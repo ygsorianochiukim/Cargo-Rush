@@ -1,0 +1,300 @@
+<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+  <div
+    class="inline-flex rounded-control border border-cr-line p-0.5"
+    role="group"
+    aria-label="View"
+  >
+    <button
+      type="button"
+      class="h-9 rounded-[6px] px-4 text-[13px] font-semibold transition-colors"
+      [class]="
+        tab() === 'roles' ? 'bg-cr-blue text-cr-surface' : 'text-cr-ink-muted hover:bg-cr-tint'
+      "
+      [attr.aria-pressed]="tab() === 'roles'"
+      (click)="tab.set('roles')"
+    >
+      Roles
+    </button>
+    <button
+      type="button"
+      class="h-9 rounded-[6px] px-4 text-[13px] font-semibold transition-colors"
+      [class]="
+        tab() === 'positions' ? 'bg-cr-blue text-cr-surface' : 'text-cr-ink-muted hover:bg-cr-tint'
+      "
+      [attr.aria-pressed]="tab() === 'positions'"
+      (click)="tab.set('positions')"
+    >
+      Positions
+    </button>
+  </div>
+
+  <button
+    type="button"
+    class="flex h-10 items-center gap-1.5 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+    (click)="tab() === 'roles' ? openRoleForm() : openPositionForm()"
+  >
+    <app-icon name="plus" [size]="16" />
+    {{ tab() === 'roles' ? 'Add role' : 'Add position' }}
+  </button>
+</div>
+
+@if (notice(); as message) {
+  <p class="mb-4 rounded-control bg-cr-tint px-3 py-2 text-[13px] text-cr-ink">{{ message }}</p>
+}
+
+@if (loadError(); as message) {
+  <app-card><app-error-state [message]="message" (retry)="refresh()" /></app-card>
+} @else if (tab() === 'roles') {
+  <div class="grid grid-cols-1 gap-4 lg:grid-cols-[260px_1fr]">
+    <app-card heading="Roles" icon="shield" [padded]="false">
+      @if (roles(); as list) {
+        <ul class="divide-y divide-cr-line">
+          @for (role of list; track role.id) {
+            <li>
+              <button
+                type="button"
+                class="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-cr-tint"
+                [class.bg-cr-tint]="role.id === selectedRoleId()"
+                (click)="selectRole(role)"
+              >
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-[14px] font-semibold">{{ role.name }}</span>
+                  <span class="block text-[12px] text-cr-ink-muted">
+                    {{
+                      role.all_permissions
+                        ? 'All permissions'
+                        : role.permission_count + ' permissions'
+                    }}
+                    @if (role.user_count) {
+                      · {{ role.user_count }} {{ role.user_count === 1 ? 'account' : 'accounts' }}
+                    }
+                  </span>
+                </span>
+                <app-status-pill [status]="role.status" />
+              </button>
+            </li>
+          }
+        </ul>
+      } @else {
+        <app-skeleton-rows [count]="5" />
+      }
+    </app-card>
+
+    @if (selectedRole(); as role) {
+      <app-card [heading]="role.name" icon="shield" [hint]="role.description ?? ''">
+        <div card-actions class="ml-auto flex items-center gap-2">
+          @if (!role.is_system) {
+            <button
+              type="button"
+              class="h-9 rounded-control px-3 text-[13px] font-semibold text-cr-red transition-colors hover:bg-cr-red-bg"
+              (click)="removeRole(role)"
+            >
+              Delete
+            </button>
+          }
+          @if (!role.all_permissions) {
+            <button
+              type="button"
+              class="h-9 rounded-control bg-cr-blue px-4 text-[13px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
+              [disabled]="busy()"
+              (click)="save()"
+            >
+              {{ busy() ? 'Saving…' : 'Save permissions' }}
+            </button>
+          }
+        </div>
+
+        @if (role.all_permissions) {
+          <p class="rounded-control bg-cr-tint px-3 py-2 text-[13px] text-cr-ink-muted">
+            Holds every permission, including ones added in future releases. Not editable.
+          </p>
+        } @else {
+          @if (role.is_system) {
+            <p class="mb-3 rounded-control bg-cr-tint px-3 py-2 text-[12px] text-cr-ink-muted">
+              Built in — what it reaches can be changed, the role itself cannot be deleted.
+            </p>
+          }
+
+          @if (groups(); as groups) {
+            <div class="space-y-4">
+              @for (group of groups; track group.group) {
+                <div class="rounded-card border border-cr-line">
+                  <label
+                    class="flex cursor-pointer items-center gap-3 border-b border-cr-line px-3 py-2"
+                  >
+                    <input
+                      type="checkbox"
+                      class="h-4 w-4 flex-none accent-cr-blue"
+                      [checked]="groupAllPicked(group)"
+                      (change)="toggleGroup(group)"
+                    />
+                    <span class="text-[13px] font-semibold">{{ group.group }}</span>
+                  </label>
+
+                  <ul class="grid grid-cols-1 gap-x-4 p-3 sm:grid-cols-2">
+                    @for (permission of group.permissions; track permission.key) {
+                      <li>
+                        <label class="flex cursor-pointer items-start gap-3 py-1.5">
+                          <input
+                            type="checkbox"
+                            class="mt-0.5 h-4 w-4 flex-none accent-cr-blue"
+                            [checked]="isPicked(permission.key)"
+                            (change)="toggle(permission.key)"
+                          />
+                          <span class="min-w-0 flex-1">
+                            <span class="block text-[13px] font-medium">{{ permission.name }}</span>
+                            <span class="block text-[11px] text-cr-ink-muted">
+                              {{ permission.description }}
+                            </span>
+                          </span>
+                        </label>
+                      </li>
+                    }
+                  </ul>
+                </div>
+              }
+            </div>
+          } @else {
+            <app-skeleton-rows [count]="6" />
+          }
+        }
+      </app-card>
+    } @else {
+      <app-card>
+        <div class="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center">
+          <app-icon name="shield" [size]="32" class="text-cr-ink-muted" />
+          <h3 class="mt-1 text-[16px] font-semibold">Pick a role to see what it reaches</h3>
+        </div>
+      </app-card>
+    }
+  </div>
+} @else {
+  <app-card heading="Positions" icon="badge" hint="The job titles the roster picks from">
+    @if (positions(); as list) {
+      <ul class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        @for (position of list; track position.id) {
+          <li class="rounded-card border border-cr-line p-3">
+            <div class="flex items-start gap-2">
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-[14px] font-semibold">{{ position.name }}</p>
+                <p class="mt-0.5 text-[12px] text-cr-ink-muted">
+                  {{ position.default_role_name ?? 'No default role' }}
+                </p>
+              </div>
+              <app-status-pill [status]="position.status" />
+            </div>
+
+            @if (position.description) {
+              <p class="mt-2 text-[12px] text-cr-ink-muted">{{ position.description }}</p>
+            }
+
+            <p class="mt-2 text-[12px] text-cr-ink-muted">
+              {{ position.employee_count ?? 0 }}
+              {{ position.employee_count === 1 ? 'employee' : 'employees' }}
+            </p>
+
+            <div class="mt-3 flex items-center gap-2 border-t border-cr-line pt-3">
+              <button
+                type="button"
+                class="h-9 flex-1 rounded-control border border-cr-line text-[13px] font-semibold transition-colors hover:bg-cr-tint"
+                (click)="openPositionForm(position)"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                aria-label="Delete position"
+                class="h-9 w-9 flex-none rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
+                (click)="removePosition(position)"
+              >
+                <app-icon name="close" [size]="16" class="mx-auto" />
+              </button>
+            </div>
+          </li>
+        }
+      </ul>
+    } @else {
+      <app-skeleton-rows [count]="4" />
+    }
+  </app-card>
+}
+
+<app-modal [(open)]="roleOpen" title="New role" icon="shield" size="sm" [locked]="busy()">
+  <form [formGroup]="roleForm" class="space-y-4">
+    <app-field label="Name" required>
+      <input type="text" formControlName="name" placeholder="Warehouse Lead" [class]="inputClass" />
+    </app-field>
+    <app-field label="Description">
+      <input type="text" formControlName="description" [class]="inputClass" />
+    </app-field>
+  </form>
+  <p class="mt-3 text-[12px] text-cr-ink-muted">Tick what it reaches after creating it.</p>
+
+  <ng-container modal-footer>
+    <button
+      type="button"
+      class="h-10 rounded-control px-4 text-[14px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint disabled:opacity-50"
+      [disabled]="busy()"
+      (click)="roleOpen.set(false)"
+    >
+      Cancel
+    </button>
+    <button
+      type="button"
+      class="h-10 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
+      [disabled]="busy()"
+      (click)="createRole()"
+    >
+      {{ busy() ? 'Creating…' : 'Create role' }}
+    </button>
+  </ng-container>
+</app-modal>
+
+<app-modal
+  [(open)]="positionOpen"
+  [title]="editingPosition() ? 'Edit position' : 'New position'"
+  icon="badge"
+  size="sm"
+  [locked]="busy()"
+>
+  <form [formGroup]="positionForm" class="space-y-4">
+    <app-field label="Name" required>
+      <input
+        type="text"
+        formControlName="name"
+        placeholder="Treasury Officer"
+        [class]="inputClass"
+      />
+    </app-field>
+    <app-field label="Description">
+      <input type="text" formControlName="description" [class]="inputClass" />
+    </app-field>
+    <app-field label="Default role" hint="Pre-selected when this person is given a login.">
+      <select formControlName="default_role_id" [class]="inputClass">
+        <option value="">No login normally</option>
+        @for (option of roleOptions(); track option.value) {
+          <option [value]="option.value">{{ option.label }}</option>
+        }
+      </select>
+    </app-field>
+  </form>
+
+  <ng-container modal-footer>
+    <button
+      type="button"
+      class="h-10 rounded-control px-4 text-[14px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint disabled:opacity-50"
+      [disabled]="busy()"
+      (click)="positionOpen.set(false)"
+    >
+      Cancel
+    </button>
+    <button
+      type="button"
+      class="h-10 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
+      [disabled]="busy()"
+      (click)="savePosition()"
+    >
+      {{ busy() ? 'Saving…' : 'Save' }}
+    </button>
+  </ng-container>
+</app-modal>

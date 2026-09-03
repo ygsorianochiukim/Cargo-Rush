@@ -1,0 +1,66 @@
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+    <p class="cr-meta">Outstanding receivables</p>
+    <p class="cr-num mt-2 text-[28px] leading-none font-semibold">{{ fmt.money(receivable()) }}</p>
+    <p class="mt-1 text-[12px] text-cr-ink-muted">Money owed to Cargo Rush</p>
+  </div>
+  <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+    <p class="cr-meta">Collected</p>
+    <p class="cr-num mt-2 text-[28px] leading-none font-semibold text-cr-success">
+      {{ fmt.money(collected()) }}
+    </p>
+    <p class="mt-1 text-[12px] text-cr-ink-muted">Receivables settled</p>
+  </div>
+  <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+    <p class="cr-meta">Outstanding payables</p>
+    <p class="cr-num mt-2 text-[28px] leading-none font-semibold">{{ fmt.money(payable()) }}</p>
+    <p class="mt-1 text-[12px] text-cr-ink-muted">Money Cargo Rush owes</p>
+  </div>
+  <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+    <p class="cr-meta">Overdue</p>
+    <p class="cr-num mt-2 text-[28px] leading-none font-semibold text-cr-red">
+      {{ fmt.money(overdue()) }}
+    </p>
+    <p class="mt-1 text-[12px] text-cr-ink-muted">Past the due date</p>
+  </div>
+</div>
+
+<app-list-toolbar
+  class="mt-4 block"
+  [count]="list.rows()?.length ?? null"
+  singular="invoice"
+  plural="invoices"
+  actionLabel="New invoice"
+  (add)="list.create()" />
+
+<div>
+  <app-filter-bar
+    [options]="filters()"
+    [selected]="direction()"
+    label="Filter by direction"
+    (select)="direction.set($any($event))" />
+</div>
+
+<app-card
+  heading="Payment history"
+  icon="billing"
+  hint="Consolidated trip billing"
+  [padded]="false"
+  class="mt-4 block">
+  @if (list.error(); as message) {
+    <app-error-state [message]="message" (retry)="list.refresh()" />
+  } @else {
+    <app-data-table
+      [columns]="columns"
+      [rows]="rows()"
+      [minWidth]="980"
+      rowAction="Edit invoice"
+      [deletable]="true"
+      [rowLabel]="label"
+      emptyIcon="billing"
+      emptyTitle="No invoices in this view"
+      emptyBody="Switch the filter, or raise the first invoice for a completed trip."
+      (open)="list.edit($any($event))"
+      (remove)="list.remove($any($event))" />
+  }
+</app-card>

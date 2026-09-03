@@ -1,0 +1,136 @@
+<div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
+  <!-- Location monitoring -->
+  <div class="flex flex-col gap-4 xl:col-span-2">
+    <app-card heading="Location monitoring" icon="map-pin" hint="Live positions" [padded]="false">
+      <!-- Placeholder canvas: the real map tiles drop in here unchanged -->
+      <div
+        class="relative m-4 h-[320px] overflow-hidden rounded-card bg-cr-tint ring-1 ring-cr-line"
+        role="img"
+        aria-label="Map of live vehicle positions">
+        <svg class="absolute inset-0 h-full w-full" aria-hidden="true">
+          <defs>
+            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M40 0H0V40" fill="none" stroke="#15589C" stroke-opacity="0.10" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#grid)" />
+          <path
+            d="M-20 260 C 160 210 240 120 420 130 S 700 90 900 40"
+            fill="none"
+            stroke="#15589C"
+            stroke-opacity="0.28"
+            stroke-width="10"
+            stroke-linecap="round" />
+          <path
+            d="M-20 60 C 200 120 300 240 560 250 S 780 300 940 280"
+            fill="none"
+            stroke="#15589C"
+            stroke-opacity="0.18"
+            stroke-width="8"
+            stroke-linecap="round" />
+        </svg>
+
+        @if (units(); as list) {
+          @for (u of list; track u.id) {
+            <button
+              type="button"
+              (click)="selectedId.set(u.id)"
+              [attr.aria-label]="u.reference + ' at ' + u.location"
+              [attr.aria-pressed]="selected()?.id === u.id"
+              class="absolute -translate-x-1/2 -translate-y-1/2"
+              [style.left.%]="pin(u, 'x')"
+              [style.top.%]="pin(u, 'y')">
+              <span
+                class="flex h-8 w-8 items-center justify-center rounded-full ring-2 ring-cr-surface transition-transform"
+                [class]="toneDot[tone(u)]"
+                [class.scale-125]="selected()?.id === u.id">
+                <app-icon name="fleet" [size]="16" class="text-cr-surface" />
+              </span>
+              @if (selected()?.id === u.id) {
+                <span
+                  class="cr-num absolute top-9 left-1/2 -translate-x-1/2 rounded-control bg-cr-surface px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap shadow-card">
+                  {{ u.reference }}
+                </span>
+              }
+            </button>
+          }
+        }
+      </div>
+    </app-card>
+
+    <!-- Details display -->
+    @if (selected(); as u) {
+      <app-card heading="Details" icon="gauge" [hint]="'Updated ' + u.updated_at">
+        <div class="flex flex-wrap items-center gap-3">
+          <span class="cr-num text-[18px] font-semibold">{{ u.reference }}</span>
+          <app-status-pill [status]="u.status" />
+        </div>
+
+        <dl class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div>
+            <dt class="cr-meta">Vehicle</dt>
+            <dd class="cr-num mt-1 text-[14px]">{{ u.vehicle_plate }}</dd>
+          </div>
+          <div>
+            <dt class="cr-meta">Driver</dt>
+            <dd class="mt-1 truncate text-[14px]">{{ u.driver_name }}</dd>
+          </div>
+          <div>
+            <dt class="cr-meta">Average speed</dt>
+            <dd class="cr-num mt-1 text-[14px]">{{ u.speed_kph }} km/h</dd>
+          </div>
+          <div>
+            <dt class="cr-meta">Heading</dt>
+            <dd class="mt-1 text-[14px]">{{ u.heading }}</dd>
+          </div>
+        </dl>
+
+        <div class="mt-5">
+          <div class="flex items-baseline justify-between">
+            <span class="cr-meta">Point A to B</span>
+            <span class="cr-num text-[12px] font-semibold">{{ u.progress_pct }}%</span>
+          </div>
+          <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-cr-line">
+            <div class="h-full rounded-full bg-cr-blue" [style.width.%]="u.progress_pct"></div>
+          </div>
+          <div class="mt-2 flex items-center justify-between text-[12px] text-cr-ink-muted">
+            <span>{{ u.location }}</span>
+            <span class="cr-num">ETA {{ fmt.time(u.eta) }}</span>
+          </div>
+        </div>
+      </app-card>
+    }
+  </div>
+
+  <!-- Unit list -->
+  <app-card heading="Units on the road" icon="fleet" [hint]="moving() + ' moving'" [padded]="false">
+    @if (units(); as list) {
+      <ul class="flex flex-col">
+        @for (u of list; track u.id) {
+          <li>
+            <button
+              type="button"
+              (click)="selectedId.set(u.id)"
+              class="flex w-full items-center gap-3 border-b border-cr-line/70 px-4 py-3 text-left transition-colors last:border-0 hover:bg-cr-tint"
+              [class.bg-cr-tint]="selected()?.id === u.id">
+              <span class="h-2.5 w-2.5 flex-none rounded-full" [class]="toneDot[tone(u)]"></span>
+              <span class="min-w-0 flex-1">
+                <span class="cr-num block text-[13px] font-semibold">{{ u.reference }}</span>
+                <span class="block truncate text-[12px] text-cr-ink-muted">{{ u.location }}</span>
+              </span>
+              <span class="flex-none text-right">
+                <span class="cr-num block text-[13px] font-semibold">{{ u.speed_kph }}</span>
+                <span class="block text-[10px] text-cr-ink-muted">km/h</span>
+              </span>
+            </button>
+          </li>
+        }
+      </ul>
+      <p class="border-t border-cr-line px-4 py-3 text-[12px] text-cr-ink-muted">
+        {{ moving() }} moving · {{ stopped() }} stopped
+      </p>
+    } @else {
+      <app-skeleton-rows [count]="4" />
+    }
+  </app-card>
+</div>

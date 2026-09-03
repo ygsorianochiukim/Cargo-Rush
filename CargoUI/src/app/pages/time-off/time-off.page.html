@@ -1,0 +1,287 @@
+<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+  <div
+    class="inline-flex rounded-control border border-cr-line p-0.5"
+    role="group"
+    aria-label="Request kind"
+  >
+    <button
+      type="button"
+      class="h-9 rounded-[6px] px-4 text-[13px] font-semibold transition-colors"
+      [class]="showingLeave() ? 'bg-cr-blue text-cr-surface' : 'text-cr-ink-muted hover:bg-cr-tint'"
+      [attr.aria-pressed]="showingLeave()"
+      (click)="tab.set('leave')"
+    >
+      Leave
+    </button>
+    <button
+      type="button"
+      class="h-9 rounded-[6px] px-4 text-[13px] font-semibold transition-colors"
+      [class]="
+        !showingLeave() ? 'bg-cr-blue text-cr-surface' : 'text-cr-ink-muted hover:bg-cr-tint'
+      "
+      [attr.aria-pressed]="!showingLeave()"
+      (click)="tab.set('undertime')"
+    >
+      Undertime
+    </button>
+  </div>
+
+  <div class="flex items-center gap-2">
+    <button
+      type="button"
+      class="h-10 rounded-control border px-4 text-[13px] font-semibold transition-colors"
+      [class]="
+        onlyOpen()
+          ? 'border-cr-blue bg-cr-tint text-cr-blue'
+          : 'border-cr-line text-cr-ink-muted hover:bg-cr-tint'
+      "
+      [attr.aria-pressed]="onlyOpen()"
+      (click)="toggleOpenOnly()"
+    >
+      Awaiting decision only
+    </button>
+    <button
+      type="button"
+      class="flex h-10 items-center gap-1.5 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+      (click)="openForm()"
+    >
+      <app-icon name="plus" [size]="16" />
+      {{ showingLeave() ? 'File leave' : 'File undertime' }}
+    </button>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+  <app-card heading="Awaiting decision" icon="inbox">
+    @if (overview(); as o) {
+      <p class="cr-num text-[28px] leading-none font-semibold">{{ o.awaiting_decision }}</p>
+      <p class="cr-meta mt-1">Leave and undertime</p>
+    } @else {
+      <div class="cr-skeleton h-7 w-16"></div>
+    }
+  </app-card>
+
+  <app-card heading="Away today" icon="calendar">
+    @if (overview(); as o) {
+      <p class="cr-num text-[28px] leading-none font-semibold">{{ o.away_today }}</p>
+      <p class="cr-meta mt-1">On approved leave</p>
+    } @else {
+      <div class="cr-skeleton h-7 w-16"></div>
+    }
+  </app-card>
+
+  <app-card heading="Showing" icon="clipboard">
+    <p class="cr-num text-[28px] leading-none font-semibold">{{ rows()?.length ?? 0 }}</p>
+    <p class="cr-meta mt-1">
+      {{ showingLeave() ? 'Leave requests' : 'Undertime requests' }}
+    </p>
+  </app-card>
+</div>
+
+<app-card
+  [heading]="showingLeave() ? 'Leave requests' : 'Undertime requests'"
+  icon="calendar"
+  class="mt-4 block"
+>
+  @if (loadError(); as message) {
+    <app-error-state [message]="message" (retry)="refresh()" />
+  } @else if (rows(); as list) {
+    @if (isEmpty()) {
+      <div class="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
+        <app-icon name="calendar" [size]="32" class="text-cr-ink-muted" />
+        <h3 class="mt-1 text-[16px] font-semibold">Nothing to show</h3>
+        <p class="text-[14px] text-cr-ink-muted">
+          {{ onlyOpen() ? 'Everything has been decided.' : 'No requests filed yet.' }}
+        </p>
+      </div>
+    } @else {
+      <ul class="divide-y divide-cr-line">
+        @for (row of list; track row.id) {
+          <li class="flex flex-wrap items-start gap-3 py-3 first:pt-0 last:pb-0">
+            @if (row.employee_photo_url) {
+              <img
+                [src]="row.employee_photo_url"
+                [alt]="row.employee_name ?? ''"
+                class="h-10 w-10 flex-none rounded-full object-cover ring-1 ring-cr-line"
+              />
+            } @else {
+              <span
+                class="flex h-10 w-10 flex-none items-center justify-center rounded-full bg-cr-tint text-[13px] font-semibold text-cr-blue"
+              >
+                {{ initials(row.employee_name) }}
+              </span>
+            }
+
+            <div class="min-w-0 flex-1">
+              <p class="text-[14px] font-semibold">
+                {{ row.employee_name }}
+                <span class="font-normal text-cr-ink-muted">· {{ row.employee_position }}</span>
+              </p>
+
+              <p class="cr-num mt-0.5 text-[13px]">
+                @if ($any(row).starts_on) {
+                  {{ fmt.date($any(row).starts_on) }} – {{ fmt.date($any(row).ends_on) }}
+                  <span class="text-cr-ink-muted">
+                    · {{ $any(row).days }} {{ $any(row).days === 1 ? 'day' : 'days' }} ·
+                    {{ $any(row).type_label }}
+                  </span>
+                } @else {
+                  {{ fmt.date($any(row).date) }}
+                  <span class="text-cr-ink-muted">
+                    · {{ $any(row).from_time }}–{{ $any(row).to_time }} · {{ $any(row).hours }} h
+                  </span>
+                }
+              </p>
+
+              <p class="mt-0.5 text-[12px] text-cr-ink-muted">{{ row.reason }}</p>
+
+              @if (row.decided_by_name) {
+                <p class="mt-1 text-[12px] text-cr-ink-muted">
+                  {{ row.status_label }} by {{ row.decided_by_name }} ·
+                  {{ fmt.dateTime(row.decided_at) }}
+                  @if (row.decision_note) {
+                    — {{ row.decision_note }}
+                  }
+                </p>
+              }
+            </div>
+
+            <div class="flex flex-none items-center gap-2">
+              <span
+                class="inline-flex items-center rounded-full px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] uppercase"
+                [class]="toneClass[row.tone]"
+              >
+                {{ row.status_label }}
+              </span>
+
+              @if (row.open) {
+                <button
+                  type="button"
+                  class="h-9 rounded-control bg-cr-blue px-3 text-[13px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+                  (click)="decide(row.id, 'approved')"
+                >
+                  Approve
+                </button>
+                <button
+                  type="button"
+                  class="h-9 rounded-control px-3 text-[13px] font-semibold text-cr-red transition-colors hover:bg-cr-red-bg"
+                  (click)="reject(row.id, row.employee_name ?? 'this')"
+                >
+                  Reject
+                </button>
+              }
+
+              @if (row.status !== 'rejected' && row.status !== 'cancelled') {
+                <button
+                  type="button"
+                  class="h-9 rounded-control px-3 text-[13px] font-semibold text-cr-ink-muted transition-colors hover:bg-cr-tint"
+                  (click)="withdraw(row.id, row.employee_name ?? 'this')"
+                >
+                  Withdraw
+                </button>
+              }
+            </div>
+          </li>
+        }
+      </ul>
+    }
+  } @else {
+    <app-skeleton-rows [count]="4" />
+  }
+</app-card>
+
+<app-modal
+  [(open)]="formOpen"
+  [title]="showingLeave() ? 'File leave' : 'File undertime'"
+  icon="calendar"
+  size="md"
+  [locked]="busy()"
+>
+  @if (formError(); as message) {
+    <p
+      role="alert"
+      class="mb-4 rounded-control bg-cr-red-bg px-3 py-2 text-[13px] font-medium text-cr-red"
+    >
+      {{ message }}
+    </p>
+  }
+
+  @if (showingLeave()) {
+    <form [formGroup]="leaveForm" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <app-field label="Employee" required class="sm:col-span-2">
+        <select formControlName="employee_id" [class]="inputClass">
+          <option value="">Select…</option>
+          @for (option of staffOptions(); track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </app-field>
+
+      <app-field label="Type" required>
+        <select formControlName="type" [class]="inputClass">
+          @for (type of overview()?.leave_types ?? []; track type.value) {
+            <option [value]="type.value">{{ type.label }}</option>
+          }
+        </select>
+      </app-field>
+
+      <app-field label="First day" required>
+        <input type="date" formControlName="starts_on" [class]="inputClass" />
+      </app-field>
+
+      <app-field label="Last day" required hint="Inclusive.">
+        <input type="date" formControlName="ends_on" [class]="inputClass" />
+      </app-field>
+
+      <app-field label="Reason" required class="sm:col-span-2">
+        <input type="text" formControlName="reason" [class]="inputClass" />
+      </app-field>
+    </form>
+  } @else {
+    <form [formGroup]="undertimeForm" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <app-field label="Employee" required class="sm:col-span-2">
+        <select formControlName="employee_id" [class]="inputClass">
+          <option value="">Select…</option>
+          @for (option of staffOptions(); track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </app-field>
+
+      <app-field label="Date" required>
+        <input type="date" formControlName="date" [class]="inputClass" />
+      </app-field>
+
+      <app-field label="Reason" required>
+        <input type="text" formControlName="reason" [class]="inputClass" />
+      </app-field>
+
+      <app-field label="From" required>
+        <input type="time" formControlName="from_time" [class]="inputClass" />
+      </app-field>
+
+      <app-field label="To" required>
+        <input type="time" formControlName="to_time" [class]="inputClass" />
+      </app-field>
+    </form>
+  }
+
+  <ng-container modal-footer>
+    <button
+      type="button"
+      class="h-10 rounded-control px-4 text-[14px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint disabled:opacity-50"
+      [disabled]="busy()"
+      (click)="formOpen.set(false)"
+    >
+      Cancel
+    </button>
+    <button
+      type="button"
+      class="h-10 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
+      [disabled]="busy()"
+      (click)="submit()"
+    >
+      {{ busy() ? 'Filing…' : 'File request' }}
+    </button>
+  </ng-container>
+</app-modal>

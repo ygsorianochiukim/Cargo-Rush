@@ -1,3 +1,191 @@
-/* You can add global styles to this file, and also import other style files */
-
 @import 'tailwindcss';
+
+/* ---------------------------------------------------------------------------
+   Brand face — the company name only.
+
+   Race Sport is the wordmark, not a UI face: one weight, no italic, and
+   drawn for display sizes. It is scoped to `.cr-wordmark` so it can never
+   leak into body copy or a table. Inter still does all the reading work.
+
+   `swap` on purpose: the name in Inter for a beat beats no name at all.
+--------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'Race Sport';
+  src: url('/brand/fonts/RaceSport.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ---------------------------------------------------------------------------
+   Cargo Rush design tokens — see /DESIGN.md section 1 & 10.
+   These are the only brand colors. Do not add new hex values.
+--------------------------------------------------------------------------- */
+@theme {
+  --color-cr-blue: #15589c;
+  --color-cr-blue-hover: #12497f;
+  --color-cr-red: #a11807;
+  --color-cr-red-hover: #851406;
+  --color-cr-tint: #dff0ff;
+  --color-cr-surface: #ffffff;
+  --color-cr-shell: #1f1f1f;
+  --color-cr-ink: #1f1f1f;
+  --color-cr-ink-muted: #6b7280;
+  --color-cr-line: #e5e7eb;
+  --color-cr-success: #12805c;
+  --color-cr-warning: #b26a00;
+
+  /* status pill backgrounds */
+  --color-cr-success-bg: #e6f4ef;
+  --color-cr-warning-bg: #fdf3e3;
+  --color-cr-red-bg: #fbe9e7;
+
+  --radius-panel: 16px;
+  --radius-card: 12px;
+  --radius-control: 8px;
+
+  /* Impact before Arial Black: the brand face is a condensed racing display
+     type, and Arial Black is much wider — falling back to it overflows the
+     sidebar panel the sizes were chosen against. */
+  --font-brand: 'Race Sport', Impact, 'Haettenschweiler', 'Arial Narrow Bold', sans-serif;
+
+  --font-sans:
+    'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+
+  --shadow-panel: 0 2px 12px rgb(0 0 0 / 0.1);
+  --shadow-card: 0 1px 3px rgb(0 0 0 / 0.08);
+}
+
+/* ---------------------------------------------------------------------------
+   Base
+--------------------------------------------------------------------------- */
+html,
+body {
+  height: 100%;
+  /* the shell owns all scrolling — the page itself never scrolls */
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  background: var(--color-cr-tint);
+  color: var(--color-cr-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+app-root {
+  display: block;
+  height: 100%;
+}
+
+/* tabular figures for anything numeric — keeps table columns aligned */
+.cr-num {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* The company name, and nothing else. See the @font-face note above — this is
+   the only selector allowed to reach for the brand face. */
+.cr-wordmark {
+  font-family: var(--font-brand);
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  /* Race Sport has no lowercase of its own; the caps are the design. */
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* uppercase page title, per DESIGN.md section 2 */
+.cr-page-title {
+  font-size: 24px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.cr-meta {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-cr-ink-muted);
+}
+
+.cr-th {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-cr-ink-muted);
+}
+
+/* visible focus everywhere — DESIGN.md section 9 */
+:where(a, button, [tabindex], input, select, textarea):focus-visible {
+  outline: 2px solid var(--color-cr-blue);
+  outline-offset: 2px;
+  border-radius: var(--radius-control);
+}
+
+/* recessive scrollbars inside the panels */
+.cr-scroll {
+  overflow-y: auto;
+
+  /* Reserve the vertical scrollbar's width whether or not it is showing.
+     Without this, anything that changes the content height by a pixel makes
+     the bar appear or vanish, the content box changes width, and every grid
+     on the page reflows — which reads as the layout twitching. */
+  scrollbar-gutter: stable;
+
+  /* `overflow-y: auto` alone computes `overflow-x` to `auto` as well: the two
+     axes cannot be one scrolling and one visible. That made the page grow a
+     horizontal scrollbar whenever an out-of-flow overlay — a chart tooltip —
+     reached past the right edge, and an absolutely positioned box does count
+     towards a scroll container's overflow. The bar appearing resized the
+     content, which could slide the pointer off the bar being hovered, which
+     hid the tooltip, which removed the bar again: a loop.
+
+     `clip` rather than `hidden` so this never becomes a scrollport of its own.
+     Nothing here needs to scroll sideways at page level; the wide tables carry
+     their own `overflow-x-auto` and scroll inside it. */
+  overflow-x: clip;
+
+  scrollbar-width: thin;
+  scrollbar-color: #c7d2de transparent;
+}
+.cr-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.cr-scroll::-webkit-scrollbar-thumb {
+  background: #c7d2de;
+  border-radius: 9999px;
+}
+.cr-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cr-skeleton {
+  background: var(--color-cr-line);
+  border-radius: 6px;
+  animation: cr-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes cr-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cr-skeleton {
+    animation: none;
+  }
+}

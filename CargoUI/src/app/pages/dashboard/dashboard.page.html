@@ -1,0 +1,231 @@
+<!-- KPI row -->
+<section aria-label="Key metrics" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+  @if (kpis(); as list) {
+    @for (kpi of list; track kpi.key) {
+      <app-kpi-tile [kpi]="kpi" />
+    }
+  } @else {
+    @for (s of kpiSkeletons; track s) {
+      <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+        <div class="cr-skeleton h-2 w-24"></div>
+        <div class="cr-skeleton mt-3 h-7 w-20"></div>
+        <div class="cr-skeleton mt-2 h-2 w-28"></div>
+      </div>
+    }
+  }
+</section>
+
+<div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+  <!-- Live trips -->
+  <div class="flex flex-col gap-4 xl:col-span-2">
+    <app-card heading="Live trips" icon="route" hint="Updated just now" [padded]="false">
+      @if (shipments(); as rows) {
+        @if (rows.length === 0) {
+          <div class="p-4 text-center text-[14px] text-cr-ink-muted">No shipments in transit.</div>
+        } @else {
+          <div class="overflow-x-auto">
+            <table class="w-full min-w-[640px] border-collapse text-left whitespace-nowrap">
+              <thead>
+                <tr class="border-b border-cr-line">
+                  <th class="cr-th px-4 py-2.5">Reference</th>
+                  <th class="cr-th px-4 py-2.5">Route</th>
+                  <th class="cr-th px-4 py-2.5">Driver</th>
+                  <th class="cr-th px-4 py-2.5">Vehicle</th>
+                  <th class="cr-th px-4 py-2.5 text-right">ETA</th>
+                  <th class="cr-th px-4 py-2.5">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of rows; track row.id) {
+                  <tr class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint">
+                    <td class="cr-num px-4 py-3 text-[13px] font-semibold">{{ row.reference }}</td>
+                    <td class="px-4 py-3 text-[13px]">
+                      <span class="flex items-center gap-1.5">
+                        {{ row.origin }}
+                        <app-icon name="chevron-right" [size]="14" class="text-cr-ink-muted" />
+                        {{ row.destination }}
+                      </span>
+                    </td>
+                    <td class="px-4 py-3 text-[13px]">{{ row.driver_name }}</td>
+                    <td class="cr-num px-4 py-3 text-[13px] text-cr-ink-muted">
+                      {{ row.vehicle_plate }}
+                    </td>
+                    <td class="cr-num px-4 py-3 text-right text-[13px]">{{ eta(row.eta) }}</td>
+                    <td class="px-4 py-3"><app-status-pill [status]="row.status" /></td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        }
+      } @else {
+        <app-skeleton-rows [count]="6" />
+      }
+    </app-card>
+
+    <!-- Deliveries: single series, so no legend — the heading names it -->
+    <app-card heading="Deliveries" icon="clock" hint="Last 7 days">
+      @if (deliveries()) {
+        <app-bar-chart [bars]="deliveryBars()" unit="deliveries" [height]="96" />
+      } @else {
+        <div class="flex h-28 items-end gap-2">
+          @for (s of [0, 1, 2, 3, 4, 5, 6]; track s) {
+            <div class="cr-skeleton h-full flex-1 rounded-t-[4px]"></div>
+          }
+        </div>
+      }
+    </app-card>
+  </div>
+
+  <!-- Side column -->
+  <div class="flex flex-col gap-4">
+    <!-- Receivables: what is owed against what has come in.
+         Two amounts and the proportion between them, because "we billed a lot"
+         and "we were paid" are different pieces of news and the dashboard used
+         to be unable to tell them apart at all. -->
+    <app-card heading="Receivables" icon="billing" [hint]="receivablesHint()">
+      @if (receivables(); as money) {
+        <p class="cr-meta">Pending payment</p>
+        <p class="cr-num mt-1 text-[28px] leading-none font-semibold">
+          {{ fmt.money(money.pending_payment_cents, money.currency) }}
+        </p>
+        <p class="mt-1 text-[12px] text-cr-ink-muted">
+          {{ money.pending_count }} invoice{{ money.pending_count === 1 ? '' : 's' }} outstanding
+          @if (money.overdue_cents > 0) {
+            <span class="font-semibold text-cr-red">
+              · {{ fmt.money(money.overdue_cents, money.currency) }} overdue
+            </span>
+          }
+        </p>
+
+        <!-- Share of billed money that has arrived. Labelled as well as
+             coloured, so the bar is never the only cue. -->
+        <div
+          class="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-cr-line"
+          role="img"
+          [attr.aria-label]="collectedPct() + ' percent of billed money collected'">
+          <span
+            class="block h-full rounded-full bg-cr-success transition-[width] duration-200"
+            [style.width.%]="collectedPct()"></span>
+        </div>
+
+        <dl class="mt-3 flex flex-col gap-2">
+          <div class="flex items-baseline gap-2">
+            <dt class="min-w-0 flex-1 truncate text-[13px]">Successful payments</dt>
+            <dd class="cr-num text-[13px] font-semibold text-cr-success">
+              {{ fmt.money(money.successful_payment_cents, money.currency) }}
+            </dd>
+            <dd class="cr-num w-10 text-right text-[12px] text-cr-ink-muted">
+              {{ collectedPct() }}%
+            </dd>
+          </div>
+          <div class="flex items-baseline gap-2 border-t border-cr-line/70 pt-2">
+            <dt class="min-w-0 flex-1 truncate text-[13px]">
+              Income earned
+              <span class="block text-[11px] text-cr-ink-muted">
+                Last {{ money.window_days }} days, from the ledger
+              </span>
+            </dt>
+            <dd class="cr-num text-[13px] font-semibold">
+              {{ fmt.money(money.income_cents, money.currency) }}
+            </dd>
+          </div>
+        </dl>
+      } @else {
+        <div class="flex flex-col gap-3">
+          <div class="cr-skeleton h-2 w-24"></div>
+          <div class="cr-skeleton h-7 w-32"></div>
+          <div class="cr-skeleton h-2.5 w-full rounded-full"></div>
+          <div class="cr-skeleton h-3 w-full"></div>
+          <div class="cr-skeleton h-3 w-full"></div>
+        </div>
+      }
+    </app-card>
+
+    <!-- Fleet status: share bar + direct labels, never colour alone -->
+    <app-card heading="Fleet status" icon="fleet">
+      @if (fleet(); as list) {
+        <p class="cr-num text-[28px] leading-none font-semibold">{{ fleetTotal() }}</p>
+        <p class="cr-meta mt-1">Vehicles tracked</p>
+
+        <!-- Segments fade when another is picked out, so the one being read
+             is unambiguous even where two tones sit next to each other. -->
+        <div class="mt-4 flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full">
+          @for (seg of list; track seg.status) {
+            <span
+              class="h-full transition-opacity duration-150 first:rounded-l-full last:rounded-r-full"
+              [class]="toneDot[tone(seg.status)]"
+              [style.opacity]="segment() && segment() !== seg.status ? 0.3 : 1"
+              [style.width.%]="sharePct(seg.count)"></span>
+          }
+        </div>
+
+        <ul class="mt-3 flex flex-col gap-0.5">
+          @for (seg of list; track seg.status) {
+            <li class="relative">
+              <button
+                type="button"
+                class="flex w-full items-center gap-2.5 rounded-control px-1.5 py-1.5 text-left
+                       transition-colors hover:bg-cr-tint focus:outline-none
+                       focus-visible:ring-2 focus-visible:ring-cr-blue focus-visible:ring-offset-2"
+                [attr.aria-label]="
+                  seg.label + ', ' + seg.count + ' vehicles, ' + sharePct(seg.count) + ' percent of the fleet'
+                "
+                (mouseenter)="segment.set(seg.status)"
+                (mouseleave)="segment.set(null)"
+                (focus)="segment.set(seg.status)"
+                (blur)="segment.set(null)">
+                <span
+                  class="h-2.5 w-2.5 flex-none rounded-full"
+                  [class]="toneDot[tone(seg.status)]"></span>
+                <span class="min-w-0 flex-1 truncate text-[13px]">{{ seg.label }}</span>
+                <span class="cr-num text-[13px] font-semibold">{{ seg.count }}</span>
+                <span class="cr-num w-10 text-right text-[12px] text-cr-ink-muted">
+                  {{ sharePct(seg.count) }}%
+                </span>
+              </button>
+
+              @if (segment() === seg.status) {
+                <app-chart-tooltip [title]="seg.label" [rows]="fleetRows(seg)" />
+              }
+            </li>
+          }
+        </ul>
+      } @else {
+        <div class="flex flex-col gap-3">
+          <div class="cr-skeleton h-7 w-16"></div>
+          <div class="cr-skeleton h-2.5 w-full rounded-full"></div>
+          @for (s of kpiSkeletons; track s) {
+            <div class="cr-skeleton h-3 w-full"></div>
+          }
+        </div>
+      }
+    </app-card>
+
+    <!-- Activity feed -->
+    <app-card heading="Recent activity" icon="bell" [padded]="false">
+      @if (activity(); as entries) {
+        <ul class="flex flex-col">
+          @for (entry of entries; track entry.id) {
+            <li class="flex gap-3 border-b border-cr-line/70 px-4 py-3 last:border-0">
+              <span
+                class="flex h-8 w-8 flex-none items-center justify-center rounded-full"
+                [class]="toneClass[entry.tone]">
+                <app-icon [name]="entry.icon" [size]="16" />
+              </span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-[13px] font-semibold">{{ entry.title }}</span>
+                <span class="block truncate text-[12px] text-cr-ink-muted">{{ entry.detail }}</span>
+              </span>
+              <span class="flex-none text-[11px] whitespace-nowrap text-cr-ink-muted">
+                {{ entry.at }}
+              </span>
+            </li>
+          }
+        </ul>
+      } @else {
+        <app-skeleton-rows [count]="4" />
+      }
+    </app-card>
+  </div>
+</div>

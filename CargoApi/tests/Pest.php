@@ -15,7 +15,9 @@ use Tests\TestCase;
 */
 
 pest()->extend(TestCase::class)
- // ->use(RefreshDatabase::class)
+    // Every feature test runs against a fresh in-memory schema, so the seeded
+    // workbook figures are the same on every run.
+    ->use(RefreshDatabase::class)
     ->in('Feature');
 
 /*

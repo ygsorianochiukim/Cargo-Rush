@@ -1,0 +1,330 @@
+<app-list-toolbar
+  [count]="rows()?.length ?? null"
+  singular="employee"
+  plural="employees"
+  actionLabel="Register employee"
+  (add)="list.create()"
+/>
+
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  <app-card heading="Headcount" icon="badge">
+    @if (overview(); as o) {
+      <p class="cr-num text-[28px] leading-none font-semibold">{{ o.headcount }}</p>
+      <p class="cr-meta mt-1">{{ o.active }} active · {{ o.inactive }} inactive</p>
+    } @else {
+      <div class="cr-skeleton h-7 w-16"></div>
+    }
+  </app-card>
+
+  <app-card heading="Without a login" icon="profile" class="lg:col-span-1">
+    @if (overview(); as o) {
+      <p class="cr-num text-[28px] leading-none font-semibold">{{ o.without_account }}</p>
+      <p class="cr-meta mt-1">Cannot sign in yet</p>
+      <p class="mt-3 text-[12px] text-cr-ink-muted">
+        A driver without one cannot be reached by the handset.
+      </p>
+    } @else {
+      <div class="cr-skeleton h-7 w-16"></div>
+    }
+  </app-card>
+
+  <app-card heading="By position" icon="clipboard" class="sm:col-span-2">
+    @if (overview(); as o) {
+      @if (o.by_position.length === 0) {
+        <p class="text-[13px] text-cr-ink-muted">Nobody on the roster yet.</p>
+      } @else {
+        <ul class="flex flex-wrap gap-2">
+          @for (row of o.by_position; track row.position) {
+            <li
+              class="inline-flex items-center gap-2 rounded-full border border-cr-line px-3 py-1.5 text-[13px]"
+            >
+              {{ row.position }}
+              <span class="cr-num font-semibold">{{ row.count }}</span>
+            </li>
+          }
+        </ul>
+      }
+    } @else {
+      <div class="cr-skeleton h-8 w-full"></div>
+    }
+  </app-card>
+</div>
+
+<app-card
+  heading="Roster"
+  icon="badge"
+  hint="Photograph, position, and whether they can sign in"
+  class="mt-4 block"
+>
+  @if (list.error(); as message) {
+    <app-error-state [message]="message" (retry)="list.refresh()" />
+  } @else if (rows(); as staff) {
+    @if (isEmpty()) {
+      <div class="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
+        <app-icon name="badge" [size]="32" class="text-cr-ink-muted" />
+        <h3 class="mt-1 text-[16px] font-semibold">Nobody on the roster yet</h3>
+        <p class="max-w-sm text-[14px] text-cr-ink-muted">
+          Register drivers, helpers, mechanics and office staff here.
+        </p>
+      </div>
+    } @else {
+      <ul class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        @for (employee of staff; track employee.id) {
+          <li class="rounded-card border border-cr-line p-3">
+            <div class="flex items-start gap-3">
+              <!-- The photograph, or their initials. The office knows the face
+                   before it knows the payroll number. -->
+              @if (employee.photo_url) {
+                <img
+                  [src]="employee.photo_url"
+                  [alt]="employee.full_name"
+                  class="h-12 w-12 flex-none rounded-full object-cover ring-1 ring-cr-line"
+                />
+              } @else {
+                <span
+                  class="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-cr-tint text-[15px] font-semibold text-cr-blue"
+                >
+                  {{ initials(employee) }}
+                </span>
+              }
+
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-[14px] font-semibold">{{ employee.full_name }}</p>
+                <p class="truncate text-[12px] text-cr-ink-muted">
+                  {{ employee.position }}
+                  @if (employee.department) {
+                    · {{ employee.department }}
+                  }
+                </p>
+                <p class="cr-num mt-0.5 text-[12px] text-cr-ink-muted">
+                  {{ employee.employee_no }}
+                </p>
+              </div>
+
+              <app-status-pill [status]="employee.status" />
+            </div>
+
+            <dl class="mt-3 space-y-1 text-[12px]">
+              <div class="flex justify-between gap-2">
+                <dt class="text-cr-ink-muted">Hired</dt>
+                <dd class="cr-num">{{ fmt.date(employee.hired_on) }}</dd>
+              </div>
+              <div class="flex justify-between gap-2">
+                <dt class="text-cr-ink-muted">Contact</dt>
+                <dd class="truncate">{{ employee.contact }}</dd>
+              </div>
+              <div class="flex justify-between gap-2">
+                <dt class="text-cr-ink-muted">Account</dt>
+                <dd class="truncate" [class.text-cr-ink-muted]="!employee.has_account">
+                  {{ employee.has_account ? employee.role_label : 'No login' }}
+                </dd>
+              </div>
+              @if (employee.driver_name) {
+                <div class="flex justify-between gap-2">
+                  <dt class="text-cr-ink-muted">Driver record</dt>
+                  <dd class="truncate">{{ employee.driver_name }}</dd>
+                </div>
+              }
+            </dl>
+
+            <div class="mt-3 flex items-center gap-2 border-t border-cr-line pt-3">
+              <button
+                type="button"
+                class="h-9 flex-1 rounded-control border border-cr-line text-[13px] font-semibold transition-colors hover:bg-cr-tint"
+                (click)="list.edit(employee)"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                class="h-9 flex-1 rounded-control border border-cr-blue text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+                (click)="openAccess(employee)"
+              >
+                {{ employee.has_account ? 'Access' : 'Give login' }}
+              </button>
+              <button
+                type="button"
+                aria-label="Remove employee"
+                class="h-9 w-9 flex-none rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
+                (click)="list.remove(employee)"
+              >
+                <app-icon name="close" [size]="16" class="mx-auto" />
+              </button>
+            </div>
+          </li>
+        }
+      </ul>
+    }
+  } @else {
+    <app-skeleton-rows [count]="4" />
+  }
+</app-card>
+
+<!-- Access: the login, the role, and which modules it reaches. -->
+@if (subject(); as employee) {
+  <app-modal
+    [(open)]="accessOpen"
+    [title]="employee.full_name"
+    subtitle="Login, role and modules"
+    icon="profile"
+    size="lg"
+    [locked]="busy()"
+  >
+    @if (accessError(); as message) {
+      <p
+        role="alert"
+        class="mb-4 rounded-control bg-cr-red-bg px-3 py-2 text-[13px] font-medium text-cr-red"
+      >
+        {{ message }}
+      </p>
+    }
+
+    @if (credentials(); as creds) {
+      <!-- Shown once. There is no endpoint that will say it again. -->
+      <div class="mb-4 rounded-control bg-cr-success-bg px-3 py-3">
+        <p class="text-[13px] font-semibold text-cr-success">Account created</p>
+        <dl class="mt-2 space-y-1 text-[13px]">
+          <div class="flex justify-between gap-3">
+            <dt class="text-cr-ink-muted">Email</dt>
+            <dd class="cr-num">{{ creds.email }}</dd>
+          </div>
+          <div class="flex justify-between gap-3">
+            <dt class="text-cr-ink-muted">Password</dt>
+            <dd class="cr-num font-semibold">{{ creds.password }}</dd>
+          </div>
+        </dl>
+        <p class="mt-2 text-[12px] text-cr-ink-muted">Not shown again — write it down.</p>
+      </div>
+    }
+
+    @if (!employee.has_account) {
+      <form [formGroup]="accountForm" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <app-field label="Sign-in email" required class="sm:col-span-2">
+          <input
+            type="email"
+            formControlName="email"
+            placeholder="name@cargorush.ph"
+            [class]="inputClass"
+          />
+        </app-field>
+
+        <app-field label="Role" required hint="What the account can do.">
+          <select formControlName="role" [class]="inputClass">
+            @for (role of roles(); track role.value) {
+              <option [value]="role.value">{{ role.label }}</option>
+            }
+          </select>
+        </app-field>
+
+        <app-field label="Password" hint="Blank uses the standard one.">
+          <input type="text" formControlName="password" [class]="inputClass" />
+        </app-field>
+      </form>
+    } @else {
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <app-field label="Sign-in email">
+          <input
+            type="text"
+            [value]="employee.account_email ?? ''"
+            readonly
+            [class]="inputClass + ' bg-cr-tint'"
+          />
+        </app-field>
+
+        <app-field label="Role" [error]="null">
+          <div class="flex gap-2">
+            <select [formControl]="$any(accountForm.get('role'))" [class]="inputClass">
+              @for (role of roles(); track role.value) {
+                <option [value]="role.value">{{ role.label }}</option>
+              }
+            </select>
+            <button
+              type="button"
+              class="h-10 flex-none rounded-control border border-cr-blue px-3 text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint disabled:opacity-60"
+              [disabled]="busy()"
+              (click)="changeRole()"
+            >
+              Change
+            </button>
+          </div>
+        </app-field>
+      </div>
+
+      <!-- Modules -->
+      <div class="mt-6">
+        <h3 class="text-[14px] font-semibold">Modules</h3>
+        <p class="mt-1 text-[12px] text-cr-ink-muted">Only what the role allows can be ticked.</p>
+
+        @if (moduleState(); as state) {
+          @if (allPicked()) {
+            <p class="mt-3 rounded-control bg-cr-tint px-3 py-2 text-[12px] text-cr-ink-muted">
+              All {{ state.available.length }} modules — the default.
+            </p>
+          }
+
+          <ul class="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+            @for (module of state.available; track module.key) {
+              <li>
+                <label
+                  class="flex cursor-pointer items-center gap-3 rounded-control border border-cr-line px-3 py-2 transition-colors hover:bg-cr-tint"
+                >
+                  <input
+                    type="checkbox"
+                    class="h-4 w-4 flex-none accent-cr-blue"
+                    [checked]="isPicked(module.key)"
+                    (change)="toggleModule(module.key)"
+                  />
+                  @if (module.icon) {
+                    <app-icon [name]="module.icon" [size]="16" class="text-cr-blue" />
+                  }
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate text-[13px] font-medium">{{ module.label }}</span>
+                    @if (module.group) {
+                      <span class="block text-[11px] text-cr-ink-muted">{{ module.group }}</span>
+                    }
+                  </span>
+                </label>
+              </li>
+            }
+          </ul>
+        } @else {
+          <app-skeleton-rows [count]="3" />
+        }
+      </div>
+    }
+
+    @if (accessNotice(); as notice) {
+      <p class="mt-4 rounded-control bg-cr-tint px-3 py-2 text-[13px] text-cr-ink">{{ notice }}</p>
+    }
+
+    <ng-container modal-footer>
+      <button
+        type="button"
+        class="h-10 rounded-control px-4 text-[14px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint disabled:opacity-50"
+        [disabled]="busy()"
+        (click)="accessOpen.set(false)"
+      >
+        Close
+      </button>
+      @if (employee.has_account) {
+        <button
+          type="button"
+          class="h-10 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
+          [disabled]="busy() || moduleState() === null"
+          (click)="saveModules()"
+        >
+          {{ busy() ? 'Saving…' : 'Save modules' }}
+        </button>
+      } @else {
+        <button
+          type="button"
+          class="h-10 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
+          [disabled]="busy()"
+          (click)="createAccount()"
+        >
+          {{ busy() ? 'Creating…' : 'Create login' }}
+        </button>
+      }
+    </ng-container>
+  </app-modal>
+}

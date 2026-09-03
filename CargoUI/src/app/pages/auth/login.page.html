@@ -1,0 +1,52 @@
+<div class="flex h-full items-center justify-center bg-cr-tint p-4">
+  <div class="w-full max-w-[380px]">
+    <div class="mb-6 flex justify-center">
+      <app-wordmark [size]="28" />
+    </div>
+
+    <form
+      [formGroup]="form"
+      (ngSubmit)="submit()"
+      class="rounded-panel bg-cr-surface p-6 shadow-panel">
+      <h1 class="text-[16px] font-semibold">Sign in</h1>
+      <p class="mt-1 text-[14px] text-cr-ink-muted">
+        Use your Cargo Rush account to reach the back office.
+      </p>
+
+      @if (failure(); as message) {
+        <p
+          role="alert"
+          class="mt-4 rounded-control bg-cr-red-bg px-3 py-2 text-[13px] font-medium text-cr-red">
+          {{ message }}
+        </p>
+      }
+
+      <div class="mt-5 flex flex-col gap-4">
+        <app-field label="Email" required [error]="errorFor('email')">
+          <input
+            type="email"
+            formControlName="email"
+            autocomplete="username"
+            [class]="inputClass"
+            placeholder="you@cargorush.ph" />
+        </app-field>
+
+        <app-field label="Password" required [error]="errorFor('password')">
+          <input
+            type="password"
+            formControlName="password"
+            autocomplete="current-password"
+            [class]="inputClass"
+            placeholder="••••••••" />
+        </app-field>
+      </div>
+
+      <button
+        type="submit"
+        class="mt-6 h-10 w-full rounded-control bg-cr-blue text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
+        [disabled]="submitting()">
+        {{ submitting() ? 'Signing in…' : 'Sign in' }}
+      </button>
+    </form>
+  </div>
+</div>

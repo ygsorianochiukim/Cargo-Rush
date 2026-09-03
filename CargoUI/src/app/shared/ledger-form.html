@@ -1,0 +1,146 @@
+<app-modal
+  [(open)]="open"
+  [title]="editing() ? 'Edit daily entry' : 'Record daily trip'"
+  subtitle="Trip income and expenses for one truck on one day"
+  icon="clipboard"
+  size="lg"
+  [locked]="saving()"
+  (closed)="reset()">
+  <form [formGroup]="form" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <app-field label="Truck" required [error]="errorFor('truck_id')">
+      <select formControlName="truck_id" [class]="inputClass">
+        <option value="">Select a truck…</option>
+        @for (t of trucks(); track t.id) {
+          <option [value]="t.id">{{ t.label }}{{ t.plate ? ' — ' + t.plate : '' }}</option>
+        }
+      </select>
+    </app-field>
+
+    <app-field label="Date" required [error]="errorFor('date')">
+      <input type="date" formControlName="date" [class]="inputClass" />
+    </app-field>
+
+    <app-field
+      label="Trip income (₱)"
+      required
+      class="sm:col-span-2"
+      [error]="errorFor('trip_income')">
+      <input
+        type="number"
+        min="0"
+        step="0.01"
+        formControlName="trip_income"
+        [class]="inputClass + ' cr-num'" />
+    </app-field>
+
+    <div class="sm:col-span-2">
+      <p class="cr-meta mb-2">Expenses (₱)</p>
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <app-field label="Fuel" [error]="errorFor('fuel')">
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            formControlName="fuel"
+            [class]="inputClass + ' cr-num'" />
+        </app-field>
+        <app-field label="Maintenance" [error]="errorFor('maintenance')">
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            formControlName="maintenance"
+            [class]="inputClass + ' cr-num'" />
+        </app-field>
+        <app-field label="Driver salary" [error]="errorFor('driver_salary')">
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            formControlName="driver_salary"
+            [class]="inputClass + ' cr-num'" />
+        </app-field>
+        <app-field label="Helper salary" [error]="errorFor('helper_salary')">
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            formControlName="helper_salary"
+            [class]="inputClass + ' cr-num'" />
+        </app-field>
+        <app-field label="Allowance" [error]="errorFor('allowance')">
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            formControlName="allowance"
+            [class]="inputClass + ' cr-num'" />
+        </app-field>
+      </div>
+    </div>
+
+    <app-field
+      label="Customer"
+      hint="Optional — a day can be several customers' work, or the company's own.">
+      <select formControlName="customer_id" [class]="inputClass">
+        <option value="">No single customer</option>
+        @for (c of customers(); track c.id) {
+          <option [value]="c.id">{{ c.name }}</option>
+        }
+      </select>
+    </app-field>
+
+    <app-field label="Route" hint="Where the trip went.">
+      <input
+        formControlName="route"
+        list="cr-routes"
+        [class]="inputClass"
+        placeholder="Gingoog" />
+      <datalist id="cr-routes">
+        @for (r of routes(); track r) {
+          <option [value]="r"></option>
+        }
+      </datalist>
+    </app-field>
+
+    <app-field label="Remarks">
+      <input formControlName="remarks" [class]="inputClass" placeholder="Optional note" />
+    </app-field>
+  </form>
+
+  <!-- Derived, never entered -->
+  <div class="mt-5 grid grid-cols-2 gap-3 rounded-card bg-cr-tint/60 p-4">
+    <div>
+      <p class="cr-meta">Total expenses</p>
+      <p class="cr-num mt-1 text-[20px] font-semibold">
+        {{ fmt.money(totalExpenses() * 100) }}
+      </p>
+    </div>
+    <div class="text-right">
+      <p class="cr-meta">Net income</p>
+      <p
+        class="cr-num mt-1 text-[20px] font-semibold"
+        [class.text-cr-red]="net() < 0"
+        [class.text-cr-success]="net() > 0">
+        {{ fmt.money(net() * 100) }}
+      </p>
+    </div>
+  </div>
+
+  <ng-container modal-footer>
+    <button
+      type="button"
+      class="h-10 rounded-control px-4 text-[14px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint disabled:opacity-50"
+      [disabled]="saving()"
+      (click)="open.set(false)">
+      Cancel
+    </button>
+    <button
+      type="button"
+      class="h-10 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
+      [disabled]="saving()"
+      (click)="submit()">
+      {{ saving() ? 'Saving…' : editing() ? 'Save changes' : 'Record entry' }}
+    </button>
+  </ng-container>
+</app-modal>

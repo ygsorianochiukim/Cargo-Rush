@@ -1,0 +1,255 @@
+<!-- ============================================================
+     Header — the sheet's "SUMMARY OF 10-DAY MONITORING" block
+     ============================================================ -->
+<header class="rounded-card bg-cr-surface p-5 shadow-card ring-1 ring-cr-line/60">
+  <div class="flex flex-wrap items-center gap-x-6 gap-y-4">
+    <div class="flex items-center gap-3">
+      <span
+        class="flex h-11 w-11 flex-none items-center justify-center rounded-control bg-cr-tint text-cr-blue">
+        <app-icon name="calendar" [size]="22" />
+      </span>
+      <div>
+        <h2 class="text-[11px] font-semibold tracking-[0.08em] text-cr-ink-muted uppercase">
+          Summary of
+        </h2>
+        <p class="text-[18px] leading-tight font-semibold">10-day monitoring</p>
+      </div>
+    </div>
+
+    <!-- From / To, exactly the pair the sheet asks you to set -->
+    <div class="flex items-center gap-2">
+      <button
+        type="button"
+        class="flex h-9 w-9 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
+        (click)="shift(-10)"
+        aria-label="Previous 10 days">
+        <app-icon name="chevron-left" [size]="16" />
+      </button>
+
+      <label class="flex flex-col gap-1">
+        <span class="cr-meta">From</span>
+        <input
+          type="date"
+          class="cr-num h-9 rounded-control border border-cr-line px-2 text-[13px]"
+          [value]="from()"
+          (change)="onFromChange($any($event.target).value)" />
+      </label>
+
+      <span class="mt-5 text-cr-ink-muted">→</span>
+
+      <div class="flex flex-col gap-1">
+        <span class="cr-meta">To</span>
+        <span
+          class="cr-num flex h-9 items-center rounded-control bg-cr-tint px-3 text-[13px] font-semibold">
+          {{ fmt.date(range().to) }}
+        </span>
+      </div>
+
+      <button
+        type="button"
+        class="flex h-9 w-9 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
+        (click)="shift(10)"
+        aria-label="Next 10 days">
+        <app-icon name="chevron-right" [size]="16" />
+      </button>
+    </div>
+
+    <p class="ml-auto max-w-[16rem] text-[12px] text-cr-ink-muted">
+      Set the starting date; the period and every figure below follow it.
+    </p>
+  </div>
+</header>
+
+@if (loading()) {
+  <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+    @for (s of skeleton; track s) {
+      <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+        <div class="cr-skeleton h-2 w-24"></div>
+        <div class="cr-skeleton mt-3 h-7 w-28"></div>
+      </div>
+    }
+  </div>
+} @else {
+  <!-- ==========================================================
+       The five tiles the sheet puts across the top
+       ========================================================== -->
+  <section aria-label="Period summary" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3 xl:grid-cols-5">
+    <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+      <div class="flex items-center gap-2 text-cr-blue">
+        <app-icon name="billing" [size]="16" />
+        <p class="cr-meta text-cr-ink-muted">Total trip income</p>
+      </div>
+      <p class="cr-num mt-2 text-[24px] leading-none font-semibold">
+        {{ fmt.money(totals().trip_income_cents) }}
+      </p>
+    </div>
+
+    <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+      <div class="flex items-center gap-2 text-cr-warning">
+        <app-icon name="fuel" [size]="16" />
+        <p class="cr-meta text-cr-ink-muted">Total expenses</p>
+      </div>
+      <p class="cr-num mt-2 text-[24px] leading-none font-semibold">
+        {{ fmt.money(totals().total_expenses_cents) }}
+      </p>
+    </div>
+
+    <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+      <div class="flex items-center gap-2 text-cr-success">
+        <app-icon name="gauge" [size]="16" />
+        <p class="cr-meta text-cr-ink-muted">Total net profit</p>
+      </div>
+      <p
+        class="cr-num mt-2 text-[24px] leading-none font-semibold"
+        [class.text-cr-red]="totals().net_income_cents < 0">
+        {{ fmt.money(totals().net_income_cents) }}
+      </p>
+    </div>
+
+    <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+      <div class="flex items-center gap-2 text-cr-blue">
+        <app-icon name="fleet" [size]="16" />
+        <p class="cr-meta text-cr-ink-muted">Ave. profit per truck</p>
+      </div>
+      <p class="cr-num mt-2 text-[24px] leading-none font-semibold">
+        {{ fmt.money(average().cents) }}
+      </p>
+      <p class="mt-1 text-[11px] text-cr-ink-muted">
+        across {{ average().trucks }} unit{{ average().trucks === 1 ? '' : 's' }} that ran
+      </p>
+    </div>
+
+    <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+      <div class="flex items-center gap-2 text-cr-success">
+        <app-icon name="check" [size]="16" />
+        <p class="cr-meta text-cr-ink-muted">Best performing</p>
+      </div>
+      <p class="cr-num mt-2 text-[24px] leading-none font-semibold">
+        {{ best()?.truck?.plate ?? '—' }}
+      </p>
+      @if (best(); as b) {
+        <p class="cr-num mt-1 text-[11px] text-cr-ink-muted">
+          {{ fmt.money(b.net_income_cents) }} net
+        </p>
+      }
+    </div>
+  </section>
+
+  <!-- ==========================================================
+       The sheet's four charts
+       ========================================================== -->
+  <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
+    <app-card heading="Trip income" icon="billing" hint="By unit">
+      <app-bar-rows [bars]="incomeBars()" />
+    </app-card>
+
+    <app-card heading="Total expenses" icon="fuel" hint="By unit">
+      <app-bar-rows [bars]="expenseBars()" />
+    </app-card>
+
+    <app-card heading="Net income" icon="gauge" hint="By unit">
+      <app-bar-rows [bars]="netBars()" />
+      <p class="mt-3 text-[11px] text-cr-ink-muted">Right of the line is profit, left is loss.</p>
+    </app-card>
+
+    <app-card heading="% of net income" icon="dashboard" hint="Share by unit">
+      <app-donut [slices]="shares()" />
+    </app-card>
+  </div>
+
+  <!-- ==========================================================
+       The sheet's table, TOTAL row included
+       ========================================================== -->
+  <app-card
+    heading="Trip income and expenses by unit"
+    icon="route"
+    [hint]="fmt.date(range().from) + ' – ' + fmt.date(range().to)"
+    [padded]="false"
+    class="mt-4 block">
+    <div class="overflow-x-auto">
+      <!-- Same rule as the monitoring sheet: scroll rather than squeeze. -->
+      <table class="w-full min-w-[1020px] border-collapse text-left whitespace-nowrap">
+        <thead>
+          <tr class="border-b border-cr-line">
+            <th class="cr-th px-4 py-2.5">Truck no.</th>
+            <th class="cr-th px-4 py-2.5">Unit no.</th>
+            <th class="cr-th px-4 py-2.5 text-right">Trip income</th>
+            <th class="cr-th px-4 py-2.5 text-right">Fuel</th>
+            <th class="cr-th px-4 py-2.5 text-right">Driver salary</th>
+            <th class="cr-th px-4 py-2.5 text-right">Helper salary</th>
+            <th class="cr-th px-4 py-2.5 text-right">Maintenance</th>
+            <th class="cr-th px-4 py-2.5 text-right">Allowance</th>
+            <th class="cr-th px-4 py-2.5 text-right">Total expenses</th>
+            <th class="cr-th px-4 py-2.5 text-right">Net income</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of rows(); track r.truck.id) {
+            <tr
+              class="border-b border-cr-line/70 transition-colors hover:bg-cr-tint"
+              [class.opacity-55]="r.entry_count === 0">
+              <td class="px-4 py-3 text-[13px] font-semibold">{{ r.truck.label }}</td>
+              <td class="cr-num px-4 py-3 text-[13px] text-cr-ink-muted">
+                {{ r.truck.plate ?? 'Unassigned' }}
+              </td>
+              <td class="cr-num px-4 py-3 text-right text-[13px]">
+                {{ fmt.money(r.trip_income_cents) }}
+              </td>
+              <td class="cr-num px-4 py-3 text-right text-[13px]">{{ fmt.money(r.fuel_cents) }}</td>
+              <td class="cr-num px-4 py-3 text-right text-[13px]">
+                {{ fmt.money(r.driver_salary_cents) }}
+              </td>
+              <td class="cr-num px-4 py-3 text-right text-[13px]">
+                {{ fmt.money(r.helper_salary_cents) }}
+              </td>
+              <td class="cr-num px-4 py-3 text-right text-[13px]">
+                {{ fmt.money(r.maintenance_cents) }}
+              </td>
+              <td class="cr-num px-4 py-3 text-right text-[13px]">
+                {{ fmt.money(r.allowance_cents) }}
+              </td>
+              <td class="cr-num px-4 py-3 text-right text-[13px]">
+                {{ fmt.money(r.total_expenses_cents) }}
+              </td>
+              <td
+                class="cr-num px-4 py-3 text-right text-[13px] font-semibold"
+                [class.text-cr-red]="r.net_income_cents < 0"
+                [class.text-cr-success]="r.net_income_cents > 0">
+                {{ fmt.money(r.net_income_cents) }}
+              </td>
+            </tr>
+          }
+          <tr class="border-t-2 border-cr-line bg-cr-tint/60">
+            <td class="px-4 py-3 text-[13px] font-semibold" colspan="2">TOTAL</td>
+            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+              {{ fmt.money(totals().trip_income_cents) }}
+            </td>
+            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+              {{ fmt.money(totals().fuel_cents) }}
+            </td>
+            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+              {{ fmt.money(totals().driver_salary_cents) }}
+            </td>
+            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+              {{ fmt.money(totals().helper_salary_cents) }}
+            </td>
+            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+              {{ fmt.money(totals().maintenance_cents) }}
+            </td>
+            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+              {{ fmt.money(totals().allowance_cents) }}
+            </td>
+            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+              {{ fmt.money(totals().total_expenses_cents) }}
+            </td>
+            <td
+              class="cr-num px-4 py-3 text-right text-[13px] font-semibold"
+              [class.text-cr-red]="totals().net_income_cents < 0">
+              {{ fmt.money(totals().net_income_cents) }}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </app-card>
+}

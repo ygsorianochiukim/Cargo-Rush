@@ -1,0 +1,235 @@
+<header class="rounded-card bg-cr-surface p-5 shadow-card ring-1 ring-cr-line/60">
+  <h2 class="text-[11px] font-semibold tracking-[0.08em] text-cr-ink-muted uppercase">
+    CargoRush Trucking Services — {{ selected()?.label ?? 'Unit' }}
+  </h2>
+  <p class="text-[18px] leading-tight font-semibold">Daily trip monitoring</p>
+</header>
+
+<!-- Unit selector: one tab per truck sheet in the workbook -->
+<div class="mt-4 flex flex-wrap items-center gap-2">
+  @if (trucks(); as list) {
+    @for (t of list; track t.id) {
+      <button
+        type="button"
+        (click)="select(t.id)"
+        [attr.aria-pressed]="selectedId() === t.id"
+        class="flex h-9 items-center gap-2 rounded-control px-3 text-[13px] font-medium transition-colors"
+        [class.bg-cr-blue]="selectedId() === t.id"
+        [class.text-cr-surface]="selectedId() === t.id"
+        [class.bg-cr-surface]="selectedId() !== t.id"
+        [class.text-cr-ink]="selectedId() !== t.id">
+        <span class="cr-num">{{ t.plate ?? t.label }}</span>
+        @if (!t.plate) {
+          <span
+            class="rounded-full px-1.5 text-[10px] font-semibold"
+            [class.bg-cr-surface]="selectedId() === t.id"
+            [class.text-cr-blue]="selectedId() === t.id"
+            [class.bg-cr-tint]="selectedId() !== t.id"
+            [class.text-cr-ink-muted]="selectedId() !== t.id">
+            No plate
+          </span>
+        }
+      </button>
+    }
+  }
+
+  <!-- Adding a unit sits with the unit tabs; recording a day sits on the
+       right, because one changes what you are looking at and the other adds
+       to it. -->
+  <button
+    type="button"
+    class="flex h-9 items-center gap-1.5 rounded-control border border-cr-blue px-3 text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+    (click)="addUnit()">
+    <app-icon name="plus" [size]="14" />
+    Add unit
+  </button>
+
+  <button
+    type="button"
+    class="ml-auto flex h-9 items-center gap-1.5 rounded-control bg-cr-blue px-3 text-[13px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-50"
+    [disabled]="selected() === null"
+    (click)="add()">
+    <app-icon name="plus" [size]="14" />
+    Record daily trip
+  </button>
+</div>
+
+@if (trucks(); as list) {
+  @if (list.length === 0) {
+    <app-empty-state
+      icon="fleet"
+      title="No units on the ledger"
+      body="The workbook keeps a sheet per truck. Add the units you run, then record each day against them.">
+      <button
+        type="button"
+        class="mt-2 h-10 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+        (click)="addUnit()">
+        Add the first unit
+      </button>
+    </app-empty-state>
+  }
+}
+
+<!-- Sheet header totals -->
+<section
+  aria-label="Totals for this unit"
+  class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4 xl:grid-cols-8">
+  <div class="rounded-card bg-cr-surface p-3 shadow-card ring-1 ring-cr-line/60">
+    <p class="cr-meta">Trip income</p>
+    <p class="cr-num mt-1 text-[16px] font-semibold">{{ fmt.money(totals().income) }}</p>
+  </div>
+  <div class="rounded-card bg-cr-surface p-3 shadow-card ring-1 ring-cr-line/60">
+    <p class="cr-meta">Fuel</p>
+    <p class="cr-num mt-1 text-[16px] font-semibold">{{ fmt.money(totals().fuel) }}</p>
+  </div>
+  <div class="rounded-card bg-cr-surface p-3 shadow-card ring-1 ring-cr-line/60">
+    <p class="cr-meta">Driver salary</p>
+    <p class="cr-num mt-1 text-[16px] font-semibold">{{ fmt.money(totals().driver) }}</p>
+  </div>
+  <div class="rounded-card bg-cr-surface p-3 shadow-card ring-1 ring-cr-line/60">
+    <p class="cr-meta">Helper salary</p>
+    <p class="cr-num mt-1 text-[16px] font-semibold">{{ fmt.money(totals().helper) }}</p>
+  </div>
+  <div class="rounded-card bg-cr-surface p-3 shadow-card ring-1 ring-cr-line/60">
+    <p class="cr-meta">Maintenance</p>
+    <p class="cr-num mt-1 text-[16px] font-semibold">{{ fmt.money(totals().maintenance) }}</p>
+  </div>
+  <div class="rounded-card bg-cr-surface p-3 shadow-card ring-1 ring-cr-line/60">
+    <p class="cr-meta">Allowance</p>
+    <p class="cr-num mt-1 text-[16px] font-semibold">{{ fmt.money(totals().allowance) }}</p>
+  </div>
+  <div class="rounded-card bg-cr-surface p-3 shadow-card ring-1 ring-cr-line/60">
+    <p class="cr-meta">Total expenses</p>
+    <p class="cr-num mt-1 text-[16px] font-semibold">{{ fmt.money(totals().expenses) }}</p>
+  </div>
+  <div class="rounded-card bg-cr-surface p-3 shadow-card ring-1 ring-cr-line/60">
+    <p class="cr-meta">Net income</p>
+    <p
+      class="cr-num mt-1 text-[16px] font-semibold"
+      [class.text-cr-red]="totals().net < 0"
+      [class.text-cr-success]="totals().net > 0">
+      {{ fmt.money(totals().net) }}
+    </p>
+  </div>
+</section>
+
+<app-card
+  [heading]="(selected()?.label ?? 'Unit') + ' · daily trip monitoring'"
+  icon="clipboard"
+  [hint]="selected()?.plate ?? 'No plate assigned'"
+  [padded]="false"
+  class="mt-4 block">
+  @if (rows(); as list) {
+    @if (list.length === 0) {
+      <div class="flex flex-col items-center gap-2 px-6 py-12 text-center">
+        <app-icon name="clipboard" [size]="32" class="text-cr-ink-muted" />
+        <h3 class="mt-1 text-[16px] font-semibold">Nothing recorded for this unit</h3>
+        <p class="max-w-sm text-[14px] text-cr-ink-muted">
+          Record the daily trip income and expenses and the dashboards fill in automatically.
+        </p>
+        <button
+          type="button"
+          class="mt-2 h-10 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+          (click)="add()">
+          Record daily trip
+        </button>
+      </div>
+    } @else {
+      <div class="overflow-x-auto">
+        <!-- The floor was 1120 for eleven columns; Trip and Customer since made
+             thirteen, and the row squeezed instead of the wrapper scrolling.
+             `whitespace-nowrap` is on the table because white-space inherits. -->
+        <table class="w-full min-w-[1360px] border-collapse text-left whitespace-nowrap">
+          <thead>
+            <tr class="border-b border-cr-line">
+              <th class="cr-th px-4 py-2.5">Date</th>
+              <th class="cr-th px-4 py-2.5 text-right">Trip income</th>
+              <th class="cr-th px-4 py-2.5 text-right">Fuel</th>
+              <th class="cr-th px-4 py-2.5 text-right">Driver</th>
+              <th class="cr-th px-4 py-2.5 text-right">Helper</th>
+              <th class="cr-th px-4 py-2.5 text-right">Maint.</th>
+              <th class="cr-th px-4 py-2.5 text-right">Allowance</th>
+              <th class="cr-th px-4 py-2.5 text-right">Total exp.</th>
+              <th class="cr-th px-4 py-2.5 text-right">Net income</th>
+              <th class="cr-th px-4 py-2.5">Route</th>
+              <th class="cr-th px-4 py-2.5">Trip</th>
+              <th class="cr-th px-4 py-2.5">Customer</th>
+              <th class="cr-th px-4 py-2.5"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (e of list; track e.id) {
+              <tr class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint">
+                <td class="cr-num px-4 py-3 text-[13px] font-semibold">{{ fmt.date(e.date) }}</td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">
+                  {{ fmt.money(e.trip_income_cents) }}
+                </td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">{{ fmt.money(e.fuel_cents) }}</td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">
+                  {{ fmt.money(e.driver_salary_cents) }}
+                </td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">
+                  {{ fmt.money(e.helper_salary_cents) }}
+                </td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">
+                  {{ fmt.money(e.maintenance_cents) }}
+                </td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">
+                  {{ fmt.money(e.allowance_cents) }}
+                </td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">
+                  {{ fmt.money(expensesOf(e)) }}
+                </td>
+                <td
+                  class="cr-num px-4 py-3 text-right text-[13px] font-semibold"
+                  [class.text-cr-red]="netOf(e) < 0"
+                  [class.text-cr-success]="netOf(e) > 0">
+                  {{ fmt.money(netOf(e)) }}
+                </td>
+                <td class="px-4 py-3 text-[13px] text-cr-ink-muted">{{ e.route ?? '—' }}</td>
+                <!-- The run the row was opened by. An em dash means the office
+                     entered this day by hand, which is a normal thing to do. -->
+                <td class="cr-num px-4 py-3 text-[13px]">
+                  @if (e.trip_reference) {
+                    <span class="font-semibold">{{ e.trip_reference }}</span>
+                  } @else {
+                    <span class="text-cr-ink-muted">—</span>
+                  }
+                </td>
+                <!-- Whose work the day was. An em dash is a real answer: a
+                     truck's day can cover several customers, or none. -->
+                <td class="px-4 py-3 text-[13px]">
+                  {{ e.customer ?? '—' }}
+                </td>
+                <td class="px-4 py-3">
+                  <div class="flex items-center justify-end gap-1">
+                    <button
+                      type="button"
+                      class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
+                      [attr.aria-label]="'Delete the ' + fmt.date(e.date) + ' entry'"
+                      (click)="remove(e)">
+                      <app-icon name="close" [size]="16" />
+                    </button>
+                    <button
+                      type="button"
+                      class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
+                      [attr.aria-label]="'Edit the ' + fmt.date(e.date) + ' entry'"
+                      (click)="edit(e)">
+                      <app-icon name="chevron-right" [size]="16" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  } @else {
+    <div class="flex flex-col gap-3 p-4" role="status" aria-label="Loading">
+      @for (s of [0, 1, 2, 3, 4, 5]; track s) {
+        <div class="cr-skeleton h-8"></div>
+      }
+    </div>
+  }
+</app-card>

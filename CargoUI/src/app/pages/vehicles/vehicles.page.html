@@ -1,0 +1,119 @@
+<div class="mb-4 flex items-center justify-between gap-3">
+  <p class="text-[13px] text-cr-ink-muted">
+    @if (list.rows(); as rows) {
+      {{ rows.length }} {{ rows.length === 1 ? 'vehicle' : 'vehicles' }} on the books
+    }
+  </p>
+  <button
+    type="button"
+    class="flex h-10 flex-none items-center gap-1.5 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+    (click)="list.create()">
+    <app-icon name="plus" [size]="16" />
+    New vehicle
+  </button>
+</div>
+@if (list.rows(); as rows) {
+  <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    @for (v of rows; track v.id) {
+      <article
+        class="flex flex-col rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60 transition-shadow hover:shadow-panel">
+        <div class="flex items-start gap-3">
+          <span
+            class="flex h-10 w-10 flex-none items-center justify-center rounded-control bg-cr-tint text-cr-blue">
+            <app-icon name="fleet" [size]="20" />
+          </span>
+          <div class="min-w-0 flex-1">
+            <p class="cr-num truncate text-[15px] font-semibold">{{ v.plate }}</p>
+            <p class="truncate text-[12px] text-cr-ink-muted">{{ v.model }}</p>
+          </div>
+          <app-status-pill [status]="v.status" />
+        </div>
+
+        <dl class="mt-4 grid grid-cols-2 gap-3">
+          <div class="min-w-0">
+            <dt class="cr-meta">Driver</dt>
+            <dd class="mt-0.5 truncate text-[13px]">{{ v.driver_name ?? 'Unassigned' }}</dd>
+          </div>
+          <div class="min-w-0">
+            <dt class="cr-meta">Registration</dt>
+            <dd class="cr-num mt-0.5 truncate text-[13px]">{{ v.registration_no }}</dd>
+          </div>
+          <div>
+            <dt class="cr-meta">Capacity</dt>
+            <dd class="cr-num mt-0.5 text-[13px]">{{ kg(v.capacity_kg) }}</dd>
+          </div>
+          <div>
+            <dt class="cr-meta">Odometer</dt>
+            <dd class="cr-num mt-0.5 text-[13px]">{{ km(v.odometer_km) }}</dd>
+          </div>
+        </dl>
+
+        <div class="mt-4">
+          <div class="flex items-baseline justify-between">
+            <span class="cr-meta">Next service</span>
+            <span
+              class="cr-num text-[12px] font-semibold"
+              [class.text-cr-warning]="serviceDue(v)"
+              [class.text-cr-ink-muted]="!serviceDue(v)">
+              {{ km(v.next_service_km - v.odometer_km) }} left
+            </span>
+          </div>
+          <div class="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-cr-line">
+            <div
+              class="h-full rounded-full"
+              [class.bg-cr-warning]="serviceDue(v)"
+              [class.bg-cr-blue]="!serviceDue(v)"
+              [style.width.%]="servicePct(v)"></div>
+          </div>
+          @if (serviceDue(v)) {
+            <p class="mt-1.5 flex items-center gap-1 text-[11px] font-medium text-cr-warning">
+              <app-icon name="bell" [size]="12" />
+              Service due soon
+            </p>
+          }
+        </div>
+        <!-- Actions sit at the foot of the card so the reading order is
+             identity, figures, then what you can do about them. -->
+        <div class="mt-4 flex items-center gap-1 border-t border-cr-line pt-3">
+          <button
+            type="button"
+            class="h-8 rounded-control px-3 text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+            (click)="list.edit(v)">
+            Edit
+          </button>
+          <button
+            type="button"
+            class="ml-auto flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
+            [attr.aria-label]="'Delete ' + v.plate"
+            (click)="list.remove(v)">
+            <app-icon name="close" [size]="16" />
+          </button>
+        </div>
+      </article>
+    }
+  </div>
+
+  @if (rows.length === 0) {
+    <app-empty-state
+      icon="fleet"
+      title="No vehicles yet"
+      body="Add the units you run. A trip needs a vehicle before it can be booked.">
+      <button
+        type="button"
+        class="mt-2 h-10 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+        (click)="list.create()">
+        Add the first vehicle
+      </button>
+    </app-empty-state>
+  }
+} @else if (list.error(); as message) {
+  <app-error-state [message]="message" (retry)="list.refresh()" />
+} @else {
+  <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    @for (s of [0, 1, 2, 3, 4, 5]; track s) {
+      <div class="rounded-card bg-cr-surface shadow-card ring-1 ring-cr-line/60">
+        <app-skeleton-rows [count]="3" />
+      </div>
+    }
+  </div>
+}

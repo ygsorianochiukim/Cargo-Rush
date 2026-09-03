@@ -1,0 +1,94 @@
+<app-list-toolbar
+  [count]="list.rows()?.length ?? null"
+  singular="fuel record"
+  plural="fuel records"
+  actionLabel="Log fuel"
+  (add)="list.create()" />
+
+<div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+  <!-- Daily budget meter -->
+  <app-card heading="Daily fuel budget" icon="fuel">
+    @if (budget(); as b) {
+      <p class="cr-num text-[28px] leading-none font-semibold">
+        {{ fmt.money(b.spent_today_cents, b.currency) }}
+      </p>
+      <p class="cr-meta mt-1">Spent of {{ fmt.money(b.daily_budget_cents, b.currency) }}</p>
+
+      <div class="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-cr-line">
+        <div
+          class="h-full rounded-full"
+          [class.bg-cr-warning]="overBudget()"
+          [class.bg-cr-blue]="!overBudget()"
+          [style.width.%]="spentPct()"></div>
+      </div>
+      <p class="mt-2 flex items-center justify-between text-[12px]">
+        <span class="cr-num font-semibold" [class.text-cr-warning]="overBudget()">
+          {{ spentPct() }}% used
+        </span>
+        <span class="cr-num text-cr-ink-muted">
+          {{ fmt.money(remaining(), b.currency) }} left today
+        </span>
+      </p>
+    } @else {
+      <div class="flex flex-col gap-3">
+        <div class="cr-skeleton h-7 w-32"></div>
+        <div class="cr-skeleton h-2.5 w-full rounded-full"></div>
+      </div>
+    }
+  </app-card>
+
+  <!-- Projection -->
+  <app-card heading="Consumption projection" icon="clock" hint="This month">
+    @if (budget(); as b) {
+      <p class="cr-num text-[28px] leading-none font-semibold">
+        {{ fmt.money(b.projection_cents, b.currency) }}
+      </p>
+      <p class="cr-meta mt-1">Projected month-end spend</p>
+      <p class="mt-4 text-[13px] text-cr-ink-muted">
+        Based on {{ fmt.litres(totalLitres()) }} logged across the current cycle and the
+        odometer readings attached to each receipt.
+      </p>
+    } @else {
+      <div class="cr-skeleton h-7 w-32"></div>
+    }
+  </app-card>
+
+  <!-- Open requests -->
+  <app-card heading="Budget requests" icon="plus">
+    @if (budget(); as b) {
+      <p class="cr-num text-[28px] leading-none font-semibold">{{ b.open_requests }}</p>
+      <p class="cr-meta mt-1">Awaiting approval</p>
+      <button
+        type="button"
+        class="mt-4 h-10 w-full rounded-control border border-cr-blue text-[14px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint">
+        Review requests
+      </button>
+    } @else {
+      <div class="cr-skeleton h-7 w-16"></div>
+    }
+  </app-card>
+</div>
+
+<app-card
+  heading="Fuel consumption history"
+  icon="fuel"
+  hint="Receipts and charges"
+  [padded]="false"
+  class="mt-4 block">
+  @if (list.error(); as message) {
+    <app-error-state [message]="message" (retry)="list.refresh()" />
+  } @else {
+    <app-data-table
+      [columns]="columns"
+      [rows]="rows()"
+      [minWidth]="940"
+      rowAction="Edit record"
+      [deletable]="true"
+      [rowLabel]="label"
+      emptyIcon="fuel"
+      emptyTitle="No fuel records yet"
+      emptyBody="Log a receipt against a vehicle and its odometer reading. Drivers can add these from the cab too."
+      (open)="list.edit($any($event))"
+      (remove)="list.remove($any($event))" />
+  }
+</app-card>

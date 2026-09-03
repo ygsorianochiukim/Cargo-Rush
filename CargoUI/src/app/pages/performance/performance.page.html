@@ -1,0 +1,97 @@
+<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+  <p class="text-[13px] text-cr-ink-muted">
+    {{ fmt.date(range().from) }} – {{ fmt.date(range().to) }}
+  </p>
+
+  <div
+    class="inline-flex rounded-control border border-cr-line p-0.5"
+    role="group"
+    aria-label="Period"
+  >
+    @for (window of windows; track window.days) {
+      <button
+        type="button"
+        class="h-9 rounded-[6px] px-4 text-[13px] font-semibold transition-colors"
+        [class]="
+          days() === window.days
+            ? 'bg-cr-blue text-cr-surface'
+            : 'text-cr-ink-muted hover:bg-cr-tint'
+        "
+        [attr.aria-pressed]="days() === window.days"
+        (click)="days.set(window.days)"
+      >
+        {{ window.label }}
+      </button>
+    }
+  </div>
+</div>
+
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  <app-card heading="Runs completed" icon="route">
+    @if (totals(); as t) {
+      <p class="cr-num text-[28px] leading-none font-semibold">{{ t.trips_completed }}</p>
+      <p class="cr-meta mt-1">Across {{ t.crew }} crew</p>
+    } @else {
+      <div class="cr-skeleton h-7 w-16"></div>
+    }
+  </app-card>
+
+  <app-card heading="On time" icon="clock">
+    @if (totals(); as t) {
+      <p class="cr-num text-[28px] leading-none font-semibold">{{ onTimePct() }}</p>
+      <p class="cr-meta mt-1">{{ t.trips_on_time }} of {{ t.trips_completed }}</p>
+    } @else {
+      <div class="cr-skeleton h-7 w-16"></div>
+    }
+  </app-card>
+
+  <app-card heading="Incidents" icon="incident">
+    @if (totals(); as t) {
+      <p
+        class="cr-num text-[28px] leading-none font-semibold"
+        [class.text-cr-red]="t.incidents > 0"
+      >
+        {{ t.incidents }}
+      </p>
+      <p class="cr-meta mt-1">Reported in the period</p>
+    } @else {
+      <div class="cr-skeleton h-7 w-16"></div>
+    }
+  </app-card>
+
+  <app-card heading="Time away" icon="calendar">
+    @if (totals(); as t) {
+      <p class="cr-num text-[28px] leading-none font-semibold">{{ t.leave_days }} d</p>
+      <p class="cr-meta mt-1">Plus {{ t.undertime_hours }} h undertime</p>
+    } @else {
+      <div class="cr-skeleton h-7 w-16"></div>
+    }
+  </app-card>
+</div>
+
+<app-card
+  heading="Crew performance"
+  icon="gauge"
+  hint="Ranked by runs completed"
+  [padded]="false"
+  class="mt-4 block"
+>
+  @if (!loading() && crew().length === 0) {
+    <div class="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
+      <app-icon name="gauge" [size]="32" class="text-cr-ink-muted" />
+      <h3 class="mt-1 text-[16px] font-semibold">No crew work in this window</h3>
+      <p class="max-w-sm text-[14px] text-cr-ink-muted">
+        Only employees linked to a driver record appear here.
+      </p>
+    </div>
+  } @else {
+    <app-data-table
+      [columns]="columns"
+      [rows]="loading() ? null : crew()"
+      [minWidth]="1100"
+      emptyIcon="gauge"
+      emptyTitle="No crew work in this window"
+      emptyBody="Only employees linked to a driver record appear here."
+    />
+  }
+</app-card>

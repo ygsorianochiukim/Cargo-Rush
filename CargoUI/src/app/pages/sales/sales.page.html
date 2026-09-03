@@ -1,0 +1,135 @@
+<!-- The granularity is the whole page's control, so it sits above everything
+     rather than inside one card. -->
+<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+  <p class="text-[13px] text-cr-ink-muted">
+    @if (report(); as r) {
+      {{ fmt.date(r.range.from) }} – {{ fmt.date(r.range.to) }}
+    }
+  </p>
+
+  <div
+    class="inline-flex rounded-control border border-cr-line p-0.5"
+    role="group"
+    aria-label="Period"
+  >
+    @for (option of options; track option.value) {
+      <button
+        type="button"
+        class="h-9 rounded-[6px] px-4 text-[13px] font-semibold transition-colors"
+        [class]="
+          granularity() === option.value
+            ? 'bg-cr-blue text-cr-surface'
+            : 'text-cr-ink-muted hover:bg-cr-tint'
+        "
+        [attr.aria-pressed]="granularity() === option.value"
+        (click)="granularity.set(option.value)"
+      >
+        {{ option.label }}
+      </button>
+    }
+  </div>
+</div>
+
+<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+  <app-card heading="Sales" icon="trend">
+    @if (totals(); as t) {
+      <p class="cr-num text-[28px] leading-none font-semibold">
+        {{ fmt.money(t.sales_cents, currency()) }}
+      </p>
+      <p class="cr-meta mt-1">Trip income over the period</p>
+    } @else {
+      <div class="cr-skeleton h-7 w-28"></div>
+    }
+  </app-card>
+
+  <app-card heading="Expenses" icon="wallet">
+    @if (totals(); as t) {
+      <p class="cr-num text-[28px] leading-none font-semibold">
+        {{ fmt.money(t.expenses_cents, currency()) }}
+      </p>
+      <p class="cr-meta mt-1">Daily sheets plus categorised lines</p>
+    } @else {
+      <div class="cr-skeleton h-7 w-28"></div>
+    }
+  </app-card>
+
+  <app-card heading="Net" icon="gauge">
+    @if (totals(); as t) {
+      <p
+        class="cr-num text-[28px] leading-none font-semibold"
+        [class.text-cr-red]="losing()"
+        [class.text-cr-success]="!losing() && t.net_cents > 0"
+      >
+        {{ fmt.money(t.net_cents, currency()) }}
+      </p>
+      <p class="cr-meta mt-1">Margin {{ marginPct() }}</p>
+    } @else {
+      <div class="cr-skeleton h-7 w-28"></div>
+    }
+  </app-card>
+
+  <app-card heading="Average" icon="calendar">
+    @if (totals(); as t) {
+      <p class="cr-num text-[28px] leading-none font-semibold">
+        {{ fmt.money(t.average_cents, currency()) }}
+      </p>
+      <p class="cr-meta mt-1">Per trading {{ averageNoun() }}</p>
+    } @else {
+      <div class="cr-skeleton h-7 w-28"></div>
+    }
+  </app-card>
+</div>
+
+<app-card
+  heading="Sales over time"
+  icon="trend"
+  [hint]="series().length > 14 ? 'Most recent 14 periods' : ''"
+  class="mt-4 block"
+>
+  @if (loading()) {
+    <div class="flex h-48 items-end gap-2">
+      @for (bar of [1, 2, 3, 4, 5, 6, 7, 8]; track bar) {
+        <div class="cr-skeleton flex-1" [style.height.%]="30 + bar * 6"></div>
+      }
+    </div>
+  } @else if (series().length === 0) {
+    <div class="flex flex-col items-center justify-center gap-2 py-12 text-center">
+      <app-icon name="trend" [size]="32" class="text-cr-ink-muted" />
+      <h3 class="mt-1 text-[16px] font-semibold">Nothing recorded in this window</h3>
+      <p class="max-w-sm text-[14px] text-cr-ink-muted">
+        Sales are read from the daily sheets in Trip Monitoring.
+      </p>
+    </div>
+  } @else {
+    <app-bar-chart [bars]="bars()" [height]="200" />
+
+    @if (totals()?.best; as best) {
+      <p class="mt-4 border-t border-cr-line pt-3 text-[13px] text-cr-ink-muted">
+        Best {{ averageNoun() }} was
+        <span class="font-semibold text-cr-ink">{{ best.label }}</span>
+        at
+        <span class="cr-num font-semibold text-cr-ink">{{
+          fmt.money(best.sales_cents, currency())
+        }}</span
+        >.
+      </p>
+    }
+  }
+</app-card>
+
+<app-card
+  heading="Period breakdown"
+  icon="clipboard"
+  hint="Newest first"
+  [padded]="false"
+  class="mt-4 block"
+>
+  <app-data-table
+    [columns]="columns"
+    [rows]="loading() ? null : tableRows()"
+    [minWidth]="720"
+    emptyIcon="trend"
+    emptyTitle="No sales in this window"
+    emptyBody="Widen the period, or record a day in Trip Monitoring."
+  />
+</app-card>

@@ -1,0 +1,279 @@
+<app-list-toolbar
+  [count]="rows()?.length ?? null"
+  singular="applicant"
+  plural="applicants"
+  actionLabel="Add applicant"
+  (add)="list.create()"
+/>
+
+<!-- Every stage, empty ones included: a pipeline with gaps in it reads as a
+     broken screen, and "nobody is at interview" is the useful signal. -->
+<app-card
+  heading="Pipeline"
+  icon="inbox"
+  [hint]="filter() ? 'Filtered — press again to clear' : ''"
+>
+  @if (pipeline(); as p) {
+    <ul class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
+      @for (stage of p.stages; track stage.stage) {
+        <li>
+          <button
+            type="button"
+            class="w-full rounded-card border p-3 text-left transition-colors"
+            [class]="
+              filter() === stage.stage
+                ? 'border-cr-blue bg-cr-tint'
+                : 'border-cr-line hover:bg-cr-tint'
+            "
+            [attr.aria-pressed]="filter() === stage.stage"
+            (click)="toggleFilter(stage.stage)"
+          >
+            <span class="cr-num block text-[24px] leading-none font-semibold">{{
+              stage.count
+            }}</span>
+            <span
+              class="mt-2 inline-block rounded-full px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] uppercase"
+              [class]="toneClass[stage.tone]"
+            >
+              {{ stage.label }}
+            </span>
+          </button>
+        </li>
+      }
+    </ul>
+
+    <p class="mt-3 text-[13px] text-cr-ink-muted">
+      <span class="cr-num font-semibold text-cr-ink">{{ p.open }}</span>
+      awaiting a decision, out of {{ p.total }} on record.
+    </p>
+  } @else {
+    <div class="cr-skeleton h-20 w-full"></div>
+  }
+</app-card>
+
+<app-card heading="Applications" icon="profile" hint="Newest first" class="mt-4 block">
+  @if (list.error(); as message) {
+    <app-error-state [message]="message" (retry)="list.refresh()" />
+  } @else if (rows(); as applicants) {
+    @if (isEmpty()) {
+      <div class="flex flex-col items-center justify-center gap-2 px-6 py-12 text-center">
+        <app-icon name="inbox" [size]="32" class="text-cr-ink-muted" />
+        <h3 class="mt-1 text-[16px] font-semibold">
+          {{ filter() ? 'Nobody at this stage' : 'No applications yet' }}
+        </h3>
+        <p class="max-w-sm text-[14px] text-cr-ink-muted">
+          @if (filter()) {
+            Press the stage again to see the whole pipeline.
+          } @else {
+            Take an application — the CV, the contact, where they came from.
+          }
+        </p>
+      </div>
+    } @else {
+      <ul class="grid grid-cols-1 gap-3 xl:grid-cols-2">
+        @for (applicant of applicants; track applicant.id) {
+          <li class="rounded-card border border-cr-line p-3">
+            <div class="flex items-start gap-3">
+              @if (applicant.photo_url) {
+                <img
+                  [src]="applicant.photo_url"
+                  [alt]="applicant.full_name"
+                  class="h-12 w-12 flex-none rounded-full object-cover ring-1 ring-cr-line"
+                />
+              } @else {
+                <span
+                  class="flex h-12 w-12 flex-none items-center justify-center rounded-full bg-cr-tint text-[15px] font-semibold text-cr-blue"
+                >
+                  {{ initials(applicant) }}
+                </span>
+              }
+
+              <div class="min-w-0 flex-1">
+                <p class="truncate text-[14px] font-semibold">{{ applicant.full_name }}</p>
+                <p class="truncate text-[12px] text-cr-ink-muted">
+                  {{ applicant.position_applied }}
+                  @if (applicant.source) {
+                    · {{ applicant.source }}
+                  }
+                </p>
+                <p class="mt-0.5 text-[12px] text-cr-ink-muted">
+                  Applied {{ fmt.date(applicant.applied_on) }}
+                  @if (applicant.rating) {
+                    · rated {{ applicant.rating }}/5
+                  }
+                </p>
+              </div>
+
+              <span
+                class="inline-flex flex-none items-center rounded-full px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] uppercase"
+                [class]="toneClass[applicant.tone]"
+              >
+                {{ applicant.stage_label }}
+              </span>
+            </div>
+
+            <div class="mt-3 flex flex-wrap items-center gap-3 text-[12px] text-cr-ink-muted">
+              <span class="truncate">{{ applicant.contact }}</span>
+              @if (applicant.email) {
+                <span class="truncate">{{ applicant.email }}</span>
+              }
+              @if (applicant.resume_url) {
+                <a
+                  [href]="applicant.resume_url"
+                  target="_blank"
+                  rel="noopener"
+                  class="inline-flex items-center gap-1 font-semibold text-cr-blue underline-offset-2 hover:underline"
+                >
+                  <app-icon name="clipboard" [size]="13" />
+                  CV
+                </a>
+              }
+            </div>
+
+            @if (applicant.notes) {
+              <p class="mt-2 line-clamp-2 text-[12px] text-cr-ink-muted">{{ applicant.notes }}</p>
+            }
+
+            <div class="mt-3 flex flex-wrap items-center gap-2 border-t border-cr-line pt-3">
+              @if (applicant.employee_id) {
+                <p class="flex-1 text-[12px] font-semibold text-cr-success">
+                  Hired · {{ applicant.employee_no }}
+                </p>
+              } @else if (applicant.open) {
+                @if (nextStage(applicant); as next) {
+                  <button
+                    type="button"
+                    class="h-9 rounded-control border border-cr-line px-3 text-[13px] font-semibold transition-colors hover:bg-cr-tint"
+                    (click)="move(applicant, next)"
+                  >
+                    {{ nextLabel(applicant) }}
+                  </button>
+                }
+                <button
+                  type="button"
+                  class="h-9 rounded-control bg-cr-blue px-3 text-[13px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+                  (click)="openHire(applicant)"
+                >
+                  Hire
+                </button>
+                <button
+                  type="button"
+                  class="h-9 rounded-control px-3 text-[13px] font-semibold text-cr-red transition-colors hover:bg-cr-red-bg"
+                  (click)="reject(applicant)"
+                >
+                  Not proceeding
+                </button>
+              } @else {
+                <p class="flex-1 text-[12px] text-cr-ink-muted">
+                  Closed {{ fmt.dateTime(applicant.decided_at) }}
+                </p>
+              }
+
+              <button
+                type="button"
+                class="ml-auto h-9 rounded-control px-3 text-[13px] font-semibold text-cr-ink-muted transition-colors hover:bg-cr-tint"
+                (click)="list.edit(applicant)"
+              >
+                Edit
+              </button>
+            </div>
+          </li>
+        }
+      </ul>
+    }
+  } @else {
+    <app-skeleton-rows [count]="4" />
+  }
+</app-card>
+
+<!-- Hiring: the employee record is built from the application, so this asks
+     only for what an application does not know. -->
+@if (candidate(); as applicant) {
+  <app-modal
+    [(open)]="hireOpen"
+    [title]="'Hire ' + applicant.full_name"
+    subtitle="Their employee record is built from this application"
+    icon="badge"
+    size="md"
+    [locked]="busy()"
+  >
+    @if (hireError(); as message) {
+      <p
+        role="alert"
+        class="mb-4 rounded-control bg-cr-red-bg px-3 py-2 text-[13px] font-medium text-cr-red"
+      >
+        {{ message }}
+      </p>
+    }
+
+    @if (hired(); as done) {
+      <div class="rounded-control bg-cr-success-bg px-3 py-3">
+        <p class="text-[13px] font-semibold text-cr-success">
+          {{ done.name }} is on the roster as {{ done.employee_no }}
+        </p>
+        <p class="mt-1 text-[12px] text-cr-ink-muted">
+          Give them a login from the Employees screen.
+        </p>
+      </div>
+    } @else {
+      <form [formGroup]="hireForm" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <app-field label="Start date" required>
+          <input type="date" formControlName="hired_on" [class]="inputClass" />
+        </app-field>
+
+        <app-field label="Position" required>
+          <input type="text" formControlName="position" [class]="inputClass" />
+        </app-field>
+
+        <app-field label="Department">
+          <input
+            type="text"
+            formControlName="department"
+            placeholder="Operations"
+            [class]="inputClass"
+          />
+        </app-field>
+
+        <app-field label="Employment">
+          <select formControlName="employment_type" [class]="inputClass">
+            <option value="probationary">Probationary</option>
+            <option value="regular">Regular</option>
+            <option value="contractual">Contractual</option>
+            <option value="part_time">Part-time</option>
+          </select>
+        </app-field>
+
+        <app-field label="Base salary (₱)" class="sm:col-span-2">
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            formControlName="base_salary"
+            [class]="inputClass + ' cr-num'"
+          />
+        </app-field>
+      </form>
+    }
+
+    <ng-container modal-footer>
+      <button
+        type="button"
+        class="h-10 rounded-control px-4 text-[14px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint disabled:opacity-50"
+        [disabled]="busy()"
+        (click)="hireOpen.set(false)"
+      >
+        {{ hired() ? 'Close' : 'Cancel' }}
+      </button>
+      @if (!hired()) {
+        <button
+          type="button"
+          class="h-10 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
+          [disabled]="busy()"
+          (click)="hire()"
+        >
+          {{ busy() ? 'Hiring…' : 'Add to roster' }}
+        </button>
+      }
+    </ng-container>
+  </app-modal>
+}

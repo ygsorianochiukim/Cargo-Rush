@@ -1,0 +1,115 @@
+<app-list-toolbar
+  [count]="list.rows()?.length ?? null"
+  singular="driver"
+  plural="drivers"
+  actionLabel="New driver"
+  (add)="list.create()" />
+
+<app-card [padded]="false">
+  @if (list.rows(); as rows) {
+    <div class="overflow-x-auto">
+      <table class="w-full min-w-[900px] border-collapse text-left whitespace-nowrap">
+        <thead>
+          <tr class="border-b border-cr-line">
+            <th class="cr-th px-4 py-2.5">Driver</th>
+            <th class="cr-th px-4 py-2.5">Licence</th>
+            <th class="cr-th px-4 py-2.5 text-right">LTMS violations</th>
+            <th class="cr-th px-4 py-2.5 text-right">Trips</th>
+            <th class="cr-th px-4 py-2.5">On-time rate</th>
+            <th class="cr-th px-4 py-2.5">Status</th>
+            <th class="cr-th px-4 py-2.5"><span class="sr-only">Open</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (d of rows; track d.id) {
+            <tr class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint">
+              <td class="px-4 py-3">
+                <span class="flex items-center gap-3">
+                  <span
+                    class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-cr-tint text-[11px] font-semibold text-cr-blue">
+                    {{ initials(d.name) }}
+                  </span>
+                  <span class="text-[13px] font-semibold">{{ d.name }}</span>
+                </span>
+              </td>
+              <td class="px-4 py-3">
+                <span class="cr-num block text-[13px]">{{ d.licence_no }}</span>
+                <span
+                  class="block text-[12px]"
+                  [class.text-cr-warning]="expiringSoon(d)"
+                  [class.text-cr-ink-muted]="!expiringSoon(d)">
+                  {{ expiringSoon(d) ? 'Expires' : 'Valid to' }} {{ date(d.licence_expiry) }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-right">
+                @if (d.violations === 0) {
+                  <span class="cr-num text-[13px] text-cr-ink-muted">None</span>
+                } @else {
+                  <span
+                    class="cr-num inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[12px] font-semibold"
+                    [class.bg-cr-red-bg]="d.violations >= 3"
+                    [class.text-cr-red]="d.violations >= 3"
+                    [class.bg-cr-warning-bg]="d.violations < 3"
+                    [class.text-cr-warning]="d.violations < 3">
+                    {{ d.violations }}
+                  </span>
+                }
+              </td>
+              <td class="cr-num px-4 py-3 text-right text-[13px]">{{ d.trips_completed }}</td>
+              <td class="px-4 py-3">
+                <span class="flex items-center gap-2">
+                  <span class="h-1.5 w-24 overflow-hidden rounded-full bg-cr-line">
+                    <span
+                      class="block h-full rounded-full"
+                      [class.bg-cr-success]="d.on_time_rate >= 95"
+                      [class.bg-cr-blue]="d.on_time_rate >= 90 && d.on_time_rate < 95"
+                      [class.bg-cr-warning]="d.on_time_rate < 90"
+                      [style.width.%]="d.on_time_rate"></span>
+                  </span>
+                  <span class="cr-num text-[13px] font-semibold">{{ d.on_time_rate }}%</span>
+                </span>
+              </td>
+              <td class="px-4 py-3"><app-status-pill [status]="d.status" /></td>
+              <td class="px-4 py-3">
+                <span class="flex items-center justify-end gap-1">
+                  <button
+                    type="button"
+                    class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
+                    [attr.aria-label]="'Edit ' + d.name"
+                    (click)="list.edit(d)">
+                    <app-icon name="chevron-right" [size]="16" />
+                  </button>
+                  <button
+                    type="button"
+                    class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
+                    [attr.aria-label]="'Delete ' + d.name"
+                    (click)="list.remove(d)">
+                    <app-icon name="close" [size]="16" />
+                  </button>
+                </span>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    @if (rows.length === 0) {
+      <app-empty-state
+        icon="profile"
+        title="No drivers yet"
+        body="Add your drivers and helpers. Both live here — a helper is a driver record without the keys.">
+        <button
+          type="button"
+          class="mt-2 h-10 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+          (click)="list.create()">
+          Add the first driver
+        </button>
+      </app-empty-state>
+    }
+  } @else if (list.error(); as message) {
+    <app-error-state [message]="message" (retry)="list.refresh()" />
+  } @else {
+    <app-skeleton-rows [count]="6" />
+  }
+</app-card>

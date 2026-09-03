@@ -1,0 +1,170 @@
+<app-list-toolbar
+  [count]="rows()?.length ?? null"
+  singular="expense"
+  plural="expenses"
+  actionLabel="Log expense"
+  (add)="list.create()"
+/>
+
+<div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
+  <app-card heading="Spend this month" icon="wallet">
+    @if (report(); as r) {
+      <p class="cr-num text-[28px] leading-none font-semibold">
+        {{ fmt.money(r.total_cents, r.currency) }}
+      </p>
+      <p class="cr-meta mt-1">
+        {{ r.entry_count }} {{ r.entry_count === 1 ? 'entry' : 'entries' }} ·
+        {{ fmt.date(r.range.from) }} – {{ fmt.date(r.range.to) }}
+      </p>
+
+      <dl class="mt-4 space-y-1.5 text-[13px]">
+        <div class="flex justify-between">
+          <dt class="text-cr-ink-muted">Charged to a truck</dt>
+          <dd class="cr-num">{{ fmt.money(r.attributed_cents, r.currency) }}</dd>
+        </div>
+        <div class="flex justify-between">
+          <dt class="text-cr-ink-muted">Fleet overhead</dt>
+          <dd class="cr-num">{{ fmt.money(r.overhead_cents, r.currency) }}</dd>
+        </div>
+      </dl>
+
+      <p class="mt-3 text-[12px] text-cr-ink-muted">
+        Overhead is {{ overheadShare() }}% of the month, charged to no unit.
+      </p>
+    } @else {
+      <div class="cr-skeleton h-7 w-32"></div>
+    }
+  </app-card>
+
+  <app-card heading="Where it went" icon="trend" hint="Biggest first" class="lg:col-span-2">
+    @if (report(); as r) {
+      @if (r.categories.length === 0) {
+        <div class="flex flex-col items-center justify-center gap-2 py-10 text-center">
+          <app-icon name="wallet" [size]="28" class="text-cr-ink-muted" />
+          <h3 class="text-[15px] font-semibold">Nothing logged this month</h3>
+          <p class="max-w-sm text-[13px] text-cr-ink-muted">Food, tolls, repairs, permits.</p>
+        </div>
+      } @else {
+        <app-bar-rows [bars]="spendBars()" />
+      }
+    } @else {
+      <div class="flex flex-col gap-2">
+        <div class="cr-skeleton h-4 w-full"></div>
+        <div class="cr-skeleton h-4 w-4/5"></div>
+        <div class="cr-skeleton h-4 w-3/5"></div>
+      </div>
+    }
+  </app-card>
+</div>
+
+<!-- Categories. Collapsed by default: the office edits this list once and then
+     spends its time on the table below. -->
+<app-card heading="Categories" icon="tag" class="mt-4 block">
+  <div card-actions class="ml-auto">
+    <button
+      type="button"
+      class="h-9 rounded-control px-3 text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+      (click)="managingCategories.set(!managingCategories())"
+    >
+      {{ managingCategories() ? 'Done' : 'Manage' }}
+    </button>
+  </div>
+
+  @if (categoryNotice(); as notice) {
+    <p
+      class="mb-3 rounded-control bg-cr-warning-bg px-3 py-2 text-[13px] font-medium text-cr-warning"
+    >
+      {{ notice }}
+    </p>
+  }
+
+  @if (categories(); as list) {
+    <div class="flex flex-wrap gap-2">
+      @for (category of list; track category.id) {
+        <span
+          class="inline-flex items-center gap-2 rounded-full border border-cr-line px-3 py-1.5 text-[13px]"
+          [class.opacity-50]="category.status !== 'active'"
+        >
+          @if (category.icon) {
+            <app-icon [name]="category.icon" [size]="14" class="text-cr-blue" />
+          }
+          {{ category.name }}
+          @if (managingCategories()) {
+            <button
+              type="button"
+              class="text-[11px] font-semibold text-cr-ink-muted underline-offset-2 hover:underline"
+              (click)="toggleCategory(category)"
+            >
+              {{ category.status === 'active' ? 'switch off' : 'switch on' }}
+            </button>
+            <button
+              type="button"
+              aria-label="Delete category"
+              class="rounded-full p-0.5 text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
+              (click)="removeCategory(category)"
+            >
+              <app-icon name="close" [size]="12" />
+            </button>
+          }
+        </span>
+      }
+    </div>
+
+    @if (managingCategories()) {
+      <form
+        [formGroup]="categoryForm"
+        class="mt-4 flex flex-wrap items-end gap-3 border-t border-cr-line pt-4"
+      >
+        <app-field label="New category" required class="min-w-[200px] flex-1">
+          <input
+            type="text"
+            formControlName="name"
+            placeholder="Driver bonus"
+            [class]="inputClass"
+          />
+        </app-field>
+        <app-field label="Description" class="min-w-[240px] flex-[2]">
+          <input type="text" formControlName="description" [class]="inputClass" />
+        </app-field>
+        <button
+          type="button"
+          class="h-10 flex-none rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+          (click)="addCategory()"
+        >
+          Add
+        </button>
+      </form>
+      <p class="mt-2 text-[12px] text-cr-ink-muted">
+        A category with spend on it is switched off, not deleted.
+      </p>
+    }
+  } @else {
+    <div class="cr-skeleton h-8 w-full"></div>
+  }
+</app-card>
+
+<app-card
+  heading="Expense entries"
+  icon="wallet"
+  hint="Newest first"
+  [padded]="false"
+  class="mt-4 block"
+>
+  @if (list.error(); as message) {
+    <app-error-state [message]="message" (retry)="list.refresh()" />
+  } @else {
+    <app-data-table
+      [columns]="columns"
+      [rows]="rows()"
+      [minWidth]="1000"
+      rowAction="Edit expense"
+      [deletable]="true"
+      [rowLabel]="label"
+      emptyIcon="wallet"
+      emptyTitle="No expenses logged yet"
+      emptyBody="Food, tolls, repairs, permits. Leave the truck blank for fleet overhead."
+      (open)="list.edit($any($event))"
+      (remove)="list.remove($any($event))"
+    />
+  }
+</app-card>
