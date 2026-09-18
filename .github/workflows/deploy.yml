@@ -191,7 +191,13 @@ jobs:
           RELEASE: ${{ github.run_number }}-${{ github.sha }}
         run: |
           set -euo pipefail
-          ssh_opts="-i $HOME/.ssh/deploy_key -p $SSH_PORT -o BatchMode=yes"
+          # `-o Port=`, not `-p`. ssh spells the port `-p`, but scp spells it
+          # `-P` and uses `-p` for "preserve timestamps" — so a shared `-p 22`
+          # makes scp treat 22 as a local filename and fail with
+          # `stat local "22": No such file or directory`, long after the ssh
+          # calls either side of it have worked fine. The long form means the
+          # same thing to both.
+          ssh_opts="-i $HOME/.ssh/deploy_key -o Port=$SSH_PORT -o BatchMode=yes"
           target="$SSH_USER@$SSH_HOST"
 
           ssh $ssh_opts "$target" "mkdir -p '$DEPLOY_PATH/releases/$RELEASE'"
