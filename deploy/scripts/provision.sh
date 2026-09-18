@@ -40,13 +40,18 @@ APP_ENV="$ENV_NAME"
 APP_DEBUG="false"
 LOG_LEVEL="$([ "$ENV_NAME" = production ] && echo warning || echo debug)"
 
-# The cookie domain: apex plus subdomains for production, the exact host for
-# staging, so a staging session cannot be presented to production.
-if [ "$ENV_NAME" = production ]; then
-  SESSION_DOMAIN=".${SERVER_NAME#www.}"
-else
-  SESSION_DOMAIN="$SERVER_NAME"
-fi
+# The exact host, for both environments.
+#
+# The tempting thing for production is ".$SERVER_NAME" so the cookie covers
+# the apex and www together. Don't: staging is usually a subdomain of that
+# apex, so a leading dot puts the production session cookie on every request
+# to staging as well. Staging cannot read it — different APP_KEY — but there
+# is no reason to send it there, and on a single box hosting both that is
+# exactly the arrangement.
+#
+# If you do serve apex and www as one site, widen this by hand in
+# shared/.env and re-run `php artisan config:cache`.
+SESSION_DOMAIN="$SERVER_NAME"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
