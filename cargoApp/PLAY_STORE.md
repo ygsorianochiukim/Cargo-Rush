@@ -5,38 +5,46 @@ does. Work top to bottom.
 
 ---
 
-## 0. Blocker — the current build cannot reach any server
+## 0. The API origin — done, but know why it mattered
 
-`src/services/shared/api.service.ts` resolves the API like this:
+`src/services/shared/api.service.ts` falls back like this when
+`EXPO_PUBLIC_API_URL` is unset:
 
 ```ts
-const configured = process.env.EXPO_PUBLIC_API_URL;   // unset
 const host = Constants.expoConfig?.hostUri?.split(':')[0];  // undefined off Metro
 return host ? `http://${host}:8000` : 'http://localhost:8000';
 ```
 
 `hostUri` is the machine that served the JS bundle. A release build has no
-Metro, so it is `undefined`, and every call falls through to
-**`http://localhost:8000`** — the handset itself. Sign-in fails, and so does
-everything behind it. The splash and the login form will look perfect and
-nothing will work.
+Metro, so it is `undefined` and every call goes to **`http://localhost:8000`**
+— the handset itself. The splash and the login form look perfect and nothing
+works. `http://` would fail anyway: Android blocks cleartext from API 28.
 
-There is also a second problem behind it: `http://`. Android blocks cleartext
-traffic by default from API 28, so the production API has to be **HTTPS**
-regardless.
+Set on EAS, against the live server:
 
-**Fix before any upload**, with the real API origin:
+| Environment | Value |
+|---|---|
+| `production` | `https://api.aya-it.online` |
+| `preview` | `https://staging.aya-it.online` |
 
-```bash
-eas env:create --environment production --name EXPO_PUBLIC_API_URL \
-  --value https://api.cargorush.ph --visibility plaintext
-eas env:create --environment preview --name EXPO_PUBLIC_API_URL \
-  --value https://api.cargorush.ph --visibility plaintext
+Preview points at staging deliberately, so an internal test build cannot write
+into production data. Change it if you want release candidates tested against
+the real thing.
+
+Both hosts are live, serve HTTPS, and 308-redirect from HTTP.
+`POST /api/v1/login` answers 422 to an empty body, which is the endpoint this
+app actually calls.
+
+To confirm a build picked it up, the build log must contain:
+
+```
+Environment variables with visibility "Plain text" and "Sensitive" loaded from
+the "production" environment on EAS: EXPO_PUBLIC_API_URL.
 ```
 
-Then rebuild. Confirm it took by checking the build log's environment line —
-it currently reads *"No environment variables ... found for the production
-environment"*.
+If it instead says *"No environment variables ... found"*, the build is the
+broken one — do not upload it. **Any `.aab` built before 18 September 2026 has
+this bug**, including version code 4.
 
 ---
 
@@ -116,10 +124,29 @@ Assets required:
 | App icon | 512×512 PNG | ready — `assets/store/play-icon-512.png` |
 | Feature graphic | 1024×500 PNG | **not in repo — must be made** |
 | Phone screenshots | 2–8, min 320px side | **must be captured** |
-| Privacy policy URL | public, must load | draft at `store/privacy-policy.md` — **host it**; `aya-it.online/privacy` currently 404s |
+| Privacy policy URL | public, must load | draft at `store/privacy-policy.md` — **fill in `{COMPANY}` (4×) and `{CONTACT_EMAIL}` (3×), then host it**. See below |
 
 Content rating questionnaire: a business logistics tool — no ads, no user
 content, no purchases. Expect *Everyone*.
+
+### Hosting the privacy policy
+
+The serving side is already in place: `CargoUI`'s vhost has an exact-match
+`location = /privacy` that serves `privacy.html`, so the finished policy goes
+live at **`https://app.aya-it.online/privacy`** on the next deploy.
+
+Two things first, and neither is something to guess at — this is the document
+Google holds you to:
+
+1. Replace `{COMPANY}` (4 occurrences) with the legal entity that owns the
+   Play listing, and `{CONTACT_EMAIL}` (3) with a monitored address.
+2. Convert `store/privacy-policy.md` to `CargoUI/public/privacy.html` and
+   commit it. Anything that renders Markdown to a standalone HTML page will
+   do; it needs no styling to satisfy the requirement, only to be readable and
+   publicly reachable.
+
+Check it loads before pasting the URL into the console — a policy URL that
+404s is a rejection, and it is the single most common one.
 
 ---
 
