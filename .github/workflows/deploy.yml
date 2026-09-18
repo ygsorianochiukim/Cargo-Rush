@@ -50,13 +50,17 @@ jobs:
       # --no-dev is the point: Pest, Pint, Faker and Pail have no business on a
       # server. --optimize-autoloader builds a classmap so PHP is not stat-ing
       # the filesystem for every class on every request.
+      #
+      # Not --classmap-authoritative. It would shave a little more off, at the
+      # cost of making any class that is not in the classmap unloadable rather
+      # than merely slow to find — and that failure shows up at runtime on the
+      # server, not here.
       - name: Install PHP dependencies (production)
         working-directory: CargoApi
         run: |
           composer install \
             --no-dev \
             --optimize-autoloader \
-            --classmap-authoritative \
             --prefer-dist \
             --no-interaction \
             --no-progress
@@ -119,6 +123,35 @@ jobs:
       url: ${{ vars.APP_URL }}
 
     steps:
+      # Without this the first run on an unconfigured environment fails by
+      # handing ssh an empty host and printing its usage, which says nothing
+      # about what is actually wrong.
+      - name: Check this environment is configured
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          missing=()
+          [ -n "$SSH_HOST" ]        || missing+=("secret SSH_HOST")
+          [ -n "$SSH_USER" ]        || missing+=("secret SSH_USER")
+          [ -n "$SSH_PRIVATE_KEY" ] || missing+=("secret SSH_PRIVATE_KEY")
+          [ -n "$SSH_KNOWN_HOSTS" ] || missing+=("secret SSH_KNOWN_HOSTS")
+          [ -n "$DEPLOY_PATH" ]     || missing+=("variable DEPLOY_PATH")
+          [ -n "$APP_URL" ]         || missing+=("variable APP_URL")
+
+          if [ ${#missing[@]} -gt 0 ]; then
+            printf '::error::The "%s" environment is not set up yet. Missing: %s\n' \
+              "${{ github.ref_name == 'main' && 'production' || 'staging' }}" \
+              "$(IFS=', '; echo "${missing[*]}")"
+            echo "Set them under Settings -> Environments. See deploy/README.md, 'First-time setup' step 4."
+            exit 1
+          fi
+          echo "Environment configured; deploying to $DEPLOY_PATH on $SSH_HOST."
+
       - name: Download release payload
         uses: actions/download-artifact@v4
         with:

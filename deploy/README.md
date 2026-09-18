@@ -126,6 +126,11 @@ verification.
 On the `production` environment, also turn on **Required reviewers**. It is the
 one thing that stops an accidental push to `main` going straight to live.
 
+Until an environment has all six, its deploy job fails on the first step and
+names what is missing. Tests and the release build still run, so a push before
+the server exists tells you whether the code is good — it just has nowhere to
+put it.
+
 ### 5. Push
 
 ```bash
