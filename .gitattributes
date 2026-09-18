@@ -1,0 +1,23 @@
+# Default: let git normalise text in the repository.
+* text=auto
+
+# These run on Linux. A CRLF here is not a cosmetic difference — the shebang
+# line becomes "#!/usr/bin/env bash\r" and the kernel reports "bad interpreter",
+# and nginx/systemd reject their own config the same way. Checked out with LF
+# whatever core.autocrlf says on the machine doing the checkout.
+*.sh            text eol=lf
+*.template      text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+.env.example    text eol=lf
+
+# Binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.pdf binary

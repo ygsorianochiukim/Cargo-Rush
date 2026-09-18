@@ -1,0 +1,19 @@
+# One tick of Laravel's scheduler. Driven by cargo-scheduler-__ENV_NAME__.timer,
+# not by this unit directly.
+#
+# routes/console.php schedules three commands — trip release, overdue trips and
+# overdue invoices. All three are clock-driven rather than write-driven, so
+# nothing in the application raises them: without this timer, trips never leave
+# `scheduled` and invoices never go overdue.
+[Unit]
+Description=Cargo Rush scheduler tick (__ENV_NAME__)
+After=network.target mysql.service
+
+[Service]
+Type=oneshot
+User=__DEPLOY_USER__
+Group=www-data
+ExecStart=/usr/bin/php__PHP_VERSION__ __DEPLOY_PATH__/current/CargoApi/artisan schedule:run
+
+StandardOutput=append:/var/log/cargo-rush/__ENV_NAME__-scheduler.log
+StandardError=append:/var/log/cargo-rush/__ENV_NAME__-scheduler.log

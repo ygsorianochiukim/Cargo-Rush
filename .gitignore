@@ -1,0 +1,20 @@
+# Root-level ignores. Each sub-project (CargoApi, CargoUI, cargoApp) keeps its
+# own .gitignore for build output and dependencies — this file only covers what
+# lives at the repository root.
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Deployment secrets. `deploy/scripts/provision.sh` writes the real .env on the
+# server; nothing that holds a credential belongs in the repo.
+deploy/**/*.env
+deploy/**/*.key
+deploy/**/*.pem
+*.retry
+
+# Stray file from an interrupted npm run
+/npm

@@ -1,0 +1,41 @@
+# Queue worker. CargoApi runs QUEUE_CONNECTION=database, so without this
+# nothing queued is ever processed — jobs accumulate in the `jobs` table and
+# look, from the outside, like features that silently do nothing.
+#
+# Placeholders filled in by provision.sh: __ENV_NAME__ __DEPLOY_PATH__
+# __PHP_VERSION__ __DEPLOY_USER__
+[Unit]
+Description=Cargo Rush queue worker (__ENV_NAME__)
+After=network.target mysql.service
+Requires=network.target
+
+[Service]
+Type=simple
+User=__DEPLOY_USER__
+Group=www-data
+Restart=always
+RestartSec=5
+
+# --max-time recycles the process hourly so a slow memory leak in a job cannot
+# grow without bound. --tries=3 with --backoff means a job that fails on a
+# transient error (a dropped database connection) is retried rather than
+# buried straight away.
+ExecStart=/usr/bin/php__PHP_VERSION__ __DEPLOY_PATH__/current/CargoApi/artisan queue:work \
+    --sleep=3 \
+    --tries=3 \
+    --backoff=10 \
+    --max-time=3600 \
+    --max-jobs=1000
+
+# `artisan queue:restart` during a deploy asks workers to finish the job in
+# hand and exit; Restart=always is what brings them back on the new release.
+# SIGTERM is the same graceful stop, so a manual `systemctl restart` does not
+# kill work mid-flight either.
+KillSignal=SIGTERM
+TimeoutStopSec=90
+
+StandardOutput=append:/var/log/cargo-rush/__ENV_NAME__-queue.log
+StandardError=append:/var/log/cargo-rush/__ENV_NAME__-queue.log
+
+[Install]
+WantedBy=multi-user.target

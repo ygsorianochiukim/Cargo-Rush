@@ -1,0 +1,175 @@
+# Branch-to-server deployment.
+#
+#   staging  ->  the staging GitHub Environment  ->  staging server
+#   main     ->  the production GitHub Environment -> production server
+#
+# Host, user, key and path all come from the Environment, so this one file
+# drives both targets and nothing about either server is written down here.
+# See deploy/README.md for the secrets and variables each Environment needs.
+name: Deploy
+
+on:
+  push:
+    branches: [main, staging]
+  workflow_dispatch:
+
+# One deploy per branch at a time. Not cancel-in-progress: killing a job
+# half-way through a migration is how you get a database nobody can reason
+# about. A queued run waits for the one ahead of it to finish.
+concurrency:
+  group: deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  # The same suite pull requests run. A red build never reaches a server.
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build release
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, bcmath, intl, pdo_mysql, gd, zip
+          coverage: none
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: CargoUI/package-lock.json
+
+      # --no-dev is the point: Pest, Pint, Faker and Pail have no business on a
+      # server. --optimize-autoloader builds a classmap so PHP is not stat-ing
+      # the filesystem for every class on every request.
+      - name: Install PHP dependencies (production)
+        working-directory: CargoApi
+        run: |
+          composer install \
+            --no-dev \
+            --optimize-autoloader \
+            --classmap-authoritative \
+            --prefer-dist \
+            --no-interaction \
+            --no-progress
+
+      - name: Build CargoUI
+        working-directory: CargoUI
+        run: |
+          npm ci
+          npx ng build --configuration production
+
+      # Assemble exactly what the server gets. Building here rather than on the
+      # VPS means the box needs no Composer, no Node and no build toolchain.
+      - name: Assemble release payload
+        run: |
+          set -euo pipefail
+          mkdir -p release/CargoApi release/CargoUI release/bin
+
+          rsync -a \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='tests' \
+            --exclude='storage' \
+            --exclude='.env' \
+            --exclude='.env.*' \
+            --exclude='phpunit.xml' \
+            --exclude='public/storage' \
+            CargoApi/ release/CargoApi/
+
+          # `storage` is a symlink into shared/ on the server; ship the tree it
+          # needs so a first deploy has the directories Laravel expects.
+          mkdir -p release/skel/storage/app/public \
+                   release/skel/storage/framework/{cache/data,sessions,testing,views} \
+                   release/skel/storage/logs
+
+          cp -r CargoUI/dist/CargoUI/browser release/CargoUI/browser
+
+          # Both scripts ride along with the release, so the script that
+          # activates a build is always the one committed beside it — and
+          # rollback.sh is on the box before you need it.
+          cp deploy/scripts/release.sh deploy/scripts/rollback.sh release/bin/
+          chmod +x release/bin/*.sh
+
+          tar -czf release.tar.gz -C release .
+          ls -lh release.tar.gz
+
+      - name: Upload release payload
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ github.sha }}
+          path: release.tar.gz
+          retention-days: 7
+
+  deploy:
+    name: Deploy to ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+      url: ${{ vars.APP_URL }}
+
+    steps:
+      - name: Download release payload
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ github.sha }}
+
+      # Host key comes from a secret rather than ssh-keyscan: keyscan trusts
+      # whatever answers on the night, which is not verification.
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Upload and release
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ vars.SSH_PORT || '22' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+          RELEASE: ${{ github.run_number }}-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          ssh_opts="-i $HOME/.ssh/deploy_key -p $SSH_PORT -o BatchMode=yes"
+          target="$SSH_USER@$SSH_HOST"
+
+          ssh $ssh_opts "$target" "mkdir -p '$DEPLOY_PATH/releases/$RELEASE'"
+          scp $ssh_opts release.tar.gz "$target:$DEPLOY_PATH/releases/$RELEASE/"
+          ssh $ssh_opts "$target" "
+            set -euo pipefail
+            cd '$DEPLOY_PATH/releases/$RELEASE'
+            tar -xzf release.tar.gz && rm release.tar.gz
+            bin/release.sh '$DEPLOY_PATH' '$RELEASE'
+          "
+
+      - name: Smoke test
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          set -euo pipefail
+          # Laravel's health endpoint, registered by `health: '/up'` in
+          # bootstrap/app.php. A 200 here means PHP booted and the config
+          # cache is readable.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-delay 5 "$APP_URL/up")
+          echo "GET $APP_URL/up -> $code"
+          [ "$code" = "200" ] || exit 1
+
+          # And that nginx is serving the SPA shell, not a directory listing
+          # or the Laravel welcome page.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' "$APP_URL/")
+          echo "GET $APP_URL/ -> $code"
+          [ "$code" = "200" ] || exit 1

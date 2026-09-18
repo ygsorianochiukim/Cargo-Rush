@@ -1,0 +1,84 @@
+# Tests and a production build of both deployables.
+#
+# Runs on every pull request, and is called by deploy.yml as a gate before
+# anything reaches a server — `workflow_call` is what makes it reusable rather
+# than a copy of the same steps in two files.
+name: CI
+
+on:
+  pull_request:
+    branches: [main, staging]
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api:
+    name: CargoApi (Pest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: CargoApi
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          # sqlite/pdo_sqlite because phpunit.xml runs the suite against an
+          # in-memory database — no MySQL service needed here.
+          extensions: mbstring, bcmath, intl, pdo_sqlite, sqlite3, gd, zip
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/composer/files
+          key: composer-${{ runner.os }}-${{ hashFiles('CargoApi/composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+
+      - name: Prepare environment
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+
+      - name: Lint (Pint)
+        run: vendor/bin/pint --test
+
+      - name: Run Pest
+        run: vendor/bin/pest --colors=always
+
+  ui:
+    name: CargoUI (build + vitest)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: CargoUI
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: CargoUI/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Unit tests
+        run: npx ng test --no-watch
+
+      # Also the type check: the Angular compiler fails the build on a type
+      # error, so there is no separate tsc step.
+      - name: Production build
+        run: npx ng build --configuration production

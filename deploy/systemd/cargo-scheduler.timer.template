@@ -1,0 +1,16 @@
+# Every minute, which is the interval Laravel's scheduler expects — it decides
+# for itself which of the three commands is due on any given tick.
+[Unit]
+Description=Run the Cargo Rush scheduler every minute (__ENV_NAME__)
+Requires=cargo-scheduler-__ENV_NAME__.service
+
+[Timer]
+OnCalendar=*:0/1
+AccuracySec=1s
+# Do not fire a backlog of missed ticks after the box was down; the next
+# minute's run reconciles everything anyway.
+Persistent=false
+Unit=cargo-scheduler-__ENV_NAME__.service
+
+[Install]
+WantedBy=timers.target
