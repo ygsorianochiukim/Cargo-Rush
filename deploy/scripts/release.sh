@@ -31,7 +31,8 @@ ENV_NAME="$(basename "$DEPLOY_PATH")"
 # How many past releases to keep for rollback.
 KEEP_RELEASES="${KEEP_RELEASES:-5}"
 
-log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+warn() { printf '\033[1;33m ! \033[0m%s\n' "$*"; }
 fail() { printf '\033[1;31m!!!\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ -d "$RELEASE_DIR" ] || fail "release $RELEASE was not uploaded to $RELEASE_DIR"
@@ -108,8 +109,26 @@ sudo -n /usr/bin/systemctl reload "${PHP}-fpm"
 
 # Graceful: workers finish the job in hand, exit, and systemd starts them again
 # on the new symlink.
+# `queue:restart` alone is not enough. It sets a flag that running workers
+# notice and exit on, so systemd's Restart=always brings them back on the new
+# release — but it does nothing at all to a worker that is not running, and
+# after provisioning it is not: the unit is enabled and left stopped, because
+# at that point there is no release for it to run.
+#
+# So the first deploy would finish green with no worker ever started, and
+# every queued job would sit in the table unprocessed, looking like features
+# that quietly do nothing.
+#
+# `systemctl restart` covers both cases, and is still graceful — queue:work
+# handles SIGTERM by finishing the job in hand, with TimeoutStopSec=90 to do
+# it in. The sudoers rule permits exactly this unit and nothing else.
 log "Restarting queue workers"
-"$PHP" artisan queue:restart
+if sudo -n /usr/bin/systemctl restart "cargo-queue-$ENV_NAME" 2>/dev/null; then
+  log "  cargo-queue-$ENV_NAME restarted"
+else
+  warn "could not restart cargo-queue-$ENV_NAME; signalling running workers instead"
+  "$PHP" artisan queue:restart
+fi
 
 log "Reloading nginx"
 sudo -n /usr/bin/systemctl reload nginx
