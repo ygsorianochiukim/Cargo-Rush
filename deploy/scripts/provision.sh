@@ -177,12 +177,32 @@ fi
 # ---------------------------------------------------------------------------
 log "Installing the nginx vhost"
 # ---------------------------------------------------------------------------
-sed -e "s|__SERVER_NAME__|$SERVER_NAME|g" \
-    -e "s|__DEPLOY_PATH__|$DEPLOY_PATH|g" \
-    -e "s|__ENV_NAME__|$ENV_NAME|g" \
-    -e "s|__PHP_VERSION__|$PHP_VERSION|g" \
-    "$HERE/nginx/cargo-rush.conf.template" > "/etc/nginx/sites-available/cargo-$ENV_NAME"
-ln -sfn "/etc/nginx/sites-available/cargo-$ENV_NAME" "/etc/nginx/sites-enabled/cargo-$ENV_NAME"
+# Left alone once it exists, for the same reason as shared/.env: this is not
+# the only thing that writes it. `certbot --nginx` rewrites this file to add
+# the 443 server block and the redirect, so regenerating it from the template
+# would throw the TLS config away and drop the site back to plain HTTP — and
+# with SESSION_SECURE_COOKIE=true that reads as "nobody can log in any more",
+# a long way from the command that caused it.
+#
+# FORCE_NGINX=1 regenerates anyway, keeping a timestamped backup. Re-run
+# certbot afterwards.
+VHOST="/etc/nginx/sites-available/cargo-$ENV_NAME"
+if [ -f "$VHOST" ] && [ "${FORCE_NGINX:-0}" != "1" ]; then
+  warn "$VHOST exists — not regenerating it (FORCE_NGINX=1 to override)"
+else
+  if [ -f "$VHOST" ]; then
+    backup="$VHOST.bak.$(date +%Y%m%d%H%M%S)"
+    cp -a "$VHOST" "$backup"
+    warn "regenerating $VHOST — previous version kept at $backup"
+    warn "re-run: certbot --nginx -d $SERVER_NAME --redirect"
+  fi
+  sed -e "s|__SERVER_NAME__|$SERVER_NAME|g" \
+      -e "s|__DEPLOY_PATH__|$DEPLOY_PATH|g" \
+      -e "s|__ENV_NAME__|$ENV_NAME|g" \
+      -e "s|__PHP_VERSION__|$PHP_VERSION|g" \
+      "$HERE/nginx/cargo-rush.conf.template" > "$VHOST"
+fi
+ln -sfn "$VHOST" "/etc/nginx/sites-enabled/cargo-$ENV_NAME"
 rm -f /etc/nginx/sites-enabled/default
 
 # nginx will not start until `current` resolves, and `current` does not exist

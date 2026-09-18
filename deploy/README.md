@@ -72,6 +72,14 @@ timer; and prints what is left to do.
 Override the defaults with environment variables if you need to:
 `PHP_VERSION`, `DEPLOY_USER`, `DEPLOY_ROOT`.
 
+Re-running it is safe. The two files that other things also write —
+`shared/.env` and the nginx vhost — are left alone once they exist, and it
+says so rather than doing it quietly. The vhost matters because `certbot`
+rewrites it to add TLS; regenerating from the template would throw that away.
+`FORCE_NGINX=1` regenerates anyway and keeps a timestamped backup, after which
+you re-run certbot. The database and its password are likewise left alone if
+the database already exists.
+
 ### 2. Give GitHub a key
 
 On your laptop, one key pair per environment:
