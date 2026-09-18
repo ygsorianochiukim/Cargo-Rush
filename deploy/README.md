@@ -115,7 +115,6 @@ Secrets, per environment:
 | Secret            | Value |
 |-------------------|-------|
 | `SSH_HOST`        | The server's hostname or IP |
-| `SSH_USER`        | `deploy` |
 | `SSH_PRIVATE_KEY` | Contents of `~/.ssh/cargo_ci_staging` — the private half, whole file including the BEGIN/END lines |
 | `SSH_KNOWN_HOSTS` | Output of `ssh-keyscan -t ed25519 staging.cargorush.example` |
 
@@ -123,9 +122,17 @@ Variables, per environment:
 
 | Variable      | Value |
 |---------------|-------|
+| `SSH_USER`    | `deploy` |
 | `DEPLOY_PATH` | `/var/www/cargo-rush/staging` |
 | `APP_URL`     | `https://staging.cargorush.example` |
 | `SSH_PORT`    | Only if not 22 |
+
+`SSH_USER` is a variable rather than a secret on purpose. A username is not
+sensitive, and GitHub redacts every secret's literal text from all log output
+— so storing the value `deploy` as a secret turns `deploy/README.md` into
+`***/README.md` in every run, across the whole repository. Secrets are for
+things that would matter if they leaked, not for everything to do with
+deployment.
 
 `SSH_KNOWN_HOSTS` is a secret rather than an `ssh-keyscan` at deploy time on
 purpose: keyscan trusts whatever answers on the night, which is not
