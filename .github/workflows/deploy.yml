@@ -144,9 +144,12 @@ jobs:
           [ -n "$APP_URL" ]         || missing+=("variable APP_URL")
 
           if [ ${#missing[@]} -gt 0 ]; then
+            # `${missing[*]}` joins on the first character of IFS only, so a
+            # separator of ", " would come out as ",".
+            list="$(printf '%s, ' "${missing[@]}")"
             printf '::error::The "%s" environment is not set up yet. Missing: %s\n' \
               "${{ github.ref_name == 'main' && 'production' || 'staging' }}" \
-              "$(IFS=', '; echo "${missing[*]}")"
+              "${list%, }"
             echo "Set them under Settings -> Environments. See deploy/README.md, 'First-time setup' step 4."
             exit 1
           fi

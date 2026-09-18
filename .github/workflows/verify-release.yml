@@ -1,0 +1,116 @@
+# Exercises release.sh and rollback.sh against a fake deploy tree: seven
+# releases, a deploy, then a rollback, with php and sudo stubbed out.
+#
+# It is here because those two scripts are the part of the deployment that
+# nothing else covers — they only ever run on the server, and a mistake in
+# them is found at the worst possible moment. The symlink swap in particular
+# cannot be exercised on Windows at all, where `ln -s` quietly copies.
+#
+# Only runs when they change; it takes seconds.
+name: Verify release scripts
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/scripts/**'
+      - '.github/workflows/verify-release.yml'
+  push:
+    branches: [main, staging]
+    paths:
+      - 'deploy/scripts/**'
+      - '.github/workflows/verify-release.yml'
+  workflow_dispatch:
+
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Simulate a deploy and a rollback
+        run: |
+          set -euo pipefail
+          SB="$RUNNER_TEMP/sim"
+          mkdir -p "$SB/bin"
+
+          # Stub out everything that needs a real server.
+          cat > "$SB/bin/php8.4" <<'EOF'
+          #!/usr/bin/env bash
+          echo "  [php] $*" >> "$STUBLOG"
+          EOF
+          cat > "$SB/bin/sudo" <<'EOF'
+          #!/usr/bin/env bash
+          echo "  [sudo] $*" >> "$STUBLOG"
+          EOF
+          chmod +x "$SB/bin/php8.4" "$SB/bin/sudo"
+          export PATH="$SB/bin:$PATH" STUBLOG="$SB/stub.log"
+          : > "$STUBLOG"
+
+          DP="$SB/var/staging"
+          mkdir -p "$DP/shared/storage" "$DP/releases"
+          echo "APP_KEY=base64:test" > "$DP/shared/.env"
+
+          # Seven releases, oldest first, so pruning has work to do.
+          for n in 1 2 3 4 5 6 7; do
+            R="$DP/releases/r$n"
+            mkdir -p "$R/CargoApi/public" "$R/CargoUI/browser" "$R/bin" \
+                     "$R/skel/storage/app/public" "$R/skel/storage/logs"
+            cp deploy/scripts/release.sh deploy/scripts/rollback.sh "$R/bin/"
+            chmod +x "$R/bin"/*.sh
+            touch -d "2026-09-0$n" "$R"
+          done
+
+          # What provision.sh leaves behind before the first deploy. Dated
+          # before every release, because that is what it is on a real box —
+          # it is written at provision time and never touched again.
+          mkdir -p "$DP/releases/0-placeholder"
+          ln -sfn "$DP/releases/0-placeholder" "$DP/current"
+          touch -d "2026-08-01" "$DP/releases/0-placeholder"
+
+          echo "::group::release.sh r7"
+          KEEP_RELEASES=5 "$DP/releases/r7/bin/release.sh" "$DP" r7
+          echo "::endgroup::"
+
+          fail() { echo "::error::$1"; exit 1; }
+
+          # --- assertions -------------------------------------------------
+          [ -L "$DP/current" ] || fail "current is not a symlink"
+          [ "$(readlink "$DP/current")" = "$DP/releases/r7" ] \
+            || fail "current points at $(readlink "$DP/current"), expected r7"
+          [ -L "$DP/current/CargoApi/.env" ] || fail ".env is not a symlink"
+          [ "$(readlink "$DP/current/CargoApi/.env")" = "$DP/shared/.env" ] \
+            || fail ".env points at the wrong place"
+          [ -L "$DP/current/CargoApi/storage" ] || fail "storage is not a symlink"
+          [ "$(readlink "$DP/current/CargoApi/storage")" = "$DP/shared/storage" ] \
+            || fail "storage points at the wrong place"
+          [ -L "$DP/current/CargoApi/public/storage" ] || fail "public/storage is not a symlink"
+          [ ! -d "$DP/current/skel" ] || fail "skel was not cleaned up"
+          [ -d "$DP/shared/storage/app/public" ] || fail "shared storage was not seeded"
+          [ -d "$DP/shared/storage/logs" ] || fail "shared storage logs missing"
+
+          kept="$(ls -1 "$DP/releases" | grep '^r' | sort | tr '\n' ' ')"
+          [ "$kept" = "r3 r4 r5 r6 r7 " ] || fail "prune kept: $kept (expected r3..r7)"
+          [ ! -e "$DP/current.tmp" ] || fail "current.tmp was left behind"
+
+          # Writing through the symlink must land in shared/, so it survives.
+          echo "hello" > "$DP/current/CargoApi/storage/logs/probe.log"
+          [ -f "$DP/shared/storage/logs/probe.log" ] || fail "storage symlink does not reach shared/"
+
+          echo "PASS: release.sh"
+          echo
+
+          echo "::group::rollback.sh"
+          : > "$STUBLOG"
+          "$DP/current/bin/rollback.sh" "$DP"
+          echo "::endgroup::"
+
+          [ -L "$DP/current" ] || fail "current is not a symlink after rollback"
+          [ "$(readlink "$DP/current")" = "$DP/releases/r6" ] \
+            || fail "rollback landed on $(readlink "$DP/current"), expected r6"
+          [ -f "$DP/shared/storage/logs/probe.log" ] \
+            || fail "shared storage did not survive the rollback"
+
+          echo "PASS: rollback.sh"
+          echo
+          echo "=== commands the scripts would have run ==="
+          cat "$STUBLOG"
