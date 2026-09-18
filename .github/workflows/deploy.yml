@@ -129,7 +129,7 @@ jobs:
       - name: Check this environment is configured
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_USER: ${{ vars.SSH_USER }}
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
@@ -137,7 +137,7 @@ jobs:
         run: |
           missing=()
           [ -n "$SSH_HOST" ]        || missing+=("secret SSH_HOST")
-          [ -n "$SSH_USER" ]        || missing+=("secret SSH_USER")
+          [ -n "$SSH_USER" ]        || missing+=("variable SSH_USER")
           [ -n "$SSH_PRIVATE_KEY" ] || missing+=("secret SSH_PRIVATE_KEY")
           [ -n "$SSH_KNOWN_HOSTS" ] || missing+=("secret SSH_KNOWN_HOSTS")
           [ -n "$DEPLOY_PATH" ]     || missing+=("variable DEPLOY_PATH")
@@ -174,7 +174,7 @@ jobs:
       - name: Upload and release
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
-          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_USER: ${{ vars.SSH_USER }}
           SSH_PORT: ${{ vars.SSH_PORT || '22' }}
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
           RELEASE: ${{ github.run_number }}-${{ github.sha }}
