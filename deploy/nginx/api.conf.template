@@ -1,0 +1,72 @@
+# The Laravel API. Serves CargoApi/public and nothing else.
+#
+# Placeholders filled in by deploy/scripts/provision.sh:
+#   __API_HOST__     api.aya-it.online
+#   __DEPLOY_PATH__  /var/www/cargo-rush/production
+#   __ENV_NAME__     production
+#   __PHP_VERSION__  8.4
+#
+# The SPA is on its own host, so every browser call here is cross-origin.
+# What makes that work is on the application side, not here: config/cors.php
+# names the SPA host via FRONTEND_URL, SANCTUM_STATEFUL_DOMAINS lists it, and
+# the session cookie is issued for the parent domain so the SPA can read the
+# XSRF token it has to echo back. The CORS headers are Laravel's to send —
+# adding them here as well would produce duplicates, which browsers reject.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __API_HOST__;
+
+    root __DEPLOY_PATH__/current/CargoApi/public;
+    index index.php;
+    charset utf-8;
+
+    # Proof-of-delivery photos and company logos come through here.
+    client_max_body_size 20M;
+
+    access_log /var/log/nginx/cargo-__ENV_NAME__-api-access.log;
+    error_log  /var/log/nginx/cargo-__ENV_NAME__-api-error.log;
+
+    add_header X-Content-Type-Options "nosniff" always;
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types application/json text/plain;
+
+    # Uploads, straight off disk through the shared/storage symlink. Ahead of
+    # the catch-all so they never touch PHP.
+    location ^~ /storage/ {
+        try_files $uri =404;
+        expires 1h;
+        access_log off;
+    }
+
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
+
+    location ~ \.php$ {
+        include fastcgi_params;
+        fastcgi_pass unix:/run/php/php__PHP_VERSION__-fpm.sock;
+        fastcgi_index index.php;
+
+        # $realpath_root, not $document_root. With a `current` symlink the two
+        # differ, and FPM's opcache is keyed on the resolved path — pass
+        # $document_root and every deploy appears to change nothing until FPM
+        # is restarted outright.
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        fastcgi_param DOCUMENT_ROOT $realpath_root;
+
+        fastcgi_hide_header X-Powered-By;
+        fastcgi_read_timeout 60;
+        fastcgi_buffers 16 16k;
+        fastcgi_buffer_size 32k;
+    }
+
+    location ~ /\.(?!well-known) {
+        deny all;
+        access_log off;
+    }
+}

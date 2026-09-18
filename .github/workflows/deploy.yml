@@ -65,11 +65,20 @@ jobs:
             --no-interaction \
             --no-progress
 
+      # The API is on its own host, so the API's URL is compiled into the
+      # bundle — environment.prod.ts for production, environment.staging.ts
+      # for staging. Building the wrong one produces an app that looks fine
+      # and talks to the other environment's database.
       - name: Build CargoUI
         working-directory: CargoUI
+        env:
+          NG_CONFIG: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
         run: |
           npm ci
-          npx ng build --configuration production
+          echo "Building CargoUI with the '$NG_CONFIG' configuration"
+          npx ng build --configuration "$NG_CONFIG"
+          grep -rho 'https://[a-z0-9.-]*' dist/CargoUI/browser/*.js \
+            | sort -u | grep -i 'aya-it' || true
 
       # Assemble exactly what the server gets. Building here rather than on the
       # VPS means the box needs no Composer, no Node and no build toolchain.
@@ -134,6 +143,7 @@ jobs:
           SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
           APP_URL: ${{ vars.APP_URL }}
+          API_URL: ${{ vars.API_URL }}
         run: |
           missing=()
           [ -n "$SSH_HOST" ]        || missing+=("secret SSH_HOST")
@@ -141,7 +151,8 @@ jobs:
           [ -n "$SSH_PRIVATE_KEY" ] || missing+=("secret SSH_PRIVATE_KEY")
           [ -n "$SSH_KNOWN_HOSTS" ] || missing+=("secret SSH_KNOWN_HOSTS")
           [ -n "$DEPLOY_PATH" ]     || missing+=("variable DEPLOY_PATH")
-          [ -n "$APP_URL" ]         || missing+=("variable APP_URL")
+          [ -n "$APP_URL" ]         || missing+=("variable APP_URL (the SPA host)")
+          [ -n "$API_URL" ]         || missing+=("variable API_URL (the Laravel host)")
 
           if [ ${#missing[@]} -gt 0 ]; then
             # `${missing[*]}` joins on the first character of IFS only, so a
@@ -192,20 +203,37 @@ jobs:
             bin/release.sh '$DEPLOY_PATH' '$RELEASE'
           "
 
+      # Two hosts, so two checks — plus the one thing that is only true when
+      # they are wired to each other.
       - name: Smoke test
         env:
           APP_URL: ${{ vars.APP_URL }}
+          API_URL: ${{ vars.API_URL }}
         run: |
           set -euo pipefail
-          # Laravel's health endpoint, registered by `health: '/up'` in
-          # bootstrap/app.php. A 200 here means PHP booted and the config
-          # cache is readable.
-          code=$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-delay 5 "$APP_URL/up")
-          echo "GET $APP_URL/up -> $code"
-          [ "$code" = "200" ] || exit 1
+          fail() { echo "::error::$1"; exit 1; }
 
-          # And that nginx is serving the SPA shell, not a directory listing
-          # or the Laravel welcome page.
-          code=$(curl -sS -o /dev/null -w '%{http_code}' "$APP_URL/")
-          echo "GET $APP_URL/ -> $code"
-          [ "$code" = "200" ] || exit 1
+          # Laravel's health endpoint, registered by `health: '/up'` in
+          # bootstrap/app.php. A 200 means PHP booted and read its config cache.
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --retry 3 --retry-delay 5 "$API_URL/up")
+          echo "GET $API_URL/up -> $code"
+          [ "$code" = "200" ] || fail "API host is not healthy"
+
+          # The SPA shell, not a directory listing or Laravel's welcome page.
+          body=$(curl -sS --retry 3 --retry-delay 5 "$APP_URL/")
+          echo "$body" | grep -qi '<app-root' \
+            || fail "$APP_URL/ did not return the Angular shell"
+          echo "GET $APP_URL/ -> Angular shell"
+
+          # The part that a per-host check cannot see: CORS. The SPA is a
+          # different origin, so if FRONTEND_URL in shared/.env does not name
+          # it exactly, every authenticated request fails in the browser while
+          # both hosts look perfectly healthy on their own.
+          origin=$(curl -sS -o /dev/null -D - \
+                     -H "Origin: $APP_URL" \
+                     -H "Access-Control-Request-Method: POST" \
+                     -X OPTIONS "$API_URL/sanctum/csrf-cookie" \
+                   | tr -d '\r' | awk -F': ' 'tolower($1)=="access-control-allow-origin"{print $2}')
+          echo "CORS Access-Control-Allow-Origin -> ${origin:-<none>}"
+          [ "$origin" = "$APP_URL" ] \
+            || fail "API does not allow origin $APP_URL (got '${origin:-none}') — check FRONTEND_URL in shared/.env"
