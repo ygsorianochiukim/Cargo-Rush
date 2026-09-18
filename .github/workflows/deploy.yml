@@ -220,10 +220,14 @@ jobs:
           [ "$code" = "200" ] || fail "API host is not healthy"
 
           # The SPA shell, not a directory listing or Laravel's welcome page.
+          # Matched with `case`, not `| grep -q`: grep exits on first match,
+          # the writer takes SIGPIPE, and pipefail then reports the pipeline
+          # as failed — a match would read as a miss.
           body=$(curl -sS --retry 3 --retry-delay 5 "$APP_URL/")
-          echo "$body" | grep -qi '<app-root' \
-            || fail "$APP_URL/ did not return the Angular shell"
-          echo "GET $APP_URL/ -> Angular shell"
+          case "${body,,}" in
+            *"<app-root"*) echo "GET $APP_URL/ -> Angular shell" ;;
+            *)             fail "$APP_URL/ did not return the Angular shell" ;;
+          esac
 
           # The part that a per-host check cannot see: CORS. The SPA is a
           # different origin, so if FRONTEND_URL in shared/.env does not name
