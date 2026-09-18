@@ -27,7 +27,7 @@ esac
 
 [ "$(id -u)" -eq 0 ] || { echo "run this with sudo" >&2; exit 1; }
 
-PHP_VERSION="${PHP_VERSION:-8.3}"
+PHP_VERSION="${PHP_VERSION:-8.4}"
 DEPLOY_USER="${DEPLOY_USER:-deploy}"
 DEPLOY_ROOT="${DEPLOY_ROOT:-/var/www/cargo-rush}"
 DEPLOY_PATH="$DEPLOY_ROOT/$ENV_NAME"

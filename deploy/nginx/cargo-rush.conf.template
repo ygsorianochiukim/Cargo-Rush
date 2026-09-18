@@ -7,7 +7,7 @@
 #   __SERVER_NAME__   staging.example.com
 #   __DEPLOY_PATH__   /var/www/cargo-rush/staging
 #   __ENV_NAME__      staging
-#   __PHP_VERSION__   8.3
+#   __PHP_VERSION__   8.4
 #
 # TLS is deliberately absent: `certbot --nginx -d __SERVER_NAME__` adds the
 # 443 block and the redirect. Shipping cert paths for files that do not exist
