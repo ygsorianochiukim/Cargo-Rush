@@ -5,13 +5,12 @@
 #   __DEPLOY_PATH__  /var/www/cargo-rush/production
 #   __ENV_NAME__     production
 #
-# TLS is deliberately absent: `certbot --nginx -d __SPA_HOST__` adds the 443
-# block and the redirect. Cert paths for files that do not exist yet would
-# stop nginx starting at all.
+# No TLS here. Caddy terminates it at the edge and proxies to this port, so
+# this server block only ever sees plain HTTP from the host bridge.
 
 server {
-    listen 80;
-    listen [::]:80;
+    # See api.conf.template — behind Caddy, on the docker bridge address.
+    listen __BIND_ADDR__:__SPA_PORT__;
     server_name __SPA_HOST__;
 
     root __DEPLOY_PATH__/current/CargoUI/browser;

@@ -42,6 +42,28 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $middleware->api(prepend: ForgetTenant::class, remove: SubstituteBindings::class);
 
+        /**
+         * Deployed, this sits behind a reverse proxy that terminates TLS, so
+         * every request arrives over plain HTTP on a private address. Without
+         * trusting the proxy's `X-Forwarded-*` headers Laravel believes that
+         * literally: `SESSION_SECURE_COOKIE=true` then declines to set the
+         * session cookie at all, `url()` builds `http://` links into a site
+         * served over https, and the rate limiter keys every caller to the
+         * proxy's address instead of their own.
+         *
+         * The default is the private ranges rather than `*`, because trusting
+         * every proxy means trusting whatever `X-Forwarded-For` a caller sends
+         * — which is the rate limiter's key. Nothing outside the machine can
+         * reach the port these headers arrive on. `TRUSTED_PROXIES` overrides
+         * it for a deployment where the proxy is elsewhere.
+         */
+        $middleware->trustProxies(
+            at: array_map(
+                trim(...),
+                explode(',', (string) env('TRUSTED_PROXIES', '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1')),
+            ),
+        );
+
         // CargoUI authenticates as a first-party SPA, so its cookie has to
         // reach the API group. cargoApp sends a bearer token and is unaffected.
         $middleware->statefulApi();

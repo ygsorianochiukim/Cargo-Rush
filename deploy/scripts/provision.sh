@@ -44,6 +44,23 @@ DEPLOY_PATH="$DEPLOY_ROOT/$ENV_NAME"
 DB_DATABASE="cargo_${ENV_NAME}"
 DB_USERNAME="cargo_${ENV_NAME}"
 
+# This box already runs Caddy on :80 and :443 in front of everything else, so
+# nginx serves on two ports of the docker bridge instead and Caddy proxies to
+# them. The bridge address rather than 127.0.0.1 because Caddy is itself a
+# container: loopback there is the container's own.
+#
+# Not reachable from outside the machine either way — docker0 is host-local.
+if [ "$ENV_NAME" = production ]; then
+  API_PORT="${API_PORT:-3010}"
+  SPA_PORT="${SPA_PORT:-3011}"
+else
+  API_PORT="${API_PORT:-3020}"
+  SPA_PORT="${SPA_PORT:-3021}"
+fi
+
+BIND_ADDR="${BIND_ADDR:-$(ip -4 -o addr show docker0 2>/dev/null | awk '{print $4}' | cut -d/ -f1)}"
+BIND_ADDR="${BIND_ADDR:-127.0.0.1}"
+
 # Staging keeps debug off too. A stack trace on a public URL is a stack trace
 # on a public URL, whatever the box is called.
 APP_ENV="$ENV_NAME"
@@ -144,7 +161,7 @@ if ! have_php_packages; then
   exit 78
 fi
 packages=(
-  nginx mysql-server rsync curl git unzip acl certbot python3-certbot-nginx
+  nginx mysql-server rsync curl git unzip acl
   "php${PHP_VERSION}-fpm"
   "php${PHP_VERSION}-cli"
   "php${PHP_VERSION}-mysql"
@@ -274,11 +291,10 @@ fi
 log "Installing the nginx vhosts"
 # ---------------------------------------------------------------------------
 # Each is left alone once it exists, for the same reason as shared/.env: this
-# is not the only thing that writes them. `certbot --nginx` rewrites the file
-# to add the 443 server block and the redirect, so regenerating from the
-# template would throw the TLS config away and drop the site back to plain
-# HTTP — and with SESSION_SECURE_COOKIE=true that reads as "nobody can log in
-# any more", a long way from the command that caused it.
+# is not the only thing that writes them. Anything that rewrites a vhost in
+# place — certbot on a box where it terminates TLS, or a hand edit — would be
+# thrown away by regenerating from the template, and the resulting breakage
+# points nowhere near the command that caused it.
 #
 # FORCE_NGINX=1 regenerates anyway, keeping a timestamped backup.
 install_vhost() {
@@ -292,10 +308,13 @@ install_vhost() {
       local backup="$vhost.bak.$(date +%Y%m%d%H%M%S)"
       cp -a "$vhost" "$backup"
       warn "regenerating $vhost — previous version kept at $backup"
-      warn "re-run: certbot --nginx -d $host --redirect"
+      warn "check the Caddy entry still points at $host"
     fi
     sed -e "s|__API_HOST__|$API_HOST|g" \
         -e "s|__SPA_HOST__|$SPA_HOST|g" \
+        -e "s|__BIND_ADDR__|$BIND_ADDR|g" \
+        -e "s|__API_PORT__|$API_PORT|g" \
+        -e "s|__SPA_PORT__|$SPA_PORT|g" \
         -e "s|__DEPLOY_PATH__|$DEPLOY_PATH|g" \
         -e "s|__ENV_NAME__|$ENV_NAME|g" \
         -e "s|__PHP_VERSION__|$PHP_VERSION|g" \
@@ -332,6 +351,9 @@ if [ ! -e "$DEPLOY_PATH/current" ]; then
 fi
 
 nginx -t
+# enable --now, then reload: on a first run nginx has never started, and
+# `systemctl reload` on an inactive unit fails rather than starting it.
+systemctl enable --now nginx
 systemctl reload nginx
 
 # ---------------------------------------------------------------------------
@@ -389,11 +411,23 @@ echo "  1. Add the CI public key so GitHub can log in:"
 echo "       echo 'ssh-ed25519 AAAA... cargo-rush-ci' \\"
 echo "         >> /home/$DEPLOY_USER/.ssh/authorized_keys"
 echo ""
-echo "  2. Point both names at this box in DNS, then get certificates:"
-echo "       certbot --nginx -d $API_HOST --redirect"
+echo "  2. Point both names at this box in DNS, then route them to these"
+echo "     ports at your edge proxy. nginx is listening on:"
+echo "       $API_HOST -> $BIND_ADDR:$API_PORT"
 if [ "$SPA_HOST" != "$API_HOST" ]; then
-echo "       certbot --nginx -d $SPA_HOST --redirect"
+echo "       $SPA_HOST -> $BIND_ADDR:$SPA_PORT"
 fi
+echo ""
+echo "     For the Caddy on this box, that is:"
+echo "       $API_HOST {"
+echo "           reverse_proxy $BIND_ADDR:$API_PORT"
+echo "       }"
+if [ "$SPA_HOST" != "$API_HOST" ]; then
+echo "       $SPA_HOST {"
+echo "           reverse_proxy $BIND_ADDR:$SPA_PORT"
+echo "       }"
+fi
+echo "     Caddy issues the certificates itself; there is no certbot step."
 echo ""
 echo "  3. Check $ENV_FILE. DB_PASSWORD is set; MAIL_MAILER is still 'log',"
 echo "     so password resets and invoices are written to the log, not sent."

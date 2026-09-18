@@ -14,8 +14,10 @@
 # adding them here as well would produce duplicates, which browsers reject.
 
 server {
-    listen 80;
-    listen [::]:80;
+    # Bound to the docker bridge address, not 0.0.0.0: Caddy owns :80 and
+    # :443 on this box and reaches the host at this address. Nothing outside
+    # the machine can reach this port directly.
+    listen __BIND_ADDR__:__API_PORT__;
     server_name __API_HOST__;
 
     root __DEPLOY_PATH__/current/CargoApi/public;
