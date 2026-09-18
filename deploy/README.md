@@ -41,28 +41,65 @@ Releases are kept for rollback; the five most recent survive pruning.
 └── current -> releases/42-e4f5g6h
 ```
 
-### One origin, two apps
+### Two hosts per environment
 
-nginx serves `CargoUI/browser` as the document root and carves out
-`/api`, `/sanctum`, `/login`, `/logout`, `/up`, `/build` and `/storage` for
-Laravel. That is deliberate: `CargoUI/src/environments/environment.prod.ts`
-sets `apiUrl: ''`, so the SPA reaches the API by path. Same origin means no
-CORS preflight and a first-party Sanctum session cookie.
+The API and the SPA are separate origins:
 
-Anything else — `/employees`, `/payroll/…` — falls through to `index.html` for
-the Angular router to handle.
+| | API | SPA |
+|---|---|---|
+| production | `api.aya-it.online` | `app.aya-it.online` |
+| staging | `staging.aya-it.online` | `staging-app.aya-it.online` |
+
+So there are two nginx vhosts per environment, from two templates:
+`api.conf.template` serves `CargoApi/public` through php-fpm,
+`spa.conf.template` serves `CargoUI/browser` as static files with an
+`index.html` fallback for the Angular router. Both point into the same
+`current` symlink.
+
+Three things make the cross-origin part work, and all three live in
+`shared/.env` rather than in nginx:
+
+- **`FRONTEND_URL`** names the SPA host. `config/cors.php` reads it, and a
+  credentialed request cannot use a wildcard, so it has to be exact.
+- **`SANCTUM_STATEFUL_DOMAINS`** names the SPA host too. Without it Sanctum
+  treats the call as a token request rather than a first-party session one,
+  and every authenticated route answers 401 while login itself looks fine.
+- **`SESSION_DOMAIN`** is the parent both hosts share — `.aya-it.online`.
+  This is the subtle one. CargoUI's `csrfInterceptor` reads `XSRF-TOKEN` out
+  of `document.cookie` to echo back as `X-XSRF-TOKEN`; a host-only cookie set
+  by the API host is not readable by JavaScript on the SPA host, so every
+  write comes back 419. `provision.sh` derives it as the common suffix of the
+  two hostnames.
+
+`SESSION_SAME_SITE=lax` is still correct despite the different host: "site"
+means the registrable domain, and both sit under the same one.
+
+Because `apiUrl` is compiled into the bundle, the SPA is built with a
+different Angular configuration per environment — `production` uses
+`environment.prod.ts`, `staging` uses `environment.staging.ts`, and
+`deploy.yml` picks by branch. Build the wrong one and you get an app that
+looks correct and talks to the other environment's database.
 
 ## First-time setup
 
 ### 1. Provision each server
 
-Copy this directory to the box and run it as root, once per environment:
+Clone the repo on the box and run it as root, once per environment. It takes
+the API host and the SPA host, in that order:
 
 ```bash
-scp -r deploy/ root@<host>:/tmp/
-ssh root@<host>
-bash /tmp/deploy/scripts/provision.sh staging staging.cargorush.example
+ssh root@148.113.192.33
+git clone https://github.com/ygsorianochiukim/Cargo-Rush.git /tmp/cargo
+bash /tmp/cargo/deploy/scripts/provision.sh staging \
+       staging.aya-it.online staging-app.aya-it.online
+bash /tmp/cargo/deploy/scripts/provision.sh production \
+       api.aya-it.online app.aya-it.online
 ```
+
+Both environments can share one box — they get separate directories,
+databases, nginx vhosts and systemd units. Pass the same name twice
+(`provision.sh staging host host`) for a same-origin setup instead; the
+cookie is then scoped to that single host, which is simpler and safer.
 
 It installs nginx, PHP 8.4 + FPM, MySQL and certbot; creates the `deploy` user
 and a `cargo_staging` database; writes `shared/.env` with a generated `APP_KEY`
@@ -96,15 +133,20 @@ ssh root@<host> "cat >> /home/deploy/.ssh/authorized_keys" < ~/.ssh/cargo_ci_sta
 
 ### 3. DNS and TLS
 
-Point the hostname at the box, then:
+Point all four hostnames at the box, then get a certificate for each:
 
 ```bash
-ssh root@<host> "certbot --nginx -d staging.cargorush.example --redirect"
+ssh root@148.113.192.33
+certbot --nginx -d staging.aya-it.online     --redirect
+certbot --nginx -d staging-app.aya-it.online --redirect
+certbot --nginx -d api.aya-it.online         --redirect
+certbot --nginx -d app.aya-it.online         --redirect
 ```
 
-certbot rewrites the vhost to add the 443 block. Do this **before** the first
-deploy — the smoke test requests `APP_URL`, and `SESSION_SECURE_COOKIE=true` in
-the env template means sessions will not work over plain HTTP anyway.
+certbot rewrites each vhost to add its 443 block. Do this **before** the first
+deploy: the smoke test requests both hosts over HTTPS, and
+`SESSION_SECURE_COOKIE=true` means sessions would not work over plain HTTP
+anyway.
 
 ### 4. Create the GitHub Environments
 
@@ -116,16 +158,21 @@ Secrets, per environment:
 |-------------------|-------|
 | `SSH_HOST`        | The server's hostname or IP |
 | `SSH_PRIVATE_KEY` | Contents of `~/.ssh/cargo_ci_staging` — the private half, whole file including the BEGIN/END lines |
-| `SSH_KNOWN_HOSTS` | Output of `ssh-keyscan -t ed25519 staging.cargorush.example` |
+| `SSH_KNOWN_HOSTS` | Output of `ssh-keyscan -t rsa,ecdsa,ed25519 148.113.192.33` |
 
-Variables, per environment:
+Variables, per environment — `staging` shown, production takes the other pair:
 
 | Variable      | Value |
 |---------------|-------|
 | `SSH_USER`    | `deploy` |
 | `DEPLOY_PATH` | `/var/www/cargo-rush/staging` |
-| `APP_URL`     | `https://staging.cargorush.example` |
+| `API_URL`     | `https://staging.aya-it.online` |
+| `APP_URL`     | `https://staging-app.aya-it.online` |
 | `SSH_PORT`    | Only if not 22 |
+
+`API_URL` and `APP_URL` are both needed because the smoke test checks each
+host and then checks that the API actually allows the SPA's origin — a CORS
+mistake leaves both hosts healthy on their own while the app is unusable.
 
 `SSH_USER` is a variable rather than a secret on purpose. A username is not
 sensitive, and GitHub redacts every secret's literal text from all log output
@@ -203,9 +250,15 @@ path changes and opcache invalidates on its own — but this means editing a fil
 in place on the server does nothing until FPM is reloaded. Which is the point:
 don't edit files on the server.
 
-**`SANCTUM_STATEFUL_DOMAINS` must contain the hostname.** Same-origin does not
-exempt you from Sanctum's check. Leave it out and every authenticated request
-from the browser comes back 401 while the login itself appears to succeed.
+**The three cross-origin settings fail in ways that don't point at
+themselves.** `SANCTUM_STATEFUL_DOMAINS` missing the SPA host gives 401 on
+every authenticated request while login appears to succeed.
+`SESSION_DOMAIN` too narrow gives 419 on every write, because the SPA cannot
+read the XSRF cookie to echo it back. `FRONTEND_URL` wrong gives a browser
+CORS error with both hosts perfectly healthy. The deploy's smoke test catches
+the third; the first two only show up in a browser. After editing any of them
+in `shared/.env`, run `php8.4 artisan config:cache` or the change does
+nothing.
 
 **Mail is `log` by default.** Password resets and invoice delivery are written
 to `storage/logs` rather than sent until you put real SMTP credentials in

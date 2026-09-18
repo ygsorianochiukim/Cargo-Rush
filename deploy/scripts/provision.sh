@@ -3,8 +3,12 @@
 # One-time server setup for one environment. Run it once as root per
 # environment; running it again is safe and only fills in what is missing.
 #
-#   sudo ./provision.sh staging    staging.cargorush.example
-#   sudo ./provision.sh production cargorush.example
+#   sudo ./provision.sh staging    staging.aya-it.online  staging-app.aya-it.online
+#   sudo ./provision.sh production api.aya-it.online      app.aya-it.online
+#
+# Two hostnames per environment: the API and the SPA get a vhost each. They
+# may be the same name, in which case one vhost serves both and the session
+# cookie is scoped to that host alone.
 #
 # Targets Ubuntu 22.04/24.04 with the ondrej/php PPA. It installs nginx, PHP,
 # MySQL and the two systemd units, lays out the release directories, and
@@ -13,10 +17,11 @@
 set -euo pipefail
 
 ENV_NAME="${1:-}"
-SERVER_NAME="${2:-}"
+API_HOST="${2:-}"
+SPA_HOST="${3:-}"
 
-if [ -z "$ENV_NAME" ] || [ -z "$SERVER_NAME" ]; then
-  echo "usage: sudo $0 <staging|production> <server-name>" >&2
+if [ -z "$ENV_NAME" ] || [ -z "$API_HOST" ] || [ -z "$SPA_HOST" ]; then
+  echo "usage: sudo $0 <staging|production> <api-host> <spa-host>" >&2
   exit 64
 fi
 
@@ -40,18 +45,43 @@ APP_ENV="$ENV_NAME"
 APP_DEBUG="false"
 LOG_LEVEL="$([ "$ENV_NAME" = production ] && echo warning || echo debug)"
 
-# The exact host, for both environments.
+# The cookie domain has to be readable from both hosts, so it is the deepest
+# domain they share — the common suffix of their labels, not a guess at the
+# registrable domain. For api.aya-it.online and app.aya-it.online that is
+# aya-it.online; for api.x.co.uk and app.x.co.uk it is x.co.uk, which the
+# usual "last two labels" shortcut gets wrong.
 #
-# The tempting thing for production is ".$SERVER_NAME" so the cookie covers
-# the apex and www together. Don't: staging is usually a subdomain of that
-# apex, so a leading dot puts the production session cookie on every request
-# to staging as well. Staging cannot read it — different APP_KEY — but there
-# is no reason to send it there, and on a single box hosting both that is
-# exactly the arrangement.
-#
-# If you do serve apex and www as one site, widen this by hand in
-# shared/.env and re-run `php artisan config:cache`.
-SESSION_DOMAIN="$SERVER_NAME"
+# Same host for both means no sharing is needed, and the cookie stays scoped
+# to that one host, which is strictly better.
+common_domain_suffix() {
+  local -a a b
+  local out="" i j
+  IFS='.' read -ra a <<< "$1"
+  IFS='.' read -ra b <<< "$2"
+  i=$(( ${#a[@]} - 1 )); j=$(( ${#b[@]} - 1 ))
+  while [ "$i" -ge 0 ] && [ "$j" -ge 0 ] && [ "${a[$i]}" = "${b[$j]}" ]; do
+    out="${a[$i]}${out:+.}$out"
+    i=$((i - 1)); j=$((j - 1))
+  done
+  printf '%s' "$out"
+}
+
+if [ "$API_HOST" = "$SPA_HOST" ]; then
+  SESSION_DOMAIN="$API_HOST"
+else
+  shared="$(common_domain_suffix "$API_HOST" "$SPA_HOST")"
+  # Fewer than two labels means they share only a TLD — ".com" — which no
+  # browser will accept and which would be a grave thing to set if one did.
+  case "$shared" in
+    *.*) SESSION_DOMAIN=".$shared" ;;
+    *)
+      echo "$API_HOST and $SPA_HOST share no usable parent domain ('$shared')." >&2
+      echo "Cross-origin Sanctum needs them under one registrable domain." >&2
+      exit 78
+      ;;
+  esac
+fi
+SESSION_DOMAIN="${SESSION_DOMAIN_OVERRIDE:-$SESSION_DOMAIN}"
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -155,7 +185,8 @@ else
   sed -e "s|__APP_ENV__|$APP_ENV|g" \
       -e "s|__APP_DEBUG__|$APP_DEBUG|g" \
       -e "s|__LOG_LEVEL__|$LOG_LEVEL|g" \
-      -e "s|__SERVER_NAME__|$SERVER_NAME|g" \
+      -e "s|__API_HOST__|$API_HOST|g" \
+      -e "s|__SPA_HOST__|$SPA_HOST|g" \
       -e "s|__SESSION_DOMAIN__|$SESSION_DOMAIN|g" \
       -e "s|__DB_DATABASE__|$DB_DATABASE|g" \
       -e "s|__DB_USERNAME__|$DB_USERNAME|g" \
@@ -175,34 +206,52 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-log "Installing the nginx vhost"
+log "Installing the nginx vhosts"
 # ---------------------------------------------------------------------------
-# Left alone once it exists, for the same reason as shared/.env: this is not
-# the only thing that writes it. `certbot --nginx` rewrites this file to add
-# the 443 server block and the redirect, so regenerating it from the template
-# would throw the TLS config away and drop the site back to plain HTTP — and
-# with SESSION_SECURE_COOKIE=true that reads as "nobody can log in any more",
-# a long way from the command that caused it.
+# Each is left alone once it exists, for the same reason as shared/.env: this
+# is not the only thing that writes them. `certbot --nginx` rewrites the file
+# to add the 443 server block and the redirect, so regenerating from the
+# template would throw the TLS config away and drop the site back to plain
+# HTTP — and with SESSION_SECURE_COOKIE=true that reads as "nobody can log in
+# any more", a long way from the command that caused it.
 #
-# FORCE_NGINX=1 regenerates anyway, keeping a timestamped backup. Re-run
-# certbot afterwards.
-VHOST="/etc/nginx/sites-available/cargo-$ENV_NAME"
-if [ -f "$VHOST" ] && [ "${FORCE_NGINX:-0}" != "1" ]; then
-  warn "$VHOST exists — not regenerating it (FORCE_NGINX=1 to override)"
-else
-  if [ -f "$VHOST" ]; then
-    backup="$VHOST.bak.$(date +%Y%m%d%H%M%S)"
-    cp -a "$VHOST" "$backup"
-    warn "regenerating $VHOST — previous version kept at $backup"
-    warn "re-run: certbot --nginx -d $SERVER_NAME --redirect"
+# FORCE_NGINX=1 regenerates anyway, keeping a timestamped backup.
+install_vhost() {
+  local role="$1" host="$2" template="$3"
+  local vhost="/etc/nginx/sites-available/cargo-$ENV_NAME-$role"
+
+  if [ -f "$vhost" ] && [ "${FORCE_NGINX:-0}" != "1" ]; then
+    warn "$vhost exists — not regenerating it (FORCE_NGINX=1 to override)"
+  else
+    if [ -f "$vhost" ]; then
+      local backup="$vhost.bak.$(date +%Y%m%d%H%M%S)"
+      cp -a "$vhost" "$backup"
+      warn "regenerating $vhost — previous version kept at $backup"
+      warn "re-run: certbot --nginx -d $host --redirect"
+    fi
+    sed -e "s|__API_HOST__|$API_HOST|g" \
+        -e "s|__SPA_HOST__|$SPA_HOST|g" \
+        -e "s|__DEPLOY_PATH__|$DEPLOY_PATH|g" \
+        -e "s|__ENV_NAME__|$ENV_NAME|g" \
+        -e "s|__PHP_VERSION__|$PHP_VERSION|g" \
+        "$HERE/nginx/$template" > "$vhost"
   fi
-  sed -e "s|__SERVER_NAME__|$SERVER_NAME|g" \
-      -e "s|__DEPLOY_PATH__|$DEPLOY_PATH|g" \
-      -e "s|__ENV_NAME__|$ENV_NAME|g" \
-      -e "s|__PHP_VERSION__|$PHP_VERSION|g" \
-      "$HERE/nginx/cargo-rush.conf.template" > "$VHOST"
+  ln -sfn "$vhost" "/etc/nginx/sites-enabled/cargo-$ENV_NAME-$role"
+}
+
+install_vhost api "$API_HOST" api.conf.template
+
+# One host serving both would mean two server blocks claiming the same name,
+# which nginx warns about and resolves by ignoring one of them. The API vhost
+# already answers on that name; the SPA would simply be unreachable, so say so
+# rather than installing something that cannot work.
+if [ "$SPA_HOST" = "$API_HOST" ]; then
+  warn "SPA and API share the hostname $API_HOST — installing the API vhost only."
+  warn "Serve them apart, or use the same-origin layout where one vhost does both."
+else
+  install_vhost spa "$SPA_HOST" spa.conf.template
 fi
-ln -sfn "$VHOST" "/etc/nginx/sites-enabled/cargo-$ENV_NAME"
+
 rm -f /etc/nginx/sites-enabled/default
 
 # nginx will not start until `current` resolves, and `current` does not exist
@@ -275,15 +324,25 @@ echo "  1. Add the CI public key so GitHub can log in:"
 echo "       echo 'ssh-ed25519 AAAA... cargo-rush-ci' \\"
 echo "         >> /home/$DEPLOY_USER/.ssh/authorized_keys"
 echo ""
-echo "  2. Point $SERVER_NAME at this box in DNS, then get a certificate:"
-echo "       certbot --nginx -d $SERVER_NAME --redirect"
+echo "  2. Point both names at this box in DNS, then get certificates:"
+echo "       certbot --nginx -d $API_HOST --redirect"
+if [ "$SPA_HOST" != "$API_HOST" ]; then
+echo "       certbot --nginx -d $SPA_HOST --redirect"
+fi
 echo ""
 echo "  3. Check $ENV_FILE. DB_PASSWORD is set; MAIL_MAILER is still 'log',"
 echo "     so password resets and invoices are written to the log, not sent."
 echo ""
-echo "  4. Push to the '$DEPLOY_BRANCH' branch."
+echo "  4. Push to the '$DEPLOY_BRANCH' branch. The GitHub environment needs:"
+echo "       API_URL = https://$API_HOST"
+echo "       APP_URL = https://$SPA_HOST"
 echo ""
-echo "  Host key for the SSH_KNOWN_HOSTS secret (run from your laptop once DNS"
-echo "  resolves, so you are trusting the name you will actually connect to):"
-echo "       ssh-keyscan -t ed25519 $SERVER_NAME"
+echo "  Session cookie domain for this environment: $SESSION_DOMAIN"
+if [ "$SPA_HOST" != "$API_HOST" ]; then
+echo "  (shared parent of $API_HOST and $SPA_HOST, so the SPA can read the"
+echo "   XSRF token the API issues — a host-only cookie would 419 every write)"
+fi
+echo ""
+echo "  Host key for the SSH_KNOWN_HOSTS secret:"
+echo "       ssh-keyscan -t rsa,ecdsa,ed25519 <this box's address>"
 echo ""

@@ -1,0 +1,62 @@
+# The Angular app. Static files and nothing else — no PHP reaches this host.
+#
+# Placeholders filled in by deploy/scripts/provision.sh:
+#   __SPA_HOST__     app.aya-it.online
+#   __DEPLOY_PATH__  /var/www/cargo-rush/production
+#   __ENV_NAME__     production
+#
+# TLS is deliberately absent: `certbot --nginx -d __SPA_HOST__` adds the 443
+# block and the redirect. Cert paths for files that do not exist yet would
+# stop nginx starting at all.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name __SPA_HOST__;
+
+    root __DEPLOY_PATH__/current/CargoUI/browser;
+    index index.html;
+    charset utf-8;
+
+    access_log /var/log/nginx/cargo-__ENV_NAME__-spa-access.log;
+    error_log  /var/log/nginx/cargo-__ENV_NAME__-spa-error.log;
+
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/javascript application/json
+               image/svg+xml application/x-font-ttf font/woff2;
+
+    # Hashed filenames (outputHashing: 'all'), so these can be cached forever.
+    location ~* \.(?:js|css|woff2?|ttf|eot|png|jpe?g|gif|svg|ico|webp|avif|map)$ {
+        try_files $uri =404;
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        access_log off;
+    }
+
+    # The shell must never be cached: it is the file that names the current
+    # release's chunks, so a stale copy asks for JavaScript that no longer
+    # exists. Headers repeated because a location with its own add_header
+    # drops the server-level ones.
+    location = /index.html {
+        add_header Cache-Control "no-store, must-revalidate";
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    }
+
+    # Deep links (/employees, /payroll/…) are routes in the browser, not files.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    location ~ /\.(?!well-known) {
+        deny all;
+        access_log off;
+    }
+}
