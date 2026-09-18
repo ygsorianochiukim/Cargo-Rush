@@ -49,6 +49,18 @@ server {
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     }
 
+    # The Play listing needs a stable public URL for the privacy policy, and
+    # "/privacy.html" is an odd thing to print on a store page. Exact-match so
+    # it wins over the SPA fallback below, which would otherwise hand /privacy
+    # to the Angular router and render a 404 to a Play reviewer.
+    #
+    # Drop the file in at CargoUI/public/privacy.html and it deploys with the
+    # app. Until then this 404s, same as before.
+    location = /privacy {
+        try_files /privacy.html =404;
+        add_header Cache-Control "public, max-age=3600";
+    }
+
     # Deep links (/employees, /payroll/…) are routes in the browser, not files.
     location / {
         try_files $uri $uri/ /index.html;
