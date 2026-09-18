@@ -101,7 +101,7 @@ databases, nginx vhosts and systemd units. Pass the same name twice
 (`provision.sh staging host host`) for a same-origin setup instead; the
 cookie is then scoped to that single host, which is simpler and safer.
 
-It installs nginx, PHP 8.4 + FPM, MySQL and certbot; creates the `deploy` user
+It installs nginx, PHP 8.5 + FPM, MySQL and certbot; creates the `deploy` user
 and a `cargo_staging` database; writes `shared/.env` with a generated `APP_KEY`
 and database password; installs the vhost, the queue worker and the scheduler
 timer; and prints what is left to do.
@@ -257,7 +257,7 @@ every authenticated request while login appears to succeed.
 read the XSRF cookie to echo it back. `FRONTEND_URL` wrong gives a browser
 CORS error with both hosts perfectly healthy. The deploy's smoke test catches
 the third; the first two only show up in a browser. After editing any of them
-in `shared/.env`, run `php8.4 artisan config:cache` or the change does
+in `shared/.env`, run `php8.5 artisan config:cache` or the change does
 nothing.
 
 **Mail is `log` by default.** Password resets and invoice delivery are written
@@ -269,5 +269,5 @@ editing that file, or the change will not take effect.
 nothing else. A fresh staging database is empty; seed it by hand once:
 
 ```bash
-cd /var/www/cargo-rush/staging/current/CargoApi && php8.4 artisan db:seed --force
+cd /var/www/cargo-rush/staging/current/CargoApi && php8.5 artisan db:seed --force
 ```

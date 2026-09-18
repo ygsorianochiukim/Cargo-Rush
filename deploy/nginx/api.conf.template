@@ -4,7 +4,7 @@
 #   __API_HOST__     api.aya-it.online
 #   __DEPLOY_PATH__  /var/www/cargo-rush/production
 #   __ENV_NAME__     production
-#   __PHP_VERSION__  8.4
+#   __PHP_VERSION__  8.5
 #
 # The SPA is on its own host, so every browser call here is cross-origin.
 # What makes that work is on the application side, not here: config/cors.php

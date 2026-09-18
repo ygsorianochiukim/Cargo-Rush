@@ -22,7 +22,7 @@ RELEASE="${2:?release name required}"
 RELEASE_DIR="$DEPLOY_PATH/releases/$RELEASE"
 SHARED_DIR="$DEPLOY_PATH/shared"
 API_DIR="$RELEASE_DIR/CargoApi"
-PHP="${PHP_BIN:-php8.4}"
+PHP="${PHP_BIN:-php8.5}"
 
 # staging or production — the unit suffix for this environment's queue worker
 # and scheduler, taken from the deploy path so one script serves both.
