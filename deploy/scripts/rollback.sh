@@ -18,7 +18,7 @@ DEPLOY_PATH="${1:?deploy path required}"
 TARGET="${2:-}"
 
 RELEASES_DIR="$DEPLOY_PATH/releases"
-PHP="${PHP_BIN:-php8.4}"
+PHP="${PHP_BIN:-php8.5}"
 
 log()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m!!!\033[0m %s\n' "$*" >&2; exit 1; }

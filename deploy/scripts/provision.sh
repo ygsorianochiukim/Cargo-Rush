@@ -10,9 +10,14 @@
 # may be the same name, in which case one vhost serves both and the session
 # cookie is scoped to that host alone.
 #
-# Targets Ubuntu 22.04/24.04 with the ondrej/php PPA. It installs nginx, PHP,
-# MySQL and the two systemd units, lays out the release directories, and
-# leaves you with a server that a `git push` can deploy to.
+# Targets Ubuntu. It installs nginx, PHP, MySQL and the two systemd units,
+# lays out the release directories, and leaves you with a server that a
+# `git push` can deploy to.
+#
+# PHP comes from the distro where the distro has it (26.04 ships 8.5) and from
+# ondrej/php only where it does not — and only where that PPA actually
+# publishes for the release, which for 26.04 "resolute" it does not.
+# PHP_VERSION overrides the default.
 #
 set -euo pipefail
 
@@ -32,7 +37,7 @@ esac
 
 [ "$(id -u)" -eq 0 ] || { echo "run this with sudo" >&2; exit 1; }
 
-PHP_VERSION="${PHP_VERSION:-8.4}"
+PHP_VERSION="${PHP_VERSION:-8.5}"
 DEPLOY_USER="${DEPLOY_USER:-deploy}"
 DEPLOY_ROOT="${DEPLOY_ROOT:-/var/www/cargo-rush}"
 DEPLOY_PATH="$DEPLOY_ROOT/$ENV_NAME"
@@ -92,14 +97,41 @@ warn() { printf '\033[1;33m ! \033[0m%s\n' "$*"; }
 log "Installing packages"
 # ---------------------------------------------------------------------------
 export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq
 
-if ! grep -rq "ondrej/php" /etc/apt/sources.list.d/ 2>/dev/null; then
-  apt-get update -qq
-  apt-get install -y -qq software-properties-common
-  add-apt-repository -y ppa:ondrej/php
+# The distro first, the PPA only if it cannot help.
+#
+# ondrej/php is the reflex on Ubuntu, but it does not publish for every
+# release — 26.04 "resolute" has no suite there at all, and adding a source
+# that 404s breaks every subsequent `apt-get update` on the box, which is a
+# much worse problem than the one it was added to solve. Recent Ubuntu also
+# ships a PHP new enough on its own: 26.04 has 8.5.
+have_php_packages() {
+  apt-cache policy "php${PHP_VERSION}-fpm" 2>/dev/null | grep -q 'Candidate: [0-9]'
+}
+
+if ! have_php_packages; then
+  . /etc/os-release
+  ppa_url="https://ppa.launchpadcontent.net/ondrej/php/ubuntu/dists/$VERSION_CODENAME/Release"
+
+  if [ "$(curl -fsS -o /dev/null -w '%{http_code}' "$ppa_url" || echo 000)" = "200" ]; then
+    log "php${PHP_VERSION} is not in the distro repos — adding ondrej/php"
+    apt-get install -y -qq software-properties-common
+    add-apt-repository -y ppa:ondrej/php
+    apt-get update -qq
+  else
+    warn "ondrej/php has no packages for $VERSION_CODENAME; using the distro only"
+  fi
 fi
 
-apt-get update -qq
+if ! have_php_packages; then
+  available=$(apt-cache search --names-only '^php8\.[0-9]-fpm$' 2>/dev/null \
+              | awk '{print $1}' | sed 's/-fpm//' | tr '\n' ' ')
+  echo "php${PHP_VERSION}-fpm is not installable on this box." >&2
+  echo "Available here: ${available:-none}" >&2
+  echo "Re-run with PHP_VERSION set to one of those." >&2
+  exit 78
+fi
 apt-get install -y -qq \
   nginx mysql-server rsync curl git unzip acl certbot python3-certbot-nginx \
   "php${PHP_VERSION}-fpm" \

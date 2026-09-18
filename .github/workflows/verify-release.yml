@@ -34,7 +34,7 @@ jobs:
           mkdir -p "$SB/bin"
 
           # Stub out everything that needs a real server.
-          cat > "$SB/bin/php8.4" <<'EOF'
+          cat > "$SB/bin/php8.5" <<'EOF'
           #!/usr/bin/env bash
           echo "  [php] $*" >> "$STUBLOG"
           EOF
@@ -42,7 +42,7 @@ jobs:
           #!/usr/bin/env bash
           echo "  [sudo] $*" >> "$STUBLOG"
           EOF
-          chmod +x "$SB/bin/php8.4" "$SB/bin/sudo"
+          chmod +x "$SB/bin/php8.5" "$SB/bin/sudo"
           export PATH="$SB/bin:$PATH" STUBLOG="$SB/stub.log"
           : > "$STUBLOG"
 
