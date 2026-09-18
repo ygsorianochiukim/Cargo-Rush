@@ -110,14 +110,16 @@ apt-get update -qq
 # it matches, apt-cache then dies of SIGPIPE, and `set -o pipefail` reports the
 # pipeline as failed — so a successful match reads as "package not found".
 # Capture first, test after: no pipe, nothing to race.
-have_php_packages() {
+apt_has() {
   local policy
-  policy=$(apt-cache policy "php${PHP_VERSION}-fpm" 2>/dev/null) || return 1
+  policy=$(apt-cache policy "$1" 2>/dev/null) || return 1
   case "$policy" in
     *"Candidate: "[0-9]*) return 0 ;;
     *)                    return 1 ;;
   esac
 }
+
+have_php_packages() { apt_has "php${PHP_VERSION}-fpm"; }
 
 if ! have_php_packages; then
   . /etc/os-release
@@ -141,19 +143,36 @@ if ! have_php_packages; then
   echo "Re-run with PHP_VERSION set to one of those." >&2
   exit 78
 fi
-apt-get install -y -qq \
-  nginx mysql-server rsync curl git unzip acl certbot python3-certbot-nginx \
-  "php${PHP_VERSION}-fpm" \
-  "php${PHP_VERSION}-cli" \
-  "php${PHP_VERSION}-mysql" \
-  "php${PHP_VERSION}-mbstring" \
-  "php${PHP_VERSION}-xml" \
-  "php${PHP_VERSION}-bcmath" \
-  "php${PHP_VERSION}-intl" \
-  "php${PHP_VERSION}-curl" \
-  "php${PHP_VERSION}-gd" \
-  "php${PHP_VERSION}-zip" \
-  "php${PHP_VERSION}-opcache"
+packages=(
+  nginx mysql-server rsync curl git unzip acl certbot python3-certbot-nginx
+  "php${PHP_VERSION}-fpm"
+  "php${PHP_VERSION}-cli"
+  "php${PHP_VERSION}-mysql"
+  "php${PHP_VERSION}-mbstring"
+  "php${PHP_VERSION}-xml"
+  "php${PHP_VERSION}-bcmath"
+  "php${PHP_VERSION}-intl"
+  "php${PHP_VERSION}-curl"
+  "php${PHP_VERSION}-gd"
+  "php${PHP_VERSION}-zip"
+)
+
+# opcache is not a package everywhere. Debian and Ubuntu build it into
+# php-cli and php-fpm; ondrej ships it split out. Asking for a package that
+# does not exist aborts the whole apt-get, so ask only where it exists — and
+# check afterwards that the extension is actually loaded, which is the thing
+# that was wanted either way.
+if apt_has "php${PHP_VERSION}-opcache"; then
+  packages+=("php${PHP_VERSION}-opcache")
+fi
+
+apt-get install -y -qq "${packages[@]}"
+
+loaded_modules=$("php${PHP_VERSION}" -m 2>/dev/null || true)
+case "$loaded_modules" in
+  *[Zz]end\ OPcache*) ;;
+  *) warn "opcache is not loaded for php${PHP_VERSION} — the settings below will do nothing" ;;
+esac
 
 # ---------------------------------------------------------------------------
 log "Creating the deploy user"
