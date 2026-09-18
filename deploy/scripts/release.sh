@@ -61,7 +61,18 @@ ln -sfn "$SHARED_DIR/storage" "$API_DIR/storage"
 rm -rf "$API_DIR/public/storage"
 ln -sfn "$SHARED_DIR/storage/app/public" "$API_DIR/public/storage"
 
-chmod -R ug+rwX "$SHARED_DIR/storage"
+# No chmod over shared/storage here, deliberately.
+#
+# Permissions on that tree are a provisioning concern: provision.sh owns it to
+# the deploy user, sets the setgid bit and a default ACL granting both this
+# user and www-data rwX, so everything created later — by a deploy, by
+# php-fpm, by the queue worker — already comes out right.
+#
+# A `chmod -R` on every release would add nothing and would eventually fail:
+# php-fpm writes cached views and session files as www-data, and chmod needs
+# ownership, which the ACL does not give. The first deploy after the app had
+# served a single page would die here, pointing at storage rather than at the
+# release that happened to follow.
 
 # ---------------------------------------------------------------------------
 # Migrate, then cache. In that order: a cached config that a migration has not
