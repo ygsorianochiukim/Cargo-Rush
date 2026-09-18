@@ -28,7 +28,7 @@ jobs:
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: '8.3'
+          php-version: '8.4'
           # sqlite/pdo_sqlite because phpunit.xml runs the suite against an
           # in-memory database — no MySQL service needed here.
           extensions: mbstring, bcmath, intl, pdo_sqlite, sqlite3, gd, zip

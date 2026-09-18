@@ -64,7 +64,7 @@ ssh root@<host>
 bash /tmp/deploy/scripts/provision.sh staging staging.cargorush.example
 ```
 
-It installs nginx, PHP 8.3 + FPM, MySQL and certbot; creates the `deploy` user
+It installs nginx, PHP 8.4 + FPM, MySQL and certbot; creates the `deploy` user
 and a `cargo_staging` database; writes `shared/.env` with a generated `APP_KEY`
 and database password; installs the vhost, the queue worker and the scheduler
 timer; and prints what is left to do.
@@ -196,5 +196,5 @@ editing that file, or the change will not take effect.
 nothing else. A fresh staging database is empty; seed it by hand once:
 
 ```bash
-cd /var/www/cargo-rush/staging/current/CargoApi && php8.3 artisan db:seed --force
+cd /var/www/cargo-rush/staging/current/CargoApi && php8.4 artisan db:seed --force
 ```
