@@ -112,9 +112,13 @@ current_target="$(readlink -f "$DEPLOY_PATH/current")"
 # shellcheck disable=SC2012
 ls -1dt ./*/ 2>/dev/null | tail -n "+$((KEEP_RELEASES + 1))" | while read -r old; do
   old_abs="$(readlink -f "$old")"
-  [ "$old_abs" = "$current_target" ] && continue
-  echo "    removing $(basename "$old_abs")"
-  rm -rf "$old_abs"
+  # An `if` rather than `[ … ] && continue`: under `set -e` a bare test that
+  # comes out false is a non-zero status at the end of the loop body, and this
+  # body runs in a subshell because of the pipe. Not worth the argument.
+  if [ "$old_abs" != "$current_target" ]; then
+    echo "    removing $(basename "$old_abs")"
+    rm -rf "$old_abs"
+  fi
 done
 
 log "Deployed $RELEASE to $ENV_NAME"
