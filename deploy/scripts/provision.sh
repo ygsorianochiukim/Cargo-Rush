@@ -98,14 +98,18 @@ chmod 600 "/home/$DEPLOY_USER/.ssh/authorized_keys"
 
 # The release script reloads FPM and nginx. Exactly those two commands, with
 # no password — a broader rule would make the CI key a root key.
+#
+# The file is named after the user, not the project: running this twice on one
+# box with DEPLOY_USER set differently each time would otherwise have the
+# second run overwrite the first user's rule and silently break its deploys.
 {
   echo "$DEPLOY_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx"
   echo "$DEPLOY_USER ALL=(root) NOPASSWD: /usr/bin/systemctl reload php${PHP_VERSION}-fpm"
   echo "$DEPLOY_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart cargo-queue-staging"
   echo "$DEPLOY_USER ALL=(root) NOPASSWD: /usr/bin/systemctl restart cargo-queue-production"
-} > /etc/sudoers.d/cargo-rush
-chmod 440 /etc/sudoers.d/cargo-rush
-visudo -cf /etc/sudoers.d/cargo-rush >/dev/null
+} > "/etc/sudoers.d/cargo-rush-$DEPLOY_USER"
+chmod 440 "/etc/sudoers.d/cargo-rush-$DEPLOY_USER"
+visudo -cf "/etc/sudoers.d/cargo-rush-$DEPLOY_USER" >/dev/null
 
 # ---------------------------------------------------------------------------
 log "Laying out $DEPLOY_PATH"
