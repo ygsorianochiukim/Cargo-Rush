@@ -221,14 +221,27 @@ visudo -cf "/etc/sudoers.d/cargo-rush-$DEPLOY_USER" >/dev/null
 # ---------------------------------------------------------------------------
 log "Laying out $DEPLOY_PATH"
 # ---------------------------------------------------------------------------
-install -d -o "$DEPLOY_USER" -g www-data -m 2775 \
-  "$DEPLOY_PATH" "$DEPLOY_PATH/releases" "$DEPLOY_PATH/shared"
-install -d -o "$DEPLOY_USER" -g www-data -m 2775 \
+# mkdir -p then chown, rather than `install -d -o … a/b/c`.
+#
+# `install -d` applies its -o/-g/-m to the LAST component only; every
+# intermediate directory it has to create is left as root with the default
+# mode. That produced a shared/storage owned by root containing an
+# app/public owned by deploy — which looks fine, and which the ACLs even make
+# writable, right up until something tries to chmod it. chmod needs
+# ownership, and an ACL never confers that.
+mkdir -p \
+  "$DEPLOY_PATH/releases" \
   "$DEPLOY_PATH/shared/storage/app/public" \
   "$DEPLOY_PATH/shared/storage/framework/cache/data" \
   "$DEPLOY_PATH/shared/storage/framework/sessions" \
   "$DEPLOY_PATH/shared/storage/framework/views" \
   "$DEPLOY_PATH/shared/storage/logs"
+
+chown -R "$DEPLOY_USER:www-data" "$DEPLOY_PATH"
+chmod -R u=rwX,g=rwX,o=rX "$DEPLOY_PATH"
+# setgid so anything created below keeps the www-data group.
+find "$DEPLOY_PATH" -type d -exec chmod g+s {} +
+
 install -d -o "$DEPLOY_USER" -g "$DEPLOY_USER" -m 755 /var/log/cargo-rush
 
 # setgid plus a default ACL: files the deploy user writes and files php-fpm
