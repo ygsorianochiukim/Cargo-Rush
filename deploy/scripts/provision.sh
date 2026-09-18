@@ -106,8 +106,17 @@ apt-get update -qq
 # that 404s breaks every subsequent `apt-get update` on the box, which is a
 # much worse problem than the one it was added to solve. Recent Ubuntu also
 # ships a PHP new enough on its own: 26.04 has 8.5.
+# Deliberately not `apt-cache policy … | grep -q`. `grep -q` exits the moment
+# it matches, apt-cache then dies of SIGPIPE, and `set -o pipefail` reports the
+# pipeline as failed — so a successful match reads as "package not found".
+# Capture first, test after: no pipe, nothing to race.
 have_php_packages() {
-  apt-cache policy "php${PHP_VERSION}-fpm" 2>/dev/null | grep -q 'Candidate: [0-9]'
+  local policy
+  policy=$(apt-cache policy "php${PHP_VERSION}-fpm" 2>/dev/null) || return 1
+  case "$policy" in
+    *"Candidate: "[0-9]*) return 0 ;;
+    *)                    return 1 ;;
+  esac
 }
 
 if ! have_php_packages; then
@@ -197,7 +206,12 @@ log "Creating the database"
 # ---------------------------------------------------------------------------
 DB_PASSWORD="$(openssl rand -base64 30 | tr -d '/+=' | head -c 32)"
 DB_EXISTED=no
-if mysql -N -B -e "SHOW DATABASES LIKE '$DB_DATABASE'" | grep -q "$DB_DATABASE"; then
+# Captured rather than piped into `grep -q`, for the same reason as the PHP
+# check above. Getting this backwards would be worse here: the script would
+# decide an existing database does not exist and run CREATE DATABASE on it,
+# which fails, which under `set -e` ends the run half-provisioned.
+existing_db=$(mysql -N -B -e "SHOW DATABASES LIKE '$DB_DATABASE'" 2>/dev/null || true)
+if [ -n "$existing_db" ]; then
   DB_EXISTED=yes
   warn "database $DB_DATABASE already exists — leaving it and its password alone"
 else
