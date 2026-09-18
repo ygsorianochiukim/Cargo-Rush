@@ -104,7 +104,7 @@ class AccessController extends ApiController
         }
 
         return $this->item(
-            new PositionResource($position->refresh()->load('defaultRole')),
+            new PositionResource($position->refresh()),
             ['retired' => true, 'reason' => 'Employees hold this position, so it was switched off rather than deleted.'],
         );
     }

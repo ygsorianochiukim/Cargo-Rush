@@ -21,8 +21,26 @@ export interface FieldSpec {
      */
     | 'file';
   required?: boolean;
-  hint?: string;
+  /**
+   * The note under the control.
+   *
+   * A function when it depends on the rest of the form — registering somebody
+   * is the case that needed it: the hint under the salary says what the chosen
+   * job pays, and which job that is changes as the form is filled in. Resolved
+   * against the current values on every render, exactly as `showWhen` is.
+   */
+  hint?: string | ((values: Record<string, unknown>) => string);
   placeholder?: string;
+  /**
+   * What this field starts as on a create, when the default is wrong.
+   *
+   * A money field otherwise starts at `0`, which is right almost everywhere
+   * and wrong wherever the payload builder needs to tell "not answered" from
+   * "zero". Registering somebody is that case: a salary left alone takes the
+   * job's rate, and a coerced `0` would look like a deliberate instruction to
+   * pay nothing and suppress the copy.
+   */
+  blank?: unknown;
   /** `select` only. Resolved when the dialog opens, so it can hold live rows. */
   options?: () => { value: string; label: string }[];
   /** `file` only, e.g. `image/*` or `.pdf,.doc,.docx`. */
@@ -59,10 +77,7 @@ export interface FieldSpec {
  * string, so an untouched optional field would otherwise arrive as `""` and
  * overwrite a real value with a blank.
  */
-export function toFormData(
-  values: Record<string, unknown>,
-  method?: 'PATCH' | 'PUT',
-): FormData {
+export function toFormData(values: Record<string, unknown>, method?: 'PATCH' | 'PUT'): FormData {
   const form = new FormData();
 
   if (method) form.append('_method', method);

@@ -46,15 +46,32 @@ return [
     |
     | A rate card is drawn at some assumed fuel price. When the pump moves, the
     | whole card is wrong by roughly the fuel share of the run, and the choice
-    | is between retyping every bracket or deriving the difference. This is the
-    | second one:
+    | is between retyping every band or deriving the difference.
+    |
+    | There are two ways to derive it, and which one applies is decided per
+    | rate-card line rather than here. See `FuelIndex`.
+    |
+    | **The step**, which is what a subsidy table states, and which needs no
+    | setting in this file: a line carries `diesel_step_cents`, the pesos it
+    | adds for every ₱1/L above the baseline, and the surcharge is that times
+    | the whole pesos of movement. A card typed from a printed table reproduces
+    | the table to the peso.
+    |
+    |     price = base + step * floor((today - baseline) / 100)
+    |
+    | **The percentage**, for a line with no step — a firm with one card and no
+    | table behind it. The settings below are this one's:
     |
     |     move       = (today - baseline) / baseline
     |     adjustment = clamp(move * sensitivity, -cap, +cap)
-    |     price      = bracket price * (1 + adjustment)
+    |     price      = line price * (1 + adjustment)
     |
-    | `baseline_cents` is the pump price the brackets were priced at. A zone may
-    | override it; most installs buy fuel at one price and never will.
+    | `baseline_cents` is the pump price the card was priced at. On a banded
+    | card it is the **top of the band the printed figures already cover** —
+    | the workbook these bands were typed from holds from ₱30 to ₱43 a litre,
+    | so ₱43.00 is the baseline and diesel at ₱38 adds nothing. A zone may
+    | override it, and a banded one normally does; the value here is the
+    | fallback for a card with no band of its own.
     |
     | `sensitivity` is the fuel share of a run — how much of the price actually
     | is diesel. At 0.35, a 10% pump rise moves the quote 3.5%, not 10%. Passing
@@ -66,9 +83,24 @@ return [
     | deciding to redraw it — a bad `baseline_cents` should produce a visibly
     | capped figure, not a bill nobody can explain.
     |
+    | Neither applies to a stepped line. A step is a figure the office read off
+    | a table and typed in, and clamping it would silently quote something the
+    | table does not say.
+    |
     */
     'diesel' => [
         'baseline_cents' => (int) env('DIESEL_BASELINE_CENTS', 6_500),
+        /**
+         * The bottom of the baseline band, for display only.
+         *
+         * A subsidy table's printed prices cover a *range* of pump prices —
+         * the workbook's say "From 30 / To 43 per litre diesel" — and only the
+         * top of that range is arithmetic, because it is where the surcharge
+         * starts counting from. The floor is what the office needs on screen to
+         * recognise the card as the one it typed, and nothing reads it to
+         * compute a price.
+         */
+        'band_floor_cents' => (int) env('DIESEL_BAND_FLOOR_CENTS', 3_000),
         'sensitivity' => (float) env('DIESEL_SENSITIVITY', 0.35),
         'cap_bp' => (int) env('DIESEL_CAP_BP', 2_500),
     ],
@@ -170,6 +202,26 @@ return [
          * on the single run.
          */
         'runs_per_month' => (int) env('PAYROLL_RUNS_PER_MONTH', 2),
+
+        /**
+         * The install-wide default cutoff days, for a company that has not set
+         * its own.
+         *
+         * One or two day-of-month numbers, ascending, each the **last day
+         * worked** in a period. `[15, 31]` gives the 1st–15th and the
+         * 16th–end; `31` alone is a monthly payroll. A day past the end of a
+         * short month clamps, so `31` means "the end of the month".
+         *
+         * Null derives it from `runs_per_month` above, which is what this
+         * setting used to be on its own. Both are only a **default** now: the
+         * days a firm actually closes on are `companies.payroll_cutoff_days`,
+         * because they are the firm's policy and not the government's, and an
+         * environment variable cannot answer two hauliers differently. See
+         * `PayrollCalendar`.
+         */
+        'cutoff_days' => env('PAYROLL_CUTOFF_DAYS') === null
+            ? null
+            : array_map('intval', array_filter(explode(',', (string) env('PAYROLL_CUTOFF_DAYS')), 'strlen')),
 
         /*
          * Which cutoff the monthly contributions come off is NOT here.

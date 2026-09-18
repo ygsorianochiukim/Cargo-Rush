@@ -7,13 +7,16 @@ namespace App\Domain\Payroll\Controllers;
 use App\Domain\Identity\Models\User;
 use App\Domain\Payroll\Models\PayRun;
 use App\Domain\Payroll\Models\PayRunLine;
+use App\Domain\Payroll\Models\PayRunLineComponent;
 use App\Domain\Payroll\Resources\PayRunResource;
 use App\Domain\Payroll\Services\PayrollService;
 use App\Domain\Payroll\Support\PayPeriod;
 use App\Domain\Shared\Http\Controllers\ApiController;
+use App\Domain\Tenancy\Support\Tenant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -48,12 +51,18 @@ class PayrollController extends ApiController
     /**
      * The legal pay periods in a month — what the choice on screen is made of.
      *
-     * Payroll is cut off on the 1st and the 16th, so a period is one of two
-     * per month rather than a range somebody types. Sent by the API for the
-     * reason the account types and the journal categories are: it is a fixed
-     * set the server owns, and a client working the calendar out for itself
-     * would be a second place to get February wrong — or to keep offering two
-     * halves to an office that has switched to paying monthly.
+     * A period is one of the firm's own one or two per month rather than a
+     * range somebody types. Sent by the API for the reason the account types
+     * and the journal categories are: it is a set the server owns, and a client
+     * working the calendar out for itself would be a second place to get
+     * February wrong — or to keep offering two halves to an office that has
+     * switched to paying monthly.
+     *
+     * Which days those are is now the **company's** setting
+     * (`companies.payroll_cutoff_days`), so this answer differs per haulier.
+     * That is the point of the endpoint rather than a complication of it: when
+     * the cutoff lived in an environment variable, one install could only ever
+     * describe one firm's fortnight.
      *
      * With no `month`, this answers with the month holding the period that has
      * just closed, and flags that period as the suggested one. That is what an
@@ -62,28 +71,51 @@ class PayrollController extends ApiController
      */
     public function periods(Request $request): JsonResponse
     {
-        $suggested = PayPeriod::justClosed();
-        $month = $this->month($request) ?? $suggested->start;
+        $calendar = $this->payroll->calendar();
+
+        $suggested = $calendar->justClosed();
+        // The month a period belongs to is the month it *closes* in, so the
+        // month on screen comes off the end date. Under a 1st/16th calendar the
+        // two are the same; for a firm cutting off on the 10th, the period
+        // starting on the 26th of August is September's.
+        $month = $this->month($request) ?? $suggested->end;
 
         $periods = array_map(
             static fn (PayPeriod $period): array => [
                 ...$period->toArray(),
                 'suggested' => $period->matches($suggested),
             ],
-            PayPeriod::inMonth((int) $month->year, (int) $month->month),
+            $calendar->inMonth((int) $month->year, (int) $month->month),
         );
 
-        return $this->payload($periods, ['month' => $month->format('Y-m')]);
+        return $this->payload($periods, [
+            'month' => $month->format('Y-m'),
+            /**
+             * The firm's own cutoff days, sent with the periods they produce.
+             *
+             * So a client can say *why* these two are the choice — "cut off on
+             * the 10th and the 25th" — without holding a second copy of the
+             * setting or, worse, working the calendar out for itself. That was
+             * the old bug in a new place: two implementations of February.
+             */
+            'calendar' => $calendar->toArray($month),
+        ]);
     }
 
     /**
      * Open a run for a period and work everybody's pay out.
      *
-     * The period is **not** the office's to invent: it is the 1st to the 15th
-     * or the 16th to the end of the month, because the statutory figures on
+     * The period is **not** the office's to invent on the day: it is one of the
+     * periods its own cutoff days produce, because the statutory figures on
      * every payslip are half a month's contributions and a semi-monthly tax
-     * table. A run covering the 3rd to the 20th would be wrong twice and wrong
-     * invisibly — see `PayPeriod`.
+     * table. A run covering the 3rd to the 20th under a 1st/16th calendar would
+     * be wrong twice and wrong invisibly — see `PayPeriod`.
+     *
+     * Which is a different thing from the cutoff being fixed. A firm that wants
+     * its fortnight to end on the 25th changes its cutoff days, in settings,
+     * once — and every period offered here moves with it. What it cannot do is
+     * type a one-off range into this endpoint and have payroll pretend the
+     * statutory tables still apply to it.
      *
      * `pay_date` is when the money actually goes out, which is a different day
      * and the one the journal entry is dated. It defaults to the cutoff on
@@ -101,8 +133,10 @@ class PayrollController extends ApiController
             'pay_date' => ['required', 'date'],
         ]);
 
+        $calendar = $this->payroll->calendar();
+
         $start = Carbon::parse($validated['period_start']);
-        $period = PayPeriod::matching($start, Carbon::parse($validated['period_end']));
+        $period = $calendar->matching($start, Carbon::parse($validated['period_end']));
 
         /**
          * Refused here, at the boundary, and deliberately not inside
@@ -115,7 +149,7 @@ class PayrollController extends ApiController
          */
         if ($period === null) {
             throw ValidationException::withMessages([
-                'period_start' => [PayPeriod::explainFor($start)],
+                'period_start' => [$calendar->explainFor($start)],
             ]);
         }
 
@@ -174,6 +208,49 @@ class PayrollController extends ApiController
         ]);
 
         $this->payroll->adjustLine($line, $validated);
+
+        return $this->item(new PayRunResource($this->payroll->find($run->getKey())));
+    }
+
+    /**
+     * Put a deduction on one payslip, for this run only.
+     *
+     * The everyday charge no assignment exists for: a uniform, a breakage, a
+     * cash advance against this fortnight. It names itself on the payslip
+     * instead of disappearing into the single "other deductions" figure —
+     * "₱3,450 other" is a number the person holding it cannot ask about.
+     *
+     * Either half identifies it. A `pay_component_id` takes the name from the
+     * firm's catalogue, so the same charge is spelled the same way every time;
+     * a `name` on its own is the one-off nobody is going to catalogue. The
+     * amount is always this payslip's, whatever the catalogue says the
+     * component is normally worth.
+     */
+    public function addDeduction(Request $request, PayRun $run, PayRunLine $line): JsonResponse
+    {
+        abort_unless($line->pay_run_id === $run->getKey(), 404, 'That payslip is not on this run.');
+
+        $validated = $request->validate([
+            'pay_component_id' => [
+                'nullable', 'string',
+                Rule::exists('pay_components', 'id')->where('company_id', app(Tenant::class)->id()),
+            ],
+            'name' => ['nullable', 'string', 'max:80'],
+            'amount_cents' => ['required', 'integer', 'min:0'],
+        ]);
+
+        $this->payroll->addDeduction($line, $validated);
+
+        return $this->item(new PayRunResource($this->payroll->find($run->getKey())), status: 201);
+    }
+
+    /** Take one back off. Only the hand-added ones — see the service. */
+    public function removeDeduction(PayRun $run, PayRunLine $line, PayRunLineComponent $component): JsonResponse
+    {
+        abort_unless($line->pay_run_id === $run->getKey(), 404, 'That payslip is not on this run.');
+        abort_unless($component->pay_run_line_id === $line->getKey(), 404, 'That is not on this payslip.');
+
+        $this->payroll->removeDeduction($component);
 
         return $this->item(new PayRunResource($this->payroll->find($run->getKey())));
     }

@@ -1,4 +1,23 @@
 <!--
+  The firm's deduction catalogue, offered to every "add a deduction" box on the
+  page.
+
+  A datalist rather than a select, because both answers are real: picking
+  "Uniform" from the list points the charge at the catalogue component, so it
+  spells itself the same way on every payslip, and typing something the list has
+  never heard of is the one-off this feature mostly exists for. A select would
+  have made the second impossible.
+
+  Rendered once for the page rather than per payslip — it is the same twenty
+  words under every row.
+-->
+<datalist id="cr-deductions">
+  @for (component of catalogue(); track component.id) {
+    <option [value]="component.name"></option>
+  }
+</datalist>
+
+<!--
   Payroll: a plain-language view for checking the figures, and a register for
   the file.
 
@@ -31,9 +50,10 @@
 
 <!-- Opening a run is a month and a half of it, not three typed dates.
 
-     Payroll is cut off on the 1st and the 16th, so the period is one of two —
-     and the two come from the API, which is why this page can never offer a
-     fortnight the API would refuse, or get the end of February wrong. -->
+     The period is one of the firm's own one or two per month, and the two come
+     from the API — which is why this page can never offer a fortnight the API
+     would refuse, get the end of February wrong, or keep showing a fortnight
+     to an office that has moved its cutoff. -->
 <div class="cr-no-print mb-4 rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
   <div class="flex flex-wrap items-end gap-3">
     <app-field label="Month" hint="Which month to pay for">
@@ -249,8 +269,56 @@
             <div>
               <h2 class="cr-meta">What you earned</h2>
               <dl class="mt-2 grid grid-cols-2 gap-y-1.5 text-[13px]">
-                <dt>Basic pay</dt>
+                <!--
+                  The basic, and — where it is not a salary — what it is a
+                  figure *of*.
+
+                  "₱12,400" of per-trip pay with nothing beside it is a number
+                  the person holding the payslip has no way to check, and
+                  per-trip pay is precisely the kind that gets queried. The
+                  day count comes frozen off the line, so it still says this
+                  next year.
+                -->
+                <dt>
+                  @switch (slip.pay_basis) {
+                    @case ('per_trip') {
+                      Trip pay
+                      <span class="block text-[12px] text-cr-ink-muted">
+                        {{ slip.trips }} {{ slip.trips === 1 ? 'haul' : 'hauls' }} delivered ·
+                        {{ slip.sheet_days }}
+                        {{ slip.sheet_days === 1 ? 'day' : 'days' }} on the truck sheet
+                      </span>
+                    }
+                    @case ('daily') {
+                      Daily pay
+                      <span class="block text-[12px] text-cr-ink-muted">
+                        {{ slip.days_worked }}
+                        {{ slip.days_worked === 1 ? 'day' : 'days' }} worked
+                      </span>
+                    }
+                    @default {
+                      Basic pay
+                    }
+                  }
+                </dt>
                 <dd class="cr-num text-right">{{ fmt.pesos(slip.basic_cents) }}</dd>
+
+                <!--
+                  The firm's own allowances, named one by one rather than
+                  summed.
+
+                  A payslip that showed a lump "allowances ₱3,000" is one the
+                  person holding it cannot check, which is the whole complaint
+                  a payslip exists to answer. These are frozen copies taken on
+                  the day, so they keep saying this after the office renames or
+                  reprices the component.
+                -->
+                @for (component of slip.components; track component.id) {
+                  @if (component.kind === 'earning') {
+                    <dt>{{ component.name }}</dt>
+                    <dd class="cr-num text-right">{{ fmt.pesos(component.amount_cents) }}</dd>
+                  }
+                }
 
                 @if (slip.allowance_cents) {
                   <dt>Allowance</dt>
@@ -295,6 +363,17 @@
                      order the BIR computes it in. -->
                 <dt>Withholding tax</dt>
                 <dd class="cr-num text-right">{{ fmt.pesos(slip.withholding_tax_cents) }}</dd>
+
+                <!-- The firm's own deductions, named. Same argument as the
+                     allowances on the other side: a loan repayment somebody
+                     cannot see the name of is the line they come and ask
+                     about. -->
+                @for (component of slip.components; track component.id) {
+                  @if (component.kind === 'deduction') {
+                    <dt>{{ component.name }}</dt>
+                    <dd class="cr-num text-right">{{ fmt.pesos(component.amount_cents) }}</dd>
+                  }
+                }
 
                 @if (slip.other_deductions_cents) {
                   <dt>
@@ -617,6 +696,26 @@
                     </div>
 
                     @if (isOpen(line.id)) {
+                      <!--
+                        A zero payslip, explained before anything else.
+
+                        It is almost always one of three things — the truck
+                        sheet names nobody, it names them with no salary against
+                        the day, or a daily rate was never set — and each needs
+                        different fixing. The API composes the sentence from the
+                        payslip's own frozen columns, so an old one goes on
+                        explaining itself the way it did.
+                      -->
+                      @if (line.zero_explanation; as why) {
+                        <div class="border-t border-cr-line/70 px-4 pt-4">
+                          <p
+                            class="rounded-control bg-cr-warning-bg px-3 py-2 text-[13px] text-cr-ink"
+                          >
+                            <span class="font-semibold">Nothing to pay.</span> {{ why }}
+                          </p>
+                        </div>
+                      }
+
                       <!-- Every line explained in words, and — while the run is
                            a draft — editable in the same place. That pairing is
                            the point: an office that knows the right SSS figure
@@ -699,6 +798,97 @@
                                     {{ fmt.pesos(part.cents) }}
                                   </p>
                                 }
+                              </div>
+                            }
+
+                            <!--
+                              The firm's own deductions, named one at a time.
+
+                              A payslip that said "₱3,450 other" is one the
+                              person holding it cannot ask a question about, and
+                              "which ₱450 was the uniform" is exactly the
+                              question they come and ask. The ones an assignment
+                              put here and the ones somebody typed on this run
+                              sit in the same list, because the reader does not
+                              care where a charge came from — only what it was
+                              for. Only the typed ones can be taken back off:
+                              removing an assigned one here would be a
+                              correction the next rebuild silently undoes.
+                            -->
+                            @for (charge of charges(line); track charge.id) {
+                              <div class="flex items-start gap-3">
+                                <div class="min-w-0 flex-1">
+                                  <p class="text-[13px]">{{ charge.name }}</p>
+                                  <p class="text-[12px] text-cr-ink-muted">
+                                    {{
+                                      charge.added_by_hand
+                                        ? 'Added on this run.'
+                                        : 'From the salary structure — end the assignment to stop it.'
+                                    }}
+                                  </p>
+                                </div>
+                                <p class="cr-num w-24 flex-none text-right text-[13px]">
+                                  {{ fmt.pesos(charge.amount_cents) }}
+                                </p>
+                                @if (current.can_edit && charge.added_by_hand) {
+                                  <button
+                                    type="button"
+                                    class="cr-no-print -mr-1 h-6 w-6 flex-none rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red disabled:opacity-50"
+                                    [attr.aria-label]="'Remove ' + charge.name"
+                                    [disabled]="busy()"
+                                    (click)="removeDeduction(current, line, charge.id)"
+                                  >
+                                    <app-icon name="close" [size]="13" class="mx-auto" />
+                                  </button>
+                                } @else {
+                                  <span class="w-6 flex-none"></span>
+                                }
+                              </div>
+                            }
+
+                            <!--
+                              One more, on this payslip only.
+
+                              The charge no assignment exists for: a uniform
+                              issued this fortnight, a breakage, a cash advance.
+                              Typing a name that matches the catalogue points it
+                              at the same component, so the same charge spells
+                              itself the same way on every payslip; a name
+                              nothing matches goes on as the one-off it is.
+                            -->
+                            @if (current.can_edit) {
+                              <div class="cr-no-print flex items-end gap-2 pt-1">
+                                <label class="min-w-0 flex-1">
+                                  <span class="sr-only">Deduction</span>
+                                  <input
+                                    type="text"
+                                    list="cr-deductions"
+                                    placeholder="Add a deduction — uniform, breakage, advance"
+                                    class="h-8 w-full rounded-control border border-cr-line bg-cr-surface px-2 text-[12px] focus:border-cr-blue focus:outline-none"
+                                    [value]="draftFor(line.id).name"
+                                    (input)="setDraft(line.id, 'name', $any($event.target).value)"
+                                  />
+                                </label>
+                                <label class="w-24 flex-none">
+                                  <span class="sr-only">Amount in pesos</span>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    placeholder="0.00"
+                                    [class]="cellClass"
+                                    [value]="draftFor(line.id).amount"
+                                    (input)="setDraft(line.id, 'amount', $any($event.target).value)"
+                                  />
+                                </label>
+                                <button
+                                  type="button"
+                                  class="h-8 flex-none rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint disabled:opacity-50"
+                                  [disabled]="busy()"
+                                  (click)="addDeduction(current, line)"
+                                >
+                                  Add
+                                </button>
                               </div>
                             }
 

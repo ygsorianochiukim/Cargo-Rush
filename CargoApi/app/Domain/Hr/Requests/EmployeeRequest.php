@@ -10,8 +10,10 @@ use App\Domain\Hr\DTO\LicenceData;
 use App\Domain\Hr\Models\Employee;
 use App\Domain\Identity\Models\Position;
 use App\Domain\Shared\Enums\EmploymentType;
+use App\Domain\Shared\Enums\PayBasis;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
+use App\Domain\Tenancy\Support\Tenant;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -27,7 +29,7 @@ use Illuminate\Validation\Validator;
  * Drivers Management first, creating half a person there, and coming back.
  *
  * So the driver details are separated out and asked for only when the job needs
- * them, which the position itself answers (`Position::drives()`). Two fields, a
+ * them, which the position itself answers (`positions.drives`). Two fields, a
  * licence number and its expiry, and the service does the rest: it finds the
  * `drivers` row that licence already belongs to, or opens one.
  *
@@ -65,7 +67,26 @@ class EmployeeRequest extends ApiFormRequest
                 'string',
                 'max:60',
             ],
-            'position_id' => ['nullable', 'string', 'exists:positions,id'],
+            /**
+             * The job from the managed list, scoped to the caller's company.
+             *
+             * `exists` queries the table directly and so runs **outside** the
+             * tenant scope every read normally sits behind; the company clause
+             * is what puts it back. Without it, an id belonging to another firm
+             * passes validation and is written to the column — a reference this
+             * company can never resolve, because `Position::find()` *is*
+             * scoped and answers null.
+             *
+             * That was survivable while a position was only a job title: the
+             * label simply did not get copied. It stopped being survivable when
+             * a position started carrying a salary.
+             */
+            'position_id' => [
+                'nullable', 'string',
+                Rule::exists('positions', 'id')
+                    ->where('company_id', app(Tenant::class)->id())
+                    ->whereNull('deleted_at'),
+            ],
             'department' => ['nullable', 'string', 'max:60'],
             'employment_type' => ['sometimes', Rule::in(EmploymentType::values())],
             'status' => ['sometimes', Rule::in([StatusValue::Active->value, StatusValue::Inactive->value])],
@@ -79,7 +100,65 @@ class EmployeeRequest extends ApiFormRequest
             'address' => ['nullable', 'string', 'max:255'],
             'emergency_contact' => ['nullable', 'string', 'max:80'],
             'emergency_phone' => ['nullable', 'string', 'max:40'],
-            'base_salary_cents' => ['sometimes', 'integer', 'min:0'],
+            /**
+             * The opening pay, and the only two fields here that are not
+             * columns on the employee.
+             *
+             * They open a **contract** — its own row, with the date it starts
+             * on — because pay is a history rather than a figure, and a raise
+             * has to leave last fortnight's payslip saying what it said.
+             *
+             * Both together or neither. A basis with no figure cannot open a
+             * contract and a figure with no basis cannot say what it means, so
+             * one alone is answered the same way as nothing: the position's
+             * rate card fills it in, which is the usual case — the office picks
+             * a job and the figure follows.
+             *
+             * Sending them on an edit writes a **new** contract dated today. It
+             * does not touch the one in force, and nothing else on this form
+             * can change anybody's pay.
+             */
+            'pay_basis' => ['sometimes', Rule::enum(PayBasis::class)],
+            'amount_cents' => ['sometimes', 'integer', 'min:0'],
+            /**
+             * The day the figure starts paying. Today unless stated.
+             *
+             * Worth being able to say, and not decoration. A rise agreed on the
+             * 20th for the 1st of next month is written now and sits there not
+             * paying until it arrives; a correction to a figure that was always
+             * wrong is backdated so the run being checked picks it up. Both are
+             * everyday, and a system that can only mean "from now" makes the
+             * second one impossible to express.
+             */
+            'effective_from' => ['sometimes', 'date'],
+
+            /**
+             * Which agencies this person is registered with.
+             *
+             * All three default to true in the database, so an old client that
+             * has never heard of them keeps deducting everything — which is
+             * what every roster predating this was doing. Off is for the cases
+             * a fleet actually has: somebody not yet registered, a casual hand
+             * taken on for the season, a person already contributing through
+             * another employer.
+             *
+             * There is deliberately **no switch for withholding tax**. Whether
+             * somebody is taxed is not the firm's to choose, and the module
+             * already answers it properly from the BIR's exemption threshold.
+             */
+            'sss_enrolled' => ['sometimes', 'boolean'],
+            'philhealth_enrolled' => ['sometimes', 'boolean'],
+            'pagibig_enrolled' => ['sometimes', 'boolean'],
+
+            /**
+             * The most one payslip may take off the store tab.
+             *
+             * Zero — the default — means the whole outstanding balance, which
+             * is what a mini-mart tab settled each cutoff actually does. A
+             * figure spreads a larger one over several payslips without
+             * anybody having to remember to stop.
+             */
+            'store_deduction_cap_cents' => ['sometimes', 'integer', 'min:0'],
 
             /**
              * The licence, required exactly when the job drives.
@@ -146,7 +225,7 @@ class EmployeeRequest extends ApiFormRequest
         return [
             'licence_no.required' => 'A driver needs their licence number.',
             'licence_expiry.required' => 'A driver needs their licence expiry date.',
-            'base_salary_cents.integer' => 'Send the salary in centavos as a whole number, not pesos.',
+            'amount_cents.integer' => 'Send the pay in centavos as a whole number, not pesos.',
             'photo.max' => 'That photograph is too large. An ID photo, not a portrait session.',
         ];
     }
@@ -192,7 +271,7 @@ class EmployeeRequest extends ApiFormRequest
      */
     private function licenceRequired(): bool
     {
-        return $this->jobPosition()?->drives() === true
+        return $this->jobPosition()?->drives === true
             && $this->employee()?->driver_id === null;
     }
 

@@ -54,7 +54,14 @@ export class ApplicantService {
       position?: string;
       department?: string | null;
       employment_type?: string;
-      base_salary_cents?: number;
+      /**
+       * The opening pay, which becomes their first contract.
+       *
+       * Left out means "take the job's rate card", on the tier the employment
+       * type above names — which is the usual way somebody is hired.
+       */
+      pay_basis?: string;
+      amount_cents?: number;
       driver_id?: string | null;
     } = {},
   ): Observable<Employee> {

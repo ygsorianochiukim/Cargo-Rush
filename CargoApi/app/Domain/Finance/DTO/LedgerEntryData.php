@@ -18,6 +18,9 @@ final class LedgerEntryData extends Data
     public function __construct(
         public readonly ?string $truck_id = null,
         public readonly ?string $customer_id = null,
+        /** Who the day's driver and helper salary belonged to. */
+        public readonly ?string $driver_id = null,
+        public readonly ?string $helper_id = null,
         public readonly ?string $date = null,
         public readonly ?int $trip_income_cents = null,
         public readonly ?int $fuel_cents = null,
@@ -39,6 +42,8 @@ final class LedgerEntryData extends Data
         return new self(
             truck_id: $attributes['truck_id'] ?? null,
             customer_id: $attributes['customer_id'] ?? null,
+            driver_id: $attributes['driver_id'] ?? null,
+            helper_id: $attributes['helper_id'] ?? null,
             date: $attributes['date'] ?? null,
             trip_income_cents: $cents('trip_income_cents'),
             fuel_cents: $cents('fuel_cents'),
@@ -57,6 +62,8 @@ final class LedgerEntryData extends Data
         return [
             'truck_id' => $this->truck_id,
             'customer_id' => $this->customer_id,
+            'driver_id' => $this->driver_id,
+            'helper_id' => $this->helper_id,
             'date' => $this->date,
             'trip_income_cents' => $this->trip_income_cents,
             'fuel_cents' => $this->fuel_cents,

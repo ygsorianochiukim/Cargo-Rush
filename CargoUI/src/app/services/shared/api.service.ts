@@ -129,6 +129,29 @@ export class ApiService {
     return this.http.delete<Envelope<T>>(this.url(path), this.options).pipe(map((r) => r.data));
   }
 
+  /**
+   * A delete that answers **either** with a record or with a 204.
+   *
+   * Not the same as `deleteItem`, and the difference is the `null`. That one
+   * assumes a body and reads `.data` straight off it, which is the bug recorded
+   * on `postVoid` above: a 204 has no envelope at all, `HttpClient` hands back
+   * `null`, and reading a field on it throws on a request that succeeded.
+   *
+   * This is for the endpoints where the outcome itself is the answer. Removing
+   * a pay component is the case: one nobody is assigned is deleted and comes
+   * back 204, while one in use is *retired* and comes back as the changed row,
+   * because "it is still there, greyed out" is something the office has to be
+   * told rather than left to notice.
+   *
+   * The whole envelope, not just `data`, so `meta` survives — that is where the
+   * reason for a retirement is.
+   */
+  deleteEnvelope<T>(path: string): Observable<Envelope<T> | null> {
+    return this.http
+      .delete<Envelope<T> | null>(this.url(path), this.options)
+      .pipe(map((response) => response ?? null));
+  }
+
   private url(path: string): string {
     return `${this.base}/${path.replace(/^\//, '')}`;
   }

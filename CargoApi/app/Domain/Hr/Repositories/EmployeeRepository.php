@@ -23,7 +23,10 @@ class EmployeeRepository extends Repository
     public function query(): Builder
     {
         return Employee::query()
-            ->with(['driver:id,name,status', 'user:id,name,email,role', 'jobPosition.defaultRole:id,key,name'])
+            // The contracts come with the row for the same reason the account
+            // does: every roster line shows what the person is on, and asking
+            // per row would be an N+1 across the whole payroll.
+            ->with(['driver:id,name,status', 'user:id,name,email,role', 'jobPosition:id,name,drives', 'contracts'])
             ->orderBy('last_name')
             ->orderBy('first_name');
     }

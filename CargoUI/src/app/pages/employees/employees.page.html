@@ -159,6 +159,29 @@
                 <app-icon name="close" [size]="16" class="mx-auto" />
               </button>
             </div>
+
+            <!--
+              What this person is paid on top of the basic, and what they owe
+              the store. Two panels rather than one because they are different
+              kinds of thing: an allowance is a standing instruction, and a tab
+              is a balance that changes at the till.
+            -->
+            <div class="mt-2 flex items-center gap-2">
+              <button
+                type="button"
+                class="h-8 flex-1 rounded-control text-[12px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+                (click)="openPay(employee)"
+              >
+                Allowances
+              </button>
+              <button
+                type="button"
+                class="h-8 flex-1 rounded-control text-[12px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+                (click)="openTab(employee)"
+              >
+                Store tab
+              </button>
+            </div>
           </li>
         }
       </ul>
@@ -167,6 +190,18 @@
     <app-skeleton-rows [count]="4" />
   }
 </app-card>
+
+<!--
+  Both panels are modals off the roster, because the question each answers is
+  always about one person and is asked while looking at them.
+-->
+@if (payFor(); as employee) {
+  <app-employee-pay-components [employee]="employee" [(open)]="payOpen" />
+}
+
+@if (tabFor(); as employee) {
+  <app-employee-store-credits [employee]="employee" [(open)]="tabOpen" />
+}
 
 <!-- Access: the login, the role, and which modules it reaches. -->
 @if (subject(); as employee) {

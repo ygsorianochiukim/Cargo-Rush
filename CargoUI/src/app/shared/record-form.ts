@@ -1,6 +1,19 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import {
+  FormBuilder,
+  FormControl,
+  FormGroup,
+  ReactiveFormsModule,
+  Validators,
+} from '@angular/forms';
 
 import { Field } from './field';
 import { Modal } from './modal';
@@ -77,6 +90,22 @@ export class RecordForm {
 
     return spec.fields.filter((field) => field.showWhen?.(values) ?? true);
   });
+
+  /**
+   * A field's note, resolved against the current values.
+   *
+   * A plain string for almost every field. A function where the note depends on
+   * the rest of the form — the salary hint that says what the chosen job pays
+   * is the case — and read here rather than in the template so the template
+   * stays a template.
+   */
+  protected hintFor(field: FieldSpec): string {
+    const hint = field.hint;
+
+    if (typeof hint === 'function') return hint(this.values());
+
+    return hint ?? '';
+  }
 
   constructor() {
     // Rebuilt whenever the dialog opens, because the next module's fields are
@@ -236,7 +265,9 @@ export class RecordForm {
   protected pickFile(key: string, event: Event): void {
     const input = event.target as HTMLInputElement;
 
-    this.form().get(key)?.setValue(input.files?.[0] ?? null);
+    this.form()
+      .get(key)
+      ?.setValue(input.files?.[0] ?? null);
     this.form().get(key)?.markAsDirty();
   }
 
@@ -248,6 +279,11 @@ export class RecordForm {
   }
 
   private blankFor(field: FieldSpec): unknown {
+    // A field that says what empty means for it wins. See `FieldSpec.blank` —
+    // a money field whose blank is `0` cannot express "not answered", and a
+    // payload builder that drops unanswered fields needs it to.
+    if (field.blank !== undefined) return field.blank;
+
     if (field.kind === 'number' || field.kind === 'money') return 0;
     // Null rather than an empty string: the payload builder drops nulls, and a
     // file field that was never touched must not be sent at all.

@@ -8,6 +8,7 @@ use App\Domain\Identity\Models\Permission;
 use App\Domain\Identity\Models\Position;
 use App\Domain\Identity\Models\Role;
 use App\Domain\Identity\Repositories\AccessRepository;
+use App\Domain\Shared\Enums\PayBasis;
 use App\Domain\Shared\Enums\StatusValue;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -150,12 +151,19 @@ class AccessService
             ),
             'name' => (string) $attributes['name'],
             'description' => $attributes['description'] ?? null,
-            'default_role_id' => $attributes['default_role_id'] ?? null,
+            'drives' => (bool) ($attributes['drives'] ?? false),
             'position' => (int) ($attributes['position'] ?? 500),
             'status' => $attributes['status'] ?? StatusValue::Active->value,
+
+            // The rate card. Zero means nobody has priced this tier, which
+            // opens no contract — see `Position::startingPay()`.
+            'pay_basis' => $attributes['pay_basis'] ?? PayBasis::Monthly->value,
+            'trainee_amount_cents' => (int) ($attributes['trainee_amount_cents'] ?? 0),
+            'probationary_amount_cents' => (int) ($attributes['probationary_amount_cents'] ?? 0),
+            'regular_amount_cents' => (int) ($attributes['regular_amount_cents'] ?? 0),
         ]);
 
-        return $position->refresh()->load('defaultRole');
+        return $position->refresh();
     }
 
     /**
@@ -165,10 +173,17 @@ class AccessService
     {
         $position->update(array_intersect_key(
             $attributes,
-            array_flip(['name', 'description', 'default_role_id', 'position', 'status']),
+            array_flip([
+                'name', 'description', 'drives', 'position', 'status',
+                // Changing what the job pays changes what the *next* hire is
+                // offered, and nothing about anybody already on it — their pay
+                // is a contract of their own. See the migration.
+                'pay_basis', 'trainee_amount_cents', 'probationary_amount_cents',
+                'regular_amount_cents',
+            ]),
         ));
 
-        return $position->refresh()->load('defaultRole');
+        return $position->refresh();
     }
 
     /**

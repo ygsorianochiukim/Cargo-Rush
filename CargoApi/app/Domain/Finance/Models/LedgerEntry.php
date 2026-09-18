@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Finance\Models;
 
 use App\Domain\Customer\Models\Customer;
+use App\Domain\Driver\Models\Driver;
 use App\Domain\Identity\Models\User;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
 use App\Domain\Trip\Models\Trip;
@@ -28,7 +29,7 @@ class LedgerEntry extends Model
     use BelongsToCompany, HasFactory, HasUlids, SoftDeletes;
 
     protected $fillable = [
-        'truck_id', 'trip_id', 'customer_id', 'date', 'trip_income_cents', 'fuel_cents',
+        'truck_id', 'trip_id', 'customer_id', 'driver_id', 'helper_id', 'date', 'trip_income_cents', 'fuel_cents',
         'driver_salary_cents', 'helper_salary_cents', 'maintenance_cents',
         'allowance_cents', 'route', 'remarks', 'recorded_by',
     ];
@@ -79,6 +80,29 @@ class LedgerEntry extends Model
     public function recorder(): BelongsTo
     {
         return $this->belongsTo(User::class, 'recorded_by');
+    }
+
+    /**
+     * Who the day's driver and helper pay belonged to.
+     *
+     * The columns beside them have recorded *what* the crew was paid since the
+     * workbook was first modelled; these say *whose*. Null is ordinary on rows
+     * entered by hand and on anything filed before the columns existed, and it
+     * means unattributed — counted toward nobody's payslip, which is the safe
+     * direction. See `TripPayService`.
+     *
+     * Both point at `drivers` rather than `employees`: that is the operational
+     * record every trip and dispatch already names, and a helper is a driver
+     * record without the keys.
+     */
+    public function driver(): BelongsTo
+    {
+        return $this->belongsTo(Driver::class);
+    }
+
+    public function helper(): BelongsTo
+    {
+        return $this->belongsTo(Driver::class, 'helper_id');
     }
 
     /** fuel + driver + helper + maintenance + allowance. */

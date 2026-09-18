@@ -55,6 +55,8 @@ class StatutoryDeductions
      * @param  bool  $isFirstCutoff  Whether this is the 1st-to-15th payslip.
      * @param  bool  $isOnlyRun  True where payroll runs once a month, so there
      *                           is no second payslip to spread anything onto.
+     * @param  array{sss?: bool, philhealth?: bool, pagibig?: bool}  $enrolled  Which
+     *                                                                          agencies this person is registered with. Absent is enrolled.
      * @return array{sss: int, philhealth: int, pagibig: int, withholding_tax: int}
      */
     public function for(
@@ -63,17 +65,46 @@ class StatutoryDeductions
         bool $isFirstCutoff = true,
         bool $isOnlyRun = false,
         ?DeductionSchedule $schedule = null,
+        array $enrolled = [],
     ): array {
         $schedule ??= DeductionSchedule::Split;
 
-        $sss = $schedule->shareOf($this->sss($monthlyBasicCents), $isFirstCutoff, $isOnlyRun);
-        $philhealth = $schedule->shareOf($this->philhealth($monthlyBasicCents), $isFirstCutoff, $isOnlyRun);
-        $pagibig = $schedule->shareOf($this->pagibig($monthlyBasicCents), $isFirstCutoff, $isOnlyRun);
+        /**
+         * A contribution the person is not enrolled for is nothing at all.
+         *
+         * Not "zero after the arithmetic" but skipped before it, which matters
+         * for PhilHealth: its floor means somebody on a low basic contributes
+         * on ₱10,000 they do not earn, and running that and then discarding it
+         * would be a figure in the logs nobody could account for.
+         *
+         * Absent means enrolled. Every employee on a roster predating this had
+         * all three, and a default of "not enrolled" would silently stop the
+         * contributions of an entire company the day it deployed.
+         */
+        $takes = static fn (string $agency): bool => ($enrolled[$agency] ?? true) === true;
 
-        // The BIR's order: contributions first, then tax on what is left. The
-        // contributions subtracted are the ones actually taken on *this*
-        // cutoff, so a firm that loads them onto one payslip moves the tax with
-        // them — which is right, because the tax follows the money withheld.
+        $sss = $takes('sss')
+            ? $schedule->shareOf($this->sss($monthlyBasicCents), $isFirstCutoff, $isOnlyRun)
+            : 0;
+        $philhealth = $takes('philhealth')
+            ? $schedule->shareOf($this->philhealth($monthlyBasicCents), $isFirstCutoff, $isOnlyRun)
+            : 0;
+        $pagibig = $takes('pagibig')
+            ? $schedule->shareOf($this->pagibig($monthlyBasicCents), $isFirstCutoff, $isOnlyRun)
+            : 0;
+
+        /**
+         * The BIR's order: contributions first, then tax on what is left.
+         *
+         * The contributions subtracted are the ones actually taken on *this*
+         * cutoff, so a firm that loads them onto one payslip moves the tax with
+         * them — which is right, because the tax follows the money withheld.
+         *
+         * The same sentence is why an unenrolled person is taxed slightly more,
+         * and why that is correct rather than a penalty: the deduction from
+         * taxable pay exists because the contribution was withheld, and nothing
+         * was withheld.
+         */
         $taxable = max(0, $periodGrossCents - $sss - $philhealth - $pagibig);
 
         return [

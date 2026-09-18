@@ -8,6 +8,8 @@ import { employeeSpec } from '../../services/hr/employee.form';
 import { EmployeeService } from '../../services/hr/employee.service';
 import { AccessService } from '../../services/identity/access.service';
 import { Card } from '../../shared/card';
+import { EmployeePayComponents } from './employee-pay-components';
+import { EmployeeStoreCredits } from './employee-store-credits';
 import { Field } from '../../shared/field';
 import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
@@ -36,6 +38,8 @@ import { StatusPill } from '../../shared/status-pill';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     Card,
+    EmployeePayComponents,
+    EmployeeStoreCredits,
     Field,
     Icon,
     ListToolbar,
@@ -71,6 +75,7 @@ export class EmployeesPage {
 
   protected readonly accessOpen = signal(false);
   protected readonly subject = signal<Employee | null>(null);
+
   protected readonly moduleState = signal<ModuleState | null>(null);
   protected readonly credentials = signal<StaffCredentials | null>(null);
   protected readonly accessError = signal<string | null>(null);
@@ -116,6 +121,29 @@ export class EmployeesPage {
     });
   }
 
+  /**
+   * The two pay panels, each held open against one person.
+   *
+   * The employee is kept in a signal of its own rather than reusing `subject`
+   * above, which the access modal owns: two modals sharing one subject means
+   * closing either one blanks the other mid-animation, and the roster is a
+   * screen where somebody opens both in turn.
+   */
+  protected readonly payFor = signal<Employee | null>(null);
+  protected readonly payOpen = signal(false);
+  protected readonly tabFor = signal<Employee | null>(null);
+  protected readonly tabOpen = signal(false);
+
+  protected openPay(employee: Employee): void {
+    this.payFor.set(employee);
+    this.payOpen.set(true);
+  }
+
+  protected openTab(employee: Employee): void {
+    this.tabFor.set(employee);
+    this.tabOpen.set(true);
+  }
+
   protected openAccess(employee: Employee): void {
     this.subject.set(employee);
     this.accessOpen.set(true);
@@ -126,10 +154,17 @@ export class EmployeesPage {
 
     this.accountForm.reset({
       email: employee.email ?? '',
-      // Their current role if they have one; otherwise the one their position
-      // normally gets, so the office is not asked a question it already
-      // answered when it picked the job title.
-      role: employee.role ?? employee.suggested_role ?? this.roles()[0]?.value ?? '',
+      /**
+       * Their current role if they have one, and otherwise the first on the
+       * list for the office to change.
+       *
+       * A position used to suggest one, and that link is gone: what somebody
+       * *is* and what they can *open* are different questions, and conflating
+       * them means you cannot have two drivers where one also keeps the books.
+       * So access is chosen here, deliberately, rather than following from a
+       * job title somebody picked on another screen.
+       */
+      role: employee.role ?? this.roles()[0]?.value ?? '',
       password: '',
     });
 

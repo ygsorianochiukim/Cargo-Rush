@@ -8,13 +8,25 @@
 -->
 @if (canManageCompany()) {
   <!--
-    Two cards, side by side on a wide screen: who the company is, and where it
-    is. The second is what puts the firm on the carrier list customers pick from
+    Who the company is, where it is, and when it pays.
+
+    Two columns, and the **stacking is the layout**: the yard card holds a map
+    and is twice the height of anything else on this screen. Left to the grid,
+    it dragged the one-line company card out to match it — cards fill their
+    grid row rather than shrink, so a short card beside a tall one is a card
+    with a hole in it — and left the cutoff card a whole empty cell beside it.
+    Stacking the two short ones against the tall one costs nothing and both
+    columns come out roughly level.
+
+    The yard card is what puts the firm on the carrier list customers pick from
     in the app, and for any company that registered before that list existed it
     is the only way onto it.
   -->
-  <div class="mb-4 grid gap-4 lg:grid-cols-2">
-    <app-company-card />
+  <div class="mb-4 grid items-start gap-4 lg:grid-cols-2">
+    <div class="flex flex-col gap-4">
+      <app-company-card />
+      <app-payroll-cutoff-card />
+    </div>
     <app-yard-card />
   </div>
 }
@@ -190,50 +202,142 @@
     }
   </div>
 } @else {
-  <app-card heading="Positions" icon="badge" hint="The job titles the roster picks from">
+  <app-card heading="Positions" icon="badge" hint="The job, and what it pays">
+    <!--
+      A position is the job, and what the job pays.
+
+      One line rather than a paragraph. The thing an office has to know is that
+      editing a figure here does not move anybody already on the job, and that
+      fits in a sentence — the rest was explaining a design decision to somebody
+      who only wants to set a rate.
+
+      It no longer suggests a role, either. What somebody *is* and what they can
+      *open* are different questions, and conflating them means you cannot have
+      two drivers where one also keeps the books — a person who exists in every
+      small fleet. Access is chosen on the account, and this screen no longer
+      mentions it at all.
+    -->
+    <p class="mb-2 text-[12px] text-cr-ink-muted">
+      Hiring into a job opens that person a contract on the figure for their tier. Changing a rate
+      here moves what the <em>next</em> hire is offered, and nobody already on it.
+    </p>
+
     @if (positions(); as list) {
-      <ul class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        @for (position of list; track position.id) {
-          <li class="rounded-card border border-cr-line p-3">
-            <div class="flex items-start gap-2">
-              <div class="min-w-0 flex-1">
-                <p class="truncate text-[14px] font-semibold">{{ position.name }}</p>
-                <p class="mt-0.5 text-[12px] text-cr-ink-muted">
-                  {{ position.default_role_name ?? 'No default role' }}
-                </p>
-              </div>
-              <app-status-pill [status]="position.status" />
-            </div>
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[720px] border-collapse text-[13px]">
+          <thead>
+            <tr class="border-b border-cr-line text-left text-[12px] text-cr-ink-muted">
+              <th scope="col" class="py-2 pr-3 font-semibold">Position</th>
+              <th scope="col" class="w-40 py-2 pr-3 font-semibold">Paid</th>
+              <th scope="col" class="py-2 pr-3 text-center font-semibold" colspan="3">
+                Amount <span class="font-normal">(₱)</span>
+              </th>
+              <th scope="col" class="w-24 py-2 font-semibold">
+                <span class="sr-only">Actions</span>
+              </th>
+            </tr>
+            <tr class="border-b border-cr-line text-right text-[12px] text-cr-ink-muted">
+              <th scope="col" class="py-1.5"></th>
+              <th scope="col" class="py-1.5"></th>
+              @for (tier of tiers; track tier) {
+                <th scope="col" class="w-32 py-1.5 pr-3 font-medium capitalize">{{ tier }}</th>
+              }
+              <th scope="col" class="py-1.5"></th>
+            </tr>
+          </thead>
 
-            @if (position.description) {
-              <p class="mt-2 text-[12px] text-cr-ink-muted">{{ position.description }}</p>
+          <tbody>
+            @for (position of list; track position.id) {
+              <tr class="border-b border-cr-line last:border-0 hover:bg-cr-tint/40">
+                <!--
+                  The wide column, doing some work.
+
+                  What the job comes to on one payslip used to be a second list
+                  under the table, repeating every priced job by name — the same
+                  figures twice, and a block of height that grew with the roster.
+                  It belongs on the row it describes, in the one column with room
+                  for a sentence.
+
+                  The API composes it from the firm's own pay calendar: ₱15,000 a
+                  month is ₱7,500 twice, and whether it is twice depends on a
+                  cutoff set on another card on this very screen.
+                -->
+                <th scope="row" class="py-1.5 pr-3 text-left font-semibold">
+                  <span class="flex items-center gap-2">
+                    {{ position.name }}
+                    @if (position.status !== 'active') {
+                      <app-status-pill [status]="position.status" />
+                    }
+                  </span>
+                  <span class="block text-[12px] font-normal text-cr-ink-muted">
+                    {{ position.employee_count ?? 0 }}
+                    {{ position.employee_count === 1 ? 'employee' : 'employees' }}
+                    @if (position.drives) {
+                      · needs a licence
+                    }
+                    @if (position.has_rate_card) {
+                      · {{ position.pay_summary }}
+                    }
+                  </span>
+                </th>
+
+                <!--
+                  What the amounts beside it mean — a month, a day, a haul.
+                  Saved on change rather than behind the dialog: a rate card is
+                  a table, and a table you have to open a form to change one
+                  cell of is a table somebody keeps a spreadsheet beside.
+                -->
+                <td class="py-2 pr-3">
+                  <select
+                    [value]="position.pay_basis"
+                    [disabled]="busy()"
+                    [attr.aria-label]="'How ' + position.name + ' is paid'"
+                    class="h-9 w-full rounded-control border border-cr-line bg-cr-surface px-2 text-[13px] focus:border-cr-blue focus:outline-none disabled:opacity-60"
+                    (change)="setBasis(position, $any($event.target).value)"
+                  >
+                    <option value="monthly">Monthly</option>
+                    <option value="daily">Daily</option>
+                    <option value="per_trip">Per Trip</option>
+                  </select>
+                </td>
+
+                @for (tier of tiers; track tier) {
+                  <td class="py-2 pr-3">
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      [value]="amountFor(position, tier) / 100"
+                      [disabled]="busy()"
+                      [attr.aria-label]="position.name + ' — ' + tier + ' rate in pesos'"
+                      class="cr-num h-9 w-full rounded-control border border-cr-line bg-cr-surface px-2 text-right text-[13px] focus:border-cr-blue focus:outline-none disabled:opacity-60"
+                      (change)="setAmount(position, tier, $any($event.target).value)"
+                    />
+                  </td>
+                }
+
+                <td class="py-2 text-right whitespace-nowrap">
+                  <button
+                    type="button"
+                    class="h-9 rounded-control px-2 text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+                    (click)="openPositionForm(position)"
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Delete position"
+                    class="h-9 w-9 rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
+                    (click)="removePosition(position)"
+                  >
+                    <app-icon name="close" [size]="16" class="mx-auto" />
+                  </button>
+                </td>
+              </tr>
             }
-
-            <p class="mt-2 text-[12px] text-cr-ink-muted">
-              {{ position.employee_count ?? 0 }}
-              {{ position.employee_count === 1 ? 'employee' : 'employees' }}
-            </p>
-
-            <div class="mt-3 flex items-center gap-2 border-t border-cr-line pt-3">
-              <button
-                type="button"
-                class="h-9 flex-1 rounded-control border border-cr-line text-[13px] font-semibold transition-colors hover:bg-cr-tint"
-                (click)="openPositionForm(position)"
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                aria-label="Delete position"
-                class="h-9 w-9 flex-none rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
-                (click)="removePosition(position)"
-              >
-                <app-icon name="close" [size]="16" class="mx-auto" />
-              </button>
-            </div>
-          </li>
-        }
-      </ul>
+          </tbody>
+        </table>
+      </div>
     } @else {
       <app-skeleton-rows [count]="4" />
     }
@@ -290,14 +394,71 @@
     <app-field label="Description">
       <input type="text" formControlName="description" [class]="inputClass" />
     </app-field>
-    <app-field label="Default role" hint="Pre-selected when this person is given a login.">
-      <select formControlName="default_role_id" [class]="inputClass">
-        <option value="">No login normally</option>
-        @for (option of roleOptions(); track option.value) {
-          <option [value]="option.value">{{ option.label }}</option>
-        }
+    <app-field
+      label="Needs a driver record"
+      hint="Tick for a job that uses the handset — the hire form then asks for a licence."
+    >
+      <label class="flex h-10 items-center gap-2 text-[14px]">
+        <input type="checkbox" formControlName="drives" class="h-4 w-4 accent-cr-blue" />
+        <span class="text-cr-ink-muted">Driver, helper, anybody who is named on a trip.</span>
+      </label>
+    </app-field>
+
+    <!--
+      The rate card.
+
+      A default at the moment of hire, not a salary — hiring into this job opens
+      that person a contract on the figure for their tier, and they carry it
+      from then on. Saying so on the form matters: an office that thinks this is
+      a live link will expect a rise here to reach everybody, and it does not.
+    -->
+    <hr class="border-cr-line" />
+
+    <app-field
+      label="Paid"
+      hint="What the three figures below are per. Offered to the next person hired into this job; it does not change anybody already on it."
+    >
+      <select formControlName="pay_basis" [class]="inputClass">
+        <option value="monthly">Monthly — a salary for the month</option>
+        <option value="daily">Daily — a rate for each day worked</option>
+        <option value="per_trip">Per trip — a rate for each haul delivered</option>
       </select>
     </app-field>
+
+    <div class="grid grid-cols-3 gap-2">
+      <app-field label="Trainee (₱)">
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          formControlName="trainee"
+          [class]="inputClass + ' cr-num'"
+        />
+      </app-field>
+      <app-field label="Probationary (₱)">
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          formControlName="probationary"
+          [class]="inputClass + ' cr-num'"
+        />
+      </app-field>
+      <app-field label="Regular (₱)">
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          formControlName="regular"
+          [class]="inputClass + ' cr-num'"
+        />
+      </app-field>
+    </div>
+
+    <p class="cr-meta">
+      Leave a tier at 0 if the figure is agreed per person — hiring then opens no contract and the
+      roster form asks for it. Contractual and part-time hires are paid the regular figure.
+    </p>
   </form>
 
   <ng-container modal-footer>

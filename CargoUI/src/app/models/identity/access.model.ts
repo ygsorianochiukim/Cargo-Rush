@@ -58,26 +58,78 @@ export interface Position extends Timestamped {
   key: string;
   name: string;
   description: string | null;
-  /** A default, not a rule — the account still names its own role. */
-  default_role_id: string | null;
-  default_role_key: string | null;
-  default_role_name: string | null;
+
   /**
-   * Whether registering somebody into this job also asks for a licence.
+   * Whether registering somebody into this job also asks for a licence, and
+   * opens them a `drivers` record.
    *
-   * Sent by the API rather than worked out here from `default_role_key`, so
-   * the rule lives in one place — beside the validation that enforces it. The
-   * employee form reads this to decide whether to show the driver details.
+   * Its own field on the position rather than something inferred from the role
+   * the job used to suggest — that link is gone. What somebody *is* and what
+   * they can *open* are different questions, and conflating them means you
+   * cannot have two drivers where one also keeps the books.
    */
   drives: boolean;
+
+  /**
+   * The rate card: one basis, and a figure for each tier.
+   *
+   * A **default at the moment of hire**, not a salary. Hiring into this job
+   * opens the person a contract and copies the tier's figure onto it; payroll
+   * reads the contract and never looks here again. So editing these changes
+   * what the *next* hire is offered and nothing about anybody already on the
+   * job — a live link would silently restate what every existing driver is
+   * owed the day the rate moved.
+   *
+   * Three figures rather than five: contractual and part-time hires are
+   * engagements rather than stages and are paid the regular figure.
+   *
+   * `has_rate_card` is sent rather than left to a client comparing figures to
+   * zero — zero and "nobody has said" look identical from the outside, and only
+   * one of them should fill in a form.
+   */
+  pay_basis: PayBasis;
+  pay_basis_label: string;
+  /** "a month", "a day", "a trip" — what the figures beside it mean. */
+  pay_basis_unit: string;
+  trainee_amount_cents: number;
+  probationary_amount_cents: number;
+  regular_amount_cents: number;
+  has_rate_card: boolean;
+
+  /**
+   * What the job comes to on **one payslip**, in a sentence.
+   *
+   * The figure an office cannot work out from the form and most wants: ₱15,000
+   * a month is not ₱15,000 a payslip, it is ₱7,500 twice — and whether it is
+   * twice at all depends on the firm's cutoff, set on another screen entirely.
+   *
+   * Composed by the API, because that is where the pay calendar lives. A client
+   * dividing by two would be a second implementation of the pay schedule, and
+   * the first firm it got wrong would be the one paying monthly.
+   */
+  pay_summary: string;
+
   position: number;
   status: StatusValue;
   employee_count?: number;
 }
 
+/** How a figure is arrived at — and what the amount beside it is per. */
+export type PayBasis = 'monthly' | 'daily' | 'per_trip';
+
+/** The three columns of a rate card, in the order somebody moves through them. */
+export const PAY_TIERS = ['trainee', 'probationary', 'regular'] as const;
+
+export type PayTier = (typeof PAY_TIERS)[number];
+
 export interface PositionPayload {
   name: string;
   description?: string | null;
-  default_role_id?: string | null;
+  drives?: boolean;
   status?: StatusValue;
+  /** The rate card. See `Position`. */
+  pay_basis?: PayBasis;
+  trainee_amount_cents?: number;
+  probationary_amount_cents?: number;
+  regular_amount_cents?: number;
 }

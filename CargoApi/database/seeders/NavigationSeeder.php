@@ -75,7 +75,26 @@ class NavigationSeeder extends Seeder
             // Its own permission, not `hr.manage`: whoever runs the roster does
             // not thereby get to grant themselves the ledger.
             // Moved down to make room for payroll above it.
-            ['access', 'Access Control', 'shield', '/access', 111, false, true, 'HR', 'access.view', null],
+            /**
+             * Salary Structure has no sidebar row because it has no page.
+             *
+             * The allowances-and-deductions catalogue still exists and payroll
+             * still reads it. What went is the screen for keeping it, which was
+             * a second pay system standing beside the first: a catalogue to
+             * learn and an assignment to make before an office could put ₱500
+             * on one payslip. It was never listed here, so in practice nobody
+             * found it anyway.
+             *
+             * Both halves moved to where the work happens. A recurring
+             * allowance is assigned on the employee, on the Employees screen. A
+             * one-off deduction — a uniform, a breakage, a cash advance — is
+             * added on the pay run, on the payslip it belongs to, and carries
+             * across a rebuild.
+             *
+             * Written down here rather than deleted so the next person looking
+             * for the catalogue finds out where it went.
+             */
+            ['access', 'Access Control', 'shield', '/access', 112, false, true, 'HR', 'access.view', null],
 
             // Support. Numbered after HR so the two groups do not interleave.
             ['incidents', 'Incident Management', 'incident', '/incidents', 130, false, true, 'Support', 'incidents.view', 'incidents.open'],

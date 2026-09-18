@@ -6,6 +6,7 @@ namespace App\Domain\Hr\DTO;
 
 use App\Domain\Shared\DTO\Data;
 use App\Domain\Shared\Enums\EmploymentType;
+use App\Domain\Shared\Enums\PayBasis;
 use App\Domain\Shared\Enums\StatusValue;
 
 /**
@@ -44,7 +45,35 @@ final class EmployeeData extends Data
         public readonly ?string $address = null,
         public readonly ?string $emergency_contact = null,
         public readonly ?string $emergency_phone = null,
-        public readonly ?int $base_salary_cents = null,
+        /**
+         * The opening pay, and the only two fields here that are not columns
+         * on `employees`.
+         *
+         * They describe a **contract**, which is its own row with its own date
+         * — see `Contract`. The service writes one when both are answered,
+         * and falls back to the position's rate card when they are not, which
+         * is the usual case: the office picks a job and the figure follows.
+         *
+         * Null on a PATCH that does not mention them means "do not write a new
+         * contract", the same rule every other field here follows. Changing
+         * somebody's pay is never a side effect of correcting their phone
+         * number.
+         */
+        public readonly ?PayBasis $pay_basis = null,
+        public readonly ?int $amount_cents = null,
+        public readonly ?string $effective_from = null,
+        /**
+         * Which agencies this person is registered with.
+         *
+         * Null is "not part of this edit", like every other field here — not
+         * "no". A PATCH that only corrects a phone number must not quietly
+         * stop somebody's SSS.
+         */
+        public readonly ?bool $sss_enrolled = null,
+        public readonly ?bool $philhealth_enrolled = null,
+        public readonly ?bool $pagibig_enrolled = null,
+        /** The most one payslip may take off the store tab. Zero is all of it. */
+        public readonly ?int $store_deduction_cap_cents = null,
         public readonly ?string $notes = null,
     ) {}
 
@@ -69,11 +98,56 @@ final class EmployeeData extends Data
             address: $attributes['address'] ?? null,
             emergency_contact: $attributes['emergency_contact'] ?? null,
             emergency_phone: $attributes['emergency_phone'] ?? null,
-            base_salary_cents: isset($attributes['base_salary_cents'])
-                ? (int) $attributes['base_salary_cents']
+            pay_basis: isset($attributes['pay_basis'])
+                ? PayBasis::from($attributes['pay_basis'])
+                : null,
+            amount_cents: isset($attributes['amount_cents'])
+                ? (int) $attributes['amount_cents']
+                : null,
+            effective_from: $attributes['effective_from'] ?? null,
+            sss_enrolled: isset($attributes['sss_enrolled'])
+                ? (bool) $attributes['sss_enrolled']
+                : null,
+            philhealth_enrolled: isset($attributes['philhealth_enrolled'])
+                ? (bool) $attributes['philhealth_enrolled']
+                : null,
+            pagibig_enrolled: isset($attributes['pagibig_enrolled'])
+                ? (bool) $attributes['pagibig_enrolled']
+                : null,
+            store_deduction_cap_cents: isset($attributes['store_deduction_cap_cents'])
+                ? (int) $attributes['store_deduction_cap_cents']
                 : null,
             notes: $attributes['notes'] ?? null,
         );
+    }
+
+    /**
+     * The pay the caller stated, or null where they left it to the job.
+     *
+     * Either half on its own is a real instruction, so either half is enough to
+     * write a contract. A figure with no basis is "this much, on whatever this
+     * job pays by" — which is the common case, because the basis comes from the
+     * job and the office only ever argues about the number. A basis with no
+     * figure is "same money, paid differently", which is how somebody moves
+     * from a monthly salary onto a trip rate.
+     *
+     * The service fills in whichever half is missing: from the contract in
+     * force, then from the position's rate card. See
+     * `EmployeeService::openingContract()`.
+     *
+     * @return array{pay_basis: ?PayBasis, amount_cents: ?int, effective_from: ?string}|null
+     */
+    public function contractTerms(): ?array
+    {
+        if ($this->pay_basis === null && $this->amount_cents === null) {
+            return null;
+        }
+
+        return [
+            'pay_basis' => $this->pay_basis,
+            'amount_cents' => $this->amount_cents,
+            'effective_from' => $this->effective_from,
+        ];
     }
 
     public function toArray(): array
@@ -95,7 +169,10 @@ final class EmployeeData extends Data
             'address' => $this->address,
             'emergency_contact' => $this->emergency_contact,
             'emergency_phone' => $this->emergency_phone,
-            'base_salary_cents' => $this->base_salary_cents,
+            'sss_enrolled' => $this->sss_enrolled,
+            'philhealth_enrolled' => $this->philhealth_enrolled,
+            'pagibig_enrolled' => $this->pagibig_enrolled,
+            'store_deduction_cap_cents' => $this->store_deduction_cap_cents,
             'notes' => $this->notes,
         ];
     }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Tenancy\Requests;
 
+use App\Domain\Payroll\Rules\PayrollCutoffDays;
 use App\Domain\Shared\Enums\DeductionSchedule;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
 use Illuminate\Validation\Rule;
@@ -57,6 +58,20 @@ class CompanyProfileRequest extends ApiFormRequest
              * See `DeductionSchedule`.
              */
             'payroll_deduct_on' => ['sometimes', Rule::enum(DeductionSchedule::class)],
+
+            /**
+             * The days this firm's pay periods close on.
+             *
+             * The other payroll policy, and the one that used to be an
+             * environment variable — which meant one cutoff for every haulier
+             * on the install. `PayrollCutoffDays` carries the rules and the
+             * reasons for each of them, including why an open draft run blocks
+             * the change.
+             *
+             * Nullable, and that is how a firm goes back to the install
+             * default rather than a state it has to guess its way out of.
+             */
+            'payroll_cutoff_days' => ['sometimes', 'nullable', 'array', new PayrollCutoffDays],
         ];
     }
 
@@ -86,13 +101,31 @@ class CompanyProfileRequest extends ApiFormRequest
     {
         $attributes = $this->safe()->only([
             'contact_name', 'contact_email', 'contact_phone', 'address', 'latitude', 'longitude',
-            'payroll_deduct_on',
+            'payroll_deduct_on', 'payroll_cutoff_days',
         ]);
 
         foreach (['latitude', 'longitude'] as $key) {
             if (array_key_exists($key, $attributes) && $attributes[$key] !== null) {
                 $attributes[$key] = (float) $attributes[$key];
             }
+        }
+
+        /**
+         * Stored as ints, ascending.
+         *
+         * Sorted here rather than on the way out, so the column and the
+         * calendar built from it are the same list in the same order. A client
+         * that sent `[31, 15]` meant the same thing as one that sent `[15, 31]`
+         * and should not leave the row looking different.
+         *
+         * An empty array is stored as null — "back to the install default" —
+         * which is the same state the column starts in.
+         */
+        if (array_key_exists('payroll_cutoff_days', $attributes)) {
+            $days = array_values(array_unique(array_map('intval', (array) $attributes['payroll_cutoff_days'])));
+            sort($days);
+
+            $attributes['payroll_cutoff_days'] = $days === [] ? null : $days;
         }
 
         return $attributes;

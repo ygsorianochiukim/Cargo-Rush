@@ -2,10 +2,19 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
-import { PermissionGroup, Position, Role } from '../../models/identity/access.model';
+import {
+  PAY_TIERS,
+  PayBasis,
+  PayTier,
+  PermissionGroup,
+  Position,
+  PositionPayload,
+  Role,
+} from '../../models/identity/access.model';
 import { AccessService } from '../../services/identity/access.service';
 import { IdentityService } from '../../services/identity/identity.service';
 import { CompanyCard } from './company-card';
+import { PayrollCutoffCard } from './payroll-cutoff-card';
 import { YardCard } from './yard-card';
 import { Card } from '../../shared/card';
 import { Confirm } from '../../shared/confirm';
@@ -33,6 +42,7 @@ import { StatusPill } from '../../shared/status-pill';
   imports: [
     Card,
     CompanyCard,
+    PayrollCutoffCard,
     YardCard,
     Field,
     Icon,
@@ -88,7 +98,30 @@ export class AccessPage {
   protected readonly positionForm = this.fb.group({
     name: ['', Validators.required],
     description: [''],
-    default_role_id: [''],
+    /**
+     * Does somebody in this job need a `drivers` record?
+     *
+     * Which is the same question as *do they use the handset*. Asked outright
+     * rather than inferred from a role, because a firm that gives its mechanics
+     * a driver login to shunt units around the yard is not hiring drivers.
+     */
+    drives: [false],
+    /**
+     * The rate card — one basis, and a figure for each tier.
+     *
+     * A default at the moment of hire, not a salary: hiring into this job opens
+     * the person a contract on the tier's figure, and they carry that from then
+     * on. Editing these changes what the *next* hire is offered and nothing
+     * about anybody already on the job.
+     *
+     * Zero is a real answer and means nobody has priced that tier — the hire
+     * then opens no contract rather than one at ₱0.00, which would look
+     * identical to a real figure on every screen afterwards.
+     */
+    pay_basis: ['monthly'],
+    trainee: [0],
+    probationary: [0],
+    regular: [0],
   });
 
   constructor() {
@@ -244,7 +277,11 @@ export class AccessPage {
     this.positionForm.reset({
       name: position?.name ?? '',
       description: position?.description ?? '',
-      default_role_id: position?.default_role_id ?? '',
+      drives: position?.drives ?? false,
+      pay_basis: position?.pay_basis ?? 'monthly',
+      trainee: (position?.trainee_amount_cents ?? 0) / 100,
+      probationary: (position?.probationary_amount_cents ?? 0) / 100,
+      regular: (position?.regular_amount_cents ?? 0) / 100,
     });
 
     this.positionOpen.set(true);
@@ -259,11 +296,27 @@ export class AccessPage {
 
     this.busy.set(true);
 
-    const { name, description, default_role_id } = this.positionForm.getRawValue();
-    const payload = {
+    const { name, description, drives, pay_basis, trainee, probationary, regular } =
+      this.positionForm.getRawValue();
+
+    /**
+     * All three figures go, whatever the basis.
+     *
+     * Unlike the two columns this replaced, there is nothing to clear on a
+     * switch: the basis says what the amounts *mean* — a month, a day, a trip —
+     * rather than which of them is read. A job moved from monthly to per-trip
+     * keeps its three numbers and they are now per haul, which is wrong often
+     * enough to be worth the office correcting and never stale in the way a
+     * hidden second column was.
+     */
+    const payload: PositionPayload = {
       name: String(name),
       description: description || null,
-      default_role_id: default_role_id || null,
+      drives: Boolean(drives),
+      pay_basis: String(pay_basis) as PayBasis,
+      trainee_amount_cents: this.centavos(trainee),
+      probationary_amount_cents: this.centavos(probationary),
+      regular_amount_cents: this.centavos(regular),
     };
 
     const existing = this.editingPosition();
@@ -282,6 +335,78 @@ export class AccessPage {
         this.notice.set(this.messageFor(error));
       },
     });
+  }
+
+  /**
+   * The rate card, edited where it is read.
+   *
+   * A price list is a table, and a table somebody has to open a dialog to
+   * change one cell of is a table they will keep a spreadsheet beside instead.
+   * So the basis and the three figures save in place; the dialog is still there
+   * for adding a job and for the fields that are not numbers.
+   *
+   * Sent as a PATCH of the one field that moved rather than the whole row, so
+   * two people editing different columns of the same job cannot overwrite each
+   * other's work with a stale copy of it.
+   */
+  protected readonly tiers = PAY_TIERS;
+
+  /** The cell a tier is drawn from, so the table can stay a loop. */
+  protected amountFor(position: Position, tier: PayTier): number {
+    return (
+      {
+        trainee: position.trainee_amount_cents,
+        probationary: position.probationary_amount_cents,
+        regular: position.regular_amount_cents,
+      }[tier] ?? 0
+    );
+  }
+
+  protected setBasis(position: Position, basis: string): void {
+    this.patchPosition(position, { pay_basis: basis as PayBasis });
+  }
+
+  protected setAmount(position: Position, tier: PayTier, pesos: string): void {
+    const cents = this.centavos(pesos);
+
+    // Nothing moved, so nothing is sent — a blur on a field somebody only
+    // tabbed through should not write to the roster.
+    if (cents === this.amountFor(position, tier)) return;
+
+    this.patchPosition(position, { [`${tier}_amount_cents`]: cents });
+  }
+
+  /**
+   * One field, saved, with the row replaced by what came back.
+   *
+   * The server's copy rather than the typed one: it has already rounded,
+   * recomposed `pay_summary` off the firm's pay calendar, and answered whether
+   * the job now counts as priced. Patching the local row by hand would be a
+   * second implementation of all three.
+   */
+  private patchPosition(position: Position, payload: Partial<PositionPayload>): void {
+    this.busy.set(true);
+
+    this.accessApi.updatePosition(position.id, payload).subscribe({
+      next: (res) => {
+        this.busy.set(false);
+        this.positions.update(
+          (list) => list?.map((row) => (row.id === position.id ? res : row)) ?? list,
+        );
+      },
+      error: (error: HttpErrorResponse) => {
+        this.busy.set(false);
+        this.notice.set(this.messageFor(error));
+        // Put the row back as the server still has it, so a rejected edit does
+        // not leave a figure on screen that nothing agreed to.
+        this.accessApi.positions().subscribe((res) => this.positions.set(res.data));
+      },
+    });
+  }
+
+  /** Pesos off a form, centavos onto the wire. */
+  private centavos(pesos: unknown): number {
+    return Math.max(0, Math.round(Number(pesos ?? 0) * 100));
   }
 
   /**

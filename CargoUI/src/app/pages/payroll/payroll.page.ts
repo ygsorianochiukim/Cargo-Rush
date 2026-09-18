@@ -2,14 +2,16 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { HttpErrorResponse } from '@angular/common/http';
 
 import {
+  PayComponent,
   PayPeriodOption,
   PayRun,
   PayRunLine,
   PayRunLinePayload,
+  PayslipComponent,
 } from '../../models/hr/payroll.model';
 import { CompanyService } from '../../services/identity/company.service';
 import { IdentityService } from '../../services/identity/identity.service';
-import { PayrollService } from '../../services/hr/payroll.service';
+import { PayComponentService, PayrollService } from '../../services/hr/payroll.service';
 import { Card } from '../../shared/card';
 import { Confirm } from '../../shared/confirm';
 import { Field } from '../../shared/field';
@@ -109,6 +111,7 @@ interface Part {
 })
 export class PayrollPage {
   private readonly payroll = inject(PayrollService);
+  private readonly components = inject(PayComponentService);
   private readonly confirm = inject(Confirm);
   private readonly company = inject(CompanyService);
   private readonly identity = inject(IdentityService);
@@ -291,6 +294,19 @@ export class PayrollPage {
     // No month asked for: the API answers with the one holding the period that
     // has just closed, which is the run somebody has come to pay.
     this.loadPeriods();
+
+    /**
+     * The deduction catalogue, for the picker on a payslip.
+     *
+     * Active only, and failures are swallowed: it is a convenience — the same
+     * charge spelled the same way every time — and a firm that has never set
+     * one up simply types the name. A page that refused to open because a
+     * secondary list would not load would be worse than one without the list.
+     */
+    this.components.list(true).subscribe({
+      next: (res) => this.catalogue.set(res.data.filter((row) => row.kind === 'deduction')),
+      error: () => undefined,
+    });
   }
 
   /**
@@ -476,22 +492,42 @@ export class PayrollPage {
         : `The whole month's contribution: this firm takes it all on the ${run.is_first_cutoff ? 'first' : 'second'} cutoff.`
       : `Nothing on this payslip — this firm takes the whole month on the ${run.is_first_cutoff ? 'second' : 'first'} cutoff.`;
 
+    /**
+     * A contribution somebody is not enrolled for.
+     *
+     * Its own sentence, because "SSS ₱0.00" otherwise reads as the cutoff
+     * policy above and is not — this is a standing fact about the person, and
+     * the fix for it is on their record rather than on the run. Frozen on the
+     * payslip, so an old one keeps saying what was true then.
+     */
+    const notEnrolled = (agency: string) =>
+      `Not deducted — this person is not enrolled with ${agency}. Change that on their employee record.`;
+
     const parts: Part[] = [
       {
         label: 'SSS',
-        why: `Social Security — retirement, sickness and maternity cover. A share of the monthly salary up to a ceiling. ${share}`,
+        why:
+          line.sss_enrolled === false
+            ? notEnrolled('SSS')
+            : `Social Security — retirement, sickness and maternity cover. A share of the monthly salary up to a ceiling. ${share}`,
         cents: line.sss_cents,
         field: 'sss_cents',
       },
       {
         label: 'PhilHealth',
-        why: `Government health insurance. A share of the monthly salary between a floor and a ceiling. ${share}`,
+        why:
+          line.philhealth_enrolled === false
+            ? notEnrolled('PhilHealth')
+            : `Government health insurance. A share of the monthly salary between a floor and a ceiling. ${share}`,
         cents: line.philhealth_cents,
         field: 'philhealth_cents',
       },
       {
         label: 'Pag-IBIG',
-        why: `The housing fund. A share of the monthly salary, capped — so most payslips show the cap rather than the percentage. ${share}`,
+        why:
+          line.pagibig_enrolled === false
+            ? notEnrolled('Pag-IBIG')
+            : `The housing fund. A share of the monthly salary, capped — so most payslips show the cap rather than the percentage. ${share}`,
         cents: line.pagibig_cents,
         field: 'pagibig_cents',
       },
@@ -510,6 +546,22 @@ export class PayrollPage {
         field: 'withholding_tax_cents',
       },
       {
+        /**
+         * The store tab, and it is **not editable** — unlike everything else
+         * on this panel.
+         *
+         * The figure is the outstanding balance as at the period end, capped
+         * by the person's own cap, and it is settled against the tab when the
+         * run is approved. Typing over it here would take an amount the tab
+         * never learns about, and the two would disagree from then on. The way
+         * to change it is a line on the tab or a cap on the record.
+         */
+        label: 'Store tab',
+        why: 'The mini-mart tab, taken off at this cutoff. Settled against the tab when the run is approved — change it by editing the tab or the person’s cap, not here.',
+        cents: line.store_deduction_cents,
+        field: null,
+      },
+      {
         label: 'Advance or other deduction',
         why: 'Something the company is recovering — a cash advance, say. This goes back to the company, not to an agency.',
         cents: line.other_deductions_cents,
@@ -524,9 +576,14 @@ export class PayrollPage {
      * to answer, and hiding the line hides the answer. Only an advance nobody
      * took is dropped.
      */
-    return parts.filter(
-      (part) => part.field !== 'other_deductions_cents' || part.cents !== 0 || run.can_edit,
-    );
+    return parts.filter((part) => {
+      // The store tab is dropped when there is none, on a draft as well as on
+      // a frozen run: unlike the four statutory lines, its zero explains
+      // nothing — it means the person has no tab, which is most people.
+      if (part.label === 'Store tab') return part.cents !== 0;
+
+      return part.field !== 'other_deductions_cents' || part.cents !== 0 || run.can_edit;
+    });
   }
 
   /** Open a run for the chosen period and work everybody's pay out. */
@@ -686,6 +743,100 @@ export class PayrollPage {
       error: (failure: HttpErrorResponse) =>
         this.notice.set(failure.error?.message ?? 'Could not save that note.'),
     });
+  }
+
+  /**
+   * The firm's deduction catalogue, for the picker on a payslip.
+   *
+   * Loaded once with the page rather than per payslip: it is a short list that
+   * changes rarely, and fetching it every time somebody opens a row would be a
+   * request per click for the same twenty words.
+   *
+   * Empty is the normal state for a firm that has never set one up, and the
+   * picker falls back to a typed name — which is the case this feature is
+   * mostly for.
+   */
+  protected readonly catalogue = signal<PayComponent[]>([]);
+
+  /** The half-typed deduction, per payslip. Cleared once it is saved. */
+  protected readonly draft = signal<Record<string, { name: string; amount: string }>>({});
+
+  protected draftFor(lineId: string): { name: string; amount: string } {
+    return this.draft()[lineId] ?? { name: '', amount: '' };
+  }
+
+  protected setDraft(lineId: string, field: 'name' | 'amount', value: string): void {
+    this.draft.update((all) => ({
+      ...all,
+      [lineId]: { ...this.draftFor(lineId), [field]: value },
+    }));
+  }
+
+  /**
+   * Put the typed deduction on the payslip.
+   *
+   * The name is matched against the catalogue first, so picking "Uniform" from
+   * the list and typing it both end up pointing at the same component — which
+   * is what makes the same charge spell itself the same way on every payslip.
+   * A name nothing matches goes on as a one-off, which is allowed and is the
+   * point.
+   */
+  protected addDeduction(run: PayRun, line: PayRunLine): void {
+    const draft = this.draftFor(line.id);
+    const name = draft.name.trim();
+    const pesos = Number(draft.amount);
+
+    if (name === '' || !Number.isFinite(pesos) || pesos <= 0) {
+      this.notice.set('Give the deduction a name and an amount.');
+
+      return;
+    }
+
+    const known = this.catalogue().find(
+      (component) => component.name.toLowerCase() === name.toLowerCase(),
+    );
+
+    this.busy.set(true);
+
+    this.payroll
+      .addDeduction(run.id, line.id, {
+        pay_component_id: known?.id ?? null,
+        name,
+        amount_cents: Math.round(pesos * 100),
+      })
+      .subscribe({
+        next: (fresh) => {
+          this.busy.set(false);
+          this.run.set(fresh);
+          this.notice.set(null);
+          this.draft.update((all) => ({ ...all, [line.id]: { name: '', amount: '' } }));
+        },
+        error: (failure: HttpErrorResponse) => {
+          this.busy.set(false);
+          this.notice.set(failure.error?.message ?? 'Could not add that deduction.');
+        },
+      });
+  }
+
+  protected removeDeduction(run: PayRun, line: PayRunLine, componentId: string): void {
+    this.busy.set(true);
+
+    this.payroll.removeDeduction(run.id, line.id, componentId).subscribe({
+      next: (fresh) => {
+        this.busy.set(false);
+        this.run.set(fresh);
+        this.notice.set(null);
+      },
+      error: (failure: HttpErrorResponse) => {
+        this.busy.set(false);
+        this.notice.set(failure.error?.message ?? 'Could not remove that deduction.');
+      },
+    });
+  }
+
+  /** The itemised deductions on a payslip — assigned and hand-added alike. */
+  protected charges(line: PayRunLine): PayslipComponent[] {
+    return line.components.filter((component) => component.kind === 'deduction');
   }
 
   protected print(): void {

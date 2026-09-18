@@ -363,6 +363,12 @@ class TripService
                 date: $at,
                 incomeCents: $trip->price_cents,
                 customerId: $trip->customer_id,
+                // Who was in the cab, so the day's driver and helper salary
+                // columns have somebody to belong to. Payroll reads them for
+                // anybody paid per trip — without this the sheet says what the
+                // crew was paid and not who to.
+                driverId: $trip->driver_id,
+                helperId: $trip->helper_id,
             );
         }
 

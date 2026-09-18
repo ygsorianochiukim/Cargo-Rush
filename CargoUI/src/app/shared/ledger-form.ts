@@ -1,9 +1,18 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { Customer } from '../models/customer/customer.model';
+import { Driver } from '../models/driver/driver.model';
 import { LedgerEntryPayload, Truck } from '../models/finance/finance.model';
 import { CustomerService } from '../services/customer/customer.service';
+import { DriverService } from '../services/driver/driver.service';
 import { FinanceService } from '../services/finance/finance.service';
 import { Field } from './field';
 import { fmt } from './format';
@@ -24,6 +33,7 @@ import { Modal } from './modal';
 export class LedgerForm {
   private readonly financeApi = inject(FinanceService);
   private readonly customerApi = inject(CustomerService);
+  private readonly driverApi = inject(DriverService);
   private readonly fb = inject(FormBuilder);
   private readonly dialog = inject(LedgerDialog);
 
@@ -40,6 +50,15 @@ export class LedgerForm {
   /** For naming whose work a day was, which is what puts it on their history. */
   protected readonly customers = signal<Customer[]>([]);
 
+  /**
+   * The crew, for naming whose the day's two salary figures are.
+   *
+   * Drivers rather than employees, because that is the operational record the
+   * rest of the sheet already names — and a helper is a driver record without
+   * the keys, so one list serves both pickers.
+   */
+  protected readonly drivers = signal<Driver[]>([]);
+
   protected readonly inputClass =
     'h-10 w-full rounded-control border border-cr-line bg-cr-surface px-3 text-[14px] text-cr-ink placeholder:text-cr-ink-muted focus:border-cr-blue focus:outline-none';
 
@@ -52,6 +71,16 @@ export class LedgerForm {
     helper_salary: [0, [Validators.required, Validators.min(0)]],
     maintenance: [0, [Validators.required, Validators.min(0)]],
     allowance: [0, [Validators.required, Validators.min(0)]],
+    /**
+     * Who the driver and helper salary figures belong to.
+     *
+     * Optional, because plenty of days are recorded before anybody knows or
+     * cares — and because every row filed before these columns existed has
+     * nobody in them. An unattributed row is counted toward nobody's payslip,
+     * which is the safe direction.
+     */
+    driver_id: [''],
+    helper_id: [''],
     customer_id: [''],
     route: [''],
     remarks: [''],
@@ -77,6 +106,7 @@ export class LedgerForm {
     this.financeApi.trucks().subscribe((trucks) => this.trucks.set(trucks));
     this.financeApi.routes().subscribe((routes) => this.routes.set(routes));
     this.customerApi.list().subscribe((res) => this.customers.set(res.data));
+    this.driverApi.list().subscribe((res) => this.drivers.set(res.data));
 
     this.form.valueChanges.subscribe(() => this.values.set(this.form.getRawValue()));
 
@@ -92,6 +122,8 @@ export class LedgerForm {
         helper_salary: e ? e.helper_salary_cents / 100 : 0,
         maintenance: e ? e.maintenance_cents / 100 : 0,
         allowance: e ? e.allowance_cents / 100 : 0,
+        driver_id: e?.driver_id ?? '',
+        helper_id: e?.helper_id ?? '',
         customer_id: e?.customer_id ?? '',
         route: e?.route ?? '',
         remarks: e?.remarks ?? '',
@@ -134,6 +166,8 @@ export class LedgerForm {
       helper_salary_cents: cents(v.helper_salary),
       maintenance_cents: cents(v.maintenance),
       allowance_cents: cents(v.allowance),
+      driver_id: v.driver_id || null,
+      helper_id: v.helper_id || null,
       customer_id: v.customer_id || null,
       route: v.route || null,
       remarks: v.remarks || null,

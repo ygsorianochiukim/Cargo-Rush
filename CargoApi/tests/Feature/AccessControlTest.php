@@ -227,24 +227,53 @@ describe('positions', function (): void {
         $treasury = collect($positions)->firstWhere('key', 'treasury-officer');
 
         expect($treasury['name'])->toBe('Treasury Officer');
-        expect($treasury['default_role_key'])->toBe('treasury');
+        // A position says what the job is and what it pays. What somebody in
+        // it can open is chosen on their account.
+        expect($treasury['drives'])->toBeFalse();
     });
 
     it('adds one the office invents', function (): void {
         $response = $this->actingAs($this->admin)->postJson('/api/v1/access/positions', [
             'name' => 'Yard Marshal',
-            'default_role_id' => Role::where('key', 'dispatcher')->firstOrFail()->id,
+            'drives' => true,
+            'pay_basis' => 'monthly',
+            'trainee_amount_cents' => 1_200_000,
+            'probationary_amount_cents' => 1_400_000,
+            'regular_amount_cents' => 1_600_000,
         ])->assertCreated();
 
         expect($response->json('data.key'))->toBe('yard-marshal');
-        expect($response->json('data.default_role_name'))->toBe('Dispatcher');
+        expect($response->json('data.drives'))->toBeTrue();
+        expect($response->json('data.regular_amount_cents'))->toBe(1_600_000);
+        expect($response->json('data.has_rate_card'))->toBeTrue();
     });
 
-    it('allows a position with no default role, for a job that never signs in', function (): void {
+    it('starts a job unpriced rather than guessing what it pays', function (): void {
+        // Zero and "nobody has said" look identical from the outside, so the
+        // API says which it is — and an unpriced job writes no contract on a
+        // hire rather than putting somebody on ₱0.00.
         $mechanic = collect($this->actingAs($this->admin)->getJson('/api/v1/access/positions')->json('data'))
             ->firstWhere('key', 'mechanic');
 
-        expect($mechanic['default_role_id'])->toBeNull();
+        expect($mechanic['has_rate_card'])->toBeFalse()
+            ->and($mechanic['regular_amount_cents'])->toBe(0)
+            ->and($mechanic['drives'])->toBeFalse();
+    });
+
+    it('marks the jobs that need a drivers record, and only those', function (): void {
+        // The question is "do they use the handset", and it is the job's to
+        // answer — it used to be inferred from the role a position suggested,
+        // which read correctly right up to the firm that gave its mechanics a
+        // driver login to shunt units around the yard.
+        $positions = collect($this->actingAs($this->admin)->getJson('/api/v1/access/positions')->json('data'))
+            ->pluck('drives', 'key');
+
+        expect($positions['driver'])->toBeTrue()
+            // A helper is a driver record without the keys: they ride along,
+            // they are named on the trip, and the roster keeps their licence.
+            ->and($positions['helper'])->toBeTrue()
+            ->and($positions['dispatcher'])->toBeFalse()
+            ->and($positions['mechanic'])->toBeFalse();
     });
 
     it('retires a position somebody holds rather than deleting it', function (): void {
@@ -285,8 +314,6 @@ describe('an employee and their access', function (): void {
 
         expect($response->json('data.position'))->toBe('Treasury Officer');
         expect($response->json('data.position_id'))->toBe($this->treasuryPost->id);
-        // What the account form pre-selects, so the office is not asked twice.
-        expect($response->json('data.suggested_role'))->toBe('treasury');
     });
 
     it('still accepts a typed job title, for a role the list has no name for', function (): void {

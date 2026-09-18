@@ -6,6 +6,7 @@ namespace App\Domain\Payroll\Models;
 
 use App\Domain\Accounting\Models\JournalEntry;
 use App\Domain\Identity\Models\User;
+use App\Domain\Payroll\Services\PayrollService;
 use App\Domain\Payroll\Support\PayPeriod;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Builder;
@@ -130,16 +131,42 @@ class PayRun extends Model
             'philhealth' => (int) $this->lines->sum('philhealth_cents'),
             'pagibig' => (int) $this->lines->sum('pagibig_cents'),
             'withholding_tax' => (int) $this->lines->sum('withholding_tax_cents'),
-            'other' => (int) $this->lines->sum('other_deductions_cents'),
+            /**
+             * Everything the **firm** is recovering, rather than remitting.
+             *
+             * Three columns, not one, and the two that were missing were a real
+             * bug rather than a tidy-up. The journal a paid run writes debits
+             * the whole gross and credits the agencies, this bucket and the
+             * net — so the entry only balances if this is every deduction that
+             * is not a contribution or the tax.
+             *
+             * It was `other_deductions_cents` alone. A run carrying any pay
+             * component deduction — a uniform, a cash-advance repayment, the
+             * things that table exists for — therefore came out short by that
+             * amount and `JournalService` refused to post it, with a balance
+             * error naming no cause. Nothing tested paying a run that had one.
+             *
+             * `store_deduction_cents` joins them for the same reason: the money
+             * never leaves the bank, so it has to be credited somewhere, and
+             * what the firm is recovering is exactly what this bucket is.
+             */
+            'other' => (int) $this->lines->sum('other_deductions_cents')
+                + (int) $this->lines->sum('component_deductions_cents')
+                + (int) $this->lines->sum('store_deduction_cents'),
         ];
     }
 
     /**
-     * Is this the 1st-to-15th payslip?
+     * Is this the month's first payslip?
      *
      * Which cutoff a run is decides how much of a monthly salary and how much
-     * of a monthly contribution it carries — see `PayPeriod::classify()`, which
-     * is the one place that answers it.
+     * of a monthly contribution it carries — see `PayrollCalendar::classify()`,
+     * which is the one place that answers it.
+     *
+     * Named for the position in the month rather than for a pair of dates,
+     * because the dates are now the firm's own: "the 1st-to-15th payslip" is
+     * true of most hauliers here and not of one cutting off on the 10th and the
+     * 25th, while "the first of the month's two" is true of both.
      */
     public function isFirstCutoff(): bool
     {
@@ -152,24 +179,36 @@ class PayRun extends Model
         return $this->cutoff()['only'];
     }
 
-    /** @return array{first: bool, only: bool} */
+    /**
+     * @return array{first: bool, only: bool}
+     */
     private function cutoff(): array
     {
         if ($this->period_start === null || $this->period_end === null) {
             return ['first' => true, 'only' => false];
         }
 
-        return PayPeriod::classify($this->period_start, $this->period_end);
+        // Through the service rather than resolving a company here: a model
+        // reaching for the tenant itself is one more place that could disagree
+        // about whose calendar is in force.
+        return app(PayrollService::class)->calendar()->classify($this->period_start, $this->period_end);
     }
 
-    /** How the period reads on a list: `1–15 Sep 2026`. */
+    /**
+     * How the period reads on a list: `1–15 Sep 2026`.
+     *
+     * Formatted by `PayPeriod`, which is what produced the period this run was
+     * opened on. A second copy of the format here is how a register heading
+     * comes to disagree with the button that made it — and once a period can
+     * cross a month boundary, the two would disagree visibly.
+     */
     public function periodLabel(): string
     {
         if ($this->period_start === null || $this->period_end === null) {
             return '';
         }
 
-        return $this->period_start->format('j').'–'.$this->period_end->format('j M Y');
+        return PayPeriod::formatRange($this->period_start, $this->period_end);
     }
 
     public function scopeInPayrollOrder(Builder $query): Builder

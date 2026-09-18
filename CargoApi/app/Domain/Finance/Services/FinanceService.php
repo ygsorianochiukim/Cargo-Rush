@@ -397,6 +397,8 @@ class FinanceService
         string $route,
         CarbonInterface $date,
         ?string $customerId = null,
+        ?string $driverId = null,
+        ?string $helperId = null,
     ): LedgerEntry {
         $truck = $this->truckForVehicle($vehicleId, $plate);
 
@@ -407,6 +409,18 @@ class FinanceService
             // one customer keeps whoever's run opened it; the office can
             // correct it on the sheet.
             'customer_id' => $customerId,
+            /**
+             * Who was in the cab, carried from the trip for the same reason.
+             *
+             * The salary columns on this row have always recorded what the
+             * crew was paid and never who they were, which was survivable
+             * while the figure only fed Profitability — and stops being so the
+             * moment somebody is paid from it. Like the customer, it names
+             * whoever's run *opened* the day: a unit that changed crew keeps
+             * the first, and the office can correct it on the sheet.
+             */
+            'driver_id' => $driverId,
+            'helper_id' => $helperId,
             'route' => $route,
         ]);
     }
@@ -476,6 +490,8 @@ class FinanceService
         CarbonInterface $date,
         int $incomeCents,
         ?string $customerId = null,
+        ?string $driverId = null,
+        ?string $helperId = null,
     ): LedgerEntry {
         $row = $this->openDailyRow(
             vehicleId: $vehicleId,
@@ -484,6 +500,8 @@ class FinanceService
             route: $route,
             date: $date,
             customerId: $customerId,
+            driverId: $driverId,
+            helperId: $helperId,
         );
 
         if ($incomeCents !== 0) {

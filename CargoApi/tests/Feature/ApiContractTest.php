@@ -6,6 +6,7 @@ use App\Domain\Identity\Models\User;
 use Database\Seeders\Demo\FleetSeeder;
 use Database\Seeders\Demo\OperationsSeeder;
 use Database\Seeders\NavigationSeeder;
+use Laravel\Sanctum\PersonalAccessToken;
 
 /**
  * The contract both clients are written against — DESIGN.md section 7.
@@ -148,5 +149,93 @@ describe('cookie auth from an unconfigured origin', function (): void {
         ])
             ->assertCreated()
             ->assertJsonPath('meta.token_type', 'Bearer');
+    });
+});
+
+/**
+ * Staying signed in — what the handset rests on.
+ *
+ * cargoApp keeps its bearer token in the keychain and reuses it on the next
+ * launch, because asking a driver for a password at the start of every shift,
+ * in a cab, is the friction that gets an app put down. That only holds if the
+ * server keeps its half of the bargain, and there are three separate ways it
+ * could stop: the token could expire, a second handset could evict the first,
+ * or signing out on one could sign out the other.
+ *
+ * All three look identical from the cab — "it logged me out" — and none of them
+ * belongs to any one module, so they are pinned here beside the rest of the
+ * contract the clients are written against.
+ */
+describe('staying signed in', function (): void {
+    beforeEach(function (): void {
+        $this->signIn = fn (string $device): string => $this->postJson('/api/v1/login', [
+            'email' => 'marco@cargorush.ph',
+            'password' => 'password',
+            'device_name' => $device,
+        ])->json('meta.token');
+    });
+
+    it('issues a token with no expiry, so a stored one still opens the app weeks later', function (): void {
+        $token = ($this->signIn)('cargoApp Pixel 8 a1b2c3');
+
+        // Both halves matter: `sanctum.expiration` overrides whatever is on the
+        // row, so a null column under a configured lifetime would still expire.
+        expect(config('sanctum.expiration'))->toBeNull()
+            ->and(PersonalAccessToken::findToken($token)->expires_at)->toBeNull();
+
+        $this->travel(60)->days();
+
+        $this->withToken($token)->getJson('/api/v1/me')->assertOk();
+    });
+
+    it('leaves one handset signed in when the same driver signs in on another', function (): void {
+        // Two handsets, two names. The app names a token after the device it
+        // was issued to rather than after the platform, and this is why: a
+        // shared name means the second sign-in deletes the first phone's token,
+        // and that phone drops to the sign-in form on its next call with
+        // nothing to tell the driver why.
+        $first = ($this->signIn)('cargoApp Pixel 8 a1b2c3');
+        $second = ($this->signIn)('cargoApp SM-G991B d4e5f6');
+
+        $this->withToken($first)->getJson('/api/v1/me')->assertOk();
+        $this->withToken($second)->getJson('/api/v1/me')->assertOk();
+    });
+
+    it('replaces a handset own token rather than stacking another beside it', function (): void {
+        $old = ($this->signIn)('cargoApp Pixel 8 a1b2c3');
+        $new = ($this->signIn)('cargoApp Pixel 8 a1b2c3');
+
+        $this->withToken($old)->getJson('/api/v1/me')->assertUnauthorized();
+        $this->withToken($new)->getJson('/api/v1/me')->assertOk();
+
+        expect($this->driver->tokens()->where('name', 'cargoApp Pixel 8 a1b2c3')->count())->toBe(1);
+    });
+
+    it('signs out only the handset that asked', function (): void {
+        $first = ($this->signIn)('cargoApp Pixel 8 a1b2c3');
+        $second = ($this->signIn)('cargoApp SM-G991B d4e5f6');
+
+        $this->withToken($first)->postJson('/api/v1/logout')->assertNoContent();
+
+        // The container lives across calls inside one test, and the guard holds
+        // on to whoever it resolved last — so without this the next request is
+        // answered from that cache and passes on a token that is already gone.
+        // Nothing the app ever sees: every real request gets its own container.
+        $this->app['auth']->forgetGuards();
+
+        $this->withToken($first)->getJson('/api/v1/me')->assertUnauthorized();
+        $this->withToken($second)->getJson('/api/v1/me')->assertOk();
+    });
+
+    it('answers a revoked token with 401, the one status the app signs out on', function (): void {
+        // The handset tells a dead token apart from a dead signal by the status
+        // alone. Anything else — a timeout, a 500, a server that is not up yet —
+        // leaves the stored token in place and tries again next launch, so this
+        // status is load bearing rather than incidental.
+        $token = ($this->signIn)('cargoApp Pixel 8 a1b2c3');
+
+        PersonalAccessToken::findToken($token)->delete();
+
+        $this->withToken($token)->getJson('/api/v1/me')->assertStatus(401);
     });
 });

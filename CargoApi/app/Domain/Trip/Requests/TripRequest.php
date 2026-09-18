@@ -6,6 +6,7 @@ namespace App\Domain\Trip\Requests;
 
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
+use App\Domain\Tenancy\Support\Tenant;
 use App\Domain\Trip\DTO\TripData;
 use Illuminate\Validation\Rule;
 
@@ -64,6 +65,50 @@ class TripRequest extends ApiFormRequest
             // A helper who is also the driver is a data-entry slip, not a crew.
             'helper_id' => ['nullable', 'string', 'exists:drivers,id', 'different:driver_id'],
             'vehicle_id' => ['nullable', 'string', 'exists:vehicles,id'],
+
+            /**
+             * The kind of unit this job needs — asked for at booking.
+             *
+             * A *requirement*, not a fact about the assigned vehicle: a trip is
+             * quoted the moment it is booked, usually before any unit is
+             * picked, and a customer asking for a freezer is owed the freezer
+             * price whatever rolls out of the yard three days later.
+             *
+             * Scoped to the caller's company — `exists` runs outside the tenant
+             * scope, and a category from another firm would price nothing.
+             */
+            'truck_category_id' => [
+                'nullable', 'string',
+                Rule::exists('truck_categories', 'id')
+                    ->where('company_id', app(Tenant::class)->id())
+                    ->whereNull('deleted_at'),
+            ],
+            /**
+             * The band this run is to be priced in, where the desk has chosen
+             * one.
+             *
+             * A zone is a band of kilometres — A1 is 1–40 km — and the
+             * distance picks it on its own for most runs. This is here for the
+             * case the distance cannot decide: a subsidy table routinely holds
+             * two bands over the same kilometres at different money (A1 beside
+             * A2, E1 beside E2), and which of the two applies is a commercial
+             * call about that particular job. Left out, the table's own order
+             * decides, which is the lower figure of the two.
+             *
+             * The same column the price trace is written to, and deliberately.
+             * The band somebody picked and the band that priced the trip are
+             * one fact, and a second column for it would be two answers to
+             * "which band is this?" with nothing to say which the invoice used.
+             *
+             * Scoped to the caller's company, like the category above: `exists`
+             * runs outside the tenant scope.
+             */
+            'pricing_zone_id' => [
+                'nullable', 'string',
+                Rule::exists('pricing_zones', 'id')
+                    ->where('company_id', app(Tenant::class)->id())
+                    ->whereNull('deleted_at'),
+            ],
             'status' => ['sometimes', Rule::in(self::OFFICE_SETTABLE)],
             'pickup_place' => ['nullable', 'string', 'max:255'],
             'dropoff_place' => ['nullable', 'string', 'max:255'],

@@ -50,6 +50,25 @@ trait SeedsIntoACompany
 
     private function seedCompany(): Company
     {
+        /**
+         * A company already in force wins, and nothing else is consulted.
+         *
+         * Somebody who wrapped this seeder in `Tenant::use()` — the
+         * `cargo:demo-payroll` command does exactly that, after asking which
+         * firm — has already answered the question. Re-deriving it from an
+         * environment variable or from "the oldest company" quietly overrules
+         * them, which is how a demo ends up in a company nobody is looking at
+         * while the command cheerfully reports the one you picked.
+         *
+         * It also makes `DemoSeeder` calling four child seeders inside one
+         * `intoCompany()` mean what it looks like it means.
+         */
+        $inForce = app(Tenant::class)->company();
+
+        if ($inForce !== null) {
+            return $inForce;
+        }
+
         $named = env('DEMO_COMPANY');
 
         if ($named !== null && $named !== '') {

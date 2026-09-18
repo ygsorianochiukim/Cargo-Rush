@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Tenancy\Models;
 
 use App\Domain\Identity\Models\User;
+use App\Domain\Payroll\Support\PayrollCalendar;
 use App\Domain\Shared\Enums\DeductionSchedule;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Support\Geo;
@@ -32,7 +33,7 @@ class Company extends Model
         'name', 'code', 'logo_path', 'contact_name', 'contact_email', 'contact_phone', 'address', 'status',
         'latitude', 'longitude',
         'tin', 'vat_registered', 'vat_rate_bp',
-        'payroll_deduct_on',
+        'payroll_deduct_on', 'payroll_cutoff_days',
     ];
 
     protected function casts(): array
@@ -54,7 +55,34 @@ class Company extends Model
              * See `DeductionSchedule`.
              */
             'payroll_deduct_on' => DeductionSchedule::class,
+
+            /**
+             * The days this firm's pay periods close on.
+             *
+             * An ascending list of one or two day-of-month numbers — `[15, 31]`
+             * for the Philippine norm, `[10, 25]` for a firm that cuts off on
+             * those days instead. Null means the install default, which is what
+             * every company had before the column existed.
+             *
+             * A column rather than configuration for the same reason
+             * `payroll_deduct_on` is one, and with more force: an environment
+             * variable served one cutoff to every haulier on the platform. See
+             * `PayrollCalendar`, which is the only thing that should read this
+             * — never the raw array.
+             */
+            'payroll_cutoff_days' => 'array',
         ];
+    }
+
+    /**
+     * The calendar this company runs payroll on.
+     *
+     * Here rather than left to each caller to assemble, so nothing outside
+     * `PayrollCalendar` ever has to know what a null column means.
+     */
+    public function payrollCalendar(): PayrollCalendar
+    {
+        return PayrollCalendar::for($this);
     }
 
     public function users(): HasMany

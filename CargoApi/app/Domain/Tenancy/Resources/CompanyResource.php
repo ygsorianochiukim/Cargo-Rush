@@ -66,6 +66,21 @@ class CompanyResource extends ApiResource
             'payroll_deduct_on' => $this->payroll_deduct_on?->value,
             'payroll_deduct_on_label' => $this->payroll_deduct_on?->label(),
             'payroll_deduct_on_detail' => $this->payroll_deduct_on?->detail(),
+
+            /**
+             * When this firm's pay periods close.
+             *
+             * The raw column and the calendar it produces, both. The column is
+             * what a settings form edits and may be null — "the install
+             * default" — while `payroll_calendar` is always the calendar
+             * actually in force, with the periods of the current month worked
+             * out. A screen showing a firm its own cutoff needs the second: the
+             * days on their own are a pair of numbers, and "26 Aug–10 Sep" is
+             * the thing an office can check.
+             */
+            'payroll_cutoff_days' => $this->payroll_cutoff_days,
+            'payroll_calendar' => $this->payrollCalendar()->toArray(),
+
         ];
     }
 }

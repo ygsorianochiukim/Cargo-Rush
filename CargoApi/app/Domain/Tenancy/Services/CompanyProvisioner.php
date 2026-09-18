@@ -12,6 +12,7 @@ use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
+use Database\Seeders\TruckCategorySeeder;
 
 /**
  * Gives a newly registered company the configuration it cannot open without.
@@ -63,6 +64,9 @@ class CompanyProvisioner
             (new RoleSeeder)->run();
             (new PositionSeeder)->run();
             (new ExpenseCategorySeeder)->run();
+            // The kinds of unit the firm runs, so a freezer job can be priced
+            // on day one rather than after somebody invents the vocabulary.
+            (new TruckCategorySeeder)->run();
             // The chart of accounts, for the same reason as the categories: a
             // company with no chart cannot write a single journal entry, so an
             // empty `accounts` table is a module that cannot be opened rather

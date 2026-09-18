@@ -65,7 +65,7 @@ beforeEach(function (): void {
             'department' => 'Administration',
             'contact' => '0917 555 0199',
             'hired_on' => '2026-01-05',
-            'base_salary_cents' => 3_000_000,
+            'amount_cents' => 3_000_000,
             ...$overrides,
         ])->assertCreated()->json('data');
 
@@ -89,7 +89,7 @@ describe('who is on a run', function (): void {
             'position' => 'Driver',
             'licence_no' => 'N01-23-456789',
             'licence_expires_on' => '2029-08-31',
-            'base_salary_cents' => 0,
+            'amount_cents' => 0,
         ]);
 
         $run = ($this->open)()->assertCreated()->json('data');
@@ -160,7 +160,7 @@ describe('what comes off a payslip', function (): void {
     it('charges no tax to somebody under the first bracket', function (): void {
         // A PHP 12,000 monthly basic: PHP 6,000 a period, which is under the
         // PHP 10,417 floor of the first taxable bracket.
-        ($this->hire)(['base_salary_cents' => 1_200_000]);
+        ($this->hire)(['amount_cents' => 1_200_000]);
 
         $line = ($this->open)()->assertCreated()->json('data.lines.0');
 
@@ -182,7 +182,7 @@ describe('splitting the salary', function (): void {
     it('pays half on each cutoff, and the two halves are the salary', function (): void {
         // ₱10,000.01 a month — an odd number of centavos, which is where a
         // careless split loses one.
-        ($this->hire)(['base_salary_cents' => 1_000_001]);
+        ($this->hire)(['amount_cents' => 1_000_001]);
 
         $first = ($this->open)(['period_start' => '2026-09-01', 'period_end' => '2026-09-15'])
             ->assertCreated()->json('data.lines.0');
@@ -198,7 +198,7 @@ describe('splitting the salary', function (): void {
     it('pays the whole salary on the one run where payroll is monthly', function (): void {
         config(['cargo.payroll.runs_per_month' => 1]);
 
-        ($this->hire)(['base_salary_cents' => 1_000_001]);
+        ($this->hire)(['amount_cents' => 1_000_001]);
 
         $line = ($this->open)(['period_start' => '2026-09-01', 'period_end' => '2026-09-30'])
             ->assertCreated()->json('data.lines.0');
@@ -331,7 +331,7 @@ describe('which cutoff the contributions come off', function (): void {
  */
 describe('what triggers withholding tax', function (): void {
     it('charges nothing to a salary inside the exemption', function (): void {
-        ($this->hire)(['base_salary_cents' => 2_000_000]);
+        ($this->hire)(['amount_cents' => 2_000_000]);
 
         $line = ($this->open)()->assertCreated()->json('data.lines.0');
 
@@ -343,11 +343,11 @@ describe('what triggers withholding tax', function (): void {
     it('charges nothing at exactly the exemption, and something above it', function (): void {
         // ₱20,833.33 a month is ₱250,000 a year: the last salary that pays no
         // income tax.
-        ($this->hire)(['base_salary_cents' => 2_083_333]);
+        ($this->hire)(['amount_cents' => 2_083_333]);
         ($this->hire)([
             'first_name' => 'Rosa',
             'last_name' => 'Zamora',
-            'base_salary_cents' => 2_500_000,
+            'amount_cents' => 2_500_000,
         ]);
 
         $lines = collect(($this->open)()->assertCreated()->json('data.lines'))->keyBy('name');
@@ -364,7 +364,7 @@ describe('what triggers withholding tax', function (): void {
     it('keeps a monthly payroll from taxing an exempt salary', function (): void {
         config(['cargo.payroll.runs_per_month' => 1]);
 
-        ($this->hire)(['base_salary_cents' => 2_000_000]);
+        ($this->hire)(['amount_cents' => 2_000_000]);
 
         $exempt = ($this->open)(['period_start' => '2026-09-01', 'period_end' => '2026-09-30'])
             ->assertCreated()->json('data.lines.0');
@@ -434,7 +434,11 @@ describe('correcting a payslip', function (): void {
                 'department' => 'Administration',
                 'contact' => '0917 555 0199',
                 'hired_on' => '2026-01-05',
-                'base_salary_cents' => 3_600_000,
+                'amount_cents' => 3_600_000,
+                // Backdated to the start of the period: this is a correction to
+                // a figure that was always wrong, not a rise from today. A rise
+                // would be left to default, and would not touch this run.
+                'effective_from' => '2026-09-01',
             ])->assertOk();
 
         $rebuilt = $this->actingAs($this->admin)
@@ -669,14 +673,19 @@ describe('the cutoff', function (): void {
             ['2026-09-03', '2026-09-15'],
             ['2026-09-16', '2026-09-29'],
             ['2026-09-01', '2026-09-30'],
-            // Crossing a month boundary: a period never does.
+            // Crossing a month boundary, which no period on *this* firm's
+            // calendar does. One cutting off on the 10th and the 25th has a
+            // period that does — see the cutoff-days tests below.
             ['2026-09-16', '2026-10-15'],
         ] as [$start, $end]) {
             ($this->open)(['period_start' => $start, 'period_end' => $end])
                 ->assertStatus(422)
                 ->assertJsonPath(
                     'errors.period_start.0',
-                    'Payroll is cut off on the 1st and the 16th, so a pay period runs 1–15 Sep 2026 or 16–30 Sep 2026. Choose one of those.',
+                    // The message names the firm's own cutoff days, because
+                    // they are now the firm's own setting and an office that
+                    // moved them may have forgotten doing so.
+                    'Payroll is cut off on the 15th and the last day of the month here, so a pay period runs 1–15 Sep 2026 or 16–30 Sep 2026. Choose one of those.',
                 );
         }
     });
@@ -727,7 +736,7 @@ describe('the cutoff', function (): void {
             ->assertStatus(422)
             ->assertJsonPath(
                 'errors.period_start.0',
-                'Payroll runs once a month here, so a pay period is the whole month — 1–30 Sep 2026. Choose that.',
+                'Payroll runs once a month here, cut off on the last day of the month, so a pay period is 1–30 Sep 2026. Choose that.',
             );
     });
 });

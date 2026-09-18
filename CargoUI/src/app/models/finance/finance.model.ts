@@ -57,6 +57,24 @@ export interface LedgerEntry extends Timestamped {
    */
   customer_id: string | null;
   customer: string | null;
+
+  /**
+   * Who the day's driver and helper salary belonged to.
+   *
+   * The sheet has recorded *what* the crew was paid since the workbook was
+   * first modelled and never *whose*, which was survivable while the figure
+   * only fed Profitability — and stops being so the moment somebody is paid
+   * from it. Payroll sums these rows for anybody on a per-trip or daily basis.
+   *
+   * Null is ordinary and means nobody said. An unattributed row is counted
+   * toward nobody's payslip, which is the safe direction: the failure is a
+   * figure somebody notices missing rather than one quietly paid to the wrong
+   * person.
+   */
+  driver_id: string | null;
+  driver_name: string | null;
+  helper_id: string | null;
+  helper_name: string | null;
 }
 
 /** What an entry form sends. Neither derived figure is accepted. */
@@ -69,6 +87,9 @@ export interface LedgerEntryPayload {
   helper_salary_cents: number;
   maintenance_cents: number;
   allowance_cents: number;
+  /** Whose the two salary figures above are. See `LedgerEntry`. */
+  driver_id?: string | null;
+  helper_id?: string | null;
   customer_id?: string | null;
   route?: string | null;
   remarks?: string | null;
