@@ -5,7 +5,8 @@
   icon="clipboard"
   size="lg"
   [locked]="saving()"
-  (closed)="reset()">
+  (closed)="reset()"
+>
   <form [formGroup]="form" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
     <app-field label="Truck" required [error]="errorFor('truck_id')">
       <select formControlName="truck_id" [class]="inputClass">
@@ -24,13 +25,15 @@
       label="Trip income (₱)"
       required
       class="sm:col-span-2"
-      [error]="errorFor('trip_income')">
+      [error]="errorFor('trip_income')"
+    >
       <input
         type="number"
         min="0"
         step="0.01"
         formControlName="trip_income"
-        [class]="inputClass + ' cr-num'" />
+        [class]="inputClass + ' cr-num'"
+      />
     </app-field>
 
     <div class="sm:col-span-2">
@@ -42,7 +45,8 @@
             min="0"
             step="0.01"
             formControlName="fuel"
-            [class]="inputClass + ' cr-num'" />
+            [class]="inputClass + ' cr-num'"
+          />
         </app-field>
         <app-field label="Maintenance" [error]="errorFor('maintenance')">
           <input
@@ -50,7 +54,8 @@
             min="0"
             step="0.01"
             formControlName="maintenance"
-            [class]="inputClass + ' cr-num'" />
+            [class]="inputClass + ' cr-num'"
+          />
         </app-field>
         <app-field label="Driver salary" [error]="errorFor('driver_salary')">
           <input
@@ -58,7 +63,8 @@
             min="0"
             step="0.01"
             formControlName="driver_salary"
-            [class]="inputClass + ' cr-num'" />
+            [class]="inputClass + ' cr-num'"
+          />
         </app-field>
         <app-field label="Helper salary" [error]="errorFor('helper_salary')">
           <input
@@ -66,7 +72,8 @@
             min="0"
             step="0.01"
             formControlName="helper_salary"
-            [class]="inputClass + ' cr-num'" />
+            [class]="inputClass + ' cr-num'"
+          />
         </app-field>
         <app-field label="Allowance" [error]="errorFor('allowance')">
           <input
@@ -74,14 +81,48 @@
             min="0"
             step="0.01"
             formControlName="allowance"
-            [class]="inputClass + ' cr-num'" />
+            [class]="inputClass + ' cr-num'"
+          />
         </app-field>
       </div>
     </div>
 
+    <!--
+      Who the two salary figures above belong to.
+
+      The sheet has recorded what the crew was paid since the workbook was
+      first modelled and never who they were, which was survivable while the
+      figure only fed Profitability — and stops being so the moment somebody is
+      paid from it. A driver on per-trip pay is paid from exactly these rows,
+      and a day nobody named is counted toward nobody's payslip.
+    -->
+    <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <app-field
+        label="Driver"
+        hint="Whose the driver salary above is. Payroll sums these for anyone paid per trip."
+      >
+        <select formControlName="driver_id" [class]="inputClass">
+          <option value="">Not recorded</option>
+          @for (d of drivers(); track d.id) {
+            <option [value]="d.id">{{ d.name }}</option>
+          }
+        </select>
+      </app-field>
+
+      <app-field label="Helper" [error]="errorFor('helper_id')" hint="Whose the helper salary is.">
+        <select formControlName="helper_id" [class]="inputClass">
+          <option value="">Not recorded</option>
+          @for (d of drivers(); track d.id) {
+            <option [value]="d.id">{{ d.name }}</option>
+          }
+        </select>
+      </app-field>
+    </div>
+
     <app-field
       label="Customer"
-      hint="Optional — a day can be several customers' work, or the company's own.">
+      hint="Optional — a day can be several customers' work, or the company's own."
+    >
       <select formControlName="customer_id" [class]="inputClass">
         <option value="">No single customer</option>
         @for (c of customers(); track c.id) {
@@ -91,11 +132,7 @@
     </app-field>
 
     <app-field label="Route" hint="Where the trip went.">
-      <input
-        formControlName="route"
-        list="cr-routes"
-        [class]="inputClass"
-        placeholder="Gingoog" />
+      <input formControlName="route" list="cr-routes" [class]="inputClass" placeholder="Gingoog" />
       <datalist id="cr-routes">
         @for (r of routes(); track r) {
           <option [value]="r"></option>
@@ -121,7 +158,8 @@
       <p
         class="cr-num mt-1 text-[20px] font-semibold"
         [class.text-cr-red]="net() < 0"
-        [class.text-cr-success]="net() > 0">
+        [class.text-cr-success]="net() > 0"
+      >
         {{ fmt.money(net() * 100) }}
       </p>
     </div>
@@ -132,14 +170,16 @@
       type="button"
       class="h-10 rounded-control px-4 text-[14px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint disabled:opacity-50"
       [disabled]="saving()"
-      (click)="open.set(false)">
+      (click)="open.set(false)"
+    >
       Cancel
     </button>
     <button
       type="button"
       class="h-10 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
       [disabled]="saving()"
-      (click)="submit()">
+      (click)="submit()"
+    >
       {{ saving() ? 'Saving…' : editing() ? 'Save changes' : 'Record entry' }}
     </button>
   </ng-container>

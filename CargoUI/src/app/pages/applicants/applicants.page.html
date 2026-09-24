@@ -236,6 +236,7 @@
 
         <app-field label="Employment">
           <select formControlName="employment_type" [class]="inputClass">
+            <option value="trainee">Trainee</option>
             <option value="probationary">Probationary</option>
             <option value="regular">Regular</option>
             <option value="contractual">Contractual</option>
@@ -243,12 +244,16 @@
           </select>
         </app-field>
 
-        <app-field label="Base salary (₱)" class="sm:col-span-2">
+        <app-field
+          label="Pay (₱)"
+          class="sm:col-span-2"
+          hint="Leave at 0 to use the job’s rate for the employment type above."
+        >
           <input
             type="number"
             step="0.01"
             min="0"
-            formControlName="base_salary"
+            formControlName="amount"
             [class]="inputClass + ' cr-num'"
           />
         </app-field>

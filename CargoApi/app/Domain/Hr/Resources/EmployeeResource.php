@@ -16,6 +16,12 @@ class EmployeeResource extends ApiResource
 {
     public function toArray(Request $request): array
     {
+        // Asked once. The repository eager-loads the contracts, so this is a
+        // read of what is already in memory — but reaching for it seven times
+        // in the array below would be seven scans, and one of them would
+        // eventually be written on a record the relation was not loaded on.
+        $contract = $this->contractOn();
+
         return [
             'id' => $this->id,
             'employee_no' => $this->employee_no,
@@ -27,10 +33,6 @@ class EmployeeResource extends ApiResource
             'full_name' => $this->fullName(),
             'position' => $this->position,
             'position_id' => $this->position_id,
-            // The role somebody in this job normally gets, so the account form
-            // can pre-select it instead of asking twice.
-            'suggested_role' => $this->jobPosition?->defaultRole?->key,
-            'suggested_role_name' => $this->jobPosition?->defaultRole?->name,
             'department' => $this->department,
             'employment_type' => $this->employment_type->value,
             'employment_type_label' => $this->employment_type->label(),
@@ -42,7 +44,55 @@ class EmployeeResource extends ApiResource
             'address' => $this->address,
             'emergency_contact' => $this->emergency_contact,
             'emergency_phone' => $this->emergency_phone,
-            'base_salary_cents' => $this->base_salary_cents,
+            /**
+             * What this person is on **today**, read off the contract in force.
+             *
+             * Flattened onto the record rather than nested, because every
+             * screen that asks about an employee's pay wants the current figure
+             * and nothing else. The history is its own endpoint for the one
+             * screen that shows it.
+             *
+             * Null and zero where nobody has written a contract yet — a real
+             * state, and one that keeps somebody off pay runs rather than
+             * putting a ₱0.00 payslip on one.
+             *
+             * The label and the sentence come from the API so the form offering
+             * the choice does not keep its own copy of what "per trip" means.
+             */
+            'pay_basis' => $contract?->pay_basis?->value,
+            'pay_basis_label' => $contract?->pay_basis?->label(),
+            'pay_basis_detail' => $contract?->pay_basis?->detail(),
+            'amount_cents' => (int) ($contract?->amount_cents ?? 0),
+            'pay_summary' => $contract?->summary(),
+            'contract_id' => $contract?->getKey(),
+            'contract_effective_from' => $contract?->effective_from?->toDateString(),
+            'has_contract' => $contract !== null,
+
+            /**
+             * Which contributions come off this person's pay.
+             *
+             * `has_statutory_exemption` is sent alongside so a roster can flag
+             * the people who are not on all three without the client
+             * re-deriving the rule. It is the sort of thing an office wants to
+             * see at a glance before a run, because it is also the sort of
+             * thing somebody switches off for a fortnight and forgets.
+             */
+            'sss_enrolled' => (bool) $this->sss_enrolled,
+            'philhealth_enrolled' => (bool) $this->philhealth_enrolled,
+            'pagibig_enrolled' => (bool) $this->pagibig_enrolled,
+            'has_statutory_exemption' => $this->hasStatutoryExemption(),
+
+            /** The most one payslip takes off the store tab. Zero is all of it. */
+            'store_deduction_cap_cents' => (int) $this->store_deduction_cap_cents,
+            /**
+             * Is this person's pay multiplied by work done in the period?
+             *
+             * Said plainly rather than left for a client to infer from the
+             * basis, because it is what decides whether a screen shows them a
+             * salary or a rate — and, on a run, whether the figure came from
+             * days on the sheet or hauls delivered.
+             */
+            'paid_per_unit_worked' => $this->paidPerUnitWorked(),
             // Resolved on read, never stored: moving the install must not
             // orphan every photograph on the roster.
             'photo_url' => app(PhotoStore::class)->url($this->photo_path),
@@ -59,7 +109,7 @@ class EmployeeResource extends ApiResource
              * recorded in Drivers Management shows on the roster without
              * anything having to keep two columns in step.
              */
-            'position_drives' => $this->jobPosition?->drives() ?? false,
+            'position_drives' => (bool) ($this->jobPosition?->drives ?? false),
             'licence_no' => $this->driver?->licence_no,
             'licence_expiry' => $this->driver?->licence_expiry?->toDateString(),
 

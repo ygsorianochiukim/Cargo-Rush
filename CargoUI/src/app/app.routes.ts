@@ -264,6 +264,21 @@ export const routes: Routes = [
         data: { title: 'Payroll' },
         loadComponent: () => import('./pages/payroll/payroll.page').then((m) => m.PayrollPage),
       },
+      /*
+       * Salary Structure had a page here, and it is gone.
+       *
+       * It was a second pay system standing beside the first: a catalogue to
+       * learn, and an assignment to make, before an office could put ₱500 on
+       * one payslip. Most fleets pay a salary or a trip rate and a handful of
+       * one-off charges, and for those the page was a detour — it was never in
+       * the sidebar, so in practice nobody found it anyway.
+       *
+       * What replaced it is where the work actually happens. A recurring
+       * allowance is assigned on the employee (see `employee-pay-components`
+       * on the Employees screen), and a one-off deduction is added on the pay
+       * run itself, on the payslip it belongs to. The catalogue is still there
+       * and still reached by both.
+       */
       {
         path: 'access',
         title: 'Access Control · Cargo Rush',

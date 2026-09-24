@@ -78,7 +78,7 @@ jobs:
           echo "Building CargoUI with the '$NG_CONFIG' configuration"
           npx ng build --configuration "$NG_CONFIG"
           grep -rho 'https://[a-z0-9.-]*' dist/CargoUI/browser/*.js \
-            | sort -u | grep -i 'aya-it' || true
+            | sort -u | grep -i 'cargorush-logistics' || true
 
       # Assemble exactly what the server gets. Building here rather than on the
       # VPS means the box needs no Composer, no Node and no build toolchain.
@@ -182,6 +182,55 @@ jobs:
           printf '%s\n' "${{ secrets.SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
           chmod 644 ~/.ssh/known_hosts
 
+      # shared/.env stays the base — APP_KEY and DB_PASSWORD never leave the
+      # server — but the keys below are set from GitHub on every deploy, so
+      # changing one is an edit in Settings -> Environments and a re-run, not
+      # an SSH session.
+      #
+      # The four host keys are derived from API_URL / APP_URL, the same two
+      # values the smoke test checks, so the API's CORS and cookie settings
+      # cannot drift from the hosts CI is actually testing. Note the naming:
+      # the workflow's APP_URL is the SPA; Laravel's APP_URL is the API.
+      #
+      # ENV_OVERRIDES is an optional secret of KEY=VALUE lines, applied last,
+      # so it can set anything — including overriding the derived keys.
+      - name: Render .env overrides
+        env:
+          APP_URL: ${{ vars.APP_URL }}
+          API_URL: ${{ vars.API_URL }}
+          ENV_OVERRIDES: ${{ secrets.ENV_OVERRIDES }}
+        run: |
+          set -euo pipefail
+          api_host="${API_URL#*://}"; api_host="${api_host%%/*}"
+          spa_host="${APP_URL#*://}"; spa_host="${spa_host%%/*}"
+
+          # The deepest domain both hosts share, as provision.sh computes it.
+          # Same host for both means no sharing is needed: host-only cookie.
+          session_domain=null
+          if [ "$api_host" != "$spa_host" ]; then
+            IFS='.' read -ra a <<< "$api_host"
+            IFS='.' read -ra b <<< "$spa_host"
+            i=$(( ${#a[@]} - 1 )); j=$(( ${#b[@]} - 1 )); common=""
+            while [ "$i" -ge 0 ] && [ "$j" -ge 0 ] && [ "${a[$i]}" = "${b[$j]}" ]; do
+              common="${a[$i]}${common:+.}$common"; i=$((i - 1)); j=$((j - 1))
+            done
+            [ -n "$common" ] && session_domain=".$common"
+          fi
+
+          umask 077
+          {
+            echo "APP_URL=${API_URL%/}"
+            echo "FRONTEND_URL=${APP_URL%/}"
+            echo "SANCTUM_STATEFUL_DOMAINS=$spa_host"
+            echo "SESSION_DOMAIN=$session_domain"
+            printf '%s\n' "$ENV_OVERRIDES" | tr -d '\r'
+          } > env.overrides
+
+          # Names only. Values can be secrets, and this log is readable by
+          # anyone with access to the repository.
+          echo "Keys set from GitHub on this deploy:"
+          grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' env.overrides | tr -d '=' | sort -u | sed 's/^/  /'
+
       - name: Upload and release
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -201,7 +250,7 @@ jobs:
           target="$SSH_USER@$SSH_HOST"
 
           ssh $ssh_opts "$target" "mkdir -p '$DEPLOY_PATH/releases/$RELEASE'"
-          scp $ssh_opts release.tar.gz "$target:$DEPLOY_PATH/releases/$RELEASE/"
+          scp $ssh_opts release.tar.gz env.overrides "$target:$DEPLOY_PATH/releases/$RELEASE/"
           ssh $ssh_opts "$target" "
             set -euo pipefail
             cd '$DEPLOY_PATH/releases/$RELEASE'

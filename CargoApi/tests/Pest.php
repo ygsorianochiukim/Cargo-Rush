@@ -1,5 +1,9 @@
 <?php
 
+use App\Domain\Hr\Models\Contract;
+use App\Domain\Hr\Models\Employee;
+use App\Domain\Hr\Services\ContractService;
+use App\Domain\Shared\Enums\PayBasis;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -46,7 +50,27 @@ expect()->extend('toBeOne', function () {
 |
 */
 
-function something()
-{
-    // ..
+/**
+ * Put somebody on a figure, the way hiring them through the form would.
+ *
+ * Pay is a contract row rather than a column, so a test that builds an employee
+ * directly has to open one — and doing it inline, in a dozen files, would be a
+ * dozen chances to get the shape of a contract subtly wrong.
+ *
+ * Dated from the hire date so the contract covers every period a test is likely
+ * to build, rather than starting today and quietly leaving last fortnight
+ * unpaid.
+ */
+function payContract(
+    Employee $employee,
+    string $basis,
+    int $amountCents,
+    ?string $from = null,
+): Contract {
+    return app(ContractService::class)->open(
+        $employee,
+        PayBasis::from($basis),
+        $amountCents,
+        $from ?? $employee->hired_on ?? now()->subYear(),
+    );
 }

@@ -1,3 +1,5 @@
+import { PayrollCalendar } from '../hr/payroll.model';
+
 /**
  * `GET /api/v1/me` — drives the sidebar user chip (DESIGN.md section 7.2).
  *
@@ -108,6 +110,22 @@ export interface Company {
   payroll_deduct_on: 'split' | 'first' | 'second';
   payroll_deduct_on_label: string;
   payroll_deduct_on_detail: string;
+
+  /**
+   * The days this firm's pay periods close on.
+   *
+   * The other payroll policy, and the one that used to be an environment
+   * variable — which meant one cutoff for every haulier on the install, so a
+   * firm closing on the 10th and the 25th could not be described at all.
+   *
+   * **Null means the install default**, which is what a firm that has never
+   * touched the setting has. That is why there are two fields: this one is what
+   * a settings form edits and may be empty, while `payroll_calendar` is always
+   * the calendar actually in force. A screen showing an office its own cutoff
+   * wants the second.
+   */
+  payroll_cutoff_days: number[] | null;
+  payroll_calendar: PayrollCalendar;
 }
 
 /** What `POST /api/v1/login` takes. */

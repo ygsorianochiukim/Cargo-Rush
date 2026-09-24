@@ -20,6 +20,7 @@ use App\Domain\Finance\Controllers\FinanceController;
 use App\Domain\Fuel\Controllers\FuelController;
 use App\Domain\Gps\Controllers\GpsController;
 use App\Domain\Hr\Controllers\ApplicantController;
+use App\Domain\Hr\Controllers\ContractController;
 use App\Domain\Hr\Controllers\EmployeeController;
 use App\Domain\Hr\Controllers\PerformanceController;
 use App\Domain\Hr\Controllers\TimeOffController;
@@ -32,7 +33,10 @@ use App\Domain\Incident\Controllers\DriverIncidentController;
 use App\Domain\Incident\Controllers\IncidentController;
 use App\Domain\Inspection\Controllers\InspectionController;
 use App\Domain\Notification\Controllers\NotificationController;
+use App\Domain\Payroll\Controllers\PayComponentController;
 use App\Domain\Payroll\Controllers\PayrollController;
+use App\Domain\Payroll\Controllers\PayrollCutoffRequestController;
+use App\Domain\Payroll\Controllers\StoreCreditController;
 use App\Domain\Pricing\Controllers\PricingController;
 use App\Domain\Tenancy\Controllers\CarrierController;
 use App\Domain\Tenancy\Controllers\CompanyController;
@@ -330,15 +334,107 @@ Route::prefix('v1')->group(function (): void {
                  * ordering rule as `billing/statement`.
                  */
                 Route::get('periods', [PayrollController::class, 'periods']);
+
+                /**
+                 * The firm's salary structure — its allowances and deductions.
+                 *
+                 * Before `{run}`, like `periods`, so `components` is never read
+                 * as a run id.
+                 *
+                 * Under `payroll.view` rather than `hr.view`: what a firm pays
+                 * on top of a basic is the same private business a payslip is,
+                 * and the permission comment on `payroll.view` already draws
+                 * that line — the roster and the pay are different rooms.
+                 */
+                Route::get('components', [PayComponentController::class, 'index']);
+
+                /**
+                 * Requests to move the firm's pay cutoff.
+                 *
+                 * Readable by anybody who can see payroll, because the person
+                 * who filed one needs to know what happened to it — and a
+                 * decision that only appeared on the administrator's screen
+                 * would leave the office running payroll on a cutoff they had
+                 * asked to change and had no way of knowing was still in force.
+                 *
+                 * `pending` before `{request}`, so it is never read as an id.
+                 */
+                Route::get('cutoff-requests', [PayrollCutoffRequestController::class, 'index']);
+                Route::get('cutoff-requests/pending', [PayrollCutoffRequestController::class, 'pending']);
+
                 Route::get('{run}', [PayrollController::class, 'show']);
             });
 
+            /**
+             * Filing and withdrawing a cutoff request — `payroll.manage`.
+             *
+             * Whoever builds, approves and pays the runs. They cannot change
+             * the cutoff themselves (that is `company.manage`, below) and this
+             * is the whole point of the endpoint: the person who notices gets a
+             * way to say so that is not a conversation in a corridor.
+             *
+             * Declared before the `{run}` writes for the same reason the reads
+             * are — `cutoff-requests` must not bind as a run id.
+             */
             Route::middleware('permission:payroll.manage')->group(function (): void {
+                Route::post('cutoff-requests', [PayrollCutoffRequestController::class, 'store']);
+                Route::delete('cutoff-requests/{request}', [PayrollCutoffRequestController::class, 'withdraw']);
+            });
+
+            /**
+             * Deciding one — `company.manage`, which is the permission that
+             * could have made the change directly in the first place.
+             *
+             * Approving **applies** it, so the gate has to be the same one
+             * `PATCH /company` sits behind. Anything looser would be a way
+             * round that permission rather than a request to exercise it.
+             */
+            Route::middleware('permission:company.manage')->group(function (): void {
+                Route::post('cutoff-requests/{request}/approve', [PayrollCutoffRequestController::class, 'approve']);
+                Route::post('cutoff-requests/{request}/decline', [PayrollCutoffRequestController::class, 'decline']);
+            });
+
+            Route::middleware('permission:payroll.manage')->group(function (): void {
+                /**
+                 * Keeping the structure, and assigning it.
+                 *
+                 * `payroll.manage` rather than `hr.manage`, and the line is the
+                 * same one the rest of this prefix draws: HR answers for the
+                 * roster, and deciding that everybody gets another ₱2,000 a
+                 * month is a money decision that lands in the books at the end
+                 * of it. An office that wants its HR officer to do both gives
+                 * them the permission.
+                 */
+                Route::post('components', [PayComponentController::class, 'store']);
+                Route::match(['put', 'patch'], 'components/{component}', [PayComponentController::class, 'update']);
+                Route::delete('components/{component}', [PayComponentController::class, 'destroy']);
+
+                Route::post('assignments', [PayComponentController::class, 'assign']);
+                Route::match(['put', 'patch'], 'assignments/{assignment}', [PayComponentController::class, 'updateAssignment']);
+                Route::delete('assignments/{assignment}', [PayComponentController::class, 'unassign']);
+
                 Route::post('/', [PayrollController::class, 'store']);
                 // Not a PUT: rebuilding throws the lines away and works them
                 // out again from the employee records as they now stand.
                 Route::post('{run}/rebuild', [PayrollController::class, 'rebuild']);
                 Route::match(['put', 'patch'], '{run}/lines/{line}', [PayrollController::class, 'adjust']);
+
+                /**
+                 * A deduction on one payslip, for this run only.
+                 *
+                 * The charge no assignment exists for — a uniform, a breakage,
+                 * a cash advance against this fortnight. It goes on **named**
+                 * rather than into the single "other deductions" figure,
+                 * because "₱3,450 other" is a number the person holding the
+                 * payslip cannot ask a question about.
+                 *
+                 * Deductions only. A taxable earning belongs in the tax base,
+                 * and the withholding on the line was worked out when the run
+                 * was built — so an earning goes on by working the run out
+                 * again, which recomputes the lot.
+                 */
+                Route::post('{run}/lines/{line}/deductions', [PayrollController::class, 'addDeduction']);
+                Route::delete('{run}/lines/{line}/deductions/{component}', [PayrollController::class, 'removeDeduction']);
                 Route::post('{run}/approve', [PayrollController::class, 'approve']);
                 Route::post('{run}/pay', [PayrollController::class, 'pay']);
                 Route::delete('{run}', [PayrollController::class, 'destroy']);
@@ -467,6 +563,33 @@ Route::prefix('v1')->group(function (): void {
             Route::post('quote', [PricingController::class, 'quote'])->middleware('permission:pricing.view');
             Route::get('diesel', [PricingController::class, 'diesel'])->middleware('permission:pricing.view');
             Route::post('diesel', [PricingController::class, 'storeDiesel'])->middleware('permission:pricing.manage');
+
+            /**
+             * The firm's plain distance card — the lines belonging to no zone.
+             *
+             * For most hauliers this *is* the rate card: "450 km is ₱5,000",
+             * with no place to name. The zone editor beside it is for the
+             * firms that genuinely price one route differently from another,
+             * and is now a refinement rather than the only way in.
+             */
+            Route::get('card', [PricingController::class, 'card'])->middleware('permission:pricing.view');
+            Route::put('card', [PricingController::class, 'saveCard'])->middleware('permission:pricing.manage');
+
+            /**
+             * The kinds of unit the firm runs — Dry Goods, Freezer, Flatbed.
+             *
+             * The card's second dimension. Reefer work carries a premium that
+             * has nothing to do with distance, and a card that could only
+             * price distance forced the desk to quote it off-system.
+             */
+            Route::get('truck-categories', [PricingController::class, 'truckCategories'])
+                ->middleware('permission:pricing.view');
+
+            Route::middleware('permission:pricing.manage')->group(function (): void {
+                Route::post('truck-categories', [PricingController::class, 'storeTruckCategory']);
+                Route::match(['put', 'patch'], 'truck-categories/{truckCategory}', [PricingController::class, 'updateTruckCategory']);
+                Route::delete('truck-categories/{truckCategory}', [PricingController::class, 'destroyTruckCategory']);
+            });
         });
 
         Route::get('pricing/zones', [PricingController::class, 'index'])->middleware('permission:pricing.view');
@@ -649,6 +772,64 @@ Route::prefix('v1')->group(function (): void {
             Route::get('employees', [EmployeeController::class, 'index']);
             Route::get('employees/{employee}', [EmployeeController::class, 'show']);
             Route::get('employees/{employee}/modules', [EmployeeController::class, 'modules']);
+
+            /**
+             * The allowances and deductions this person is on.
+             *
+             * Under the employee because that is the screen it belongs to, and
+             * gated on `payroll.view` rather than the `hr.view` around it: what
+             * somebody is paid on top of their basic is the private business a
+             * payslip is. An HR officer who runs the roster does not
+             * automatically see everybody's allowances — the same line the
+             * payroll prefix draws, drawn here too rather than quietly not.
+             */
+            Route::get('employees/{employee}/pay-components', [PayComponentController::class, 'forEmployee'])
+                ->middleware('permission:payroll.view');
+
+            /**
+             * The store tab — the mini-mart *pautang* this person owes against.
+             *
+             * `payroll.view` to read and `payroll.manage` to write, for the
+             * same reason as the pay components above: what somebody owes the
+             * firm and what comes off their payslip is pay information, not
+             * roster information. An HR officer running the roster does not
+             * automatically see everybody's tab.
+             *
+             * Writing is `payroll.manage` rather than a permission of its own.
+             * A tab is a deduction from wages by another name, and whoever may
+             * decide what comes off a payslip is exactly who should be able to
+             * put a line on it.
+             */
+            /**
+             * What this person has been paid, over time.
+             *
+             * Pay is a history rather than a column — one row per agreement,
+             * with the day it starts on — so this is the screen that answers
+             * "what was she on last year" and "when did that go up".
+             *
+             * On the payroll permissions for the same reason as the two
+             * above: what somebody earns is pay information rather than roster
+             * information. `payroll.view` to read and `payroll.manage` to
+             * write, so an HR officer can see what somebody is on while
+             * agreeing a new figure stays with whoever runs the payroll.
+             *
+             * No update and no delete beyond taking back a row typed by
+             * mistake. A rise appends, because the row a pay run was built from
+             * has to still be there when the draft is rebuilt next week.
+             */
+            Route::get('employees/{employee}/contracts', [ContractController::class, 'index'])
+                ->middleware('permission:payroll.view');
+            Route::post('employees/{employee}/contracts', [ContractController::class, 'store'])
+                ->middleware('permission:payroll.manage');
+            Route::delete('employees/{employee}/contracts/{contract}', [ContractController::class, 'destroy'])
+                ->middleware('permission:payroll.manage');
+
+            Route::get('employees/{employee}/store-credits', [StoreCreditController::class, 'index'])
+                ->middleware('permission:payroll.view');
+            Route::post('employees/{employee}/store-credits', [StoreCreditController::class, 'store'])
+                ->middleware('permission:payroll.manage');
+            Route::delete('store-credits/{storeCredit}', [StoreCreditController::class, 'destroy'])
+                ->middleware('permission:payroll.manage');
             Route::get('applicants', [ApplicantController::class, 'index']);
             Route::get('applicants/{applicant}', [ApplicantController::class, 'show']);
         });

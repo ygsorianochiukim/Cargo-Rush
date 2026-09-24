@@ -30,31 +30,30 @@ import { MapPicker } from '../../shared/map-picker';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Card, Icon, MapPicker],
   template: `
-    <app-card
-      heading="Your yard"
-      icon="map-pin"
-      hint="How customers in the app find you">
+    <app-card heading="Your yard" icon="map-pin" hint="How customers in the app find you">
       @if (loading()) {
         <p class="text-[13px] text-cr-ink-muted">Reading the company…</p>
       } @else {
         <div class="flex flex-col gap-3">
           <div
             class="flex items-start gap-2 rounded-control px-3 py-2"
-            [class]="pin() ? 'bg-cr-tint' : 'bg-cr-line/40'">
+            [class]="pin() ? 'bg-cr-tint' : 'bg-cr-line/40'"
+          >
             <app-icon
               name="map-pin"
               [size]="16"
               class="mt-0.5 flex-none"
-              [class]="pin() ? 'text-cr-blue' : 'text-cr-ink-muted'" />
+              [class]="pin() ? 'text-cr-blue' : 'text-cr-ink-muted'"
+            />
             <p class="text-[13px]">
               @if (pin()) {
                 <span class="font-semibold">Customers near you can see you.</span>
-                They pick a carrier from the ones closest to their load, and this
-                is the point that distance is measured from.
+                They pick a carrier from the ones closest to their load, and this is the point that
+                distance is measured from.
               } @else {
                 <span class="font-semibold">You are not on the carrier list yet.</span>
-                Customers in the app choose a haulier from the ones nearest their
-                load. Drop a pin on your yard and you appear on that list.
+                Customers in the app choose a haulier from the ones nearest their load. Drop a pin
+                on your yard and you appear on that list.
               }
             </p>
           </div>
@@ -66,7 +65,8 @@ import { MapPicker } from '../../shared/map-picker';
               [value]="address()"
               (input)="address.set($any($event.target).value)"
               placeholder="Km 9, Sasa, Davao City"
-              class="h-10 w-full rounded-control border border-cr-line bg-cr-surface px-3 text-[14px] placeholder:text-cr-ink-muted focus:border-cr-blue focus:outline-none" />
+              class="h-10 w-full rounded-control border border-cr-line bg-cr-surface px-3 text-[14px] placeholder:text-cr-ink-muted focus:border-cr-blue focus:outline-none"
+            />
           </label>
 
           <app-map-picker [value]="pin()" (changed)="pinned($event)" />
@@ -86,7 +86,8 @@ import { MapPicker } from '../../shared/map-picker';
               type="button"
               class="h-10 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
               [disabled]="busy()"
-              (click)="save()">
+              (click)="save()"
+            >
               {{ busy() ? 'Saving…' : 'Save location' }}
             </button>
 
@@ -99,7 +100,8 @@ import { MapPicker } from '../../shared/map-picker';
                 type="button"
                 class="h-10 rounded-control border border-cr-line px-4 text-[14px] font-semibold text-cr-ink-muted transition-colors hover:bg-cr-tint disabled:opacity-60"
                 [disabled]="busy()"
-                (click)="clear()">
+                (click)="clear()"
+              >
                 Take me off the list
               </button>
             }

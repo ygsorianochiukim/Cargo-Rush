@@ -11,11 +11,15 @@ use App\Domain\Accounting\Services\JournalService;
 use App\Domain\Hr\Models\Employee;
 use App\Domain\Identity\Models\User;
 use App\Domain\Notification\Services\NotificationService;
+use App\Domain\Payroll\Models\PayComponent;
 use App\Domain\Payroll\Models\PayRun;
 use App\Domain\Payroll\Models\PayRunLine;
-use App\Domain\Payroll\Support\PayPeriod;
+use App\Domain\Payroll\Models\PayRunLineComponent;
+use App\Domain\Payroll\Support\PayrollCalendar;
 use App\Domain\Shared\Enums\DeductionSchedule;
 use App\Domain\Shared\Enums\JournalCategory;
+use App\Domain\Shared\Enums\PayBasis;
+use App\Domain\Shared\Enums\PayComponentKind;
 use App\Domain\Shared\Enums\Role;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\Tone;
@@ -45,18 +49,37 @@ use Illuminate\Support\Facades\DB;
  *
  * **Delete** is for a draft only. An approved run has been shown to people.
  *
- * ## Who is on a run
+ * ## Who is on a run, and how each of them is worked out
  *
- * Active employees with a monthly basic on record. A fleet's drivers are often
- * paid **per trip** rather than salaried — that money is already in the daily
- * truck sheet's driver and helper columns — so an employee with no basic is
- * left off rather than paid twice. The office can still add anything a person
- * is owed as an adjustment on their line.
+ * Active employees, on one of three **pay bases** — see `PayBasis`.
+ *
+ * **Monthly** staff are on every run: a salary agreed once, split across the
+ * month's cutoffs. This is what payroll has always done.
+ *
+ * **Daily** and **per-trip** staff are on a run whenever they have a `drivers`
+ * record to find their work under. Each cutoff sums what the daily truck sheet
+ * recorded them earning between the period's two dates, and that is their pay —
+ * which is how trip money reaches a payslip, a government contribution and the
+ * books at all.
+ *
+ * Their figures come from the sheet rather than from a rate card, because a
+ * fleet's per-trip arrangements are endless and a rate card here would be wrong
+ * within a month. See `TripPayService`.
+ *
+ * A firm that hands drivers their trip money in cash against that same sheet
+ * should leave those people on a **monthly** basis with no salary — which keeps
+ * them off a run, as it always did — rather than paying it twice.
+ *
+ * The office can still add anything a person is owed as an adjustment on their
+ * line, whatever basis they are on.
  */
 class PayrollService
 {
     public function __construct(
         private readonly StatutoryDeductions $deductions,
+        private readonly PayComponentService $components,
+        private readonly TripPayService $tripPay,
+        private readonly StoreCreditService $storeCredit,
         private readonly JournalService $journal,
         private readonly NotificationService $notifications,
         private readonly Tenant $tenant,
@@ -68,7 +91,7 @@ class PayrollService
     public function paginate(array $filters = [], int $perPage = 25): LengthAwarePaginator
     {
         return PayRun::query()
-            ->with(['lines', 'approvedBy:id,name', 'journalEntry:id,reference'])
+            ->with(['lines.components', 'approvedBy:id,name', 'journalEntry:id,reference'])
             ->when(
                 ! empty($filters['status']),
                 fn ($query) => $query->whereIn('status', (array) $filters['status']),
@@ -88,7 +111,7 @@ class PayrollService
     public function find(string $id): PayRun
     {
         return PayRun::query()
-            ->with(['lines.employee:id,employee_no,first_name,last_name', 'approvedBy:id,name', 'journalEntry:id,reference'])
+            ->with(['lines.components', 'lines.employee:id,employee_no,first_name,last_name', 'approvedBy:id,name', 'journalEntry:id,reference'])
             ->findOrFail($id);
     }
 
@@ -127,38 +150,152 @@ class PayrollService
 
             $run->save();
 
+            /**
+             * What the office typed onto these payslips, read before the lines
+             * go. Folded back into the resolved list below, so a carried-over
+             * deduction goes through the same arithmetic as an assigned one.
+             */
+            $byHand = $this->handAddedComponents($run);
+
             // Wholesale, not merged. See the note above.
             $run->lines()->delete();
 
             // Which cutoff this is, worked out once for the whole run rather
             // than per employee: it is a fact about the period, and every
             // payslip on the run shares it.
-            $cutoff = PayPeriod::classify($run->period_start, $run->period_end);
+            $cutoff = $this->calendar()->classify($run->period_start, $run->period_end);
             $schedule = $this->schedule();
 
-            foreach ($this->payable() as $employee) {
-                $this->writeLine($run, $employee, $cutoff, $schedule);
+            /**
+             * Everything the run needs from the database, fetched once.
+             *
+             * Both of these used to be asked per employee, which made building
+             * a run cost a fixed number of round trips **times the headcount**
+             * — around five each, so a 90-strong roster was some four hundred
+             * queries for a job that reads two tables. A draft is rebuilt every
+             * time somebody corrects a figure, so that cost was paid over and
+             * over.
+             *
+             * The order matters: the sheet is read first because a per-trip
+             * driver's monthly basic is inferred from what they earned, and the
+             * components need that figure to work a percentage out of.
+             */
+            $payable = $this->payable($run->period_end);
+            $sheet = $this->tripPay->forEmployees($payable, $run->period_start, $run->period_end);
+
+            $earnings = [];
+            $monthlyBasics = [];
+
+            foreach ($payable as $employee) {
+                $earned = $this->earningsFor(
+                    $employee,
+                    $cutoff,
+                    $sheet[$employee->getKey()] ?? null,
+                    $run->period_end,
+                );
+
+                $earnings[$employee->getKey()] = $earned;
+                $monthlyBasics[$employee->getKey()] = $earned['monthly_equivalent_cents'];
             }
 
-            return $run->refresh()->load('lines');
+            $components = $this->components->resolveFor(
+                $payable,
+                $monthlyBasics,
+                $run->period_start,
+                $run->period_end,
+                $cutoff,
+            );
+
+            /**
+             * The store tab, as at the **end of the period** and not as at
+             * today.
+             *
+             * That is what makes a draft rebuildable. A run for the first half
+             * of the month, worked out again on the 20th, must not suddenly
+             * deduct the rice somebody took on the 18th: that charge belongs to
+             * the next payslip, and a rebuild that moved it would change a
+             * figure the office had already checked.
+             *
+             * One query for the whole roster, like the sheet and the
+             * components above.
+             */
+            $tabs = $this->storeCredit->balances(
+                $payable->modelKeys(),
+                $run->period_end->toDateString(),
+            );
+
+            foreach ($payable as $employee) {
+                $this->writeLine(
+                    $run,
+                    $employee,
+                    $cutoff,
+                    $schedule,
+                    $earnings[$employee->getKey()],
+                    [
+                        ...($components[$employee->getKey()] ?? []),
+                        ...($byHand[$employee->getKey()] ?? []),
+                    ],
+                    $tabs[$employee->getKey()] ?? 0,
+                );
+            }
+
+            return $run->refresh()->load('lines.components');
         });
     }
 
     /**
      * Everybody the run pays.
      *
-     * Active, and with a basic on record. See the class note on why somebody
-     * paid per trip is deliberately not here.
+     * **The pay basis on the person decides, on its own.**
+     *
+     * Monthly staff with a salary on record, and trip- or day-paid staff with a
+     * `drivers` record to find their work under. Nothing else votes.
+     *
+     * There used to be a company switch that could veto the second group, and
+     * removing it was the point: setting somebody to *per trip* and then
+     * finding them on no payslip — because of a setting on another screen in
+     * another module — is the kind of surprise that makes a payroll module feel
+     * untrustworthy. A firm that settles its drivers in cash against the truck
+     * sheet leaves them on a monthly basis with no salary, which keeps them off
+     * a run exactly as it always did.
+     *
+     * Ordered by surname so a register reads like a register.
      *
      * @return Collection<int, Employee>
      */
-    public function payable()
+    public function payable(Carbon|string|null $on = null)
     {
         return Employee::query()
             ->where('status', StatusValue::Active->value)
-            ->where('base_salary_cents', '>', 0)
+            // The contract in force, read for the whole roster in one query
+            // rather than one per person as each line is worked out.
+            ->with(['contracts' => fn ($contracts) => $contracts->inForceOn($on)])
             ->orderBy('last_name')
-            ->get();
+            ->get()
+            ->filter(function (Employee $employee) use ($on): bool {
+                $contract = $employee->contractOn($on);
+
+                // Nobody has said what this person is paid. Not a zero payslip
+                // — no payslip, until the office writes one.
+                if ($contract === null) {
+                    return false;
+                }
+
+                $basis = $contract->pay_basis ?? PayBasis::Monthly;
+
+                // A monthly contract at zero is somebody half set up, and a
+                // ₱0.00 payslip is worse than none.
+                if (! $basis->countsWork()) {
+                    return (int) $contract->amount_cents > 0;
+                }
+
+                // A trip- or day-paid person with no `drivers` record has no
+                // work this could find — every sheet row and every trip names a
+                // driver — so they are left off rather than given an empty
+                // payslip.
+                return $employee->driver_id !== null;
+            })
+            ->values();
     }
 
     /**
@@ -175,30 +312,95 @@ class PayrollService
         Employee $employee,
         array $cutoff,
         DeductionSchedule $schedule,
+        array $earned,
+        array $components,
+        int $storeBalanceCents = 0,
     ): PayRunLine {
-        $monthly = (int) $employee->base_salary_cents;
+        $monthly = $earned['monthly_equivalent_cents'];
 
         /**
-         * The monthly salary split across the month's two cutoffs.
+         * The earnings and the components arrive worked out, from `build()`.
          *
-         * The **second** cutoff carries the remainder, so the two payslips add
-         * up to the monthly salary exactly. Halving with `intdiv` on both runs
-         * would quietly short a salary ending in an odd centavo by one centavo
-         * every month — twelve centavos a year per employee, permanently, and
-         * impossible to find from either payslip.
+         * Both are fetched for the whole run in one query each rather than per
+         * person — see the note there. The components were resolved *before*
+         * the statutory figures below because a **taxable** earning belongs in
+         * the tax base, and the BIR's order is contributions first, then tax on
+         * what is left.
+         *
+         * A percentage component reads the monthly equivalent, so 10% of the
+         * basic means 10% of what a per-trip driver actually earns rather than
+         * 10% of a salary they do not have.
          */
-        $basic = match (true) {
-            $cutoff['only'] => $monthly,
-            $cutoff['first'] => intdiv($monthly, 2),
-            default => $monthly - intdiv($monthly, 2),
-        };
+        $componentEarnings = 0;
+        $componentDeductions = 0;
+        $taxableEarnings = 0;
+
+        foreach ($components as $component) {
+            if ($component['kind'] === PayComponentKind::Earning->value) {
+                $componentEarnings += $component['amount_cents'];
+
+                if ($component['taxable']) {
+                    $taxableEarnings += $component['amount_cents'];
+                }
+
+                continue;
+            }
+
+            $componentDeductions += $component['amount_cents'];
+        }
+
+        // Worked out by basis — a salary is split across the month's cutoffs,
+        // while trip and daily pay are already this period's. See `earningsFor`.
+        $basic = $earned['basic_cents'];
+
+        /**
+         * The tax base is the period's basic **plus any taxable earning**.
+         *
+         * The contributions are not: SSS, PhilHealth and Pag-IBIG are computed
+         * from the monthly *basic*, which is what the agencies' own schedules
+         * read, and an allowance does not move them. Tax is different — a
+         * taxable allowance is taxable pay, and leaving it out would understate
+         * the withholding on every payslip that carried one.
+         *
+         * Non-taxable is the default on a component, and most of what a fleet
+         * pays on top of a basic genuinely is: rice, uniform and medical
+         * allowances are de minimis benefits up to the BIR's ceilings. So a
+         * firm that has not thought about this gets exactly the arithmetic
+         * payroll did before components existed.
+         */
+        $enrolled = $employee->statutoryEnrolment();
 
         $statutory = $this->deductions->for(
             $monthly,
-            $basic,
+            $basic + $taxableEarnings,
             $cutoff['first'],
             $cutoff['only'],
             $schedule,
+            $enrolled,
+        );
+
+        /**
+         * The store tab, taken last — after everything else is known.
+         *
+         * Last because it is the only deduction that has to look at what is
+         * left. A tab is a recovery, and a recovery that takes more than the
+         * payslip holds has stopped being a recovery and become an unpayable
+         * wage: the person is handed nothing and still owes money. So it is
+         * floored at whatever the payslip can actually bear, and the rest
+         * stays on the tab for the next one.
+         *
+         * Which means a tab settles itself over as many payslips as it takes,
+         * with no schedule for anybody to maintain — the behaviour a
+         * `pay_components` deduction cannot express, and the reason this is not
+         * one.
+         */
+        $beforeStore = $basic + $componentEarnings
+            - $statutory['sss'] - $statutory['philhealth'] - $statutory['pagibig']
+            - $statutory['withholding_tax'] - $componentDeductions;
+
+        $store = min(
+            $this->storeCredit->deductionFor($employee, $storeBalanceCents),
+            max(0, $beforeStore),
         );
 
         $line = new PayRunLine([
@@ -207,18 +409,150 @@ class PayrollService
             'employee_no' => $employee->employee_no,
             'name' => trim($employee->first_name.' '.$employee->last_name),
             'position' => $employee->position,
+            // How this payslip was worked out, and the workings behind it —
+            // frozen, because "₱12,400" with no indication of what it was
+            // 12,400 *of* is a figure nobody holding it can check.
+            'pay_basis' => $earned['basis']->value,
             'basic_cents' => $basic,
+            'days_worked' => $earned['days_worked'],
+            'sheet_days' => $earned['sheet_days'],
+            'trips' => $earned['trips'],
             'allowance_cents' => 0,
             'overtime_cents' => 0,
             'adjustments_cents' => 0,
+            // The structure's totals, kept apart from the hand-typed figures
+            // above so a rebuild cannot wipe somebody's correction. See the
+            // migration that adds these two columns.
+            'component_earnings_cents' => $componentEarnings,
+            'component_deductions_cents' => $componentDeductions,
             'sss_cents' => $statutory['sss'],
             'philhealth_cents' => $statutory['philhealth'],
             'pagibig_cents' => $statutory['pagibig'],
             'withholding_tax_cents' => $statutory['withholding_tax'],
+            // Frozen beside the figures: "SSS ₱0.00" has two quite different
+            // explanations, and only one of them is for the office to fix.
+            'sss_enrolled' => $enrolled['sss'],
+            'philhealth_enrolled' => $enrolled['philhealth'],
+            'pagibig_enrolled' => $enrolled['pagibig'],
+            'store_deduction_cents' => $store,
             'other_deductions_cents' => 0,
         ]);
 
-        return $this->settleTotals($line);
+        // Totals first, then one insert — rather than inserting and updating
+        // the row we just wrote.
+        $this->totalsOn($line)->save();
+
+        /**
+         * Itemised, and frozen. The totals above are what the payslip adds up;
+         * these are what it says — and they have to keep saying it after the
+         * catalogue is edited. See `PayRunLineComponent`.
+         *
+         * One insert each rather than a bulk write, deliberately: a bulk
+         * `insert()` skips model events, and `BelongsToCompany` stamps
+         * `company_id` in one. A handful of rows per payslip is a fair price
+         * for not having a tenancy stamp that depends on remembering.
+         */
+        foreach ($components as $component) {
+            PayRunLineComponent::create([
+                'pay_run_line_id' => $line->getKey(),
+                'pay_component_id' => $component['pay_component_id']
+                    ?? $component['component']?->getKey(),
+                'name' => $component['name'],
+                'kind' => $component['kind'],
+                'taxable' => $component['taxable'],
+                'amount_cents' => $component['amount_cents'],
+                'added_by_hand' => $component['added_by_hand'] ?? false,
+            ]);
+        }
+
+        return $line;
+    }
+
+    /**
+     * What this person earned in this period, and what it is a month's worth
+     * of.
+     *
+     * Three bases, and the difference between them is not the arithmetic but
+     * **what the period means**.
+     *
+     * A **monthly** salary is a figure for a month, so the payslip carries a
+     * share of it: half on each cutoff, with the remainder on the second so the
+     * two add up to the month exactly. Halving with `intdiv` on both runs would
+     * quietly short a salary ending in an odd centavo by one centavo every
+     * month — twelve a year per employee, permanently, and impossible to find
+     * from either payslip.
+     *
+     * **Daily** and **per-trip** pay is already this period's. It is summed
+     * from the days actually worked between these two dates, so there is
+     * nothing to split — splitting it would halve a fortnight's work.
+     *
+     * ## The monthly equivalent, and why it is an estimate
+     *
+     * SSS, PhilHealth and Pag-IBIG are computed from a **monthly** figure, and
+     * a per-trip driver has no monthly figure. So one is inferred: this
+     * period's earnings, multiplied by the number of periods in the month.
+     *
+     * That is an approximation and it moves with the work — a driver who had a
+     * quiet fortnight contributes less that fortnight. Which is closer to right
+     * than the alternatives: a fixed guess would over-deduct in a lean month
+     * and under-remit in a busy one, and zero would leave somebody with no
+     * contributions at all, which is the state this feature exists to end.
+     * It sits alongside the module's other honest approximation — the SSS
+     * percentage-with-a-ceiling — and like that one, every figure it produces
+     * is editable on the line by an office that knows better.
+     *
+     * @param  array{first: bool, only: bool}  $cutoff
+     * @return array{basis: PayBasis, basic_cents: int, monthly_equivalent_cents: int, days_worked: int, sheet_days: int, trips: int}
+     */
+    private function earningsFor(Employee $employee, array $cutoff, ?array $sheet = null, Carbon|string|null $on = null): array
+    {
+        $contract = $employee->contractOn($on);
+        $basis = $contract?->pay_basis ?? PayBasis::Monthly;
+        $rate = (int) ($contract?->amount_cents ?? 0);
+
+        if ($basis === PayBasis::Monthly) {
+            return [
+                'basis' => $basis,
+                'basic_cents' => match (true) {
+                    $cutoff['only'] => $rate,
+                    $cutoff['first'] => intdiv($rate, 2),
+                    default => $rate - intdiv($rate, 2),
+                },
+                'monthly_equivalent_cents' => $rate,
+                'days_worked' => 0,
+                'sheet_days' => 0,
+                'trips' => 0,
+            ];
+        }
+
+        // Read for the whole run in one pass and handed in — see `build()`.
+        // Nothing for this person is an ordinary answer, not a missing one:
+        // they simply did not work this period.
+        $sheet ??= ['earned_cents' => 0, 'days' => 0, 'trips' => 0];
+
+        // The rate times what the period actually holds. Days off the truck
+        // sheet for a daily hand, hauls off the trip record for a per-trip one.
+        $basic = $basis === PayBasis::Daily
+            ? $sheet['days'] * $rate
+            : $sheet['trips'] * $rate;
+
+        // How many periods make a month, from the firm's own calendar — so a
+        // monthly payroll multiplies by one rather than assuming two.
+        $perMonth = max(1, $this->calendar()->runsPerMonth());
+
+        return [
+            'basis' => $basis,
+            'basic_cents' => $basic,
+            'monthly_equivalent_cents' => $basic * $perMonth,
+            // Only meaningful on a daily basis, where it is what the rate was
+            // multiplied by. Zero elsewhere rather than a number nothing reads.
+            'days_worked' => $basis === PayBasis::Daily ? $sheet['days'] : 0,
+            // How many sheet days the figure came from. On a per-trip payslip
+            // this is the count somebody checks the trips against.
+            'sheet_days' => $sheet['days'],
+            // What a per-trip rate was multiplied by.
+            'trips' => $basis === PayBasis::PerTrip ? $sheet['trips'] : 0,
+        ];
     }
 
     /**
@@ -231,6 +565,25 @@ class PayrollService
     public function schedule(): DeductionSchedule
     {
         return $this->tenant->company()?->payroll_deduct_on ?? DeductionSchedule::Split;
+    }
+
+    /**
+     * The calendar this firm's payroll runs on.
+     *
+     * Read off the company for the same reason the deduction schedule is, and
+     * it is the more important of the two: the cutoff days used to come from an
+     * environment variable, which meant one answer for every haulier on the
+     * install. Falls back to the configured default for a company that has
+     * never set its own, so nothing about an existing install changes until
+     * somebody chooses otherwise.
+     *
+     * The one place the rest of payroll should get a calendar from — the
+     * controller, the resource and `PayRun` all come through here rather than
+     * each resolving a company of their own.
+     */
+    public function calendar(): PayrollCalendar
+    {
+        return PayrollCalendar::for($this->tenant->company());
     }
 
     /**
@@ -268,15 +621,169 @@ class PayrollService
      * somebody was handed on paper — see `PayRunLine` — and one writer is what
      * keeps them agreeing with the columns beside them.
      */
+    /**
+     * The rows somebody typed onto a payslip, keyed by employee.
+     *
+     * Read **before** the lines are deleted, in the shape the catalogue's own
+     * components arrive in, so `writeLine()` cannot tell the two apart. That is
+     * the point: a hand-added deduction goes through the same totals and the
+     * same tax base as an assigned one rather than being stapled on afterwards,
+     * and a rebuilt payslip adds up for the same reason the first one did.
+     *
+     * Keyed by employee rather than by line because the lines themselves are
+     * about to stop existing.
+     *
+     * @return array<string, list<array<string, mixed>>>
+     */
+    private function handAddedComponents(PayRun $run): array
+    {
+        $kept = [];
+
+        foreach ($run->lines()->with('components')->get() as $line) {
+            foreach ($line->components as $component) {
+                if (! $component->added_by_hand) {
+                    continue;
+                }
+
+                $kept[$line->employee_id][] = [
+                    'component' => null,
+                    'pay_component_id' => $component->pay_component_id,
+                    'name' => $component->name,
+                    'kind' => $component->kind->value,
+                    'taxable' => (bool) $component->taxable,
+                    'amount_cents' => (int) $component->amount_cents,
+                    'added_by_hand' => true,
+                ];
+            }
+        }
+
+        return $kept;
+    }
+
+    /**
+     * Put a deduction on one payslip, for this run only.
+     *
+     * The everyday case the catalogue cannot answer: a uniform charged to one
+     * driver this fortnight, a breakage, a cash advance nobody is going to set
+     * up an assignment for. It names itself on the payslip rather than
+     * disappearing into the single "other deductions" figure, which is the
+     * whole reason to bother — a person holding a payslip that says
+     * "₱3,450 other" has no way to ask about the ₱450 part of it.
+     *
+     * **Deductions only**, and that is a correctness rule rather than a
+     * simplification. A taxable earning belongs in the tax base, and the
+     * withholding on this line was worked out when the run was built — adding
+     * one here would leave the tax saying something the gross no longer
+     * supports. An earning is added by working the run out again, which
+     * recomputes the lot.
+     *
+     * @param  array{pay_component_id?: ?string, name?: ?string, amount_cents: int}  $data
+     */
+    public function addDeduction(PayRunLine $line, array $data): PayRunLine
+    {
+        $this->mustBeOpen($line->payRun);
+
+        $catalogue = isset($data['pay_component_id'])
+            ? PayComponent::find($data['pay_component_id'])
+            : null;
+
+        abort_if(
+            $catalogue !== null && $catalogue->kind !== PayComponentKind::Deduction,
+            422,
+            'That is an earning. Only deductions can be added to a payslip once the run is open — '
+            .'an earning changes the tax base, so it goes on by working the run out again.',
+        );
+
+        $name = trim((string) ($data['name'] ?? $catalogue?->name ?? ''));
+
+        abort_if($name === '', 422, 'Give the deduction a name, or pick one from the list.');
+
+        PayRunLineComponent::create([
+            'pay_run_line_id' => $line->getKey(),
+            'pay_component_id' => $catalogue?->getKey(),
+            'name' => $name,
+            'kind' => PayComponentKind::Deduction->value,
+            'taxable' => false,
+            'amount_cents' => max(0, (int) $data['amount_cents']),
+            'added_by_hand' => true,
+        ]);
+
+        return $this->recountComponents($line->refresh());
+    }
+
+    /**
+     * Take one back off.
+     *
+     * Only the hand-added ones. A row that came from an assignment is the
+     * catalogue's answer to this period, and removing it here would be a
+     * correction that the next rebuild silently undoes — the office ends the
+     * assignment instead, which is the change that lasts.
+     */
+    public function removeDeduction(PayRunLineComponent $component): PayRunLine
+    {
+        $line = $component->line;
+
+        $this->mustBeOpen($line->payRun);
+
+        abort_unless(
+            $component->added_by_hand,
+            422,
+            'This one comes from the salary structure. End the assignment to stop it, or it will '
+            .'be back the next time the run is worked out.',
+        );
+
+        $component->delete();
+
+        return $this->recountComponents($line->refresh());
+    }
+
+    /**
+     * Add the itemised rows up onto the line, then settle the three totals.
+     *
+     * The writer for `component_earnings_cents` and `component_deductions_cents`
+     * on a line that already exists — `writeLine()` is the writer at insert
+     * time, where the figures are needed before there is a row to read them
+     * back from. The same split `settleTotals()` and `totalsOn()` make, and for
+     * the same reason.
+     */
+    private function recountComponents(PayRunLine $line): PayRunLine
+    {
+        $components = $line->components()->get();
+
+        $line->component_earnings_cents = (int) $components
+            ->where('kind', PayComponentKind::Earning)
+            ->sum('amount_cents');
+
+        $line->component_deductions_cents = (int) $components
+            ->where('kind', PayComponentKind::Deduction)
+            ->sum('amount_cents');
+
+        return $this->settleTotals($line);
+    }
+
     private function settleTotals(PayRunLine $line): PayRunLine
+    {
+        $this->totalsOn($line)->save();
+
+        return $line->refresh();
+    }
+
+    /**
+     * Write the three totals onto the line without saving it.
+     *
+     * Split out so building a run can set them on a line that has not been
+     * inserted yet and save **once**, rather than inserting and immediately
+     * updating. The totals still have exactly one writer, which is the whole
+     * point of `settleTotals` — this is that writer, and the method above is
+     * the version for a line that already exists.
+     */
+    private function totalsOn(PayRunLine $line): PayRunLine
     {
         $line->gross_cents = $line->computedGrossCents();
         $line->deductions_cents = $line->computedDeductionsCents();
         $line->net_cents = $line->computedNetCents();
 
-        $line->save();
-
-        return $line->refresh();
+        return $line;
     }
 
     /**
@@ -289,7 +796,7 @@ class PayrollService
     {
         $this->mustBeOpen($run);
 
-        $run->load('lines');
+        $run->load('lines.components');
 
         abort_if(
             $run->lines->isEmpty(),
@@ -302,6 +809,20 @@ class PayrollService
             'approved_at' => now(),
             'approved_by' => $author?->id,
         ])->save();
+
+        /**
+         * The store tab learns about the run here, and nowhere earlier.
+         *
+         * Not on build, and that is the whole of why: a draft exists to be
+         * worked out again, and a repayment written at build time would be
+         * subtracted from the balance the next rebuild reads. Pressing "work
+         * out again" twice would settle the tab twice and hand the person the
+         * difference.
+         *
+         * Approving is the point at which the figures stop moving, so it is
+         * the point at which anything outside the run may act on them.
+         */
+        $this->storeCredit->settle($run->lines, $run->pay_date ?? now());
 
         $this->notifications->pushToRoles(
             roles: [Role::Administrator, Role::Accountant],
@@ -316,7 +837,7 @@ class PayrollService
             tone: Tone::Info,
         );
 
-        return $run->refresh()->load('lines');
+        return $run->refresh()->load('lines.components');
     }
 
     /**
@@ -346,7 +867,7 @@ class PayrollService
                 : 'Approve the run before paying it — approving is what freezes the figures.',
         );
 
-        $run->load('lines');
+        $run->load('lines.components');
 
         return DB::transaction(function () use ($run, $author): PayRun {
             $entry = $this->post($run, $author);
@@ -357,7 +878,7 @@ class PayrollService
                 'journal_entry_id' => $entry?->getKey(),
             ])->save();
 
-            return $run->refresh()->load(['lines', 'journalEntry']);
+            return $run->refresh()->load(['lines.components', 'journalEntry']);
         });
     }
 

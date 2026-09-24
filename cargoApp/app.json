@@ -3,6 +3,7 @@
     "name": "Cargo Rush",
     "slug": "cargoApp",
     "version": "1.0.0",
+    "owner": "glynn_dev",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "cargoapp",
@@ -12,8 +13,12 @@
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Cargo Rush reports your position while you are on a trip, so dispatch can see where the load is.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Cargo Rush keeps reporting your position while the app is in the background, so a trip is tracked with the phone in its cradle and the screen off.",
-        "UIBackgroundModes": ["location", "fetch"]
-      }
+        "UIBackgroundModes": [
+          "location",
+          "fetch"
+        ]
+      },
+      "bundleIdentifier": "ph.cargorush.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -24,11 +29,15 @@
       },
       "predictiveBackGestureEnabled": false,
       "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION",
-        "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION"
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
+      ],
+      "package": "ph.cargorush.app",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -40,15 +49,18 @@
       [
         "expo-font",
         {
-          "fonts": ["./assets/fonts/RaceSport.ttf"]
+          "fonts": [
+            "./assets/fonts/RaceSport.ttf"
+          ]
         }
       ],
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FFFFFF",
+          "backgroundColor": "#DFF0FF",
           "image": "./assets/images/splash-icon.png",
-          "imageWidth": 180
+          "imageWidth": 180,
+          "resizeMode": "contain"
         }
       ],
       "expo-secure-store",
@@ -71,6 +83,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "f0ff0b62-c525-4948-b050-77ca72d33289"
+      }
     }
   }
 }

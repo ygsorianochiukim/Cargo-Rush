@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { Icon } from '@/components/ui/icon';
 import { Wordmark } from '@/components/ui/wordmark';
 import { Brand, Hit, Radius, Spacing } from '@/constants/theme';
 import { SignUpPage } from '@/pages/sign-up/sign-up.page';
@@ -51,6 +52,17 @@ export function SignInPage() {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
 
+  /**
+   * Stay signed in after the app is closed.
+   *
+   * Ticked by default, and that default is the point: a driver signs in once
+   * and the app opens on their work every morning after, because a password
+   * prompt at the start of a shift, in a cab, is exactly the friction that
+   * gets an app put down. Unticking it is for the handset that gets passed
+   * around a yard — that session ends with the app, and the token with it.
+   */
+  const [remember, setRemember] = useState(true);
+
   const ready = email.trim().length > 0 && secret.length > 0;
 
   if (signingUp) return <SignUpPage onBack={() => setSigningUp(false)} />;
@@ -62,7 +74,7 @@ export function SignInPage() {
     setFailure(null);
 
     try {
-      await signIn({ email: email.trim(), password: secret });
+      await signIn({ email: email.trim(), password: secret }, remember);
     } catch (error) {
       setFailure(messageFor(error));
       setBusy(false);
@@ -122,6 +134,25 @@ export function SignInPage() {
             onSubmitEditing={submit}
             style={styles.input}
           />
+
+          <Pressable
+            accessibilityRole="checkbox"
+            accessibilityLabel="Remember me"
+            accessibilityHint="Stay signed in on this phone after closing the app"
+            accessibilityState={{ checked: remember }}
+            onPress={() => setRemember((on) => !on)}
+            hitSlop={Spacing.two}
+            style={styles.remember}>
+            <View style={[styles.box, remember && styles.boxOn]}>
+              {remember ? <Icon name="check" size={13} color={Brand.surface} /> : null}
+            </View>
+            <View style={styles.rememberCopy}>
+              <Text style={styles.rememberLabel}>Remember me</Text>
+              <Text style={styles.rememberHint}>
+                Stay signed in on this phone. Leave it off on a shared handset.
+              </Text>
+            </View>
+          </Pressable>
 
           <Pressable
             accessibilityRole="button"
@@ -246,8 +277,32 @@ const styles = StyleSheet.create({
     backgroundColor: Brand.surface,
   },
 
+  remember: {
+    marginTop: Spacing.four,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.two + 2,
+    minHeight: Hit.min,
+    paddingVertical: Spacing.one,
+  },
+  box: {
+    width: 20,
+    height: 20,
+    marginTop: 1,
+    borderRadius: Radius.control - 3,
+    borderWidth: 1.5,
+    borderColor: Brand.line,
+    backgroundColor: Brand.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  boxOn: { backgroundColor: Brand.blue, borderColor: Brand.blue },
+  rememberCopy: { flex: 1, minWidth: 0 },
+  rememberLabel: { fontSize: 14, fontWeight: '600', color: Brand.ink },
+  rememberHint: { marginTop: 2, fontSize: 12, color: Brand.inkMuted },
+
   submit: {
-    marginTop: Spacing.five,
+    marginTop: Spacing.four,
     height: 48,
     borderRadius: Radius.control,
     backgroundColor: Brand.blue,

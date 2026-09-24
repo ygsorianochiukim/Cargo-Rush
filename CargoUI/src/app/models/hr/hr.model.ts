@@ -1,3 +1,4 @@
+import { PayBasis } from '../identity/access.model';
 import { StatusValue } from '../shared/status.model';
 import { Timestamped } from '../shared/envelope.model';
 
@@ -9,7 +10,7 @@ import { Timestamped } from '../shared/envelope.model';
  * replaces neither, which is why `driver_id` and `user_id` are nullable and
  * plenty of employees have neither.
  */
-export type EmploymentType = 'regular' | 'probationary' | 'contractual' | 'part_time';
+export type EmploymentType = 'trainee' | 'probationary' | 'regular' | 'contractual' | 'part_time';
 
 export interface Employee extends Timestamped {
   id: string;
@@ -24,9 +25,6 @@ export interface Employee extends Timestamped {
   position: string;
   /** Set when the title came from the managed list. */
   position_id: string | null;
-  /** The role this job normally gets, so the account form can pre-select it. */
-  suggested_role: string | null;
-  suggested_role_name: string | null;
   department: string | null;
   employment_type: EmploymentType;
   employment_type_label: string;
@@ -38,7 +36,73 @@ export interface Employee extends Timestamped {
   address: string | null;
   emergency_contact: string | null;
   emergency_phone: string | null;
-  base_salary_cents: number;
+  /**
+   * What this person is on **today**, read off the contract in force.
+   *
+   * Pay is a contract — its own record, with the day it starts on — rather than
+   * a column here, because a column is one figure that gets overwritten, and
+   * the record of what somebody was on before a rise was the rise destroying
+   * it. The whole history is at `employees/{id}/contracts`; these are the
+   * current figures, flattened on because almost every screen wants only those.
+   *
+   * Null and zero where nobody has written a contract yet. That is a real
+   * state — a record created before anybody said what it pays — and it keeps
+   * the person off pay runs rather than putting a ₱0.00 payslip on one.
+   *
+   * `amount_cents` means a month, a day or a haul, and `pay_basis` is which.
+   * `daily` multiplies it by the days the truck sheet names them on; `per_trip`
+   * by the hauls they delivered.
+   */
+  pay_basis: PayBasis | null;
+  pay_basis_label: string | null;
+  pay_basis_detail: string | null;
+  amount_cents: number;
+  /** `₱15,000 a month` — the figure and what it buys, composed by the API. */
+  pay_summary: string | null;
+  contract_id: string | null;
+  contract_effective_from: string | null;
+  has_contract: boolean;
+
+  /**
+   * Is this person's pay multiplied by work done in the period?
+   *
+   * True on a daily or per-trip basis, and then the basis is the whole
+   * instruction: they are on every run, and each cutoff counts what they
+   * actually did. Nothing else can veto it.
+   *
+   * A firm that hands drivers their trip money in cash against the truck sheet
+   * should leave them without a contract, which keeps them off a run.
+   */
+  paid_per_unit_worked: boolean;
+
+  /**
+   * Which agencies this person is registered with.
+   *
+   * All three true by default, which is what the system assumed before they
+   * existed. Off is for the cases a fleet actually has: somebody not yet
+   * registered, a casual hand taken on for the season, a person already
+   * contributing through another employer. Switching one off stops that
+   * contribution being withheld — it does not change what the agency is owed.
+   *
+   * There is deliberately no switch for withholding tax: whether somebody is
+   * taxed is not the firm's to choose, and the API answers it from the BIR's
+   * exemption threshold.
+   */
+  sss_enrolled: boolean;
+  philhealth_enrolled: boolean;
+  pagibig_enrolled: boolean;
+  /** True when any of the three is off — for flagging a roster at a glance. */
+  has_statutory_exemption: boolean;
+
+  /**
+   * The most one payslip may take off the store tab.
+   *
+   * Zero — the default — means the whole outstanding balance, which is what a
+   * mini-mart tab settled each cutoff actually does. A figure spreads a larger
+   * one over several payslips without anybody having to remember to stop.
+   */
+  store_deduction_cap_cents: number;
+
   /** Resolved on read, never stored — moving the install must not orphan it. */
   photo_url: string | null;
   /**

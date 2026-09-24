@@ -80,7 +80,7 @@ export class ApplicantsPage {
     position: ['', Validators.required],
     department: [''],
     employment_type: ['probationary'],
-    base_salary: [0],
+    amount: [0],
   });
 
   constructor() {
@@ -150,7 +150,7 @@ export class ApplicantsPage {
       position: applicant.position_applied,
       department: '',
       employment_type: 'probationary',
-      base_salary: 0,
+      amount: 0,
     });
   }
 
@@ -166,7 +166,7 @@ export class ApplicantsPage {
     this.busy.set(true);
     this.hireError.set(null);
 
-    const { hired_on, position, department, employment_type, base_salary } =
+    const { hired_on, position, department, employment_type, amount } =
       this.hireForm.getRawValue();
 
     this.applicantsApi
@@ -175,7 +175,9 @@ export class ApplicantsPage {
         position: String(position),
         department: department || null,
         employment_type: String(employment_type),
-        base_salary_cents: Math.round(Number(base_salary ?? 0) * 100),
+        // Zero means "take the job's rate card". A figure here is this
+        // person's own, and opens their contract on it instead.
+        amount_cents: Math.round(Number(amount ?? 0) * 100),
       })
       .subscribe({
         next: (employee) => {

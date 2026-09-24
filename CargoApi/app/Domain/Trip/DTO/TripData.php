@@ -37,6 +37,16 @@ final class TripData extends Data
         public readonly ?string $driver_id = null,
         public readonly ?string $helper_id = null,
         public readonly ?string $vehicle_id = null,
+        /** The kind of unit the job needs, as asked for at booking. */
+        public readonly ?string $truck_category_id = null,
+        /**
+         * The band this run is priced in, where the desk chose one.
+         *
+         * Only here because a subsidy table holds two bands over the same
+         * kilometres — A1 beside A2 at different money — and a distance cannot
+         * decide between them. Left out, the band is derived from the distance.
+         */
+        public readonly ?string $pricing_zone_id = null,
         public readonly ?StatusValue $status = null,
         public readonly ?string $pickup_place = null,
         public readonly ?string $dropoff_place = null,
@@ -66,6 +76,8 @@ final class TripData extends Data
             driver_id: $attributes['driver_id'] ?? null,
             helper_id: $attributes['helper_id'] ?? null,
             vehicle_id: $attributes['vehicle_id'] ?? null,
+            truck_category_id: $attributes['truck_category_id'] ?? null,
+            pricing_zone_id: $attributes['pricing_zone_id'] ?? null,
             status: isset($attributes['status']) ? StatusValue::from($attributes['status']) : null,
             pickup_place: $attributes['pickup_place'] ?? null,
             dropoff_place: $attributes['dropoff_place'] ?? null,
@@ -95,6 +107,8 @@ final class TripData extends Data
             'driver_id' => $this->driver_id,
             'helper_id' => $this->helper_id,
             'vehicle_id' => $this->vehicle_id,
+            'truck_category_id' => $this->truck_category_id,
+            'pricing_zone_id' => $this->pricing_zone_id,
             'status' => $this->status?->value,
             'pickup_place' => $this->pickup_place,
             'dropoff_place' => $this->dropoff_place,

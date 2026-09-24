@@ -51,11 +51,6 @@ class Role extends Model
         return $this->hasMany(User::class, 'role', 'key');
     }
 
-    public function positions(): HasMany
-    {
-        return $this->hasMany(Position::class, 'default_role_id');
-    }
-
     /**
      * The permission keys this role grants.
      *

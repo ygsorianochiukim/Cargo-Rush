@@ -132,6 +132,35 @@ export class IdentityService {
     );
   }
 
+  /** The signed-in person's name. Empty until `me` has loaded. */
+  readonly name = computed(() => this.meSignal()?.name ?? '');
+
+  /**
+   * Does this account hold a permission?
+   *
+   * The **same rule the server applies**, wildcard and all: an administrator's
+   * permission list is the single entry `['*']` rather than an expanded set, so
+   * a plain `includes()` would answer false for every permission they in fact
+   * hold. See `User::hasPermission()`, which this mirrors.
+   *
+   * Two things this is emphatically not for. It is not access control — that is
+   * the permission gate on each endpoint, and a client deciding what it may
+   * reach is a client that can be told otherwise. And it is not how the sidebar
+   * is built: navigation comes back already filtered, because a menu item a
+   * role has no permission for would be a link that 403s on click, which is the
+   * appearance of access without any.
+   *
+   * What it *is* for is offering the right one of two honest paths — a person
+   * who can change a setting is pointed at the setting; a person who cannot is
+   * offered the request. Both work whatever this returns; it only decides which
+   * is put in front of somebody first.
+   */
+  readonly can = (permission: string): boolean => {
+    const held = this.meSignal()?.permissions ?? [];
+
+    return held.includes('*') || held.includes(permission);
+  };
+
   /** The company whose system is on screen. Null until `me` has loaded. */
   readonly company = computed(() => this.meSignal()?.company_name ?? null);
 

@@ -29,7 +29,11 @@ use App\Domain\Identity\Models\Role;
 use App\Domain\Identity\Models\User;
 use App\Domain\Incident\Models\Incident;
 use App\Domain\Notification\Models\NotificationItem;
+use App\Domain\Payroll\Console\DemoPayrollCommand;
+use App\Domain\Payroll\Models\StoreCredit;
+use App\Domain\Pricing\Console\LoadSubsidyCardCommand;
 use App\Domain\Pricing\Models\PricingZone;
+use App\Domain\Pricing\Models\TruckCategory;
 use App\Domain\Tenancy\Models\Company;
 use App\Domain\Tenancy\Support\Tenant;
 use App\Domain\Trip\Console\ReconcileOverdueTripsCommand;
@@ -76,6 +80,16 @@ class DomainServiceProvider extends ServiceProvider
         'truck' => Truck::class,
         'expense' => Expense::class,
         'category' => ExpenseCategory::class,
+        /**
+         * Not `category`, which is taken.
+         *
+         * These bindings are global by parameter *name*, so two modules using
+         * `{category}` would both resolve to whichever model is listed here —
+         * and the second one 404s on every id, which reads as a missing record
+         * rather than as a wiring mistake. The route says `{truckCategory}` for
+         * that reason and not as a style preference.
+         */
+        'truckCategory' => TruckCategory::class,
         'user' => User::class,
         'zone' => PricingZone::class,
         'employee' => Employee::class,
@@ -86,6 +100,9 @@ class DomainServiceProvider extends ServiceProvider
         'position' => Position::class,
         'company' => Company::class,
         'payment' => Payment::class,
+        // Not `credit`, for the reason `truckCategory` is not `category`:
+        // these bind by parameter *name* across every module at once.
+        'storeCredit' => StoreCredit::class,
     ];
 
     public function register(): void
@@ -120,6 +137,12 @@ class DomainServiceProvider extends ServiceProvider
                 // A one-off repair rather than a sweep: nothing schedules it.
                 RequoteInvoicesCommand::class,
                 QuoteUnpricedTripsCommand::class,
+                // A published rate table, loaded into one named company on
+                // purpose. Never scheduled, and never across every company:
+                // prices are one haulier's business with its principal.
+                LoadSubsidyCardCommand::class,
+                // Demo data, run on purpose and never as part of a deploy.
+                DemoPayrollCommand::class,
             ]);
         }
 

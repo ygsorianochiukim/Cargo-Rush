@@ -1,8 +1,16 @@
+<!--
+  The distance card first, because it is the card a firm with no published
+  table works from: what a run costs by how far it goes, in lines that belong
+  to no band. The bands below are the rate table itself, and the card above is
+  also what prices a run past the last of them.
+-->
+<app-distance-card class="mb-4 block" />
+
 <app-list-toolbar
   [count]="zones()?.length ?? null"
-  singular="zone"
-  plural="zones"
-  actionLabel="Add zone"
+  singular="band"
+  plural="bands"
+  actionLabel="Add band"
   (add)="startNew()"
 />
 
@@ -56,12 +64,15 @@
       >
         {{ adjustmentPct() }}
       </p>
-      <p class="cr-meta mt-1">Applied to every zone quote</p>
+      <p class="cr-meta mt-1">On bands priced as a share of the fare</p>
 
       <dl class="mt-4 space-y-1.5 text-[13px]">
         <div class="flex justify-between">
-          <dt class="text-cr-ink-muted">Cards drawn at</dt>
-          <dd class="cr-num">{{ fmt.money(d.baseline_cents, d.currency) }}/L</dd>
+          <dt class="text-cr-ink-muted">Cards cover up to</dt>
+          <dd class="cr-num">
+            {{ fmt.money(d.band_floor_cents, d.currency) }} –
+            {{ fmt.money(d.baseline_cents, d.currency) }}/L
+          </dd>
         </div>
         <div class="flex justify-between">
           <dt class="text-cr-ink-muted">Fuel share of a run</dt>
@@ -72,6 +83,11 @@
           <dd class="cr-num">±{{ (d.cap_bp / 100).toFixed(0) }}%</dd>
         </div>
       </dl>
+
+      <p class="mt-3 text-[12px] text-cr-ink-muted">
+        A band with a diesel step of its own ignores the share and the cap — it adds its own pesos
+        per ₱1/L above {{ fmt.money(d.baseline_cents, d.currency) }}.
+      </p>
 
       @if (d.capped) {
         <p class="mt-3 rounded-control bg-cr-red-bg px-3 py-2 text-[12px] font-medium text-cr-red">
@@ -85,16 +101,8 @@
 
   <app-card heading="What would this cost?" icon="tag">
     <form [formGroup]="previewForm" class="space-y-3">
-      <app-field label="Destination" hint="A town or an address.">
-        <input
-          type="text"
-          formControlName="destination"
-          placeholder="Bajada, Davao City"
-          [class]="inputClass"
-        />
-      </app-field>
       <div class="grid grid-cols-2 gap-3">
-        <app-field label="Distance (km)">
+        <app-field label="Distance (km)" hint="The band follows from this.">
           <input
             type="number"
             min="0"
@@ -111,6 +119,14 @@
           />
         </app-field>
       </div>
+      <app-field label="Class of truck" hint="Blank takes the band's fleet rate.">
+        <select formControlName="truck_category_id" [class]="inputClass">
+          <option value="">Current fleet</option>
+          @for (category of categories(); track category.id) {
+            <option [value]="category.id">{{ category.name }}</option>
+          }
+        </select>
+      </app-field>
       <button
         type="button"
         class="h-10 w-full rounded-control border border-cr-blue text-[14px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
@@ -127,9 +143,11 @@
         </p>
         <p class="cr-meta mt-1">
           @if (q.source === 'zone') {
-            {{ q.zone?.name }} · {{ q.bracket?.range }}
+            Zone {{ q.zone?.code }} · {{ q.zone?.band }} · {{ q.bracket?.label }}
+          } @else if (q.source === 'card') {
+            Distance card · {{ q.bracket?.range }}
           } @else {
-            Standard tariff — no zone claims this place
+            Standard tariff — no band covers {{ fmt.km(q.km) }}
           }
         </p>
 
@@ -138,9 +156,16 @@
             <dt class="text-cr-ink-muted">Card price</dt>
             <dd class="cr-num">{{ fmt.money(q.card_cents, q.currency) }}</dd>
           </div>
-          @if (q.fuel_adjustment_bp !== 0) {
+          @if (q.fuel_adjustment_cents !== 0) {
             <div class="flex justify-between">
-              <dt class="text-cr-ink-muted">Diesel adjustment</dt>
+              <dt class="text-cr-ink-muted">
+                @if (q.fuel_rule === 'step') {
+                  Diesel · {{ q.diesel.pesos_above_baseline }} ×
+                  {{ fmt.money(q.diesel.step_cents, q.currency) }}
+                } @else {
+                  Diesel adjustment
+                }
+              </dt>
               <dd class="cr-num" [class.text-cr-warning]="q.fuel_adjustment_cents > 0">
                 {{ q.fuel_adjustment_cents > 0 ? '+' : ''
                 }}{{ fmt.money(q.fuel_adjustment_cents, q.currency) }}
@@ -152,23 +177,56 @@
             <dd class="cr-num">{{ fmt.km(q.km) }}</dd>
           </div>
         </dl>
+
+        <!--
+          The bands that also cover this distance. A table holds A1 beside A2
+          over the same kilometres at different money, and nothing about the
+          distance chooses between them — so the screen has to offer, or half
+          the card is unreachable from the only place it gets checked.
+        -->
+        @if (q.zone_alternatives.length > 0) {
+          <div class="mt-3 border-t border-cr-line pt-3">
+            <p class="cr-meta">Also covers {{ fmt.km(q.km) }}</p>
+            <div class="mt-2 flex flex-wrap gap-2">
+              @for (other of q.zone_alternatives; track other.id) {
+                <button
+                  type="button"
+                  class="h-8 rounded-control border border-cr-line px-3 text-[13px] font-semibold transition-colors hover:border-cr-blue hover:text-cr-blue"
+                  (click)="previewIn(other.id)"
+                >
+                  Price as {{ other.code }}
+                </button>
+              }
+            </div>
+          </div>
+        }
+
+        @if (previewZoneId() !== null) {
+          <button
+            type="button"
+            class="mt-2 text-[12px] font-semibold text-cr-blue hover:underline"
+            (click)="previewUnpinned()"
+          >
+            Let the distance choose the band
+          </button>
+        }
       </div>
     }
   </app-card>
 </div>
 
 <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
-  <!-- The zones themselves -->
-  <app-card heading="Zones" icon="map-pin" [padded]="false">
+  <!-- The bands themselves -->
+  <app-card heading="Bands" icon="map-pin" [padded]="false">
     @if (loadError(); as message) {
       <app-error-state [message]="message" (retry)="refresh()" />
     } @else if (zones(); as list) {
       @if (list.length === 0 && !creating()) {
         <div class="px-4 py-10 text-center">
           <app-icon name="map-pin" [size]="28" class="text-cr-ink-muted" />
-          <h3 class="mt-2 text-[15px] font-semibold">No zones yet</h3>
+          <h3 class="mt-2 text-[15px] font-semibold">No bands yet</h3>
           <p class="mt-1 text-[13px] text-cr-ink-muted">
-            Bookings fall back to the standard tariff.
+            Bookings are priced off the distance card, or the standard tariff.
           </p>
         </div>
       } @else {
@@ -182,9 +240,11 @@
                 (click)="select(zone)"
               >
                 <span class="min-w-0 flex-1">
-                  <span class="block truncate text-[14px] font-semibold">{{ zone.name }}</span>
-                  <span class="block text-[12px] text-cr-ink-muted">
-                    {{ zone.bracket_count }} {{ zone.bracket_count === 1 ? 'bracket' : 'brackets' }}
+                  <span class="block truncate text-[14px] font-semibold">
+                    {{ zone.code }} · {{ zone.band }}
+                  </span>
+                  <span class="block truncate text-[12px] text-cr-ink-muted">
+                    {{ zone.bracket_count }} {{ zone.bracket_count === 1 ? 'rate' : 'rates' }}
                   </span>
                 </span>
                 <app-status-pill [status]="zone.status" />
@@ -198,12 +258,14 @@
     }
   </app-card>
 
-  <!-- The card for whichever zone is open -->
+  <!-- The rates for whichever band is open -->
   @if (selected() || creating()) {
     <app-card
-      [heading]="creating() ? 'New zone' : (selected()?.name ?? '')"
+      [heading]="
+        creating() ? 'New band' : (selected()?.code ?? '') + ' — ' + (selected()?.name ?? '')
+      "
       icon="tag"
-      hint="Within this distance, this is the price"
+      hint="A range of kilometres, and the money for each class of truck"
     >
       <div card-actions class="ml-auto flex items-center gap-2">
         @if (selected(); as zone) {
@@ -218,7 +280,7 @@
         <button
           type="button"
           class="h-9 rounded-control bg-cr-blue px-4 text-[13px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
-          [disabled]="saving()"
+          [disabled]="saving() || blocked()"
           (click)="save()"
         >
           {{ saving() ? 'Saving…' : 'Save card' }}
@@ -234,25 +296,69 @@
         </p>
       }
 
+      <!--
+        A duplicate, said before the save rather than after it. The API refuses
+        one too — that is what actually guarantees it — but a refusal arriving
+        after somebody has typed a band's worth of rates costs them the typing.
+      -->
+      @if (blocked()) {
+        <p
+          role="alert"
+          class="mb-4 rounded-control bg-cr-red-bg px-3 py-2 text-[13px] font-medium text-cr-red"
+        >
+          {{ blockedReason() }}
+          @if (duplicate(); as clash) {
+            <button type="button" class="ml-1 font-semibold underline" (click)="select(clash.zone)">
+              Open {{ clash.zone.code }}
+            </button>
+          }
+        </p>
+      }
+
+      <!--
+        Overlapping bands are a warning and never a refusal: A1 and A2 are both
+        1–40 km at different money, and so are E1 and E2. But a second band over
+        the same kilometres is far more often a row typed twice, and it is
+        invisible once saved — the list is ordered by band, so two entries for
+        0–40 km look like they belong together.
+      -->
+      @if (!blocked() && overlapping().length > 0) {
+        <p class="mb-4 rounded-control bg-cr-warning-bg px-3 py-2 text-[13px] text-cr-ink">
+          <span class="font-semibold">Already covered.</span>
+          These kilometres are also priced by
+          @for (other of overlapping(); track other.id; let last = $last) {
+            <button type="button" class="font-semibold underline" (click)="select(other)">
+              {{ other.code }}
+            </button>
+            <span>{{ last ? '' : ', ' }}</span>
+          }
+          — which is right for a table that holds A1 beside A2, and a duplicate otherwise.
+        </p>
+      }
+
       <form [formGroup]="form" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <app-field label="Zone name" required>
-          <input type="text" formControlName="name" placeholder="Davao City" [class]="inputClass" />
+        <app-field label="Zone code" required hint="The cell of the table — A1, E2, O.">
+          <input type="text" formControlName="code" placeholder="A1" [class]="inputClass" />
         </app-field>
 
-        <app-field label="Code" required hint="An id — letters, numbers and dashes.">
-          <input type="text" formControlName="code" placeholder="davao-city" [class]="inputClass" />
+        <app-field label="Name" required>
+          <input type="text" formControlName="name" placeholder="Zone A1" [class]="inputClass" />
+        </app-field>
+
+        <app-field label="From (km)" required hint="Inclusive.">
+          <input type="number" min="0" formControlName="min_km" [class]="inputClass + ' cr-num'" />
         </app-field>
 
         <app-field
-          label="Also known as"
-          class="sm:col-span-2"
-          hint="Comma separated. Spellings the desk actually types."
+          label="To (km)"
+          hint="Inclusive, as the table prints it. Blank is the open-ended top band."
         >
           <input
-            type="text"
-            formControlName="aliases"
-            placeholder="Davao, DVO, Bajada"
-            [class]="inputClass"
+            type="number"
+            min="1"
+            placeholder="∞"
+            formControlName="max_km"
+            [class]="inputClass + ' cr-num'"
           />
         </app-field>
 
@@ -263,7 +369,10 @@
           </select>
         </app-field>
 
-        <app-field label="Diesel baseline (₱/L)" hint="Blank uses the install-wide figure.">
+        <app-field
+          label="Diesel baseline (₱/L)"
+          hint="The top of the band these prices already cover. Blank uses the install-wide figure."
+        >
           <input
             type="number"
             step="0.01"
@@ -281,14 +390,14 @@
       <!-- The card itself -->
       <div class="mt-6">
         <div class="mb-2 flex items-center justify-between">
-          <h3 class="text-[14px] font-semibold">Distance brackets</h3>
+          <h3 class="text-[14px] font-semibold">Rates in this band</h3>
           <button
             type="button"
             class="flex h-9 items-center gap-1.5 rounded-control border border-cr-blue px-3 text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
             (click)="addBracket()"
           >
             <app-icon name="plus" [size]="14" />
-            Add bracket
+            Add rate
           </button>
         </div>
 
@@ -299,10 +408,10 @@
           >
             <thead>
               <tr class="border-b border-cr-line">
-                <th class="cr-th px-2 py-2.5">Bracket</th>
-                <th class="cr-th px-2 py-2.5 text-right">From (km)</th>
-                <th class="cr-th px-2 py-2.5 text-right">To (km)</th>
+                <th class="cr-th px-2 py-2.5">Rate</th>
+                <th class="cr-th px-2 py-2.5">Class of truck</th>
                 <th class="cr-th px-2 py-2.5 text-right">Base (₱)</th>
+                <th class="cr-th px-2 py-2.5 text-right">Per ₱1/L diesel</th>
                 <th class="cr-th px-2 py-2.5 text-right">Per km (₱)</th>
                 <th class="cr-th px-2 py-2.5 text-right">Per kg (₱)</th>
                 <th class="cr-th px-2 py-2.5 text-right">Minimum (₱)</th>
@@ -317,22 +426,29 @@
                       <input type="text" formControlName="label" [class]="inputClass" />
                     </td>
                     <td class="px-2 py-2">
-                      <input
-                        type="number"
-                        min="0"
-                        formControlName="min_km"
-                        [class]="inputClass + ' cr-num text-right'"
-                      />
-                    </td>
-                    <td class="px-2 py-2">
-                      <!-- Blank is the open-ended top bracket: "80 km and beyond". -->
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="∞"
-                        formControlName="max_km"
-                        [class]="inputClass + ' cr-num text-right'"
-                      />
+                      <!-- Blank is the fleet as it stands: the table's own
+                           `Current Price` column, and what a booking that asks
+                           for nothing in particular is charged. -->
+                      <!--
+                        A class already priced on another row is offered
+                        disabled rather than hidden, so a row that holds one
+                        still shows what it holds. The API refuses a band that
+                        prices the same class twice; this is what stops
+                        somebody reaching that refusal.
+                      -->
+                      <select formControlName="truck_category_id" [class]="inputClass">
+                        <option value="" [disabled]="classTakenElsewhere($index, '')">
+                          Current fleet
+                        </option>
+                        @for (category of categories(); track category.id) {
+                          <option
+                            [value]="category.id"
+                            [disabled]="classTakenElsewhere($index, category.id)"
+                          >
+                            {{ category.name }}
+                          </option>
+                        }
+                      </select>
                     </td>
                     <td class="px-2 py-2">
                       <input
@@ -340,6 +456,17 @@
                         step="0.01"
                         min="0"
                         formControlName="base"
+                        [class]="inputClass + ' cr-num text-right'"
+                      />
+                    </td>
+                    <td class="px-2 py-2">
+                      <!-- The rightmost column of a printed subsidy table.
+                           Zero leaves this rate on the percentage model. -->
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        formControlName="diesel_step"
                         [class]="inputClass + ' cr-num text-right'"
                       />
                     </td>
@@ -373,7 +500,7 @@
                     <td class="px-2 py-2 text-right">
                       <button
                         type="button"
-                        aria-label="Remove bracket"
+                        aria-label="Remove rate"
                         class="rounded-control p-2 text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
                         (click)="removeBracket($index)"
                       >
@@ -391,11 +518,12 @@
           <p
             class="mt-3 rounded-control bg-cr-red-bg px-3 py-2 text-[13px] font-medium text-cr-red"
           >
-            No brackets — bookings here fall back to the standard tariff.
+            No rates — runs in this band fall back to the distance card or the standard tariff.
           </p>
         } @else {
           <p class="mt-3 text-[12px] text-cr-ink-muted">
-            Leave the last “To” blank for the open-ended bracket.
+            The band above sets the kilometres; these set the money. One rate per class of truck —
+            leave the class blank for the fleet as it stands.
           </p>
         }
       </div>
@@ -404,9 +532,9 @@
     <app-card>
       <div class="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center">
         <app-icon name="tag" [size]="32" class="text-cr-ink-muted" />
-        <h3 class="mt-1 text-[16px] font-semibold">Pick a zone to edit its card</h3>
+        <h3 class="mt-1 text-[16px] font-semibold">Pick a band to edit its rates</h3>
         <p class="max-w-sm text-[14px] text-cr-ink-muted">
-          Brackets set what a run costs at each distance.
+          A band is a range of kilometres — A1 is 1–40 km — with a rate for each class of truck.
         </p>
       </div>
     </app-card>

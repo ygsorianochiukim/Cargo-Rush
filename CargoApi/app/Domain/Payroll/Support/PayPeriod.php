@@ -7,37 +7,32 @@ namespace App\Domain\Payroll\Support;
 use Illuminate\Support\Carbon;
 
 /**
- * A pay period: the 1st to the 15th, or the 16th to the end of the month.
+ * One pay period: a stretch of days ending on a cutoff.
  *
- * Payroll is **cut off on the 1st and the 16th**, which is the Philippine
- * semi-monthly norm, so a period is not an arbitrary range somebody types. It
- * is one of two per month, and this class is the only place that knows which
- * two — the validator asks it, the endpoint that offers the choice is built
- * from it, and the client renders whatever it is handed rather than doing
- * calendar arithmetic of its own.
+ * A value object and nothing more. It knows the two dates it spans, which of
+ * the month's periods it is, and how many there are — it does **not** know how
+ * a firm's calendar is shaped, which month contains which period, or what to do
+ * with a range somebody typed. All of that is `PayrollCalendar`, and the split
+ * is the point: the calendar differs per company, and a period handed around
+ * afterwards must not be able to disagree with the one that made it.
  *
- * ## Why the shape is enforced rather than merely defaulted
+ * ## Why a period is not an arbitrary range
  *
  * Statutory contributions are monthly figures split across the month's runs
  * (see `StatutoryDeductions`), and the withholding table is the BIR's
- * **semi-monthly** one. Both are only correct if a run really is half a month.
- * A run covering the 3rd to the 20th would take half a month's SSS off
- * eighteen days of pay and tax it on a table built for fifteen — wrong twice,
- * and wrong invisibly.
+ * **semi-monthly** one. Both are only correct if a run really is one of the
+ * firm's periods. A run covering the 3rd to the 20th under a 1st/16th calendar
+ * would take half a month's SSS off eighteen days of pay and tax it on a table
+ * built for fifteen — wrong twice, and wrong invisibly. So a run is opened on a
+ * period the calendar produced, never on two dates a form collected.
  *
  * ## What it costs
  *
- * A period that is not a half-month cannot be opened at all: no 13th-month
+ * A period that is not one of the firm's cannot be opened at all: no 13th-month
  * run, no final-pay run for somebody leaving mid-period, no one-off. Those are
  * real things an office eventually needs, and the way to do them here is an
  * adjustment on the next run's payslip, or a journal entry. That is a
  * deliberate trade for figures that are right by construction.
- *
- * ## Monthly payrolls
- *
- * `cargo.payroll.runs_per_month` already decides how a monthly contribution is
- * split. Set it to 1 and the only legal period becomes the whole month, so the
- * rule here and the arithmetic there cannot disagree.
  */
 final class PayPeriod
 {
@@ -47,131 +42,70 @@ final class PayPeriod
 
     public const WHOLE_MONTH = 'month';
 
+    /**
+     * @param  int  $index  Which of the month's periods this is, from zero, in
+     *                      cutoff order.
+     * @param  int  $count  How many periods the firm's month has. Together
+     *                      these are what `DeductionSchedule` needs: *which*
+     *                      payslip, and whether there is another one.
+     */
     private function __construct(
         public readonly Carbon $start,
         public readonly Carbon $end,
-        public readonly string $half,
+        public readonly int $index,
+        public readonly int $count,
     ) {}
 
-    /** The 1st to the 15th. */
-    public static function firstHalf(int $year, int $month): self
-    {
-        $start = Carbon::createFromDate($year, $month, 1)->startOfDay();
-
-        return new self($start, $start->copy()->day(15), self::FIRST_HALF);
-    }
-
     /**
-     * The 16th to the last day of the month.
+     * A period between two dates. `PayrollCalendar` is the only caller.
      *
-     * Fourteen days in a non-leap February and sixteen in July, which is why
-     * the end is read off the calendar rather than written as a number.
+     * Public because the calendar lives beside it rather than inside it, and
+     * deliberately not something a controller reaches for: a period built from
+     * dates a client sent would be exactly the arbitrary range the class note
+     * explains this system does not have.
      */
-    public static function secondHalf(int $year, int $month): self
+    public static function between(Carbon $start, Carbon $end, int $index, int $count): self
     {
-        $start = Carbon::createFromDate($year, $month, 16)->startOfDay();
-
-        return new self($start, $start->copy()->endOfMonth()->startOfDay(), self::SECOND_HALF);
+        return new self($start->copy()->startOfDay(), $end->copy()->startOfDay(), $index, max(1, $count));
     }
 
-    /** The whole month — the only legal period where payroll runs once. */
-    public static function wholeMonth(int $year, int $month): self
+    /** Is this the month's first payslip? */
+    public function isFirst(): bool
     {
-        $start = Carbon::createFromDate($year, $month, 1)->startOfDay();
+        return $this->index === 0;
+    }
 
-        return new self($start, $start->copy()->endOfMonth()->startOfDay(), self::WHOLE_MONTH);
+    /** Is this the month's only payslip — a firm that pays monthly? */
+    public function isOnly(): bool
+    {
+        return $this->count === 1;
     }
 
     /**
-     * Every legal period in one month, in the order they are worked.
+     * `first`, `second` or `month`.
      *
-     * @return array<int, self>
+     * The wire vocabulary the clients already speak, kept as it was when the
+     * calendar was fixed at the 1st and the 16th. It stays a *position* in the
+     * month rather than a pair of dates, which is why a firm moving its cutoffs
+     * to the 10th and the 25th changes what the two periods are without
+     * changing what either client has to understand.
      */
-    public static function inMonth(int $year, int $month): array
+    public function half(): string
     {
-        return self::runsPerMonth() === 1
-            ? [self::wholeMonth($year, $month)]
-            : [self::firstHalf($year, $month), self::secondHalf($year, $month)];
+        return match (true) {
+            $this->isOnly() => self::WHOLE_MONTH,
+            $this->isFirst() => self::FIRST_HALF,
+            default => self::SECOND_HALF,
+        };
     }
 
     /**
-     * The legal period these two dates are, or null if they are not one.
+     * The day the period closes and payroll is run: the day after the last day
+     * worked, which is what a cutoff is.
      *
-     * The month is taken from the start date, so a range that crosses a month
-     * boundary matches nothing — which is the answer, since a period never
-     * does.
-     */
-    public static function matching(Carbon $start, Carbon $end): ?self
-    {
-        foreach (self::inMonth((int) $start->year, (int) $start->month) as $period) {
-            if ($period->start->isSameDay($start) && $period->end->isSameDay($end)) {
-                return $period;
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * The period that has just closed — the one an office opens payroll for.
-     *
-     * On the 16th or later, the first half of this month is done. Before that,
-     * the run waiting to be paid is the back half of last month. Which is to
-     * say: whatever the last cutoff to have passed was.
-     */
-    public static function justClosed(?Carbon $now = null): self
-    {
-        $now ??= Carbon::now();
-
-        if (self::runsPerMonth() === 1) {
-            $previous = $now->copy()->subMonthNoOverflow();
-
-            return self::wholeMonth((int) $previous->year, (int) $previous->month);
-        }
-
-        if ((int) $now->day >= 16) {
-            return self::firstHalf((int) $now->year, (int) $now->month);
-        }
-
-        $previous = $now->copy()->subMonthNoOverflow();
-
-        return self::secondHalf((int) $previous->year, (int) $previous->month);
-    }
-
-    /**
-     * Which cutoff a run's dates are, for splitting a monthly figure.
-     *
-     * `first` decides which half of the salary and which share of the
-     * contributions this payslip carries; `only` says there is no second
-     * payslip for the rest to land on, which is the monthly-payroll case.
-     *
-     * A run whose dates are not a recognised period — one opened before the
-     * cutoff rule existed — is classified by its start day rather than
-     * refused. This is arithmetic on a run that already exists, and the honest
-     * answer for a period starting on the 3rd is "the first half of the month".
-     *
-     * @return array{first: bool, only: bool}
-     */
-    public static function classify(Carbon $start, Carbon $end): array
-    {
-        $period = self::matching($start, $end);
-
-        if ($period !== null) {
-            return [
-                'first' => $period->half !== self::SECOND_HALF,
-                'only' => $period->half === self::WHOLE_MONTH,
-            ];
-        }
-
-        return ['first' => (int) $start->day <= 15, 'only' => self::runsPerMonth() === 1];
-    }
-
-    /**
-     * The day the period closes and payroll is run: the 16th, or the 1st.
-     *
-     * The day after the last day worked, which is what a cutoff is. Offered as
-     * the default pay date and no more than that — when the money actually
-     * leaves the bank is the office's decision, and plenty pay on the 20th.
+     * Offered as the default pay date and no more than that — when the money
+     * actually leaves the bank is the office's decision, and plenty pay on the
+     * 20th.
      */
     public function cutoff(): Carbon
     {
@@ -184,16 +118,18 @@ final class PayPeriod
         return (int) $this->start->diffInDays($this->end) + 1;
     }
 
-    /** `1–15 Sep 2026` — the same shape as `PayRun::periodLabel()`. */
+    /** `1–15 Sep 2026`, or `26 Aug–10 Sep 2026` where the period crosses. */
     public function label(): string
     {
-        return $this->start->format('j').'–'.$this->end->format('j M Y');
+        return self::formatRange($this->start, $this->end);
     }
 
     /** `1–15` — for a two-button choice where the month is already on screen. */
     public function short(): string
     {
-        return $this->start->format('j').'–'.$this->end->format('j');
+        return $this->start->isSameMonth($this->end)
+            ? $this->start->format('j').'–'.$this->end->format('j')
+            : $this->start->format('j M').'–'.$this->end->format('j');
     }
 
     public function matches(self $other): bool
@@ -202,34 +138,27 @@ final class PayPeriod
     }
 
     /**
-     * Why a range was refused, naming the periods it should have been.
+     * How a period reads on a list.
      *
-     * The message does the teaching, because the reader is somebody who typed
-     * a sensible-looking fortnight and got a 422: it has to say what the rule
-     * is and what the two right answers are for the month they were aiming at.
+     * Static, and shared with `PayRun::periodLabel()`, because a run's stored
+     * dates have to read the same way as the period they were opened on — two
+     * copies of this format is two chances for a register heading to disagree
+     * with the button that produced it.
+     *
+     * Three shapes, narrowest first: `1–15 Sep 2026` inside one month,
+     * `26 Aug–10 Sep 2026` across two, and `26 Dec 2025–10 Jan 2026` across a
+     * new year, where dropping the first year would be a lie rather than a
+     * tidy-up.
      */
-    public static function explainFor(Carbon $start): string
+    public static function formatRange(Carbon $start, Carbon $end): string
     {
-        $periods = self::inMonth((int) $start->year, (int) $start->month);
-
-        if (self::runsPerMonth() === 1) {
-            return sprintf(
-                'Payroll runs once a month here, so a pay period is the whole month — %s. Choose that.',
-                $periods[0]->label(),
-            );
+        if ($start->isSameMonth($end)) {
+            return $start->format('j').'–'.$end->format('j M Y');
         }
 
-        return sprintf(
-            'Payroll is cut off on the 1st and the 16th, so a pay period runs %s or %s. Choose one of those.',
-            $periods[0]->label(),
-            $periods[1]->label(),
-        );
-    }
-
-    /** How many runs a month, from configuration. See the class note. */
-    public static function runsPerMonth(): int
-    {
-        return max(1, (int) config('cargo.payroll.runs_per_month', 2));
+        return $start->isSameYear($end)
+            ? $start->format('j M').'–'.$end->format('j M Y')
+            : $start->format('j M Y').'–'.$end->format('j M Y');
     }
 
     /**
@@ -238,12 +167,13 @@ final class PayPeriod
     public function toArray(): array
     {
         return [
-            'half' => $this->half,
+            'half' => $this->half(),
+            'index' => $this->index,
             'start' => $this->start->toDateString(),
             'end' => $this->end->toDateString(),
             'label' => $this->label(),
             'short' => $this->short(),
-            /** The day the period closes: the 16th, or the 1st of next month. */
+            /** The day the period closes, which is the day after it ends. */
             'cutoff' => $this->cutoff()->toDateString(),
             'days' => $this->days(),
         ];

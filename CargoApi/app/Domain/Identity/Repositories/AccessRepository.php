@@ -71,7 +71,6 @@ class AccessRepository
     public function positions(bool $activeOnly = false): Collection
     {
         return Position::query()
-            ->with('defaultRole:id,key,name')
             ->withCount('employees')
             ->when($activeOnly, fn ($query) => $query->active())
             ->orderBy('position')

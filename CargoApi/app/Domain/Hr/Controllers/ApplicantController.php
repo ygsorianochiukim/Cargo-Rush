@@ -103,11 +103,12 @@ class ApplicantController extends ApiController
             'hired_on' => ['sometimes', 'date'],
             'position' => ['sometimes', 'string', 'max:60'],
             // The managed job title, which is what decides whether the licence
-            // below is wanted — see `Position::drives()`.
+            // below is wanted — see `positions.drives`.
             'position_id' => ['nullable', 'string', 'exists:positions,id'],
             'department' => ['nullable', 'string', 'max:60'],
             'employment_type' => ['sometimes', 'string'],
-            'base_salary_cents' => ['sometimes', 'integer', 'min:0'],
+            'pay_basis' => ['sometimes', 'string'],
+            'amount_cents' => ['sometimes', 'integer', 'min:0'],
             /**
              * The licence, where the applicant is being hired to drive.
              *

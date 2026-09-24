@@ -105,6 +105,12 @@ describe('local aggregation', () => {
     trip_reference: null,
     customer_id: null,
     customer: null,
+    // And no crew either, for the same reason: the two salary columns are
+    // figures copied off the workbook, not a reference to an employee.
+    driver_id: e.driver_id ?? null,
+    driver_name: null,
+    helper_id: e.helper_id ?? null,
+    helper_name: null,
   }));
 
   it('sums a set of rows the same way the API does', () => {

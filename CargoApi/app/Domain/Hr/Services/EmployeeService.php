@@ -7,13 +7,17 @@ namespace App\Domain\Hr\Services;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Hr\DTO\EmployeeData;
 use App\Domain\Hr\DTO\LicenceData;
+use App\Domain\Hr\Models\Contract;
 use App\Domain\Hr\Models\Employee;
 use App\Domain\Hr\Repositories\EmployeeRepository;
 use App\Domain\Identity\Models\Position;
+use App\Domain\Shared\Enums\EmploymentType;
+use App\Domain\Shared\Enums\PayBasis;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Repositories\Repository;
 use App\Domain\Shared\Services\CrudService;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
 
 /**
  * The roster.
@@ -32,6 +36,7 @@ class EmployeeService extends CrudService
     public function __construct(
         private readonly EmployeeRepository $employees,
         private readonly PhotoStore $photos,
+        private readonly ContractService $contracts,
     ) {}
 
     protected function repository(): Repository
@@ -58,6 +63,9 @@ class EmployeeService extends CrudService
         $attributes = $this->withPositionLabel($attributes);
 
         $employee = Employee::create($attributes)->refresh();
+
+        // After the row exists, because a contract points at it.
+        $this->openingContract($employee, $data);
 
         $this->linkDriverRecord($employee, $licence);
 
@@ -92,6 +100,74 @@ class EmployeeService extends CrudService
     }
 
     /**
+     * Put somebody on a figure, from what the office typed or what the job pays.
+     *
+     * Three sources, in a fixed order, and the order is the whole rule: what
+     * the office typed, then the agreement already in force, then the job's
+     * rate card. A figure somebody typed is a figure somebody agreed; what they
+     * are already on beats what the job offers a new hire; and the rate card is
+     * the default for when nobody has said anything at all.
+     *
+     * Whatever they answer between them, this writes one contract row or none.
+     *
+     * None is a real outcome and not a failure: a job nobody has priced, hired
+     * into without a stated figure, leaves the person with no contract. They
+     * stay off pay runs until the office writes one, which is the safe
+     * direction — a ₱0.00 payslip looks exactly like a real one afterwards.
+     */
+    private function openingContract(Employee $employee, EmployeeData $data, Carbon|string|null $from = null): ?Contract
+    {
+        $on = $from ?? $employee->hired_on;
+        $type = $employee->employment_type ?? EmploymentType::Regular;
+
+        $position = $employee->position_id === null
+            ? null
+            : Position::find($employee->position_id);
+
+        $terms = $data->contractTerms();
+
+        // Nothing stated: the job's rate card is the whole answer.
+        if ($terms === null) {
+            return $position === null
+                ? null
+                : $this->contracts->openFromPosition($employee, $position, $on);
+        }
+
+        $current = $employee->contractOn();
+
+        // Whichever half the caller left out, filled from the agreement already
+        // in force and then from the job — in that order, because the figure
+        // this person is on beats the figure the job offers a new hire.
+        $basis = $terms['pay_basis']
+            ?? $current?->pay_basis
+            ?? $position?->pay_basis
+            ?? PayBasis::Monthly;
+
+        $amount = $terms['amount_cents']
+            ?? $current?->amount_cents
+            ?? $position?->amountFor($type);
+
+        // A stated zero is a real instruction and not an omission: somebody
+        // hired on nothing is somebody the office has not agreed a figure with
+        // yet. No contract, which keeps them off pay runs — rather than a
+        // ₱0.00 contract, which looks exactly like a real one afterwards.
+        if ((int) $amount <= 0) {
+            return null;
+        }
+
+        return $this->contracts->open(
+            $employee,
+            $basis,
+            (int) $amount,
+            // A stated date wins: a rise dated forward waits, and a correction
+            // dated back reaches the run somebody is checking.
+            $terms['effective_from'] ?? $on,
+            'Agreed with the office.',
+            $type,
+        );
+    }
+
+    /**
      * Edit a record, replacing the photograph only when a new one arrived.
      *
      * Absent means "not part of this edit", which is the same rule the DTOs
@@ -110,7 +186,31 @@ class EmployeeService extends CrudService
             $attributes['photo_path'] = $this->photos->replace($employee->photo_path, $photo, 'employees');
         }
 
-        $employee->update($this->withPositionLabel($attributes));
+        /**
+         * Moving somebody into a different job puts them on that job's rate
+         * card — but only when the edit did not name a figure of its own.
+         *
+         * A promotion is exactly the moment to re-apply the structure, and
+         * doing it on every edit would undo a negotiated salary the next time
+         * anybody corrected a phone number. So it fires on a **change of
+         * position**, or on an edit that states pay outright, and on nothing
+         * else.
+         *
+         * Either way it writes a **new contract** dated today rather than
+         * editing the one in force. The old row stays exactly as it was, which
+         * is what keeps a pay run rebuilt for last fortnight paying last
+         * fortnight's figure.
+         */
+        $positionChanged = array_key_exists('position_id', $attributes)
+            && $attributes['position_id'] !== $employee->position_id;
+
+        $attributes = $this->withPositionLabel($attributes);
+
+        $employee->update($attributes);
+
+        if ($data->contractTerms() !== null || $positionChanged) {
+            $this->openingContract($employee->refresh(), $data, Carbon::now());
+        }
 
         // The name on a login is the person's, so a correction to the roster
         // has to reach it. Without this, fixing a misspelled surname leaves the
@@ -165,7 +265,7 @@ class EmployeeService extends CrudService
         // The job decides, not the caller. A licence sent for an office role is
         // ignored rather than obeyed — otherwise a stray field on a payload
         // would put the bookkeeper on the driver roster.
-        if ($employee->jobPosition?->drives() !== true) {
+        if ($employee->jobPosition?->drives !== true) {
             return;
         }
 

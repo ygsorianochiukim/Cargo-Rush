@@ -38,10 +38,10 @@ class Trip extends Model
         'reference', 'customer_id', 'origin', 'destination', 'cargo',
         'origin_lat', 'origin_lng', 'destination_lat', 'destination_lng',
         'weight_kg', 'pieces', 'handling', 'driver_id', 'helper_id',
-        'vehicle_id', 'status', 'pickup_place', 'dropoff_place',
+        'vehicle_id', 'truck_category_id', 'status', 'pickup_place', 'dropoff_place',
         'scheduled_at', 'eta', 'distance_total_m',
         'price_cents', 'currency', 'billed_at', 'requested_by',
-        'pricing_zone_id', 'pricing_bracket_id', 'fuel_adjustment_bp',
+        'pricing_zone_id', 'pricing_bracket_id', 'fuel_adjustment_bp', 'fuel_surcharge_cents',
     ];
 
     protected function casts(): array
@@ -56,6 +56,7 @@ class Trip extends Model
             'distance_total_m' => 'integer',
             'price_cents' => 'integer',
             'fuel_adjustment_bp' => 'integer',
+            'fuel_surcharge_cents' => 'integer',
             'billed_at' => 'datetime',
             'scheduled_at' => 'datetime',
             'eta' => 'datetime',

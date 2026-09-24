@@ -24,7 +24,7 @@ class Vehicle extends Model
 
     protected $fillable = [
         'plate', 'model', 'registration_no', 'capacity_kg', 'status',
-        'driver_id', 'odometer_km', 'next_service_km',
+        'driver_id', 'truck_category_id', 'odometer_km', 'next_service_km',
     ];
 
     protected function casts(): array

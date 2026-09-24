@@ -49,6 +49,19 @@ class LedgerEntryResource extends ApiResource
             // Whose work the day was, where it was one customer's. Null is an
             // ordinary answer, not a gap — see the relation for why.
             'customer_id' => $this->customer_id,
+
+            /**
+             * Who the day's driver and helper salary belonged to.
+             *
+             * The names come along so the sheet reads as a sheet rather than as
+             * a row of identifiers — and null is a real answer, meaning nobody
+             * has said. An unattributed row is counted toward nobody's payslip,
+             * which is worth being able to see before a pay run is built.
+             */
+            'driver_id' => $this->driver_id,
+            'driver_name' => $this->driver?->name,
+            'helper_id' => $this->helper_id,
+            'helper_name' => $this->helper?->name,
             'customer' => $this->customer?->name,
 
             ...$this->stamps(),

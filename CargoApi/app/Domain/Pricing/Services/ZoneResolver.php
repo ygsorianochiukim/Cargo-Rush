@@ -6,86 +6,95 @@ namespace App\Domain\Pricing\Services;
 
 use App\Domain\Pricing\Models\PricingZone;
 use App\Domain\Pricing\Repositories\PricingZoneRepository;
+use Illuminate\Support\Collection;
 
 /**
- * Which card applies to this booking?
+ * Which zone of the table prices this run.
  *
- * The hard part of a place-based rate card is that a booking's destination is
- * free text. Somebody at the desk types what the caller said — "Davao",
- * "Davao City", "Bajada, Davao City", "dvo" — and none of those is an id. So
- * a zone carries the strings it answers to, and this matches against them.
+ * The answer is now arithmetic rather than string matching: a run of 34 km is
+ * in the 1–40 band, and a run of 205 km is in 201–240. That is the whole rule,
+ * and it is the rule the printed table states.
  *
- * Deliberately a substring match rather than anything cleverer. Fuzzy matching
- * on place names is how a run to Tagum gets priced as a run to Digos: the
- * failure mode of being too strict is a trip that falls back to the config
- * tariff, which is visible and correctable, and the failure mode of being too
- * loose is a wrong invoice nobody notices.
+ * ## Why the destination is gone
+ *
+ * A booking's destination used to choose the zone, matched as a substring
+ * against a list of aliases somebody maintained per town. It had to go for two
+ * reasons, and only the second is about this workbook.
+ *
+ * It could not express the table. A1 and A2 are both 1–40 km; E1 and E2 are
+ * both 161–200. Nothing a destination string can see distinguishes them,
+ * because the distinction is not geographic — so a matcher would always have
+ * answered A1 and quietly under-quoted every A2 run by ₱247.
+ *
+ * And it was guessing. "Davao" reaching the Davao card and "Bajada, Davao
+ * City" reaching it too is the case that works; "Sta. Cruz" reaching the wrong
+ * one of two provinces that both have a Sta. Cruz is the case that produces a
+ * wrong invoice nobody notices. A band cannot be wrong in that way — it is
+ * derived from a distance the trip already carries.
+ *
+ * ## Two zones over one band, and who breaks the tie
+ *
+ * `covering()` returns every zone whose band holds the distance, which for a
+ * subsidy table is normally two rows. The desk picks, and the pick travels on
+ * the trip as `pricing_zone_id`.
+ *
+ * Absent a pick, `default()` takes the first in card order — A1 over A2, E1
+ * over E2, because that is the order the table prints them and the lower of
+ * the two figures. Quoting the cheaper of two applicable bands is the error
+ * the office catches: it is a figure somebody argues up. The reverse is a
+ * customer overcharged by a system that guessed, which is the error nobody
+ * reports.
  */
 class ZoneResolver
 {
     public function __construct(private readonly PricingZoneRepository $zones) {}
 
     /**
-     * The zone for a booking, or null when no card claims it.
+     * The zone that prices a run: the one the desk chose, or the band's
+     * default.
      *
-     * The destination is tried first and the origin only as a fallback, because
-     * the card is about where the goods are going. A run that starts in a zone
-     * and ends outside it is priced by where it ends — that is the longer leg
-     * and the one the customer is buying.
+     * A chosen zone is honoured whatever the distance says, and deliberately.
+     * The desk overriding the band is the mechanism by which a run gets priced
+     * as A2 rather than A1, and a resolver that second-guessed it — refusing a
+     * zone whose band does not hold the distance — would make the override
+     * work for one half of the table's ambiguities and not the other.
      */
-    public function forTrip(?string $destination, ?string $origin = null): ?PricingZone
+    public function resolve(?string $zoneId, int $km): ?PricingZone
     {
-        return $this->match($destination) ?? $this->match($origin);
+        return $this->byId($zoneId) ?? $this->default($km);
     }
 
-    /**
-     * The best zone for one free-text place, or null.
-     *
-     * Longest matching term wins. Where a zone answers to "davao" and another
-     * to "davao del norte", a destination naming the province has to reach the
-     * province's card — and it contains both terms, so the tie has to break on
-     * specificity rather than on which row came back first.
-     */
-    public function match(?string $place): ?PricingZone
+    /** A zone by id, if it is one this company can still quote from. */
+    public function byId(?string $zoneId): ?PricingZone
     {
-        $needle = $this->normalise($place);
-
-        if ($needle === '') {
+        if ($zoneId === null || $zoneId === '') {
             return null;
         }
 
-        $best = null;
-        $bestLength = 0;
-
-        foreach ($this->zones->active() as $zone) {
-            foreach ($zone->matchTerms() as $term) {
-                $normalised = $this->normalise($term);
-
-                if ($normalised === '' || ! str_contains($needle, $normalised)) {
-                    continue;
-                }
-
-                if (mb_strlen($normalised) > $bestLength) {
-                    $best = $zone;
-                    $bestLength = mb_strlen($normalised);
-                }
-            }
-        }
-
-        return $best;
+        return $this->zones->query()->active()->whereKey($zoneId)->first();
     }
 
     /**
-     * Lower case, punctuation to spaces, runs of space collapsed.
+     * The zone a run falls in when nobody has said otherwise.
      *
-     * "Bajada, Davao City." and "bajada davao city" have to be the same string
-     * before a substring test means anything.
+     * First in card order, which is the table's own order.
      */
-    private function normalise(?string $value): string
+    public function default(int $km): ?PricingZone
     {
-        $value = mb_strtolower(trim((string) $value));
-        $value = (string) preg_replace('/[^\p{L}\p{N}]+/u', ' ', $value);
+        return $this->covering($km)->first();
+    }
 
-        return trim((string) preg_replace('/\s+/', ' ', $value));
+    /**
+     * Every zone whose band covers this distance, in card order.
+     *
+     * The list the desk chooses from. Two entries is the normal case at the
+     * top and middle of a subsidy table, and a client that offers only one
+     * would hide half the card.
+     *
+     * @return Collection<int, PricingZone>
+     */
+    public function covering(int $km): Collection
+    {
+        return $this->zones->covering($km);
     }
 }

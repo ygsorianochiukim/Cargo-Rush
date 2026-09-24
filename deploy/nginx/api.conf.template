@@ -1,7 +1,7 @@
 # The Laravel API. Serves CargoApi/public and nothing else.
 #
 # Placeholders filled in by deploy/scripts/provision.sh:
-#   __API_HOST__     api.aya-it.online
+#   __API_HOST__     api.cargorush-logistics.com
 #   __DEPLOY_PATH__  /var/www/cargo-rush/production
 #   __ENV_NAME__     production
 #   __PHP_VERSION__  8.5

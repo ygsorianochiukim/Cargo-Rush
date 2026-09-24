@@ -537,13 +537,13 @@ describe('hiring an applicant', function (): void {
             ->json('data.id');
 
         $response = $this->actingAs($this->admin)
-            ->postJson("/api/v1/applicants/$id/hire", ['base_salary_cents' => 1_800_000])
+            ->postJson("/api/v1/applicants/$id/hire", ['amount_cents' => 1_800_000])
             ->assertCreated();
 
         expect($response->json('data.full_name'))->toBe('Jun Abad');
         expect($response->json('data.position'))->toBe('Helper');
         expect($response->json('data.email'))->toBe('jun@example.ph');
-        expect($response->json('data.base_salary_cents'))->toBe(1_800_000);
+        expect($response->json('data.amount_cents'))->toBe(1_800_000);
         expect($response->json('data.employee_no'))->toBe('EMP-0001');
     });
 

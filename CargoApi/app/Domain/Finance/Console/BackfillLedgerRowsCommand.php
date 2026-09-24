@@ -72,6 +72,10 @@ class BackfillLedgerRowsCommand extends Command
                 tripId: $trip->id,
                 route: "{$trip->origin} → {$trip->destination}",
                 date: $date,
+                // The crew too, so a backfilled row can be read by payroll
+                // exactly as a live one is.
+                driverId: $trip->driver_id,
+                helperId: $trip->helper_id,
             );
 
             if ($before->wasRecentlyCreated) {

@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, ElementRef, inject, signal, viewChild } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 
 import { CompanyService } from '../../services/identity/company.service';
@@ -40,10 +47,12 @@ import { Icon } from '../../shared/icon';
             alt=""
             width="64"
             height="64"
-            class="h-16 w-16 flex-none rounded-control object-contain ring-1 ring-cr-line" />
+            class="h-16 w-16 flex-none rounded-control object-contain ring-1 ring-cr-line"
+          />
         } @else {
           <span
-            class="flex h-16 w-16 flex-none items-center justify-center rounded-control bg-cr-tint text-[18px] font-semibold text-cr-blue ring-1 ring-cr-line">
+            class="flex h-16 w-16 flex-none items-center justify-center rounded-control bg-cr-tint text-[18px] font-semibold text-cr-blue ring-1 ring-cr-line"
+          >
             {{ initials() }}
           </span>
         }
@@ -74,13 +83,15 @@ import { Icon } from '../../shared/icon';
             type="file"
             accept="image/png,image/jpeg,image/gif,image/webp"
             class="sr-only"
-            (change)="chosen($event)" />
+            (change)="chosen($event)"
+          />
 
           <button
             type="button"
             class="flex h-10 items-center gap-1.5 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
             [disabled]="busy()"
-            (click)="picker.click()">
+            (click)="picker.click()"
+          >
             <app-icon name="plus" [size]="16" />
             {{ busy() ? 'Uploading…' : logo() ? 'Replace logo' : 'Upload logo' }}
           </button>
@@ -90,7 +101,8 @@ import { Icon } from '../../shared/icon';
               type="button"
               class="h-10 rounded-control border border-cr-line px-4 text-[14px] font-semibold text-cr-ink-muted transition-colors hover:bg-cr-tint disabled:opacity-60"
               [disabled]="busy()"
-              (click)="remove()">
+              (click)="remove()"
+            >
               Remove
             </button>
           }
