@@ -47,8 +47,8 @@ The API and the SPA are separate origins:
 
 | | API | SPA |
 |---|---|---|
-| production | `api.aya-it.online` | `app.aya-it.online` |
-| staging | `staging.aya-it.online` | `staging-app.aya-it.online` |
+| production | `api.cargorush-logistics.com` | `app.cargorush-logistics.com` |
+| staging | `staging.cargorush-logistics.com` | `staging-app.cargorush-logistics.com` |
 
 So there are two nginx vhosts per environment, from two templates:
 `api.conf.template` serves `CargoApi/public` through php-fpm,
@@ -64,7 +64,7 @@ Three things make the cross-origin part work, and all three live in
 - **`SANCTUM_STATEFUL_DOMAINS`** names the SPA host too. Without it Sanctum
   treats the call as a token request rather than a first-party session one,
   and every authenticated route answers 401 while login itself looks fine.
-- **`SESSION_DOMAIN`** is the parent both hosts share — `.aya-it.online`.
+- **`SESSION_DOMAIN`** is the parent both hosts share — `.cargorush-logistics.com`.
   This is the subtle one. CargoUI's `csrfInterceptor` reads `XSRF-TOKEN` out
   of `document.cookie` to echo back as `X-XSRF-TOKEN`; a host-only cookie set
   by the API host is not readable by JavaScript on the SPA host, so every
@@ -91,9 +91,9 @@ the API host and the SPA host, in that order:
 ssh root@148.113.192.33
 git clone https://github.com/ygsorianochiukim/Cargo-Rush.git /tmp/cargo
 bash /tmp/cargo/deploy/scripts/provision.sh staging \
-       staging.aya-it.online staging-app.aya-it.online
+       staging.cargorush-logistics.com staging-app.cargorush-logistics.com
 bash /tmp/cargo/deploy/scripts/provision.sh production \
-       api.aya-it.online app.aya-it.online
+       api.cargorush-logistics.com app.cargorush-logistics.com
 ```
 
 Both environments can share one box — they get separate directories,
@@ -133,17 +133,26 @@ ssh root@<host> "cat >> /home/deploy/.ssh/authorized_keys" < ~/.ssh/cargo_ci_sta
 
 ### 3. DNS and TLS
 
-Point all four hostnames at the box, then get a certificate for each:
+Point all four hostnames at the box, then route them at the Caddy container
+that owns :80 and :443 here. nginx listens on the docker bridge address
+(`docker0`, printed by `provision.sh`), one port per host:
 
-```bash
-ssh root@148.113.192.33
-certbot --nginx -d staging.aya-it.online     --redirect
-certbot --nginx -d staging-app.aya-it.online --redirect
-certbot --nginx -d api.aya-it.online         --redirect
-certbot --nginx -d app.aya-it.online         --redirect
+```caddy
+staging.cargorush-logistics.com {
+    reverse_proxy <bridge-ip>:3020
+}
+staging-app.cargorush-logistics.com {
+    reverse_proxy <bridge-ip>:3021
+}
+api.cargorush-logistics.com {
+    reverse_proxy <bridge-ip>:3010
+}
+app.cargorush-logistics.com {
+    reverse_proxy <bridge-ip>:3011
+}
 ```
 
-certbot rewrites each vhost to add its 443 block. Do this **before** the first
+Caddy issues the certificates itself; there is no certbot step. Do this **before** the first
 deploy: the smoke test requests both hosts over HTTPS, and
 `SESSION_SECURE_COOKIE=true` means sessions would not work over plain HTTP
 anyway.
@@ -166,8 +175,8 @@ Variables, per environment — `staging` shown, production takes the other pair:
 |---------------|-------|
 | `SSH_USER`    | `deploy` |
 | `DEPLOY_PATH` | `/var/www/cargo-rush/staging` |
-| `API_URL`     | `https://staging.aya-it.online` |
-| `APP_URL`     | `https://staging-app.aya-it.online` |
+| `API_URL`     | `https://staging.cargorush-logistics.com` |
+| `APP_URL`     | `https://staging-app.cargorush-logistics.com` |
 | `SSH_PORT`    | Only if not 22 |
 
 `API_URL` and `APP_URL` are both needed because the smoke test checks each
@@ -180,6 +189,31 @@ sensitive, and GitHub redacts every secret's literal text from all log output
 `***/README.md` in every run, across the whole repository. Secrets are for
 things that would matter if they leaked, not for everything to do with
 deployment.
+
+### Changing `.env` without logging in
+
+`shared/.env` is the base, and `APP_KEY` and `DB_PASSWORD` stay there, but
+every deploy rewrites some keys in it from GitHub:
+
+- `APP_URL`, `FRONTEND_URL`, `SANCTUM_STATEFUL_DOMAINS` and `SESSION_DOMAIN`
+  are derived from the `API_URL` / `APP_URL` variables above. Moving to a new
+  domain is: edit those two variables, then re-run the deploy.
+- **`ENV_OVERRIDES`** — an optional environment *secret* of `KEY=VALUE` lines,
+  one per line, applied last. Anything in it wins, including the four above:
+
+  ```
+  MAIL_MAILER=smtp
+  MAIL_HOST=smtp.example.com
+  MAIL_PASSWORD="value with spaces goes in quotes"
+  ```
+
+Each key replaces its line in `shared/.env`, or is appended if new; every
+other line is left alone. The previous file is kept as `shared/.env.bak`, and
+the deploy log lists the names (never values) of keys that changed.
+
+To apply a change without a code change: **Actions → Deploy → Run workflow**
+on the branch. Removing a key from `ENV_OVERRIDES` does not delete it from the
+server — set it to the value you want instead.
 
 `SSH_KNOWN_HOSTS` is a secret rather than an `ssh-keyscan` at deploy time on
 purpose: keyscan trusts whatever answers on the night, which is not

@@ -9,7 +9,8 @@
 # Layout it assumes and maintains:
 #
 #   <deploy_path>/
-#     shared/.env              hand-written once, never deployed
+#     shared/.env              written once; host keys and ENV_OVERRIDES are
+#                              merged in from GitHub on every deploy
 #     shared/storage/          uploads, logs, sessions — survives releases
 #     releases/<name>/         one directory per deploy
 #     current -> releases/...  what nginx serves
@@ -41,6 +42,37 @@ fail() { printf '\033[1;31m!!!\033[0m %s\n' "$*" >&2; exit 1; }
 # ---------------------------------------------------------------------------
 # Wire the release into the shared state
 # ---------------------------------------------------------------------------
+# Keys the deploy job sets from GitHub (see "Render .env overrides" in
+# .github/workflows/deploy.yml). Each KEY=VALUE replaces that key's line in
+# shared/.env, or is appended if the key is new; every other line — comments,
+# APP_KEY, DB_PASSWORD — is left exactly as it was. Later lines in the file
+# win, so ENV_OVERRIDES beats the derived host keys.
+OVERRIDES="$RELEASE_DIR/env.overrides"
+if [ -f "$OVERRIDES" ]; then
+  log "Applying .env overrides from GitHub"
+  tmp="$(mktemp "$SHARED_DIR/.env.XXXXXX")"
+  awk '
+    function key(line) { return match(line, /^[A-Za-z_][A-Za-z0-9_]*=/) ? substr(line, 1, RLENGTH - 1) : "" }
+    NR == FNR { k = key($0); if (k != "") { if (!(k in val)) order[++n] = k; val[k] = $0 }; next }
+    { k = key($0) }
+    k != "" && (k in val) { if (!(k in done)) { print val[k]; done[k] = 1 }; next }
+    { print }
+    END { for (i = 1; i <= n; i++) if (!(order[i] in done)) print val[order[i]] }
+  ' "$OVERRIDES" "$SHARED_DIR/.env" > "$tmp"
+  rm -f "$OVERRIDES"
+
+  if cmp -s "$tmp" "$SHARED_DIR/.env"; then
+    log "  shared/.env already up to date"
+  else
+    # Names, never values.
+    diff "$SHARED_DIR/.env" "$tmp" | sed -nE 's/^> ([A-Za-z_][A-Za-z0-9_]*)=.*/    changed \1/p' | sort -u || true
+    cp -p "$SHARED_DIR/.env" "$SHARED_DIR/.env.bak"
+    # Written through, not moved over: keeps the file's owner and mode.
+    cat "$tmp" > "$SHARED_DIR/.env"
+  fi
+  rm -f "$tmp"
+fi
+
 log "Linking shared .env and storage"
 
 ln -sfn "$SHARED_DIR/.env" "$API_DIR/.env"

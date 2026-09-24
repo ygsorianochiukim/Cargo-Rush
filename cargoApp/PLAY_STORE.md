@@ -24,8 +24,8 @@ Set on EAS, against the live server:
 
 | Environment | Value |
 |---|---|
-| `production` | `https://api.aya-it.online` |
-| `preview` | `https://staging.aya-it.online` |
+| `production` | `https://api.cargorush-logistics.com` |
+| `preview` | `https://staging.cargorush-logistics.com` |
 
 Preview points at staging deliberately, so an internal test build cannot write
 into production data. Change it if you want release candidates tested against
@@ -133,7 +133,7 @@ content, no purchases. Expect *Everyone*.
 
 The serving side is already in place: `CargoUI`'s vhost has an exact-match
 `location = /privacy` that serves `privacy.html`, so the finished policy goes
-live at **`https://app.aya-it.online/privacy`** on the next deploy.
+live at **`https://app.cargorush-logistics.com/privacy`** on the next deploy.
 
 Two things first, and neither is something to guess at — this is the document
 Google holds you to:

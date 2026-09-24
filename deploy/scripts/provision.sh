@@ -3,8 +3,8 @@
 # One-time server setup for one environment. Run it once as root per
 # environment; running it again is safe and only fills in what is missing.
 #
-#   sudo ./provision.sh staging    staging.aya-it.online  staging-app.aya-it.online
-#   sudo ./provision.sh production api.aya-it.online      app.aya-it.online
+#   sudo ./provision.sh staging    staging.cargorush-logistics.com  staging-app.cargorush-logistics.com
+#   sudo ./provision.sh production api.cargorush-logistics.com      app.cargorush-logistics.com
 #
 # Two hostnames per environment: the API and the SPA get a vhost each. They
 # may be the same name, in which case one vhost serves both and the session
@@ -69,8 +69,8 @@ LOG_LEVEL="$([ "$ENV_NAME" = production ] && echo warning || echo debug)"
 
 # The cookie domain has to be readable from both hosts, so it is the deepest
 # domain they share — the common suffix of their labels, not a guess at the
-# registrable domain. For api.aya-it.online and app.aya-it.online that is
-# aya-it.online; for api.x.co.uk and app.x.co.uk it is x.co.uk, which the
+# registrable domain. For api.cargorush-logistics.com and app.cargorush-logistics.com that is
+# cargorush-logistics.com; for api.x.co.uk and app.x.co.uk it is x.co.uk, which the
 # usual "last two labels" shortcut gets wrong.
 #
 # Same host for both means no sharing is needed, and the cookie stays scoped

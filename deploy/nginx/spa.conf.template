@@ -1,7 +1,7 @@
 # The Angular app. Static files and nothing else — no PHP reaches this host.
 #
 # Placeholders filled in by deploy/scripts/provision.sh:
-#   __SPA_HOST__     app.aya-it.online
+#   __SPA_HOST__     app.cargorush-logistics.com
 #   __DEPLOY_PATH__  /var/www/cargo-rush/production
 #   __ENV_NAME__     production
 #
