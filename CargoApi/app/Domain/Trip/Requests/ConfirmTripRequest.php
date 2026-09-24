@@ -19,7 +19,7 @@ use App\Domain\Trip\DTO\TripData;
  * The driver, the vehicle and the schedule are **required**, and that is the
  * whole contract: `assigned` means a driver can act on it, so confirming
  * without a unit or a time would produce a run that says "go" and cannot be
- * gone on. The helper stays optional, because plenty of runs are one person.
+ * gone on. Helpers stay optional, because plenty of runs are one person.
  *
  * `status` is deliberately not a field. It is the outcome of this call, not an
  * input to it — the same reasoning that keeps `in_transit` and `delivered` off
@@ -31,8 +31,15 @@ class ConfirmTripRequest extends ApiFormRequest
     {
         return [
             'driver_id' => ['required', 'string', 'exists:drivers,id'],
-            // A helper who is also the driver is a data-entry slip, not a crew.
-            'helper_id' => ['nullable', 'string', 'exists:drivers,id', 'different:driver_id'],
+            /**
+             * Who rides along — any number up to a truck's worth, or none.
+             *
+             * Each once, and never the driver: the same person twice would be
+             * paid for the run twice, and a helper who is also the driver is a
+             * data-entry slip, not a crew.
+             */
+            'helper_ids' => ['sometimes', 'nullable', 'array', 'max:5'],
+            'helper_ids.*' => ['string', 'distinct', 'exists:drivers,id', 'different:driver_id'],
             'vehicle_id' => ['required', 'string', 'exists:vehicles,id'],
             'scheduled_at' => ['required', 'date'],
             // An ETA before the unit even leaves cannot be right.
@@ -53,7 +60,9 @@ class ConfirmTripRequest extends ApiFormRequest
             'driver_id.required' => 'Name the driver who is taking this run.',
             'vehicle_id.required' => 'Name the unit this run goes out on.',
             'scheduled_at.required' => 'Say when this run is going out.',
-            'helper_id.different' => 'The helper cannot be the same person as the driver.',
+            'helper_ids.*.different' => 'A helper cannot be the same person as the driver.',
+            'helper_ids.*.distinct' => 'The same helper is named twice.',
+            'helper_ids.max' => 'A run can carry at most five helpers.',
             'eta.after_or_equal' => 'The ETA cannot be earlier than the scheduled departure.',
         ];
     }

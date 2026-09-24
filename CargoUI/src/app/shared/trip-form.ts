@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { Driver } from '../models/driver/driver.model';
@@ -11,6 +12,7 @@ import { VehicleService } from '../services/vehicle/vehicle.service';
 import { statusLabel } from './status';
 import { TripLocation } from '../models/geo/geo.model';
 import { Field } from './field';
+import { HelperPicker } from './helper-picker';
 import { LocationField } from './location-field';
 import { Modal } from './modal';
 import { TripDialog } from './trip-dialog';
@@ -43,7 +45,7 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'cancelled'
 @Component({
   selector: 'app-trip-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Modal, Field, LocationField, ReactiveFormsModule],
+  imports: [Modal, Field, HelperPicker, LocationField, ReactiveFormsModule],
   template: `
     <app-modal
       [(open)]="open"
@@ -110,17 +112,11 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'cancelled'
           </select>
         </app-field>
 
-        <app-field
-          label="Helper"
-          hint="Optional second crew member."
-          [error]="errorFor('helper_id')">
-          <select formControlName="helper_id" [class]="inputClass">
-            <option value="">None</option>
-            @for (d of drivers(); track d.id) {
-              <option [value]="d.id">{{ d.name }}</option>
-            }
-          </select>
-        </app-field>
+        <app-helper-picker
+          hint="Optional — add as many as the load needs."
+          [drivers]="drivers()"
+          [driverId]="driverId()"
+          [(value)]="helpers" />
 
         <app-field label="Scheduled" required [error]="errorFor('scheduled_at')">
           <input type="datetime-local" formControlName="scheduled_at" [class]="inputClass" />
@@ -193,9 +189,19 @@ export class TripForm {
     weight_kg: [0, [Validators.required, Validators.min(1)]],
     vehicle_id: ['', Validators.required],
     driver_id: ['', Validators.required],
-    helper_id: [''],
     scheduled_at: ['', Validators.required],
     status: ['scheduled' as StatusValue],
+  });
+
+  /**
+   * The helpers, held beside the form like the two places: a list of ids the
+   * picker owns, rather than a control per helper.
+   */
+  protected readonly helpers = signal<string[]>([]);
+
+  /** Whoever is driving, so the picker does not offer them as a helper. */
+  protected readonly driverId = toSignal(this.form.controls.driver_id.valueChanges, {
+    initialValue: this.form.controls.driver_id.value,
   });
 
   constructor() {
@@ -229,10 +235,11 @@ export class TripForm {
         weight_kg: t?.weight_kg ?? 0,
         vehicle_id: t?.vehicle_id ?? '',
         driver_id: t?.driver_id ?? '',
-        helper_id: t?.helper_id ?? '',
         scheduled_at: t ? t.scheduled_at.slice(0, 16) : '',
         status: t?.status ?? 'scheduled',
       });
+
+      this.helpers.set(t?.helper_ids ?? []);
     });
   }
 
@@ -278,7 +285,9 @@ export class TripForm {
       cargo: raw.cargo,
       weight_kg: Number(raw.weight_kg),
       driver_id: raw.driver_id || null,
-      helper_id: raw.helper_id || null,
+      // Always sent, so removing the last helper really takes them off. The
+      // driver is left out in case they were picked as a helper first.
+      helper_ids: this.helpers().filter((id) => id !== raw.driver_id),
       vehicle_id: raw.vehicle_id || null,
       status: raw.status,
       scheduled_at: new Date(raw.scheduled_at).toISOString(),

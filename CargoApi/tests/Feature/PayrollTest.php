@@ -206,10 +206,43 @@ describe('splitting the salary', function (): void {
         expect($line['basic_cents'])->toBe(1_000_001);
     });
 
-    it('puts the odd centavo of any monthly figure on the second cutoff', function (): void {
+    it('puts the odd centavo of any monthly figure on the last run', function (): void {
         // The rule the salary and every contribution share, stated once.
-        expect(DeductionSchedule::Split->shareOf(101, isFirstCutoff: true))->toBe(50)
-            ->and(DeductionSchedule::Split->shareOf(101, isFirstCutoff: false))->toBe(51);
+        expect(DeductionSchedule::Split->shareOf(101, index: 0, count: 2))->toBe(50)
+            ->and(DeductionSchedule::Split->shareOf(101, index: 1, count: 2))->toBe(51);
+    });
+
+    it('splits a month across three runs without inventing a peso', function (): void {
+        /**
+         * The bug this signature exists to stop.
+         *
+         * `shareOf` used to take "is this the first cutoff", which can describe
+         * a payroll of one run or two and nothing else. On three, `Split` gave
+         * the first run half the month and each of the other two the *other*
+         * half — one and a half months of SSS, PhilHealth and Pag-IBIG every
+         * month, on payslips that each looked ordinary.
+         */
+        $shares = array_map(
+            fn (int $index): int => DeductionSchedule::Split->shareOf(100_000, $index, 3),
+            [0, 1, 2],
+        );
+
+        expect($shares)->toBe([33_333, 33_333, 33_334])
+            ->and(array_sum($shares))->toBe(100_000);
+    });
+
+    it('never charges a contribution twice over three runs', function (): void {
+        foreach ([DeductionSchedule::FirstCutoff, DeductionSchedule::SecondCutoff] as $policy) {
+            $total = array_sum(array_map(
+                fn (int $index): int => $policy->shareOf(100_000, $index, 3),
+                [0, 1, 2],
+            ));
+
+            // `SecondCutoff` was the worst of them: every run but the first
+            // carried the whole month, so two of three did and the firm
+            // remitted double.
+            expect($total)->toBe(100_000);
+        }
     });
 });
 
@@ -308,9 +341,13 @@ describe('which cutoff the contributions come off', function (): void {
         $company = ($this->setSchedule)('second')->json('data');
 
         expect($company['payroll_deduct_on'])->toBe('second')
-            ->and($company['payroll_deduct_on_label'])
-            ->toBe('All on the second cutoff (16th–end of month)')
-            ->and($company['payroll_deduct_on_detail'])->toContain('The first carries none.');
+            // Said in runs rather than in dates. The label named the 16th and
+            // the end of the month, which is true of a fortnightly payroll on
+            // the old fixed calendar and of nothing else — a firm cutting off
+            // on the 5th, the 15th and the 25th was told about halves of a
+            // month it does not have.
+            ->and($company['payroll_deduct_on_label'])->toBe('All on the second run')
+            ->and($company['payroll_deduct_on_detail'])->toContain('The rest carry none.');
     });
 
     it('refuses a schedule that is not one of the three', function (): void {
@@ -755,8 +792,11 @@ describe('offering the choice', function (): void {
             'end' => '2026-09-15',
             'label' => '1–15 Sep 2026',
             'short' => '1–15',
-            // Cut off on the 16th, which is when this run is worked out.
-            'cutoff' => '2026-09-16',
+            // The last day worked. This used to be the 16th — the day after —
+            // which was how an office described the 1st/16th calendar and stopped
+            // being true when the cutoff days became the firm's own: a firm
+            // setting the 15th was told its period cut off on the 16th.
+            'cutoff' => '2026-09-15',
             'days' => 15,
         ]);
 
@@ -765,7 +805,7 @@ describe('offering the choice', function (): void {
             'start' => '2026-09-16',
             'end' => '2026-09-30',
             // Cut off on the 1st of the next month.
-            'cutoff' => '2026-10-01',
+            'cutoff' => '2026-09-30',
             'days' => 15,
         ]);
     });
@@ -777,7 +817,7 @@ describe('offering the choice', function (): void {
 
         expect($periods[1]['end'])->toBe('2026-02-28')
             ->and($periods[1]['days'])->toBe(13)
-            ->and($periods[1]['cutoff'])->toBe('2026-03-01');
+            ->and($periods[1]['cutoff'])->toBe('2026-02-28');
     });
 
     /**

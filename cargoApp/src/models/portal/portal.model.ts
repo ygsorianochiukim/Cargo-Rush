@@ -73,6 +73,20 @@ export interface DeliveryRequestPayload {
    * id, rather than having the load quietly filed with their own carrier.
    */
   carrier_id?: string;
+
+  /**
+   * A partner trucker the customer picked off the hauler list.
+   *
+   * Absent — the ordinary case — means "whoever the fleet sends", which is what
+   * picking Cargo Rush on that screen does: the request goes on the open board
+   * for the desk to crew or for any nearby trucker to take.
+   *
+   * Naming somebody makes it an **offer** held for them alone. It is on nobody
+   * else's board and is not a job until they accept, so a customer who picks a
+   * name gets that person or nobody — never a silent substitution.
+   */
+  trucker_id?: string;
+
   origin: string;
   destination: string;
   /**

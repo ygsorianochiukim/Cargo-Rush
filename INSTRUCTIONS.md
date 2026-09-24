@@ -73,6 +73,34 @@ A few things worth knowing before you pick one:
 Only an **administrator** or a **general manager** can change it. Everybody else sees it and
 cannot touch it.
 
+### Your rates
+
+**Access Control → Rates.** Everything the business charges, keeps or pays tax on is set here, in
+one card, and nowhere else. It opens with sensible figures already in it, so you can leave it
+alone until something is wrong.
+
+| | What it is |
+| --- | --- |
+| **Commission %** | What you keep of a run an owner-operator hauls for you. **12% to start with.** |
+| **Tariff** | Base + per km + per kg, never below the minimum. What a run is quoted when no rate-card band covers it — see [Pricing](#6-billing) for the bands themselves. |
+| **VAT-registered** | Untick if you are below the registration threshold. Your invoices then carry no VAT line at all. |
+| **VAT %** | 12% — the standard rate, and it has moved before. |
+| **Withholding %** | 2%, what a customer who is a withholding agent keeps back. A customer with its own rate on file keeps that instead. |
+| **Payment terms** | How many days a delivered run has to pay. 30 to start with. |
+| **Prices are quoted all-in** | Tick it if you quote one figure with the VAT already inside. The net is then worked backwards, so a customer is billed exactly what you quoted them. |
+
+Three things are worth knowing before you change any of them:
+
+- **Nothing already settled moves.** An invoice freezes the tax rates it was raised under, and a
+  delivered run freezes the commission it closed out on. Changing a figure here changes what
+  happens *next*, and never rewrites a document somebody is holding.
+- **The commission is one rate for everybody.** You cannot put one partner on 10% and another on
+  15%; if you could, nobody could say what the business charges. The Truckers page shows the rate
+  and no longer lets you edit it there.
+- **Use the system defaults** puts the whole card back to the figures it shipped with.
+
+Only an **administrator** or a **general manager** can open it.
+
 ### The accounts you start with
 
 > **Only on an install that has been set up for you.** A company you registered yourself starts
@@ -521,7 +549,72 @@ Amounts are entered in pesos, the ordinary way: type `30721` for ₱30,721.00.
 | **Quarterly Summary** | The same roll-up over a quarter |
 
 Profitability and Quarterly Summary are the **same calculation** over different date ranges, so
-they cannot disagree with each other.
+they cannot disagree with each other. The dashboard's 30-day net income is the same one again.
+
+**What comes off the income.** The five columns on each unit's daily rows, anything you filed under
+Expenses, and — this is the part people are surprised by — two kinds of money leaving the bank:
+**supplier bills you have actually paid**, from Billing, and **payouts you have actually handed to
+partner truckers**. The same three rules govern both:
+
+- **Unpaid counts for nothing.** It is money you owe, not money that has gone. It sits on the
+  Payables screen until you settle it.
+- **Part-paid counts for the part you paid.** ₱18,000 paid against a ₱30,000 bill takes ₱18,000 off
+  the period, not ₱30,000.
+- **It lands in the period you paid it**, not the one it was dated. A June bill settled in July is
+  July's money, and so is a run hauled in June and paid for in July.
+
+A trucker payout also has to have **landed**. A transfer you have entered but not yet confirmed is
+still on its way — it is still owed and it has not yet cost you anything. Confirming it is what
+moves it across.
+
+> **One exception, and it matters.** If the trucker owns a truck you hired on a *revenue share*,
+> their cut is already charged to the day the run was delivered, in the **Owner share** on that
+> unit's sheet. Paying them afterwards settles a debt your books have already counted, so it is not
+> counted a second time. Partners hauling in their own trucks have no such sheet, which is why their
+> payout is the only record that the money moved.
+
+Supplier bills and trucker payouts belong to the business rather than to any one truck, so they are
+in the **Total expenses** figure and in none of the rows of the table — a line under the table says
+how much, so the total still reconciles. The same is true of overhead: office rent and an annual
+permit are real costs that no unit earned.
+
+> **What is still missing, so you are not surprised by it.** A run a partner hauled files no daily
+> sheet, so the money the *customer* pays you for it is not in **Trip income**. Right now the
+> payout shows and that side does not. Say so if you want partner runs booked properly — it is a
+> bigger change, and it is the one that would show the margin you actually make on them.
+
+> If you want the accrual view instead — every bill counted the day it was raised, paid or not —
+> that is the **Income statement** under Financial Statements. Two reports, two questions: what the
+> quarter cost you, and what the quarter committed you to.
+
+### Actual income — what is left after what you owe
+
+Quarterly Summary carries two more figures beside Net income:
+
+| Tile | What it is |
+| --- | --- |
+| **Payables** | Everything still owed as the quarter closed — partners waiting to be paid, unsettled spend, unpaid supplier bills. The same question the Payables screen answers, asked about the end of that quarter rather than about today. |
+| **Actual income** | Net income less payables. What is genuinely left once everybody queued up behind you has been settled. |
+
+**Payables is not in Total expenses, and that is deliberate.** A bill you have not paid has cost
+the quarter nothing yet. Counting it as an expense would charge the period for money that has not
+moved — and then charge it a second time on the day it does. So an unpaid bill sits in Payables; the
+moment you settle it, it leaves Payables and appears in Total expenses instead. The two tiles never
+count the same peso twice.
+
+**That is what stops paying people from flattering the quarter.** Pay a trucker ₱8,800 and Payables
+falls by ₱8,800 — and Total expenses rises by the same ₱8,800, so Actual income does not move. It
+should not: you owed the money before and you have paid it now, and you are no better off either
+way. Before this, settling up on a Friday made Monday's figure look ₱8,800 healthier.
+
+Net income is what the quarter earned. **Actual income is what you can act on.** A quarter that made
+₱29,350 and owes ₱40,000 has still made ₱29,350 — and only one of those two figures tells you not to
+draw anything out.
+
+> One limitation worth knowing: an expense records that it is settled, but not the day it was
+> settled. So for a **closed** quarter, a bill you have paid since is no longer counted as having
+> been owed then, and Payables for that quarter reads slightly low. Supplier invoices carry their
+> payment dates and are exact either way, and the quarter you are actually in is exact throughout.
 
 ### The charts
 

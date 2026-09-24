@@ -25,7 +25,14 @@ class ExpenseRepository extends Repository
     public function query(): Builder
     {
         return Expense::query()
-            ->with(['category:id,key,name,icon', 'truck:id,label,plate', 'driver:id,name'])
+            ->with([
+                'category:id,key,name,icon',
+                'truck:id,label,plate',
+                'driver:id,name',
+                // The shop's name is printed on every row; without it a page of
+                // expenses is a page of queries.
+                'supplier:id,name',
+            ])
             ->orderByDesc('date')
             ->orderByDesc('created_at');
     }

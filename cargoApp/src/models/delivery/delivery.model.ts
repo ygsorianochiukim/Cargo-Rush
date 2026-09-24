@@ -8,7 +8,8 @@ export interface DeliveryLog {
   customer: string | null;
   destination: string | null;
   driver_name: string | null;
-  helper_name: string | null;
+  /** Everyone who rode along on the run. Empty when the driver was alone. */
+  helper_names: string[];
   delivered_at: string | null;
   /** Assigned by the API (`POD-00001`), never typed in the cab. */
   pod_ref: string | null;

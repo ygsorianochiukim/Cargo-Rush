@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -29,9 +30,9 @@ class LedgerEntry extends Model
     use BelongsToCompany, HasFactory, HasUlids, SoftDeletes;
 
     protected $fillable = [
-        'truck_id', 'trip_id', 'customer_id', 'driver_id', 'helper_id', 'date', 'trip_income_cents', 'fuel_cents',
+        'truck_id', 'trip_id', 'customer_id', 'driver_id', 'date', 'trip_income_cents', 'fuel_cents',
         'driver_salary_cents', 'helper_salary_cents', 'maintenance_cents',
-        'allowance_cents', 'route', 'remarks', 'recorded_by',
+        'allowance_cents', 'owner_share_cents', 'route', 'remarks', 'recorded_by',
     ];
 
     protected function casts(): array
@@ -44,6 +45,7 @@ class LedgerEntry extends Model
             'helper_salary_cents' => 'integer',
             'maintenance_cents' => 'integer',
             'allowance_cents' => 'integer',
+            'owner_share_cents' => 'integer',
         ];
     }
 
@@ -100,19 +102,36 @@ class LedgerEntry extends Model
         return $this->belongsTo(Driver::class);
     }
 
-    public function helper(): BelongsTo
+    /**
+     * The day's helpers, each with what they were paid.
+     *
+     * `helper_salary_cents` on this row is the sum of these, kept in step by
+     * `FinanceService` in the same write. Read the lines for who; read the
+     * column for how much the day cost.
+     */
+    public function helpers(): HasMany
     {
-        return $this->belongsTo(Driver::class, 'helper_id');
+        return $this->hasMany(LedgerEntryHelper::class)->orderBy('position');
     }
 
-    /** fuel + driver + helper + maintenance + allowance. */
+    /**
+     * fuel + driver + helper + maintenance + allowance + the owner's share.
+     *
+     * The last is non-zero only on a truck the fleet hired on a share of what
+     * it earns, and it belongs here for the same reason the crew's wages do:
+     * it is what running that unit that day actually cost. Left out, a rented
+     * ten-wheeler would be the most profitable thing on the fleet on paper —
+     * full income against almost no costs — when the fleet in fact keeps
+     * fifteen per cent of it.
+     */
     public function totalExpensesCents(): int
     {
         return $this->fuel_cents
             + $this->driver_salary_cents
             + $this->helper_salary_cents
             + $this->maintenance_cents
-            + $this->allowance_cents;
+            + $this->allowance_cents
+            + $this->owner_share_cents;
     }
 
     /** trip income - total expenses. Negative is a real, first-class loss. */

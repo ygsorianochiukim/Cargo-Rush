@@ -3,7 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { ProofPhoto } from '@/models/delivery/delivery.model';
+import { ProofOfDelivery, ProofPhoto } from '@/models/delivery/delivery.model';
 import { ApiRequestError } from '@/services/shared/api.service';
 import { tripService } from '@/services/trip/trip.service';
 import { Icon } from '@/components/ui/icon';
@@ -40,6 +40,9 @@ export function ProofOfDeliverySheet({
   onDelivered,
   reference,
   destination,
+  deliver,
+  late = false,
+  initialReceiver = '',
 }: {
   open: boolean;
   onClose: () => void;
@@ -47,8 +50,33 @@ export function ProofOfDeliverySheet({
   onDelivered: () => void;
   reference: string;
   destination: string;
+  /**
+   * Who is handing the load over.
+   *
+   * The screen is identical for an employee driver and a partner trucker —
+   * same photograph, same typed name, same one available transition — but the
+   * endpoint is not: a driver closes *the run they are on*, resolved from the
+   * token with no id at all, and a partner names the run, because the API
+   * checks it is theirs before acting.
+   *
+   * Passed in rather than branched on inside, so this component keeps knowing
+   * nothing about roles. Defaults to the driver's call, which is what every
+   * caller written before partners existed wants.
+   */
+  deliver?: (proof: ProofOfDelivery) => Promise<unknown>;
+  /**
+   * Sending the photograph for a run already handed over.
+   *
+   * The same two fields, because the API takes the same proof — but the
+   * photograph is now the whole point, so it is required, and the name comes
+   * pre-filled from the hand-off rather than asked for twice. The wording says
+   * what the button does: it closes nothing, it only files the picture.
+   */
+  late?: boolean;
+  /** Who signed at the hand-off, when this is the late photograph. */
+  initialReceiver?: string;
 }) {
-  const [receiver, setReceiver] = useState('');
+  const [receiver, setReceiver] = useState(initialReceiver);
   const [photo, setPhoto] = useState<ProofPhoto | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +89,7 @@ export function ProofOfDeliverySheet({
   const trimmedName = receiver.trim();
 
   const close = () => {
-    setReceiver('');
+    setReceiver(initialReceiver);
     setPhoto(null);
     setError(null);
     onClose();
@@ -124,13 +152,20 @@ export function ProofOfDeliverySheet({
       return;
     }
 
+    if (late && !photo) {
+      setError('Take or choose the photo to send.');
+
+      return;
+    }
+
     setSaving(true);
     setError(null);
 
-    tripService
-      .deliver({ receiver_name: trimmedName, photo })
+    const send = deliver ?? ((proof: ProofOfDelivery) => tripService.deliver(proof));
+
+    send({ receiver_name: trimmedName, photo })
       .then(() => {
-        setReceiver('');
+        setReceiver(initialReceiver);
         setPhoto(null);
         onDelivered();
         onClose();
@@ -152,7 +187,7 @@ export function ProofOfDeliverySheet({
     <Sheet
       open={open}
       onClose={close}
-      title="Mark delivered"
+      title={late ? 'Add delivery photo' : 'Mark delivered'}
       subtitle={`${reference} · ${destination}`}
       icon="check"
       footer={
@@ -164,11 +199,11 @@ export function ProofOfDeliverySheet({
           ) : null}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Confirm delivery"
+            accessibilityLabel={late ? 'Send photo' : 'Confirm delivery'}
             disabled={saving}
             onPress={submit}
             style={[styles.save, saving && { opacity: 0.6 }]}>
-            <Text style={styles.saveText}>{saving ? 'Sending…' : 'Confirm delivery'}</Text>
+            <Text style={styles.saveText}>{saving ? 'Sending…' : late ? 'Send photo' : 'Confirm delivery'}</Text>
           </Pressable>
           <Pressable accessibilityRole="button" onPress={close} style={styles.cancel}>
             <Text style={styles.cancelText}>Cancel</Text>
@@ -225,7 +260,9 @@ export function ProofOfDeliverySheet({
         <View style={styles.hint}>
           <Icon name="check" size={14} color={Brand.blue} />
           <Text style={styles.hintText}>
-            This closes the run and files its delivery log. The proof number is assigned for you.
+            {late
+              ? 'This run is already delivered. Sending the photo only adds it to the delivery log.'
+              : 'This closes the run and files its delivery log. The proof number is assigned for you.'}
           </Text>
         </View>
       </ScrollView>

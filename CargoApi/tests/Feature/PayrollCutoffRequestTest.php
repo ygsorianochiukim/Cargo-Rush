@@ -103,9 +103,15 @@ describe('filing one', function (): void {
     });
 
     it('applies the same shape rules as the settings form', function (): void {
-        ($this->ask)(['cutoff_days' => [10, 20, 31]])->assertStatus(422);
+        // Four is past what anything downstream is built for; three is a
+        // real calendar now and is checked separately below.
+        ($this->ask)(['cutoff_days' => [5, 10, 20, 31]])->assertStatus(422);
         ($this->ask)(['cutoff_days' => [28, 31]])->assertStatus(422);
         ($this->ask)(['cutoff_days' => [15, 15]])->assertStatus(422);
+    });
+
+    it('takes a request for three cutoffs a month', function (): void {
+        ($this->ask)(['cutoff_days' => [5, 15, 25]])->assertCreated();
     });
 
     it('refuses a second while one is still waiting', function (): void {

@@ -18,7 +18,12 @@ class VehicleRepository extends Repository
 
     public function query(): Builder
     {
-        return Vehicle::query()->with('driver:id,name')->orderBy('plate');
+        // The owner comes with the row because the fleet list names whoever is
+        // paid for a hired truck, and a query per unit for a column that is
+        // null on most of them is the wrong trade.
+        return Vehicle::query()
+            ->with(['driver:id,name', 'ownerPartner:id,name'])
+            ->orderBy('plate');
     }
 
     protected function searchable(): array

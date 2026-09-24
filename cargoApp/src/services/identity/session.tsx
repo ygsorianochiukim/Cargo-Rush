@@ -10,6 +10,7 @@ import {
 import { Platform } from 'react-native';
 
 import { Credentials, Me, ShipperRegistration } from '@/models/identity/identity.model';
+import { TruckerRegistration } from '@/models/trucker/trucker.model';
 
 import { api, ApiRequestError } from '../shared/api.service';
 import { identityService } from './identity.service';
@@ -36,6 +37,17 @@ export type SessionState = {
    */
   register: (
     registration: Omit<ShipperRegistration, 'device_name'>,
+    remember?: boolean,
+  ) => Promise<void>;
+  /**
+   * The same, for an owner-operator.
+   *
+   * Its own function rather than a flag on `register`: the payloads share four
+   * fields out of eleven and go to different endpoints, and a discriminated
+   * union would make both call sites harder to read to save three lines here.
+   */
+  registerTrucker: (
+    registration: Omit<TruckerRegistration, 'device_name'>,
     remember?: boolean,
   ) => Promise<void>;
   signOut: () => Promise<void>;
@@ -164,6 +176,32 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  /**
+   * Sign an owner-operator up and open the app on them.
+   *
+   * Beside `register` rather than folded into it: the two take different
+   * payloads and hit different endpoints, and the one thing they share — keep
+   * the token, put a `me` in context — is three lines. Collapsing them behind a
+   * discriminator would make both harder to read to save nothing.
+   *
+   * The account lands `pending`. The app opens on the partner's dashboard
+   * regardless, which says so; there is nothing to gate here.
+   */
+  const registerTrucker = useCallback(
+    async (registration: Omit<TruckerRegistration, 'device_name'>, remember = true) => {
+      const user = await identityService.registerTrucker({
+        ...registration,
+        device_name: await deviceName(),
+      });
+
+      const token = api.token;
+      if (token !== null) await tokenStore.write(token, remember, user);
+
+      setMe(user);
+    },
+    [],
+  );
+
   const signOut = useCallback(async () => {
     // Cleared locally first: a driver who taps sign out is signed out whether
     // or not the network agrees.
@@ -175,8 +213,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<SessionState>(
-    () => ({ me, restoring, signIn, register, signOut }),
-    [me, restoring, signIn, register, signOut],
+    () => ({ me, restoring, signIn, register, registerTrucker, signOut }),
+    [me, restoring, signIn, register, registerTrucker, signOut],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

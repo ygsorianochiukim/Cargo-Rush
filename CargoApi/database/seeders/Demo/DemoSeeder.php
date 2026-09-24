@@ -6,6 +6,7 @@ namespace Database\Seeders\Demo;
 
 use App\Domain\Notification\Models\NotificationItem;
 use Database\Seeders\Concerns\SeedsIntoACompany;
+use Database\Seeders\SubsidyRateCardSeeder;
 use Illuminate\Database\Seeder;
 
 /**
@@ -27,14 +28,41 @@ class DemoSeeder extends Seeder
 
     public function run(): void
     {
-        // Enters the company once for the whole walkthrough. Each of the four
-        // below enters it again on its own account — nesting costs nothing and
-        // is what lets any of them be run alone.
+        // Enters the company once for the whole walkthrough. Each seeder below
+        // enters it again on its own account — nesting costs nothing and is
+        // what lets any of them be run alone.
         $this->intoCompany(function (): void {
             $this->call([
+                /**
+                 * The rate card first, because everything below is priced off
+                 * it.
+                 *
+                 * Deliberately not part of provisioning — it is one haulier's
+                 * negotiated subsidy table and laying it on every company that
+                 * registers would hand them somebody else's prices. A
+                 * walkthrough is exactly the case it is right for: quotes come
+                 * off a published card rather than off a flat tariff, which is
+                 * what the Rate Card screen is there to show.
+                 */
+                SubsidyRateCardSeeder::class,
+                // The company's own side: the accounts, the crew, the units and
+                // the customers everything below hangs off.
                 FleetSeeder::class,
+                // The roster and a fortnight of the truck sheet, so there is a
+                // payroll to run. Before `PeopleSeeder`, which files leave,
+                // store credit and allowances against these people.
+                PayrollSeeder::class,
+                PeopleSeeder::class,
+                // The outside trucks, in the order the money depends on: the
+                // partners first, because two of the hired units are owed to
+                // one of them.
+                PartnerSeeder::class,
+                HiredFleetSeeder::class,
                 OperationsSeeder::class,
                 MoneySeeder::class,
+                // After the fleet, because the servicing it costs is charged
+                // against a unit's own daily sheet.
+                SupplierSeeder::class,
                 LedgerSeeder::class,
                 // Last, and the only one that writes outside the demo company:
                 // it pins this company's yard and puts two neighbouring

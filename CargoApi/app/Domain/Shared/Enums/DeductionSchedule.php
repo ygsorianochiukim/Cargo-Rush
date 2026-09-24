@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Domain\Shared\Enums;
 
+use App\Domain\Payroll\Support\MonthlyShare;
+
 /**
  * Which cutoff the monthly contributions come off.
  *
@@ -44,57 +46,96 @@ enum DeductionSchedule: string
     public function label(): string
     {
         return match ($this) {
-            self::Split => 'Split across both cutoffs',
-            self::FirstCutoff => 'All on the first cutoff (1st–15th)',
-            self::SecondCutoff => 'All on the second cutoff (16th–end of month)',
+            self::Split => 'Split across every run',
+            self::FirstCutoff => 'All on the first run',
+            self::SecondCutoff => 'All on the second run',
         };
     }
 
     /** What this policy means on a payslip, for somebody reading the screen. */
-    public function detail(): string
+    public function detail(int $runs = 2): string
     {
+        /**
+         * Said in runs rather than in dates, and without "half".
+         *
+         * These read "1st–15th", "16th–end" and "half of each" — all three true
+         * of a fortnightly payroll on the old fixed calendar and none of them
+         * true once the cutoff days became the firm's own. A firm closing on
+         * the 5th, the 15th and the 25th was told its contributions were split
+         * in half across two payslips it does not have.
+         *
+         * `$runs` is how many the month actually has, so the sentence counts.
+         */
         return match ($this) {
-            self::Split => 'Half of each monthly contribution comes off each payslip.',
-            self::FirstCutoff => 'The whole month of SSS, PhilHealth and Pag-IBIG comes off the first payslip. The second carries none.',
-            self::SecondCutoff => 'The whole month of SSS, PhilHealth and Pag-IBIG comes off the second payslip. The first carries none.',
+            self::Split => $runs <= 1
+                ? 'The whole monthly contribution comes off the single payslip.'
+                : sprintf(
+                    'Each monthly contribution is split %s — %s of it comes off each payslip.',
+                    $runs === 2 ? 'in half' : 'evenly across the '.$runs.' runs',
+                    $runs === 2 ? 'half' : 'a third',
+                ),
+            self::FirstCutoff => 'The whole month of SSS, PhilHealth and Pag-IBIG comes off the first payslip. The rest carry none.',
+            self::SecondCutoff => 'The whole month of SSS, PhilHealth and Pag-IBIG comes off the second payslip. The rest carry none.',
         };
     }
 
     /**
      * How much of a monthly contribution one cutoff carries, in centavos.
      *
-     * `$isFirstCutoff` rather than a pay period, so this stays a piece of
-     * vocabulary and does not grow a dependency on payroll's calendar. The
-     * caller knows which half it is building.
+     * Takes **which run of how many** rather than "is this the first one", and
+     * that is a fix rather than a tidy-up. The old signature was a pair of
+     * booleans, which can describe a payroll of one run or two and nothing
+     * else — so a firm cutting off three times a month had `Split` give the
+     * first run half the month's contribution and each of the other two the
+     * *other* half, charging one and a half months of SSS, PhilHealth and
+     * Pag-IBIG every month. `SecondCutoff` was worse: every run but the first
+     * carried the whole month, so two of the three did, and the firm remitted
+     * double.
      *
-     * `$isOnlyRun` is the monthly-payroll case: there is no second payslip for
+     * Neither announced itself. Each payslip looked ordinary; only the month
+     * added up wrong.
+     *
+     * A count of one is the monthly-payroll case: there is no other payslip for
      * the rest to land on, so the whole contribution comes off whatever the
-     * policy says. A firm that pays once a month has no cutoff to choose
-     * between.
+     * policy says.
      *
-     * On `Split`, the odd centavo goes to the **second** cutoff, so the two
-     * halves add up to the month exactly. Halving twice with `intdiv` and
-     * hoping is how a firm under-remits a peso a year per employee, which is
-     * small, permanent and impossible to explain.
+     * On `Split` the odd centavo goes to the **last** run, via `MonthlyShare`,
+     * so the shares add up to the month exactly. Dividing per run with `intdiv`
+     * and hoping is how a firm under-remits a few centavos a month per
+     * employee — small, permanent and impossible to explain.
+     *
+     * @param  int  $index  Which run this is, from zero.
+     * @param  int  $count  How many runs the month has.
      */
-    public function shareOf(int $monthlyCents, bool $isFirstCutoff, bool $isOnlyRun = false): int
+    public function shareOf(int $monthlyCents, int $index, int $count): int
     {
-        if ($isOnlyRun) {
+        if ($count <= 1) {
             return $monthlyCents;
         }
 
         return match ($this) {
-            self::Split => $isFirstCutoff
-                ? intdiv($monthlyCents, 2)
-                : $monthlyCents - intdiv($monthlyCents, 2),
-            self::FirstCutoff => $isFirstCutoff ? $monthlyCents : 0,
-            self::SecondCutoff => $isFirstCutoff ? 0 : $monthlyCents,
+            self::Split => MonthlyShare::forRun($monthlyCents, $index, $count),
+
+            // The whole month on one named run, and nothing on the others —
+            // which stays true however many others there are.
+            self::FirstCutoff => $index === 0 ? $monthlyCents : 0,
+
+            /**
+             * The second run, literally.
+             *
+             * On a two-run month that is the last one, which is what this has
+             * always meant. On a three-run month it is the middle one rather
+             * than the last, and that is the honest reading of the name: a firm
+             * that wants the contributions on its final run is choosing a
+             * different policy, and this enum would need a word for it.
+             */
+            self::SecondCutoff => $index === 1 ? $monthlyCents : 0,
         };
     }
 
     /** Does this cutoff carry the contributions at all? */
-    public function carriedOn(bool $isFirstCutoff, bool $isOnlyRun = false): bool
+    public function carriedOn(int $index, int $count): bool
     {
-        return $isOnlyRun || $this->shareOf(100, $isFirstCutoff) > 0;
+        return $this->shareOf(100, $index, $count) > 0;
     }
 }

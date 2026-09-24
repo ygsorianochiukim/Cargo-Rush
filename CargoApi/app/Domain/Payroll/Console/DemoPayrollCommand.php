@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Domain\Payroll\Console;
 
+use App\Domain\Customer\Models\Customer;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Finance\Models\LedgerEntry;
 use App\Domain\Finance\Models\Truck;
 use App\Domain\Hr\Models\Employee;
 use App\Domain\Tenancy\Models\Company;
 use App\Domain\Tenancy\Support\Tenant;
+use App\Domain\Trip\Models\Trip;
+use App\Domain\Vehicle\Models\Vehicle;
 use Database\Seeders\Demo\PayrollSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -106,6 +109,23 @@ class DemoPayrollCommand extends Command
         }
 
         $removed = DB::transaction(function (): array {
+            /**
+             * The runs first, because everything else is something they point
+             * at.
+             *
+             * These were missing, and their absence was the whole problem with
+             * this flag: the seeder writes trips, a vehicle and a customer, and
+             * `--remove` took out only the trucks and the sheet. What was left
+             * behind was four trips marked *delivered* and never billed,
+             * against a vehicle and a customer nobody could account for —
+             * demo rows sitting in the finance screens of a real company, which
+             * is exactly what somebody runs this flag to be rid of.
+             *
+             * A removal has to undo its own seeder. Anything less is a seeder
+             * with no way back.
+             */
+            $trips = Trip::query()->where('reference', 'like', 'DEMO-TR-%')->delete();
+
             $trucks = Truck::query()->whereIn('label', ['Demo Truck A', 'Demo Truck B'])->pluck('id');
 
             $rows = LedgerEntry::query()->whereIn('truck_id', $trucks)->delete();
@@ -126,15 +146,31 @@ class DemoPayrollCommand extends Command
 
             $drivers = Driver::query()->where('licence_no', 'like', 'DEMO-LIC-%')->delete();
 
-            return ['sheet' => $rows, 'staff' => $people, 'drivers' => $drivers];
+            // The unit and the shipper the demo invented, matched on the marks
+            // the seeder stamped them with rather than on their names: a plate
+            // and a registration nobody would type by accident.
+            $vehicles = Vehicle::query()->where('registration_no', 'DEMO-LTO-0001')->delete();
+            $customers = Customer::query()->where('name', 'Demo Trading Co.')->delete();
+
+            return [
+                'sheet' => $rows,
+                'staff' => $people,
+                'drivers' => $drivers,
+                'trips' => $trips,
+                'vehicles' => $vehicles,
+                'customers' => $customers,
+            ];
         });
 
         $this->info(sprintf(
-            'Removed %d staff, %d driver records and %d sheet rows. The Admin, Treasury Officer '
-            .'and Driver positions were kept.',
+            'Removed %d staff, %d driver records, %d sheet rows, %d trips, %d vehicles and '
+            .'%d customers. The Admin, Treasury Officer and Driver positions were kept.',
             $removed['staff'],
             $removed['drivers'],
             $removed['sheet'],
+            $removed['trips'],
+            $removed['vehicles'],
+            $removed['customers'],
         ));
 
         return self::SUCCESS;

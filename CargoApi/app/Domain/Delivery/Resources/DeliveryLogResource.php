@@ -22,7 +22,7 @@ class DeliveryLogResource extends ApiResource
             'customer' => $this->trip?->customer?->name,
             'destination' => $this->trip?->destination,
             'driver_name' => $this->trip?->driver?->name,
-            'helper_name' => $this->trip?->helper?->name,
+            'helper_names' => $this->trip?->helpers->pluck('name')->all() ?? [],
             'delivered_at' => $this->iso($this->delivered_at),
             'pod_ref' => $this->pod_ref,
             // Derived, never stored: the disk and its public URL are

@@ -9,6 +9,7 @@ use App\Domain\Customer\Models\Customer;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Finance\Models\LedgerEntry;
 use App\Domain\Finance\Models\Truck;
+use App\Domain\Finance\Services\FinanceService;
 use App\Domain\Hr\Models\Employee;
 use App\Domain\Hr\Services\ContractService;
 use App\Domain\Identity\Models\Position;
@@ -16,7 +17,9 @@ use App\Domain\Payroll\Support\PayrollCalendar;
 use App\Domain\Shared\Enums\PayBasis;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Vehicle\Models\Vehicle;
+use Database\Seeders\Concerns\AdoptsTrashedRows;
 use Database\Seeders\Concerns\SeedsIntoACompany;
+use Database\Seeders\Concerns\UpsertsByDay;
 use Illuminate\Database\Seeder;
 
 /**
@@ -65,7 +68,7 @@ use Illuminate\Database\Seeder;
  */
 class PayrollSeeder extends Seeder
 {
-    use SeedsIntoACompany;
+    use AdoptsTrashedRows, SeedsIntoACompany, UpsertsByDay;
 
     public function __construct(private readonly PricingService $pricing) {}
 
@@ -116,7 +119,7 @@ class PayrollSeeder extends Seeder
          * them is what keeps a delivered trip landing on the demo's sheet
          * instead of opening a brand new "Truck 3" beside it.
          */
-        $vehicle = Vehicle::updateOrCreate(
+        $vehicle = $this->restoreOrCreate(Vehicle::class,
             ['plate' => 'DEMO 0001'],
             [
                 'model' => 'Isuzu Elf 4W',
@@ -130,7 +133,7 @@ class PayrollSeeder extends Seeder
 
         Truck::query()->where('label', 'Demo Truck A')->update(['vehicle_id' => $vehicle->id]);
 
-        $customer = Customer::updateOrCreate(
+        $customer = $this->restoreOrCreate(Customer::class,
             ['name' => 'Demo Trading Co.'],
             ['contact' => '0917 555 0900', 'address' => 'Davao City', 'status' => 'active'],
         );
@@ -167,7 +170,7 @@ class PayrollSeeder extends Seeder
                 continue;
             }
 
-            $trip = Trip::updateOrCreate(
+            $trip = $this->restoreOrCreate(Trip::class,
                 ['reference' => 'DEMO-TR-'.str_pad((string) ($n + 1), 2, '0', STR_PAD_LEFT)],
                 [
                     'origin' => $from,
@@ -176,7 +179,6 @@ class PayrollSeeder extends Seeder
                     'weight_kg' => $kg,
                     'pieces' => (int) ceil($kg / 300),
                     'driver_id' => $driverId,
-                    'helper_id' => $helperId,
                     'vehicle_id' => $vehicle->id,
                     'customer_id' => $customer->id,
                     'status' => 'delivered',
@@ -184,6 +186,8 @@ class PayrollSeeder extends Seeder
                     'distance_total_m' => random_int(60, 180) * 1000,
                 ],
             );
+
+            $trip->setHelpers($helperId === null ? [] : [$helperId]);
 
             // Priced through the same rate card a real booking goes through, so
             // the board shows figures rather than a column of zeros.
@@ -303,7 +307,7 @@ class PayrollSeeder extends Seeder
             $driverId = null;
 
             if ($licence !== null) {
-                $driverId = Driver::updateOrCreate(
+                $driverId = $this->restoreOrCreate(Driver::class,
                     ['licence_no' => $licence],
                     [
                         'name' => "{$first} {$last}",
@@ -313,7 +317,7 @@ class PayrollSeeder extends Seeder
                 )->id;
             }
 
-            $employee = Employee::updateOrCreate(
+            $employee = $this->restoreOrCreate(Employee::class,
                 ['employee_no' => $number],
                 [
                     'first_name' => $first,
@@ -406,18 +410,34 @@ class PayrollSeeder extends Seeder
                 continue;
             }
 
-            LedgerEntry::updateOrCreate(
-                ['truck_id' => $truckId, 'date' => $date->toDateString()],
+            /**
+             * Matched with `whereDate`, as `FinanceService` matches a day.
+             *
+             * A `date` attribute is written through the model's `Y-m-d H:i:s`
+             * format, so on a driver that keeps the time the stored value has a
+             * midnight on it and a bare `Y-m-d` never matches. The sheet would
+             * then be written again beside itself on a second run, and every
+             * driver on it would be paid for twice the days they worked.
+             */
+            $row = $this->upsertOn(
+                LedgerEntry::class,
+                ['truck_id' => $truckId],
+                'date',
+                $date,
                 [
                     'driver_id' => $driverId,
-                    'helper_id' => $helperId,
                     'driver_salary_cents' => $driverPay,
-                    'helper_salary_cents' => $helperPay,
                     'trip_income_cents' => $driverPay * 6,
                     'fuel_cents' => $driverPay,
                     'route' => 'Demo run',
                 ],
             );
+
+            // The helper's pay on their own line, through the one method that
+            // keeps the day's helper total in step with its lines.
+            app(FinanceService::class)->syncHelperLines($row, $helperId === null
+                ? []
+                : [['driver_id' => $helperId, 'salary_cents' => $helperPay]]);
         }
     }
 

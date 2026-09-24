@@ -103,6 +103,9 @@ abstract class ApiController extends Controller
         return array_filter($request->only([
             'status', 'search', 'from', 'to',
             'driver_id', 'vehicle_id', 'customer_id', 'truck_id', 'direction',
+            // The partner cut: which contractor, whether a contractor at all,
+            // and where the work came from.
+            'trucker_id', 'hauled_by', 'booking_source',
         ]), static fn ($v) => $v !== null && $v !== '');
     }
 

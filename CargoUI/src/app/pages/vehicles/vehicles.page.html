@@ -24,7 +24,12 @@
           </span>
           <div class="min-w-0 flex-1">
             <p class="cr-num truncate text-[15px] font-semibold">{{ v.plate }}</p>
-            <p class="truncate text-[12px] text-cr-ink-muted">{{ v.model }}</p>
+            <p class="truncate text-[12px] text-cr-ink-muted">
+              {{ v.model }}
+              @if (v.wheels) {
+                · {{ v.wheels }}-wheeler
+              }
+            </p>
           </div>
           <app-status-pill [status]="v.status" />
         </div>
@@ -47,6 +52,54 @@
             <dd class="cr-num mt-0.5 text-[13px]">{{ km(v.odometer_km) }}</dd>
           </div>
         </dl>
+
+        <!--
+          On what terms this truck runs — shown only when it is not the
+          fleet's own.
+
+          A fleet that owns everything should not have "Owned" repeated on
+          every card; the absence of this block is the ordinary case and says
+          enough. When it is there it answers the two questions a hired truck
+          raises: who gets paid, and how much.
+        -->
+        @if (v.hired) {
+          <div class="mt-4 rounded-control bg-cr-tint px-3 py-2">
+            <div class="flex items-baseline justify-between gap-2">
+              <span class="text-[12px] font-semibold text-cr-blue">
+                {{ v.arrangement_label }}
+              </span>
+              <span class="cr-num text-[12px] font-semibold">
+                @if (v.arrangement === 'rented') {
+                  {{ v.rent_cents === null ? '—' : money(v.rent_cents) + '/mo' }}
+                } @else {
+                  {{ v.share_bp === null ? '—' : 'fleet keeps ' + rate(v.share_bp) }}
+                }
+              </span>
+            </div>
+            <p class="mt-0.5 truncate text-[12px] text-cr-ink-muted">
+              {{ v.owner_trucker_name ?? v.owner_name ?? 'No owner recorded' }}
+            </p>
+
+            <!--
+              A truck that cannot pay anybody.
+
+              Marked as a share arrangement with nobody named to receive it —
+              it would haul all month and credit nothing. Said here rather
+              than discovered when the owner asks where their money went.
+            -->
+            @if (
+              (v.arrangement === 'rented_share' || v.arrangement === 'subcontracted') &&
+              !v.shares_revenue
+            ) {
+              <p class="mt-1 text-[12px] font-semibold text-cr-red">
+                Nobody is set to be paid for this truck.
+              </p>
+            }
+            @if (v.arrangement === 'rented' && !v.rent_cents) {
+              <p class="mt-1 text-[12px] font-semibold text-cr-red">No monthly rent recorded.</p>
+            }
+          </div>
+        }
 
         <div class="mt-4">
           <div class="flex items-baseline justify-between">

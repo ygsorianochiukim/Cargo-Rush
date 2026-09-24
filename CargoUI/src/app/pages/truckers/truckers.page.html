@@ -1,0 +1,598 @@
+@if (loadError()) {
+  <app-error-state [message]="loadError()!" />
+}
+
+<!--
+  The standings, as tabs.
+
+  `pending` first and selected on open: a registration nobody has read is
+  somebody sitting in a waiting room with an empty app, and it is the only
+  thing on this page with a person on the other end of it.
+-->
+<div class="flex flex-wrap items-center gap-2">
+  @for (
+    option of [
+      { key: 'pending', label: 'Waiting for approval' },
+      { key: 'active', label: 'Approved' },
+      { key: 'inactive', label: 'On hold' },
+      { key: 'all', label: 'All' },
+    ];
+    track option.key
+  ) {
+    <button
+      type="button"
+      role="tab"
+      [attr.aria-selected]="tab() === option.key"
+      class="inline-flex h-9 items-center gap-2 rounded-full border px-3.5 text-[13px] transition-colors"
+      [class]="
+        tab() === option.key
+          ? 'border-cr-blue bg-cr-tint font-semibold text-cr-blue'
+          : 'border-cr-line bg-cr-surface text-cr-ink hover:bg-cr-tint'
+      "
+      (click)="tab.set($any(option.key))">
+      {{ option.label }}
+      <span class="cr-num text-[12px] opacity-70">{{ countOf($any(option.key)) }}</span>
+    </button>
+  }
+</div>
+
+<app-card [padded]="false">
+  @if (rows(); as list) {
+    @if (list.length === 0) {
+      <app-empty-state
+        icon="fleet"
+        [title]="
+          tab() === 'pending'
+            ? 'Nobody waiting'
+            : tab() === 'active'
+              ? 'No approved truckers yet'
+              : 'Nobody on hold'
+        "
+        [body]="
+          tab() === 'pending'
+            ? 'Registrations from the app appear here for you to check before they can take work.'
+            : 'Truckers register themselves in the app and appear here once they do.'
+        " />
+    } @else {
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[980px] border-collapse text-left whitespace-nowrap">
+          <thead>
+            <tr class="border-b border-cr-line">
+              <th class="cr-th px-4 py-2.5">Trucker</th>
+              <th class="cr-th px-4 py-2.5">Truck</th>
+              <th class="cr-th px-4 py-2.5">Licence</th>
+              <th class="cr-th px-4 py-2.5 text-right">Trips</th>
+              <th class="cr-th px-4 py-2.5 text-right">Rate</th>
+              <th class="cr-th px-4 py-2.5">Standing</th>
+              <th class="cr-th px-4 py-2.5"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (t of list; track t.id) {
+              <tr
+                class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint">
+                <td class="px-4 py-3">
+                  <span class="flex items-center gap-3">
+                    <span
+                      class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-cr-tint text-[11px] font-semibold text-cr-blue">
+                      {{ initials(t.name) }}
+                    </span>
+                    <span>
+                      <span class="block text-[13px] font-semibold">{{ t.name }}</span>
+                      <span class="cr-num block text-[12px] text-cr-ink-muted">{{ t.phone }}</span>
+                    </span>
+                  </span>
+                </td>
+
+                <td class="px-4 py-3 text-[13px]">{{ plate(t) }}</td>
+
+                <td class="cr-num px-4 py-3 text-[13px]">{{ t.licence_no }}</td>
+
+                <td class="cr-num px-4 py-3 text-right text-[13px]">{{ t.trips_completed }}</td>
+
+                <td class="px-4 py-3 text-right">
+                  <!--
+                    The rate. The fleet's, for everybody — there is no longer a
+                    per-partner one to tell it apart from, and the column stays
+                    because what a run splits at is the thing a desk looking at
+                    this roster is most often checking. It is changed on Access
+                    Control, with the tariff and the tax rates.
+                  -->
+                  <span class="cr-num text-[13px] font-semibold">{{ rate(t.commission_bp) }}</span>
+                </td>
+
+                <td class="px-4 py-3">
+                  <span class="flex items-center gap-2">
+                    <app-status-pill [status]="t.status" />
+                    <!--
+                      Online is the partner's own switch and says nothing about
+                      whether they are approved. Shown beside the standing
+                      rather than folded into it, because the desk needs to know
+                      which of the two is why somebody is not hauling.
+                    -->
+                    @if (t.status === 'active') {
+                      <span
+                        class="text-[11px] font-semibold"
+                        [class]="t.is_online ? 'text-cr-success' : 'text-cr-ink-muted'">
+                        {{ t.is_online ? 'online' : 'offline' }}
+                      </span>
+                    }
+                  </span>
+                </td>
+
+                <td class="px-4 py-3">
+                  <span class="flex items-center justify-end gap-1.5">
+                    @if (t.status === 'pending') {
+                      <button
+                        type="button"
+                        class="inline-flex h-8 items-center gap-1.5 rounded-control bg-cr-blue px-3 text-[12px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+                        [attr.aria-label]="'Approve ' + t.name"
+                        (click)="approve(t)">
+                        <app-icon name="check" [size]="14" />
+                        Approve
+                      </button>
+                    } @else if (t.status === 'active') {
+                      <button
+                        type="button"
+                        class="inline-flex h-8 items-center rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-ink-muted transition-colors hover:border-cr-red hover:text-cr-red"
+                        [attr.aria-label]="'Put ' + t.name + ' on hold'"
+                        (click)="suspend(t)">
+                        Put on hold
+                      </button>
+                    } @else {
+                      <button
+                        type="button"
+                        class="inline-flex h-8 items-center rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint"
+                        [attr.aria-label]="'Reinstate ' + t.name"
+                        (click)="approve(t)">
+                        Reinstate
+                      </button>
+                    }
+
+                    <button
+                      type="button"
+                      class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
+                      [attr.aria-label]="'Open ' + t.name"
+                      (click)="open(t)">
+                      <app-icon name="chevron-right" [size]="16" />
+                    </button>
+                  </span>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  } @else if (!loadError()) {
+    <div class="p-4"><app-skeleton-rows [count]="5" /></div>
+  }
+</app-card>
+
+<!--
+  One partner: their rate, and their running account.
+
+  The two are in the same drawer because they are the same conversation — what
+  this person is on, and what that has come to.
+-->
+@if (openTrucker(); as t) {
+  <app-modal
+    [open]="true"
+    [title]="t.name"
+    [subtitle]="plate(t) + ' · ' + t.phone"
+    icon="fleet"
+    size="lg"
+    (closed)="close()">
+    @if (formError()) {
+      <p class="mb-4 rounded-control bg-cr-red-bg px-3 py-2 text-[13px] font-medium text-cr-red">
+        {{ formError() }}
+      </p>
+    }
+
+    <!--
+      Vetting, at the top and with what it is decided on beside it.
+
+      A registration lands `pending` and this person's app is an empty board
+      until somebody here says yes, so the decision goes above the rate and the
+      wallet — it is the only thing on this screen with somebody waiting on it.
+
+      The licence and the truck sit next to the button on purpose: approving is
+      reading those two things and then deciding, and a button that made
+      somebody close the drawer to find what they were deciding on would split
+      one act across two screens.
+    -->
+    <div
+      class="mb-4 rounded-control px-4 py-3"
+      [class]="t.status === 'pending' ? 'bg-cr-warning-bg' : 'bg-cr-tint'">
+      <div class="flex flex-wrap items-center gap-3">
+        <div class="min-w-0 flex-1">
+          <p class="text-[13px] font-semibold">
+            @if (t.status === 'pending') {
+              Waiting for approval
+            } @else if (t.status === 'active') {
+              Approved — may take work
+            } @else {
+              On hold
+            }
+          </p>
+          <p class="cr-num mt-0.5 text-[12px] text-cr-ink-muted">
+            Licence {{ t.licence_no }}
+            @if (t.licence_expiry) {
+              · expires {{ fmt.date(t.licence_expiry) }}
+            }
+            · {{ plate(t) }}
+          </p>
+        </div>
+
+        @if (t.status === 'pending') {
+          <button
+            type="button"
+            class="inline-flex h-9 items-center gap-1.5 rounded-control bg-cr-blue px-4 text-[13px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+            [attr.aria-label]="'Approve ' + t.name"
+            (click)="approve(t)">
+            <app-icon name="check" [size]="15" />
+            Approve
+          </button>
+        } @else if (t.status === 'active') {
+          <button
+            type="button"
+            class="inline-flex h-9 items-center rounded-control border border-cr-line bg-cr-surface px-4 text-[13px] font-semibold text-cr-ink-muted transition-colors hover:border-cr-red hover:text-cr-red"
+            [attr.aria-label]="'Put ' + t.name + ' on hold'"
+            (click)="suspend(t)">
+            Put on hold
+          </button>
+        } @else {
+          <button
+            type="button"
+            class="inline-flex h-9 items-center rounded-control border border-cr-line bg-cr-surface px-4 text-[13px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint"
+            [attr.aria-label]="'Reinstate ' + t.name"
+            (click)="approve(t)">
+            Reinstate
+          </button>
+        }
+      </div>
+    </div>
+
+    <!-- The account. -->
+    @if (walletError()) {
+      <app-error-state class="mt-5 block" [message]="walletError()!" />
+    } @else if (wallet(); as w) {
+      <div class="mt-5 grid gap-4 sm:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
+        <div>
+          <div class="rounded-control border border-cr-line px-4 py-4">
+            <p class="cr-meta">{{ standing()?.label }}</p>
+            <p class="cr-num mt-1 text-[28px] font-bold" [class]="standing()?.tone">
+              <!-- The magnitude. A signed figure beside a sentence that already
+                   says the direction is the same fact stated twice, once
+                   confusingly. -->
+              {{ money(w.balance_cents < 0 ? -w.balance_cents : w.balance_cents) }}
+            </p>
+            <p class="mt-1 text-[12px] text-cr-ink-muted">{{ standing()?.hint }}</p>
+
+            <!--
+              Money already sent that has not landed.
+
+              Beside the balance, never inside it. "Owed ₱26,400, ₱26,400 on
+              the way" is the honest pair; folding them together would say the
+              transfer had arrived the moment somebody typed it.
+            -->
+            @if (w.in_flight_cents > 0) {
+              <p class="cr-num mt-2 text-[12px] font-semibold text-cr-blue">
+                {{ money(w.in_flight_cents) }} on the way
+              </p>
+            }
+          </div>
+
+          <dl class="mt-3 space-y-1.5 text-[13px]">
+            <div class="flex justify-between gap-3">
+              <dt class="text-cr-ink-muted">Earned</dt>
+              <dd class="cr-num font-semibold">{{ money(w.earned_cents) }}</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-cr-ink-muted">Commission charged</dt>
+              <dd class="cr-num font-semibold">{{ money(w.commission_cents) }}</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-cr-ink-muted">Paid out</dt>
+              <dd class="cr-num font-semibold">{{ money(w.paid_out_cents) }}</dd>
+            </div>
+            <div class="flex justify-between gap-3">
+              <dt class="text-cr-ink-muted">Remitted</dt>
+              <dd class="cr-num font-semibold">{{ money(w.remitted_cents) }}</dd>
+            </div>
+            <div class="flex justify-between gap-3 border-t border-cr-line pt-1.5">
+              <dt class="text-cr-ink-muted">Trips settled</dt>
+              <dd class="cr-num font-semibold">{{ w.trips_settled }}</dd>
+            </div>
+            <!--
+              What is actually payable, which is not the balance.
+
+              The balance includes adjustments — corrections rather than runs
+              anybody can be paid for — so a partner can have ₱26,400 of unpaid
+              work and a smaller balance. Both figures are true and the desk
+              needs the second one to settle against.
+            -->
+            @if (w.unpaid_earnings_count > 0) {
+              <div class="flex justify-between gap-3">
+                <dt class="text-cr-ink-muted">
+                  Unpaid runs ({{ w.unpaid_earnings_count }})
+                </dt>
+                <dd class="cr-num font-semibold text-cr-warning">
+                  {{ money(w.unpaid_earnings_cents) }}
+                </dd>
+              </div>
+            }
+            @if (w.unremitted_commission_count > 0) {
+              <div class="flex justify-between gap-3">
+                <dt class="text-cr-ink-muted">
+                  Commission due ({{ w.unremitted_commission_count }})
+                </dt>
+                <dd class="cr-num font-semibold text-cr-red">
+                  {{ money(w.unremitted_commission_cents) }}
+                </dd>
+              </div>
+            }
+          </dl>
+
+          <!--
+            Settling up, run by run.
+
+            A payout is no longer a figure somebody types — it is the set of
+            runs it covers, and the total follows from them. That is the whole
+            of this change: "have you paid me for CR-24823?" used to be
+            unanswerable, and is now a tick.
+
+            Nothing ticked means everything outstanding, which is the ordinary
+            case and needs no separate button.
+          -->
+          <div class="mt-4 rounded-control border border-cr-line px-3 py-3">
+            <app-field label="RECORD">
+              <!--
+                Bound to a signal, not a form control.
+
+                `outstanding()` and `settleTotal()` are computed from this, and
+                signals cannot track a `FormControl`'s plain value — so with a
+                control here, switching the select left both showing the
+                previous kind's runs and the previous total. The figure on the
+                button could then disagree with what the button settled.
+              -->
+              <select
+                [value]="settleKind()"
+                (change)="pickKind($any($event.target).value)"
+                [class]="inputClass">
+                @for (option of settleKinds(); track option.value) {
+                  <option [value]="option.value">{{ option.label }}</option>
+                }
+              </select>
+            </app-field>
+
+            @if (settleKind() === 'adjustment') {
+              <div class="mt-2.5">
+                <app-field
+                  label="AMOUNT (₱)"
+                  hint="Negative takes it off what they are owed.">
+                  <input
+                    type="number"
+                    step="0.01"
+                    [formControl]="$any(settleForm.controls.amount)"
+                    [class]="inputClass" />
+                </app-field>
+              </div>
+            } @else {
+              <p class="cr-meta mt-3">
+                {{ settleKind() === 'payout' ? 'RUNS TO PAY FOR' : 'RUNS TO CLEAR' }}
+              </p>
+
+              @if (outstanding().length === 0) {
+                <p class="mt-1 text-[12px] text-cr-ink-muted">Nothing outstanding.</p>
+              } @else {
+                <p class="mt-0.5 text-[12px] text-cr-ink-muted">
+                  Tick the ones this covers, or leave them all unticked to settle everything.
+                </p>
+
+                <ul class="mt-2 flex flex-col gap-1">
+                  @for (entry of outstanding(); track entry.id) {
+                    <li>
+                      <label
+                        class="flex cursor-pointer items-center gap-2 rounded-control px-2 py-1.5 transition-colors hover:bg-cr-tint">
+                        <input
+                          type="checkbox"
+                          class="h-4 w-4 flex-none accent-cr-blue"
+                          [checked]="picked().has(entry.id)"
+                          (change)="pick(entry.id)" />
+                        <span class="min-w-0 flex-1">
+                          <span class="block truncate text-[12px] font-semibold">
+                            {{ entry.trip_reference ?? entry.description }}
+                          </span>
+                          <span class="cr-num block text-[11px] text-cr-ink-muted">
+                            {{ fmt.date(entry.occurred_on) }}
+                          </span>
+                        </span>
+                        <span class="cr-num text-[12px] font-semibold">
+                          {{ money(entry.amount_cents < 0 ? -entry.amount_cents : entry.amount_cents) }}
+                        </span>
+                      </label>
+                    </li>
+                  }
+                </ul>
+              }
+            }
+
+            @if (settleKind() !== 'adjustment') {
+              <div class="mt-2.5">
+                <app-field label="HOW">
+                  <select [formControl]="$any(settleForm.controls.method)" [class]="inputClass">
+                    <option value="bank_transfer">Bank transfer</option>
+                    <option value="cash">Cash</option>
+                    <option value="cheque">Cheque</option>
+                    <option value="online">Online</option>
+                  </select>
+                </app-field>
+              </div>
+
+              <!--
+                Has it landed already?
+
+                Cash across the desk has. A transfer has not, and until it is
+                confirmed the partner is still owed the money — which is the
+                whole reason a payment has a state at all.
+              -->
+              <label class="mt-2.5 flex cursor-pointer items-start gap-2">
+                <input
+                  type="checkbox"
+                  class="mt-0.5 h-4 w-4 flex-none accent-cr-blue"
+                  [formControl]="$any(settleForm.controls.cleared)" />
+                <span class="text-[12px]">
+                  <span class="font-semibold">Already received</span>
+                  <span class="block text-cr-ink-muted">
+                    Leave unticked for a transfer — mark it received once it clears. The balance
+                    does not drop until then.
+                  </span>
+                </span>
+              </label>
+            }
+
+            <div class="mt-2.5">
+              <app-field label="REFERENCE" hint="A cheque number or a transfer reference.">
+                <input
+                  type="text"
+                  [formControl]="$any(settleForm.controls.reference)"
+                  [class]="inputClass" />
+              </app-field>
+            </div>
+
+            <div class="mt-2.5">
+              <app-field
+                label="NOTE"
+                [hint]="
+                  settleKind() === 'adjustment'
+                    ? 'Required — say what is being corrected.'
+                    : 'Optional.'
+                ">
+                <input
+                  type="text"
+                  [formControl]="$any(settleForm.controls.note)"
+                  [class]="inputClass" />
+              </app-field>
+            </div>
+
+            <button
+              type="button"
+              class="mt-3 h-10 w-full rounded-control bg-cr-blue text-[13px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-50"
+              [disabled]="busy() || (settleKind() !== 'adjustment' && outstanding().length === 0)"
+              (click)="settle()">
+              @if (busy()) {
+                Recording…
+              } @else if (settleKind() === 'adjustment') {
+                Record adjustment
+              } @else {
+                <!-- The figure on the button is the figure that gets written. -->
+                {{ settleKind() === 'payout' ? 'Pay' : 'Record' }}
+                {{ money(settleTotal()) }}
+                @if (picked().size === 0) {
+                  · everything outstanding
+                } @else {
+                  · {{ picked().size }} {{ picked().size === 1 ? 'run' : 'runs' }}
+                }
+              }
+            </button>
+          </div>
+        </div>
+
+        <!-- The statement. Every row carries what the run billed and what came
+             off it, so a figure queried a year later explains itself without
+             anybody opening the trip. -->
+        <div class="min-w-0">
+          <p class="cr-meta mb-2">STATEMENT</p>
+
+          @if (w.entries.length === 0) {
+            <app-empty-state
+              icon="wallet"
+              title="Nothing yet"
+              body="Every run this trucker finishes is posted here the moment it is handed over." />
+          } @else {
+            <div class="divide-y divide-cr-line rounded-control border border-cr-line">
+              @for (entry of w.entries; track entry.id) {
+                <div class="flex items-start gap-3 px-3 py-2.5">
+                  <div class="min-w-0 flex-1">
+                    <p class="truncate text-[13px] font-semibold">{{ entry.description }}</p>
+                    <p class="cr-num text-[12px] text-cr-ink-muted">
+                      {{ fmt.date(entry.occurred_on) }}
+                      @if (entry.gross_cents !== null && entry.rate_bp !== null) {
+                        · {{ money(entry.gross_cents) }} billed · {{ rate(entry.rate_bp) }}
+                      }
+                      @if (entry.reference) {
+                        · {{ entry.reference }}
+                      }
+                    </p>
+                    @if (entry.source_label) {
+                      <p class="text-[11px] font-semibold text-cr-blue">{{ entry.source_label }}</p>
+                    }
+
+                    <!--
+                      Paid or not, on the run itself.
+
+                      Only on rows that can be paid for: a payout *is* the
+                      payment, and an adjustment corrects the balance rather
+                      than recording work, so neither carries a state.
+                    -->
+                    @switch (entry.payment_state) {
+                      @case ('paid') {
+                        <p class="text-[11px] font-semibold text-cr-success">
+                          PAID {{ fmt.date(entry.settled_at) }}
+                          @if (entry.settlement_reference) {
+                            · {{ entry.settlement_reference }}
+                          }
+                        </p>
+                      }
+                      @case ('processing') {
+                        <!-- Sent, not landed. The partner is still owed it. -->
+                        <p class="text-[11px] font-semibold text-cr-blue">
+                          PROCESSING
+                          @if (entry.settlement_reference) {
+                            · {{ entry.settlement_reference }}
+                          }
+                        </p>
+                      }
+                      @case ('unpaid') {
+                        <p class="text-[11px] font-semibold text-cr-warning">UNPAID</p>
+                      }
+                    }
+
+                    <!--
+                      A payment the office has started and not confirmed.
+
+                      The button that finally moves the balance. On the payment
+                      row rather than on the runs, because one press confirms
+                      the whole transfer and pressing it per run would be
+                      asking the same question four times.
+                    -->
+                    @if (!entry.settleable && entry.status === 'pending') {
+                      <button
+                        type="button"
+                        class="mt-1 inline-flex h-7 items-center gap-1 rounded-control bg-cr-blue px-2.5 text-[11px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-50"
+                        [disabled]="busy()"
+                        [attr.aria-label]="'Confirm ' + entry.description + ' has landed'"
+                        (click)="confirmPayment(entry.id)">
+                        <app-icon name="check" [size]="12" />
+                        Mark received
+                      </button>
+                    }
+                  </div>
+                  <p
+                    class="cr-num text-[13px] font-bold"
+                    [class]="entry.amount_cents > 0 ? 'text-cr-success' : 'text-cr-ink'">
+                    {{ entry.amount_cents > 0 ? '+' : '−'
+                    }}{{ money(entry.amount_cents < 0 ? -entry.amount_cents : entry.amount_cents) }}
+                  </p>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    } @else {
+      <div class="mt-5"><app-skeleton-rows [count]="4" /></div>
+    }
+  </app-modal>
+}

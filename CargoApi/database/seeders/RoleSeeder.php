@@ -91,7 +91,11 @@ class RoleSeeder extends Seeder
                     'trips.view', 'trips.manage', 'gps.view', 'dispatch.view',
                     'delivery.view', 'vehicles.view', 'vehicles.manage',
                     'drivers.view', 'drivers.manage', 'fuel.view', 'fuel.manage',
-                    'finance.view', 'finance.manage', 'expenses.view', 'expenses.manage',
+                    // Partners, both halves. Approving one and setting their
+                    // rate are commercial decisions about who hauls for the
+                    // firm, which is the GM's job description.
+                    'truckers.view', 'truckers.manage',
+                    'finance.view', 'finance.manage', 'expenses.view', 'expenses.manage', 'suppliers.view', 'suppliers.manage',
                     // The books, both halves: a GM runs the business and signs
                     // off what the statements say — and payroll, which is the
                     // largest cheque the firm writes.
@@ -115,6 +119,16 @@ class RoleSeeder extends Seeder
                 'permissions' => [
                     'trips.view', 'trips.manage', 'gps.view', 'dispatch.view',
                     'delivery.view', 'vehicles.view', 'drivers.view',
+                    /**
+                     * Sees who hauls for the firm; does not decide who does.
+                     *
+                     * The dispatcher needs the roster to know a run has been
+                     * taken and by whom. Handing a contractor the work is
+                     * `truckers.manage`, deliberately — assigning the fleet's
+                     * own drivers costs a rota, and assigning a partner commits
+                     * the firm to paying somebody outside it.
+                     */
+                    'truckers.view',
                     'incidents.view', 'incidents.manage', 'notifications.view',
                 ],
             ],
@@ -131,7 +145,11 @@ class RoleSeeder extends Seeder
                     'accounting.view', 'accounting.manage',
                     'payroll.view', 'payroll.manage',
                     'customers.view', 'billing.view', 'billing.manage',
-                    'pricing.view', 'pricing.manage', 'expenses.view', 'expenses.manage',
+                    'pricing.view', 'pricing.manage', 'expenses.view', 'expenses.manage', 'suppliers.view', 'suppliers.manage',
+                    // Reads the partner wallets. What a contractor is owed is
+                    // a liability of the firm, and the accountant answers for
+                    // the figure whether or not they are the one who pays it.
+                    'truckers.view',
                     'sales.view', 'notifications.view',
                 ],
             ],
@@ -141,13 +159,16 @@ class RoleSeeder extends Seeder
                 'description' => 'Money in and out. Bills, collects and files spend.',
                 'system' => false,
                 'permissions' => [
-                    'finance.view', 'expenses.view', 'expenses.manage', 'sales.view',
+                    'finance.view', 'expenses.view', 'expenses.manage', 'suppliers.view', 'suppliers.manage', 'sales.view',
                     // Reads the books, does not post to them. Treasury moves
                     // money and files spend; what the entry says about it is
                     // the accountant's call, and an install where both could
                     // post has nobody left to check the other.
                     'accounting.view',
                     'billing.view', 'billing.manage', 'customers.view',
+                    // Money out includes paying the partners, so treasury both
+                    // reads the wallets and settles them.
+                    'truckers.view', 'truckers.manage',
                     'pricing.view', 'notifications.view',
                 ],
             ],
@@ -187,6 +208,17 @@ class RoleSeeder extends Seeder
                 'description' => 'A firm booking its own work and reading its own money.',
                 'system' => true,
                 'permissions' => ['portal.view', 'portal.request', 'notifications.view'],
+            ],
+            [
+                'key' => SystemRole::Trucker->value,
+                'name' => 'Trucker',
+                'description' => 'An owner-operator taking work and watching their wallet.',
+                'system' => true,
+                'permissions' => [
+                    'partner.view', 'partner.jobs', 'gps.write',
+                    'delivery.view', 'delivery.write', 'incidents.write',
+                    'notifications.view',
+                ],
             ],
         ];
     }

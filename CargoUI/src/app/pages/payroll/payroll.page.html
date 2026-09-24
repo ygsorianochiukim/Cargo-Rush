@@ -56,7 +56,7 @@
      to an office that has moved its cutoff. -->
 <div class="cr-no-print mb-4 rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
   <div class="flex flex-wrap items-end gap-3">
-    <app-field label="Month" hint="Which month to pay for">
+    <app-field label="Month">
       <input
         type="month"
         [class]="inputClass"
@@ -65,18 +65,45 @@
       />
     </app-field>
 
-    <app-field label="Cutoff" hint="Payroll is cut off on the 1st and the 16th">
-      <div class="flex h-10 items-center gap-1 rounded-control bg-cr-tint p-1" role="radiogroup">
-        @for (option of periods(); track option.half) {
+    <app-field label="Cutoff">
+      <!--
+        The firm's own calendar, on hover rather than under the chips.
+
+        Spelled out, it was a third line of hint text under a toolbar whose
+        chips already show every period the firm has — and it had to come from
+        the API either way: the sentence used to be hardcoded to "cut off on
+        the 1st and the 16th", so a firm cutting off on the 5th, the 15th and
+        the 25th read three correct chips above two days it had never chosen.
+      -->
+      <div
+        class="flex h-10 items-center gap-1 rounded-control bg-cr-tint p-1"
+        role="radiogroup"
+        [title]="cutoffHint()"
+      >
+        <!--
+          Tracked and selected by `index`, not by `half`.
+
+          `half` is "first", "second" or "month" — three words, which was enough
+          while a month had at most two periods. A firm cutting off three times
+          has two periods both calling themselves "second", so the lookup behind
+          this found the wrong one and clicking 16–25 selected 6–15. The
+          duplicate key broke `@for` tracking at the same time.
+
+          `index` is the period's position in the month and is unique by
+          construction.
+        -->
+        @for (option of periods(); track option.index) {
           <button
             type="button"
             role="radio"
-            [attr.aria-checked]="half() === option.half"
+            [attr.aria-checked]="periodIndex() === option.index"
             class="h-8 rounded-[6px] px-3 text-[13px] font-semibold transition-colors"
             [class]="
-              half() === option.half ? 'bg-cr-surface text-cr-ink shadow-card' : 'text-cr-ink-muted'
+              periodIndex() === option.index
+                ? 'bg-cr-surface text-cr-ink shadow-card'
+                : 'text-cr-ink-muted'
             "
-            (click)="chooseHalf(option.half)"
+            (click)="choosePeriod(option.index)"
           >
             {{ option.short }}
             <span class="ml-1 text-[11px] font-normal">{{ option.days }} days</span>
@@ -87,7 +114,7 @@
       </div>
     </app-field>
 
-    <app-field label="Pay date" hint="The day the money leaves the bank">
+    <app-field label="Pay date">
       <input
         type="date"
         [class]="inputClass"
@@ -187,7 +214,7 @@
             <app-empty-state
               icon="wallet"
               title="No pay runs yet"
-              body="Choose a pay period above and work one out. Only active employees with a monthly salary on record are paid here."
+              body="Choose a pay period above and work one out."
             />
           </div>
         } @else {
@@ -1230,7 +1257,7 @@
         <app-empty-state
           icon="wallet"
           title="No run selected"
-          body="Pick a run on the left, or choose a pay period above and work a new one out."
+          body="Pick a run on the left, or work a new one out."
         />
       </app-card>
     }

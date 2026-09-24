@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -62,9 +63,9 @@ class Driver extends Model
     }
 
     /** Trips they rode as the helper rather than the driver. */
-    public function helperTrips(): HasMany
+    public function helperTrips(): BelongsToMany
     {
-        return $this->hasMany(Trip::class, 'helper_id');
+        return $this->belongsToMany(Trip::class, 'trip_helpers')->withTimestamps();
     }
 
     public function fuelRecords(): HasMany

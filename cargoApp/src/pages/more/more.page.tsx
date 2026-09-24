@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
+import { DeliveryLog } from '@/models/delivery/delivery.model';
 import { deliveryService } from '@/services/delivery/delivery.service';
 import { useSession } from '@/services/identity/session';
+import { ProofOfDeliverySheet } from '@/components/proof-of-delivery-sheet';
 import { Screen } from '@/components/screen';
 import { Icon } from '@/components/ui/icon';
 import { Card, EmptyState, SkeletonRows, StatusPill } from '@/components/ui/primitives';
@@ -33,6 +35,9 @@ export function MorePage() {
   const driving = me.data?.role !== 'customer';
 
   const [signOutOpen, setSignOutOpen] = useState(false);
+  /** A delivered run whose photo is being sent late. */
+  const [photographing, setPhotographing] = useState<DeliveryLog | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   // Scoped to whoever is signed in, so this waits for the driver record
   // rather than asking the API for everybody's history.
@@ -118,37 +123,66 @@ export function MorePage() {
             body="Completed deliveries and their proof of delivery appear here."
           />
         ) : (
-          (logs.data ?? []).map((l, i, arr) => (
-            <Pressable
-              key={l.id}
-              accessibilityRole="button"
-              accessibilityLabel={`${l.reference} for ${l.customer}`}
-              style={({ pressed }) => [
-                styles.row,
-                i < arr.length - 1 && styles.divider,
-                pressed && { backgroundColor: Brand.tint },
-              ]}>
-              <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-                <Text style={styles.rowTitle}>{l.reference}</Text>
-                <Text style={styles.rowSub} numberOfLines={1}>
-                  {l.customer} · {l.destination}
-                </Text>
-                <View style={styles.podRow}>
-                  <Icon
-                    name={l.pod_ref ? 'check' : 'close'}
-                    size={12}
-                    color={l.pod_ref ? Brand.success : Brand.inkMuted}
-                  />
-                  <Text style={styles.rowSub}>
-                    {l.pod_ref ? `${l.pod_ref} · ${fmt.date(l.delivered_at)}` : 'No proof of delivery'}
+          (logs.data ?? []).map((l, i, arr) => {
+            // A run handed over without a photo — the gate had no signal. The
+            // row is the way to send it, which is why it is pressable at all;
+            // every other row has nothing to open and does not pretend to.
+            const needsPhoto = l.status === 'delivered' && !l.pod_image_url;
+
+            return (
+              <Pressable
+                key={l.id}
+                accessibilityRole={needsPhoto ? 'button' : undefined}
+                accessibilityLabel={
+                  needsPhoto
+                    ? `${l.reference} for ${l.customer}. No photo yet — tap to add one`
+                    : `${l.reference} for ${l.customer}`
+                }
+                accessibilityHint={needsPhoto ? 'Opens the camera to add a delivery photo' : undefined}
+                disabled={!needsPhoto}
+                onPress={() => setPhotographing(l)}
+                style={({ pressed }) => [
+                  styles.row,
+                  i < arr.length - 1 && styles.divider,
+                  pressed && { backgroundColor: Brand.tint },
+                ]}>
+                <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+                  <Text style={styles.rowTitle}>{l.reference}</Text>
+                  <Text style={styles.rowSub} numberOfLines={1}>
+                    {l.customer} · {l.destination}
                   </Text>
+                  {/*
+                    The photo, not the proof number, decides the tick. The number
+                    is assigned by the API on every hand-off, so it said "proof"
+                    for runs that had none.
+                  */}
+                  <View style={styles.podRow}>
+                    <Icon
+                      name={l.pod_image_url ? 'check' : needsPhoto ? 'camera' : 'close'}
+                      size={12}
+                      color={l.pod_image_url ? Brand.success : needsPhoto ? Brand.blue : Brand.inkMuted}
+                    />
+                    <Text style={[styles.rowSub, needsPhoto && styles.addPhoto]}>
+                      {l.pod_image_url
+                        ? `${l.pod_ref} · ${fmt.date(l.delivered_at)}`
+                        : needsPhoto
+                          ? 'No photo yet · Tap to add'
+                          : 'No proof of delivery'}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-              <StatusPill status={l.status} />
-            </Pressable>
-          ))
+                <StatusPill status={l.status} />
+              </Pressable>
+            );
+          })
         )}
       </Card>
+      ) : null}
+
+      {notice ? (
+        <Text style={styles.notice} accessibilityLiveRegion="polite">
+          {notice}
+        </Text>
       ) : null}
 
       <Pressable
@@ -162,6 +196,22 @@ export function MorePage() {
       <Text style={styles.version}>
         Cargo Rush · {driving ? 'Driver' : 'Customer'} v1.0.0
       </Text>
+
+      {photographing ? (
+        <ProofOfDeliverySheet
+          open
+          late
+          onClose={() => setPhotographing(null)}
+          onDelivered={() => {
+            logs.reload();
+            setNotice(`Photo sent for ${photographing.reference}.`);
+          }}
+          reference={photographing.reference ?? ''}
+          destination={photographing.destination ?? ''}
+          initialReceiver={photographing.receiver_name ?? ''}
+          deliver={(proof) => deliveryService.attachProof(photographing.id, proof)}
+        />
+      ) : null}
 
       {/* Destructive actions confirm first (DESIGN.md section 8). */}
       <Sheet
@@ -234,6 +284,8 @@ const styles = StyleSheet.create({
   rowTitle: { fontSize: 14, fontWeight: '600', color: Brand.ink, fontVariant: ['tabular-nums'] },
   rowSub: { fontSize: 12, color: Brand.inkMuted },
   podRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  addPhoto: { color: Brand.blue, fontWeight: '600' },
+  notice: { fontSize: 13, fontWeight: '500', color: Brand.success, textAlign: 'center' },
 
   signOut: {
     minHeight: 48,

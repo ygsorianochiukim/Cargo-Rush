@@ -43,6 +43,19 @@ class PermissionSeeder extends Seeder
         ['vehicles.manage', 'Manage vehicles', 'Assets', 'Add, edit and retire units.'],
         ['drivers.view', 'View drivers', 'Assets', 'The driver roster and availability.'],
         ['drivers.manage', 'Manage drivers', 'Assets', 'Add and edit driver records.'],
+        /**
+         * Partner truckers, and a line between reading the roster and acting
+         * on it.
+         *
+         * `manage` is the heavier half of any pair in this list. Approving a
+         * registration hands a stranger a customer's cargo; setting a rate
+         * decides what every future run of theirs splits at; a payout moves
+         * money out of the business. Whoever answers the phone can see who
+         * hauls and what they are owed without being able to do any of the
+         * three.
+         */
+        ['truckers.view', 'View truckers', 'Assets', 'The partner roster, their trucks and their wallets.'],
+        ['truckers.manage', 'Manage truckers', 'Assets', 'Approve partners, set their rate, assign work and pay them out.'],
         ['fuel.view', 'View fuel', 'Assets', 'Fuel records and the daily budget.'],
         ['fuel.manage', 'Manage fuel', 'Assets', 'Log and correct fuel receipts.'],
 
@@ -70,6 +83,8 @@ class PermissionSeeder extends Seeder
         ['finance.write', 'Record from the cab', 'Finance', 'A driver filing the day’s figures from the handset.'],
         ['expenses.view', 'View expenses', 'Finance', 'Categorised spend and the expense report.'],
         ['expenses.manage', 'Manage expenses', 'Finance', 'File, approve and categorise spend.'],
+        ['suppliers.view', 'View suppliers', 'Finance', 'Who the fleet buys from, and what has been spent there.'],
+        ['suppliers.manage', 'Manage suppliers', 'Finance', 'Add, rename and retire the firms the fleet buys from.'],
         ['sales.view', 'View sales', 'Finance', 'Daily, weekly and monthly takings.'],
         ['pricing.view', 'View the rate card', 'Finance', 'Zones, brackets and the diesel adjustment.'],
         ['pricing.manage', 'Manage the rate card', 'Finance', 'Change what every future run is charged.'],
@@ -108,6 +123,22 @@ class PermissionSeeder extends Seeder
         // Customer portal
         ['portal.view', 'Customer portal', 'Portal', 'A firm reading its own deliveries and invoices.'],
         ['portal.request', 'Request a pickup', 'Portal', 'A firm booking its own work.'],
+
+        /**
+         * The partner's own app, and the mirror of the two portal permissions
+         * above.
+         *
+         * `partner.view` is their record, their switch and their wallet — the
+         * things a partner may always reach, including one the office has just
+         * stood down, because somebody who cannot go offline is somebody the
+         * app is working against.
+         *
+         * `partner.jobs` is the board and the runs on it. Its own permission so
+         * a fleet can keep somebody on the roster and off the board without
+         * suspending them outright.
+         */
+        ['partner.view', 'Trucker app', 'Portal', 'A partner reading their own profile and wallet.'],
+        ['partner.jobs', 'Take jobs', 'Portal', 'A partner taking work off the board and running it.'],
     ];
 
     public function run(): void

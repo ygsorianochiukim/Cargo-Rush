@@ -12,6 +12,7 @@ use App\Domain\Identity\Models\User;
 use App\Domain\Shared\Http\Controllers\ApiController;
 use App\Domain\Tenancy\Requests\NearbyCarriersRequest;
 use App\Domain\Tenancy\Resources\CarrierResource;
+use App\Domain\Trucker\Services\HaulerDirectory;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -37,7 +38,13 @@ use Illuminate\Http\Request;
  */
 class PortalController extends ApiController
 {
-    public function __construct(private readonly PortalService $portal) {}
+    public function __construct(
+        private readonly PortalService $portal,
+        // The fleet's own contractors, near the load. A different list from
+        // `carriers` above and deliberately a different class — see
+        // `HaulerDirectory`.
+        private readonly HaulerDirectory $haulers,
+    ) {}
 
     /**
      * `GET portal/carriers` — who could pick this up.
@@ -64,6 +71,32 @@ class PortalController extends ApiController
         );
 
         return $this->collection(CarrierResource::collection($listings), $listings);
+    }
+
+    /**
+     * Who could carry this load — the fleet, and the truckers near it.
+     *
+     * Distinct from `carriers()` above, which lists *companies* across the
+     * whole platform and is how a shipper finds a haulier at all. This is
+     * inside one haulier: its own fleet, plus the vetted contractors near the
+     * load. The fleet is always on the list and never filtered by distance; a
+     * partner is only there if they are genuinely close enough to turn up.
+     *
+     * Before `requests/{tripId}` in the route file, so "haulers" is never read
+     * as a trip id.
+     */
+    public function haulers(Request $request): JsonResponse
+    {
+        $user = $this->user($request);
+        $fleet = $this->portal->carrier($user, null);
+
+        $listings = $this->haulers->near(
+            $fleet,
+            $request->has('lat') ? (float) $request->input('lat') : null,
+            $request->has('lng') ? (float) $request->input('lng') : null,
+        );
+
+        return $this->payload($listings->all(), ['fleet_id' => $fleet->getKey()]);
     }
 
     /** The counts and the two money figures the customer home screen leads with. */
@@ -117,7 +150,13 @@ class PortalController extends ApiController
         $carrier = $this->portal->carrier($user, $request->carrierId());
         $account = $this->portal->accountFor($user, $carrier);
 
-        $trip = $this->portal->submit($account, $request->toData($account->id, (int) $user->id));
+        $trip = $this->portal->submit(
+            $account,
+            $request->toData($account->id, (int) $user->id),
+            // Naming a partner turns the request into an offer held for them
+            // alone. Null — the ordinary case — leaves it with the office to place.
+            $request->truckerId(),
+        );
 
         return $this->item(new PortalTripResource($trip), status: 201);
     }

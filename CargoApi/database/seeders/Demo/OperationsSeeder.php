@@ -11,15 +11,18 @@ use App\Domain\Dispatch\Models\DispatchRecord;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Gps\Models\GpsPing;
 use App\Domain\Incident\Models\Incident;
+use App\Domain\Inspection\Models\Inspection;
+use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Vehicle\Models\Vehicle;
+use Database\Seeders\Concerns\AdoptsTrashedRows;
 use Database\Seeders\Concerns\SeedsIntoACompany;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
- * Trips and the four records that hang off them.
+ * Trips and the five records that hang off them.
  *
  * Dates are relative to today rather than pinned to a fixed day, so the
  * dashboard, the GPS view and the overdue badge all still have something to
@@ -27,7 +30,7 @@ use Illuminate\Support\Collection;
  */
 class OperationsSeeder extends Seeder
 {
-    use SeedsIntoACompany;
+    use AdoptsTrashedRows, SeedsIntoACompany;
 
     public function __construct(private readonly PricingService $pricing) {}
 
@@ -68,7 +71,7 @@ class OperationsSeeder extends Seeder
 
             $scheduled = Carbon::now()->addHours($depart);
 
-            $trip = Trip::updateOrCreate(['reference' => $ref], [
+            $trip = $this->restoreOrCreate(Trip::class, ['reference' => $ref], [
                 'origin' => $from,
                 'destination' => $to,
                 'cargo' => $cargo,
@@ -76,7 +79,6 @@ class OperationsSeeder extends Seeder
                 'pieces' => (int) ceil($kg / 300),
                 'handling' => 'Keep dry · stack max 3 high',
                 'driver_id' => $drivers[$driver] ?? null,
-                'helper_id' => $helper === null ? null : ($drivers[$helper] ?? null),
                 'vehicle_id' => $vehicles[$plate] ?? null,
                 'customer_id' => $customers[$customer] ?? null,
                 'status' => $status,
@@ -96,6 +98,9 @@ class OperationsSeeder extends Seeder
                 'currency' => $this->pricing->currency(),
             ])->save();
 
+            // The crew beside the driver, now a list rather than a column.
+            $trip->setHelpers($helper === null || ! isset($drivers[$helper]) ? [] : [$drivers[$helper]]);
+
             $this->records($trip, $status, $scheduled);
         }
 
@@ -112,7 +117,7 @@ class OperationsSeeder extends Seeder
         $left = in_array($status, ['in_transit', 'delivered', 'overdue'], true);
 
         if ($left) {
-            DispatchRecord::updateOrCreate(['trip_id' => $trip->id], [
+            $this->restoreOrCreate(DispatchRecord::class, ['trip_id' => $trip->id], [
                 'vehicle_id' => $trip->vehicle_id,
                 'dispatched_at' => $scheduled->copy()->addMinutes(random_int(2, 20)),
                 'location' => $trip->pickup_place,
@@ -121,7 +126,7 @@ class OperationsSeeder extends Seeder
             ]);
         }
 
-        DeliveryLog::updateOrCreate(['trip_id' => $trip->id], [
+        $this->restoreOrCreate(DeliveryLog::class, ['trip_id' => $trip->id], [
             'delivered_at' => $status === 'delivered' ? $trip->eta : null,
             // `pod_ref` is deliberately absent: the model assigns the next one
             // in the `POD-` series when `delivered_at` is set, exactly as it
@@ -131,9 +136,56 @@ class OperationsSeeder extends Seeder
             'status' => $status === 'delivered' ? 'delivered' : ($status === 'cancelled' ? 'cancelled' : $status),
         ]);
 
+        $this->preTripCheck($trip, $status);
+
         if (in_array($status, ['in_transit', 'overdue'], true)) {
             $this->trail($trip);
         }
+    }
+
+    /**
+     * The check that cleared this run to leave.
+     *
+     * Captured on the handset before a departure (DESIGN.md section 5.4), so
+     * anything that has left has one and anything still waiting on the desk
+     * does not — a pending request nobody has crewed yet has no unit to look
+     * over and nobody to look at it.
+     *
+     * One run fails its check on purpose. A demo where every checklist is seven
+     * ticks shows the screen and not the feature: a failure on a critical item
+     * is what holds a unit, and `failures()` is what the office reads to find
+     * out which. The unit picked for it is the one already in the workshop, so
+     * the fleet screen and the inspection agree about why it is not moving.
+     */
+    private function preTripCheck(Trip $trip, string $status): void
+    {
+        if (! in_array($status, ['in_transit', 'delivered', 'overdue', 'assigned'], true)) {
+            return;
+        }
+
+        $held = $trip->vehicle?->status === StatusValue::Maintenance;
+
+        $results = [
+            'tires' => true,
+            'oil' => true,
+            'gears' => true,
+            'brakes' => ! $held,
+            'lights' => true,
+            'coolant' => true,
+            'documents' => true,
+        ];
+
+        Inspection::updateOrCreate(['trip_id' => $trip->id], [
+            'vehicle_id' => $trip->vehicle_id,
+            'driver_id' => $trip->driver_id,
+            'results' => $results,
+            // Derived from the results rather than stated, exactly as
+            // `InspectionService` derives it: a check that said "good to go"
+            // while a critical item failed would be worse than no check.
+            'good_to_go' => ! $held,
+            'notes' => $held ? 'Pedal soft and pulling left. Held for the workshop.' : null,
+            'inspected_at' => $trip->scheduled_at?->copy()->subMinutes(25) ?? now(),
+        ]);
     }
 
     /**
@@ -176,7 +228,7 @@ class OperationsSeeder extends Seeder
         ];
 
         foreach ($rows as [$ref, $kind, $place, $hours, $driver, $plate, $status]) {
-            Incident::updateOrCreate(['reference' => $ref], [
+            $this->restoreOrCreate(Incident::class, ['reference' => $ref], [
                 'kind' => $kind,
                 'place' => $place,
                 'occurred_at' => Carbon::now()->addHours($hours),

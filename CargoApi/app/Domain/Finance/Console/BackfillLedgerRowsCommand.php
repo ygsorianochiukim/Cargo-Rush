@@ -75,7 +75,7 @@ class BackfillLedgerRowsCommand extends Command
                 // The crew too, so a backfilled row can be read by payroll
                 // exactly as a live one is.
                 driverId: $trip->driver_id,
-                helperId: $trip->helper_id,
+                helperIds: $trip->helperIds(),
             );
 
             if ($before->wasRecentlyCreated) {

@@ -120,8 +120,19 @@ export function pnlFromEntries(entries: LedgerEntry[]): PeriodTotals {
     // the API's roll-up — which does see the lines — is the authority.
     other_expenses_cents: 0,
     overhead_cents: 0,
+    // Zero for the same reason: a supplier bill is a document in Billing, not
+    // a ledger row, and this preview only has ledger rows in its hands.
+    supplier_bills_cents: 0,
+    // Zero again, and for the same reason: a partner's wallet is not
+    // something a ledger row can see.
+    trucker_payouts_cents: 0,
     total_expenses_cents: expenses,
     net_income_cents: income - expenses,
+    // And zero again: what the fleet owes lives in Billing and in the
+    // partners' wallets, neither of which a ledger row can see.
+    payables_cents: 0,
+    receivables_cents: 0,
+    actual_income_cents: income - expenses,
     margin: income === 0 ? null : (income - expenses) / income,
   };
 }
@@ -154,8 +165,13 @@ export function emptyTotals(): PeriodTotals {
     allowance_cents: 0,
     other_expenses_cents: 0,
     overhead_cents: 0,
+    supplier_bills_cents: 0,
+    trucker_payouts_cents: 0,
     total_expenses_cents: 0,
     net_income_cents: 0,
+    payables_cents: 0,
+    receivables_cents: 0,
+    actual_income_cents: 0,
     margin: null,
   };
 }

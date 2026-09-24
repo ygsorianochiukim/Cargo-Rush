@@ -179,13 +179,25 @@ class PayRun extends Model
         return $this->cutoff()['only'];
     }
 
+    /** Which run of the month this is, from zero. */
+    public function cutoffIndex(): int
+    {
+        return $this->cutoff()['index'];
+    }
+
+    /** How many runs the month this run belongs to has. */
+    public function cutoffCount(): int
+    {
+        return $this->cutoff()['count'];
+    }
+
     /**
-     * @return array{first: bool, only: bool}
+     * @return array{first: bool, only: bool, index: int, count: int}
      */
     private function cutoff(): array
     {
         if ($this->period_start === null || $this->period_end === null) {
-            return ['first' => true, 'only' => false];
+            return ['first' => true, 'only' => false, 'index' => 0, 'count' => 1];
         }
 
         // Through the service rather than resolving a company here: a model

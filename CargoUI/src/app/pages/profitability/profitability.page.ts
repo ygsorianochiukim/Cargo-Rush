@@ -55,6 +55,42 @@ export class ProfitabilityPage {
   protected readonly rows = computed<TruckPnl[]>(() => this.rollup()?.trucks ?? []);
 
   protected readonly totals = computed(() => this.rollup()?.totals ?? emptyTotals());
+
+  /**
+   * The part of the period's expenses that sits in no truck row.
+   *
+   * Office overhead, and the supplier bills actually paid over the window.
+   * Both are real costs of the period and neither is any unit's, so the TOTAL
+   * row is legitimately larger than its own columns add up to — and a reader
+   * who cannot see why will assume the table is broken. The template says the
+   * figure out loud when there is one.
+   */
+  protected readonly unattributed = computed(
+    () =>
+      this.totals().overhead_cents +
+      this.totals().supplier_bills_cents +
+      this.totals().trucker_payouts_cents,
+  );
+
+  /**
+   * The same figure broken out, for the sentence that explains it.
+   *
+   * Only the parts that are actually there. Three `@if`s in the template did
+   * this before and needed a fourth for every figure added, plus an "and"
+   * between each pair — which is how a sentence ends up reading "₱0 overhead
+   * and and ₱500 of payouts".
+   */
+  protected readonly unattributedParts = computed(() => {
+    const t = this.totals();
+
+    return [
+      [t.overhead_cents, 'overhead'] as const,
+      [t.supplier_bills_cents, 'of supplier bills paid'] as const,
+      [t.trucker_payouts_cents, 'paid to truckers'] as const,
+    ]
+      .filter(([cents]) => cents > 0)
+      .map(([cents, what]) => `${fmt.pesos(cents)} ${what}`);
+  });
   protected readonly best = computed(() => this.rollup()?.best_performer ?? null);
   protected readonly average = computed(
     () => this.rollup()?.average_profit_per_truck ?? { cents: 0, trucks: 0 },
@@ -68,7 +104,7 @@ export class ProfitabilityPage {
       key: r.truck.id,
       label: r.truck.plate ?? r.truck.label,
       value: r.net_income_cents,
-      detail: fmt.money(r.net_income_cents),
+      detail: fmt.pesos(r.net_income_cents),
     })),
   );
 
@@ -83,11 +119,11 @@ export class ProfitabilityPage {
     this.active().map((r) => ({
       key: r.truck.id,
       label: r.truck.plate ?? r.truck.label,
-      value: fmt.money(r.trip_income_cents),
+      value: fmt.pesos(r.trip_income_cents),
       pct: this.incomeWidth(r.trip_income_cents),
       tone: 'income' as const,
       rows: [
-        { label: 'Trip income', value: fmt.money(r.trip_income_cents) },
+        { label: 'Trip income', value: fmt.pesos(r.trip_income_cents) },
         { label: 'Days recorded', value: String(r.entry_count) },
       ],
     })),
@@ -97,17 +133,17 @@ export class ProfitabilityPage {
     this.active().map((r) => ({
       key: r.truck.id,
       label: r.truck.plate ?? r.truck.label,
-      value: fmt.money(r.total_expenses_cents),
+      value: fmt.pesos(r.total_expenses_cents),
       pct: this.expenseWidth(r.total_expenses_cents),
       tone: 'expense' as const,
       // The five columns the total is made of — this is where somebody looks
       // when a unit is expensive and they want to know which part of it is.
       rows: [
-        { label: 'Fuel', value: fmt.money(r.fuel_cents) },
-        { label: 'Driver', value: fmt.money(r.driver_salary_cents) },
-        { label: 'Helper', value: fmt.money(r.helper_salary_cents) },
-        { label: 'Maintenance', value: fmt.money(r.maintenance_cents) },
-        { label: 'Allowance', value: fmt.money(r.allowance_cents) },
+        { label: 'Fuel', value: fmt.pesos(r.fuel_cents) },
+        { label: 'Driver', value: fmt.pesos(r.driver_salary_cents) },
+        { label: 'Helper', value: fmt.pesos(r.helper_salary_cents) },
+        { label: 'Maintenance', value: fmt.pesos(r.maintenance_cents) },
+        { label: 'Allowance', value: fmt.pesos(r.allowance_cents) },
       ],
     })),
   );
@@ -116,16 +152,16 @@ export class ProfitabilityPage {
     this.active().map((r) => ({
       key: r.truck.id,
       label: r.truck.plate ?? r.truck.label,
-      value: fmt.money(r.net_income_cents),
+      value: fmt.pesos(r.net_income_cents),
       pct: this.netWidth(r.net_income_cents),
       tone: 'net' as const,
       negative: r.net_income_cents < 0,
       rows: [
-        { label: 'Income', value: fmt.money(r.trip_income_cents) },
-        { label: 'Expenses', value: fmt.money(r.total_expenses_cents) },
+        { label: 'Income', value: fmt.pesos(r.trip_income_cents) },
+        { label: 'Expenses', value: fmt.pesos(r.total_expenses_cents) },
         {
           label: 'Net',
-          value: fmt.money(r.net_income_cents),
+          value: fmt.pesos(r.net_income_cents),
           negative: r.net_income_cents < 0,
         },
         { label: 'Share of net', value: `${(r.net_share * 100).toFixed(1)}%` },

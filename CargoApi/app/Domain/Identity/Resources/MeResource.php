@@ -20,6 +20,10 @@ class MeResource extends ApiResource
     public function toArray(Request $request): array
     {
         $driver = $this->driver?->loadMissing('vehicle:id,driver_id,plate');
+        // The units come with it because `canTakeWork()` reads them — a partner
+        // with no truck free cannot take work, and reporting otherwise here
+        // would have the app open on a board it is about to be refused from.
+        $trucker = $this->trucker?->loadMissing('vehicles');
 
         return [
             'id' => $this->id,
@@ -109,6 +113,30 @@ class MeResource extends ApiResource
             'customer_address' => $this->customer?->address,
             'customer_lat' => $this->customer?->latitude,
             'customer_lng' => $this->customer?->longitude,
+
+            /**
+             * Present only for a partner trucker — the third of the three
+             * handset identities, beside `driver_id` and `customer_id`.
+             *
+             * `trucker_status` is the one field here the app genuinely branches
+             * on. A registration lands `pending` and the job board stays empty
+             * until somebody at the fleet approves it, so an app reading only
+             * the empty board would open on a screen that looks broken. This is
+             * what lets it say "we are checking your licence" instead.
+             *
+             * `trucker_online` is the partner's own switch and is theirs to
+             * flip; it says nothing about whether they are approved. Both are
+             * reported because collapsing them would leave the app unable to
+             * tell somebody waiting on the office from somebody who is simply
+             * off duty.
+             */
+            'trucker_id' => $trucker?->id,
+            'trucker_status' => $trucker?->status->value,
+            'trucker_online' => $trucker === null ? null : $trucker->is_online,
+            'trucker_can_take_work' => $trucker === null ? null : $trucker->canTakeWork(),
+            // What their runs split at, so the app can state the rate on the
+            // job board without a second call.
+            'commission_bp' => $trucker?->commissionRateBp(),
         ];
     }
 }

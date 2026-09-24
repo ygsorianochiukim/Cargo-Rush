@@ -12,10 +12,15 @@ final class ExpenseData extends Data
 {
     public function __construct(
         public readonly ?string $category_id = null,
-        public readonly ?string $truck_id = null,
         public readonly ?string $trip_id = null,
-        public readonly ?string $vehicle_id = null,
-        public readonly ?string $driver_id = null,
+        /**
+         * Who it was bought from.
+         *
+         * Replaces the typing. `payee` is still here below and still written —
+         * it holds what was already typed, and a tyre bought once in Tagum from
+         * somebody nobody will see again does not deserve a supplier record.
+         */
+        public readonly ?string $supplier_id = null,
         public readonly ?string $date = null,
         public readonly ?int $amount_cents = null,
         public readonly ?string $currency = null,
@@ -29,10 +34,8 @@ final class ExpenseData extends Data
     {
         return new self(
             category_id: $attributes['category_id'] ?? null,
-            truck_id: $attributes['truck_id'] ?? null,
             trip_id: $attributes['trip_id'] ?? null,
-            vehicle_id: $attributes['vehicle_id'] ?? null,
-            driver_id: $attributes['driver_id'] ?? null,
+            supplier_id: $attributes['supplier_id'] ?? null,
             date: $attributes['date'] ?? null,
             amount_cents: isset($attributes['amount_cents']) ? (int) $attributes['amount_cents'] : null,
             currency: $attributes['currency'] ?? null,
@@ -47,10 +50,8 @@ final class ExpenseData extends Data
     {
         return [
             'category_id' => $this->category_id,
-            'truck_id' => $this->truck_id,
             'trip_id' => $this->trip_id,
-            'vehicle_id' => $this->vehicle_id,
-            'driver_id' => $this->driver_id,
+            'supplier_id' => $this->supplier_id,
             'date' => $this->date,
             'amount_cents' => $this->amount_cents,
             'currency' => $this->currency,

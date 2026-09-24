@@ -7,8 +7,38 @@
 />
 
 <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-  <app-card heading="Spend this month" icon="wallet">
+  <app-card [heading]="isThisMonth() ? 'Spend this month' : 'Spend in range'" icon="wallet">
     @if (report(); as r) {
+      <div class="mb-4 flex flex-wrap items-end gap-2">
+        <app-field label="From" class="min-w-[130px] flex-1">
+          <input
+            type="date"
+            [class]="inputClass"
+            [value]="r.range.from"
+            [max]="r.range.to"
+            (change)="setRange('from', $any($event.target).value)"
+          />
+        </app-field>
+        <app-field label="To" class="min-w-[130px] flex-1">
+          <input
+            type="date"
+            [class]="inputClass"
+            [value]="r.range.to"
+            [min]="r.range.from"
+            (change)="setRange('to', $any($event.target).value)"
+          />
+        </app-field>
+        @if (!isThisMonth()) {
+          <button
+            type="button"
+            class="h-10 flex-none rounded-control px-3 text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+            (click)="resetRange()"
+          >
+            This month
+          </button>
+        }
+      </div>
+
       <p class="cr-num text-[28px] leading-none font-semibold">
         {{ fmt.money(r.total_cents, r.currency) }}
       </p>
@@ -29,7 +59,7 @@
       </dl>
 
       <p class="mt-3 text-[12px] text-cr-ink-muted">
-        Overhead is {{ overheadShare() }}% of the month, charged to no unit.
+        Overhead is {{ overheadShare() }}% of the {{ isThisMonth() ? 'month' : 'range' }}, charged to no unit.
       </p>
     } @else {
       <div class="cr-skeleton h-7 w-32"></div>
@@ -41,7 +71,7 @@
       @if (r.categories.length === 0) {
         <div class="flex flex-col items-center justify-center gap-2 py-10 text-center">
           <app-icon name="wallet" [size]="28" class="text-cr-ink-muted" />
-          <h3 class="text-[15px] font-semibold">Nothing logged this month</h3>
+          <h3 class="text-[15px] font-semibold">Nothing logged {{ isThisMonth() ? 'this month' : 'in this range' }}</h3>
           <p class="max-w-sm text-[13px] text-cr-ink-muted">Food, tolls, repairs, permits.</p>
         </div>
       } @else {

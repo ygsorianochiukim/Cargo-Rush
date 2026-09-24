@@ -59,7 +59,7 @@ class ExpenseService extends CrudService
             $expense->forceFill(['recorded_by' => $userId])->save();
         }
 
-        return $this->attachToLedger($this->dropDriverFromOverhead($expense));
+        return $this->attachToLedger($expense);
     }
 
     public function updateExpense(Expense $expense, ExpenseData $data): Expense
@@ -70,33 +70,29 @@ class ExpenseService extends CrudService
         // The truck or the date may have moved, which means the day's sheet it
         // belongs to has too. Re-deriving is cheaper than keeping a stale link
         // that puts a Tuesday's fuel on a Monday.
-        return $this->attachToLedger($this->dropDriverFromOverhead($updated));
+        return $this->attachToLedger($updated);
     }
 
-    /**
-     * Overhead carries no driver.
+    /*
+     * There was a rule here that took the driver off any expense with no truck
+     * on it. It is gone, and so is the driver.
      *
-     * The office rent and the annual permits belong to no unit, and therefore
-     * to nobody who drives one. A driver left on a line like that puts a person
-     * against spend they had no part in, and keeps them there in every
-     * per-driver figure built on this table afterwards.
+     * The rule existed to stop a person being named against the office rent,
+     * with a truck standing in for "belongs to a unit". Then the truck picker
+     * went — what a unit costs to run is a maintenance job now — and the rule
+     * became "drop the driver from every expense", which was the field
+     * disappearing by accident rather than by decision.
      *
-     * The clients ask outright whether an expense is a truck's and take the
-     * driver field away when it is not. This is that same rule at the other
-     * end, so a payload that skipped the form cannot file what the form would
-     * not let through — and an expense moved off its truck loses the driver it
-     * was carrying rather than keeping a stale one.
+     * So it is now a decision. Other Expenses is the supplies and the
+     * sundries: rice, tarpaulins, tolls, the office rent. What a crew costs is
+     * payroll and the daily sheet's own driver and helper columns, and a
+     * second, hand-filed record of the same money against a person is how two
+     * answers to "what did we pay Marco" get into one system.
+     *
+     * The column stays for the rows already filed with one — see
+     * `ExpenseRequest`, which stopped accepting it, and `ExpenseResource`,
+     * which still prints it.
      */
-    private function dropDriverFromOverhead(Expense $expense): Expense
-    {
-        if ($expense->truck_id !== null || $expense->driver_id === null) {
-            return $expense;
-        }
-
-        $expense->forceFill(['driver_id' => null])->save();
-
-        return $expense;
-    }
 
     private function attachToLedger(Expense $expense): Expense
     {

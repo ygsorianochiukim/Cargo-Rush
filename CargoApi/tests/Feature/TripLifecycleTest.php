@@ -31,7 +31,7 @@ beforeEach(function (): void {
         'cargo' => 'Dry goods, 12 pallets',
         'weight_kg' => 3200,
         'driver_id' => $this->driver->id,
-        'helper_id' => $this->helper->id,
+        'helper_ids' => [$this->helper->id],
         'vehicle_id' => $this->vehicle->id,
         'scheduled_at' => now()->addHours(3)->toIso8601String(),
     ];
@@ -59,9 +59,9 @@ it('refuses a reference chosen by the client', function (): void {
 
 it('will not book the same person as driver and helper', function (): void {
     $this->actingAs($this->admin)
-        ->postJson('/api/v1/trips', [...$this->payload, 'helper_id' => $this->driver->id])
+        ->postJson('/api/v1/trips', [...$this->payload, 'helper_ids' => [$this->driver->id]])
         ->assertStatus(422)
-        ->assertJsonValidationErrors('helper_id');
+        ->assertJsonValidationErrors('helper_ids.0');
 });
 
 it('will not accept an ETA before departure', function (): void {
@@ -183,12 +183,15 @@ describe('where a trip starts and ends', function (): void {
             'destination_lng' => 123.8444,
         ])->assertCreated();
 
-        // Pagadian to Ozamis is about 57 km as the crow flies. Checked as a
-        // range, because asserting a haversine to the metre tests arithmetic
-        // rather than behaviour.
+        // Pagadian to Ozamis is about 57 km as the crow flies. With no routing
+        // key in the test environment that is an estimate — the straight line
+        // times the detour factor — and marked as one. Checked as a range,
+        // because asserting a haversine to the metre tests arithmetic rather
+        // than behaviour. `RoadDistanceTest` covers the measured case.
         expect($response->json('data.distance_total_m'))
-            ->toBeGreaterThan(50_000)
-            ->toBeLessThan(65_000);
+            ->toBeGreaterThan(70_000)
+            ->toBeLessThan(90_000)
+            ->and($response->json('data.distance_source'))->toBe('estimate');
     });
 
     it('leaves a distance somebody entered alone', function (): void {
@@ -285,7 +288,7 @@ describe('the driver hands the run over', function (): void {
         // Two runs on the road at once, one each. The endpoint carries no id,
         // so the only run Marco can close is his.
         $mine = $onTheRoad();
-        $theirs = $onTheRoad(['driver_id' => $this->helper->id, 'helper_id' => $this->driver->id]);
+        $theirs = $onTheRoad(['driver_id' => $this->helper->id, 'helper_ids' => [$this->driver->id]]);
 
         $marco = User::where('email', 'marco@cargorush.ph')->firstOrFail();
 

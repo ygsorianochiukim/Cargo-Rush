@@ -31,7 +31,12 @@ class TripRepository extends Repository
     {
         return Trip::query()
             ->with([
-                'customer:id,name', 'driver:id,name', 'helper:id,name', 'vehicle:id,plate',
+                'customer:id,name', 'driver:id,name', 'helpers', 'vehicle:id,plate',
+                // The partner and their unit, for the runs the company's own
+                // crew is not on. Beside the driver rather than instead of it:
+                // a trip has one or the other, and the board prints whichever
+                // it has under a single "Handled by" column.
+                'trucker:id,name,phone', 'truckerVehicle:id,plate',
                 // The pre-trip check rides along because every list that shows a
                 // run now says whether the unit was cleared before it rolled —
                 // the driver's queue, the office board and the customer's own
@@ -53,7 +58,7 @@ class TripRepository extends Repository
         if (! empty($filters['driver_id'])) {
             $query->where(function (Builder $q) use ($filters): void {
                 $q->where('driver_id', $filters['driver_id'])
-                    ->orWhere('helper_id', $filters['driver_id']);
+                    ->orWhereHas('helpers', fn (Builder $h) => $h->whereKey($filters['driver_id']));
             });
         }
 
@@ -63,6 +68,33 @@ class TripRepository extends Repository
 
         if (! empty($filters['customer_id'])) {
             $query->where('customer_id', $filters['customer_id']);
+        }
+
+        if (! empty($filters['trucker_id'])) {
+            $query->where('trucker_id', $filters['trucker_id']);
+        }
+
+        /**
+         * Who is moving it: the company's own crew, or a partner.
+         *
+         * A column rather than a status, because it cuts across every status —
+         * the desk wants "everything a contractor is on", whether it is
+         * confirmed, on the road or delivered. `company` is the absence of a
+         * partner rather than the presence of a driver: a run booked before a
+         * crew was named is still the company's work, and filtering on
+         * `driver_id` would file it under neither.
+         */
+        if (! empty($filters['hauled_by'])) {
+            $query->when(
+                $filters['hauled_by'] === 'trucker',
+                static fn (Builder $q): Builder => $q->whereNotNull('trucker_id'),
+                static fn (Builder $q): Builder => $q->whereNull('trucker_id'),
+            );
+        }
+
+        /** Where the work came from — the audit cut. See `BookingSource`. */
+        if (! empty($filters['booking_source'])) {
+            $query->where('booking_source', $filters['booking_source']);
         }
 
         if (! empty($filters['from'])) {
@@ -150,7 +182,8 @@ class TripRepository extends Repository
         return Trip::query()
             ->with('deliveryLog')
             ->where(function (Builder $query) use ($driverId): void {
-                $query->where('driver_id', $driverId)->orWhere('helper_id', $driverId);
+                $query->where('driver_id', $driverId)
+                    ->orWhereHas('helpers', fn (Builder $h) => $h->whereKey($driverId));
             })
             ->whereBetween('scheduled_at', [$from->copy()->startOfDay(), $to->copy()->endOfDay()])
             ->get();

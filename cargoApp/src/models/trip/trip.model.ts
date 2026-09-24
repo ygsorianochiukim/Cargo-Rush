@@ -87,8 +87,12 @@ export interface Trip {
 
   driver_id: string | null;
   driver_name: string | null;
-  helper_id: string | null;
-  helper_name: string | null;
+  /**
+   * Everyone riding along, in the order the desk named them — any number,
+   * including none. The ids for a form to send back, the pairs to print.
+   */
+  helper_ids: string[];
+  helpers: { id: string; name: string }[];
   vehicle_id: string | null;
   vehicle_plate: string | null;
 
@@ -113,6 +117,11 @@ export interface Trip {
    * answer rather than a missing one.
    */
   billed_at: string | null;
+  /**
+   * Whether the hand-off photograph arrived. Only on lists that load the
+   * delivery log — a partner's Finished runs — and absent everywhere else.
+   */
+  has_pod_photo?: boolean;
 }
 
 /**
@@ -158,7 +167,8 @@ export interface CurrentTrip {
   /** Matches the ledger sheet for this unit. Survives a plate correction. */
   vehicle_id: string | null;
   vehicle_plate: string | null;
-  helper_name: string | null;
+  /** Who is riding along today, by name. Empty when the driver is alone. */
+  helper_names: string[];
   status: StatusValue;
   scheduled_at: string;
   eta: string | null;

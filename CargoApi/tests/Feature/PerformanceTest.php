@@ -90,7 +90,7 @@ describe('one person', function (): void {
     });
 
     it('counts the runs they rode on as helper too', function (): void {
-        ($this->trip)(['driver_id' => null, 'helper_id' => $this->driver->id]);
+        ($this->trip)(['driver_id' => null])->setHelpers([$this->driver->id]);
 
         // Counting only the driver's seat would show every helper as a zero
         // and make the module useless for half the crew.

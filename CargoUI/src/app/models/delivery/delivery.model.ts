@@ -9,7 +9,8 @@ export interface DeliveryLog extends Timestamped {
   customer: string | null;
   destination: string | null;
   driver_name: string | null;
-  helper_name: string | null;
+  /** The whole crew beside the driver. Empty when the driver went alone. */
+  helper_names: string[];
   delivered_at: string | null;
   pod_ref: string | null;
   receiver_name: string | null;

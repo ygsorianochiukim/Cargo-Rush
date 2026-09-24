@@ -4,6 +4,7 @@ import {
   NavItem,
   ShipperRegistration,
 } from '@/models/identity/identity.model';
+import { TruckerRegistration } from '@/models/trucker/trucker.model';
 
 import { api } from '../shared/api.service';
 
@@ -46,6 +47,28 @@ export const identityService = {
    */
   async registerCustomer(registration: ShipperRegistration): Promise<Me> {
     const response = await api.postEnvelope<Me>('register/customer', registration);
+
+    api.setToken(String(response.meta?.['token'] ?? ''));
+
+    return response.data;
+  },
+
+  /**
+   * Sign an owner-operator up.
+   *
+   * The third registration, and the one that asks for the most — a fleet, a
+   * licence and a truck on top of the login. Each earns its place: a partner's
+   * relationship is a standing one with a rate and a running balance, so there
+   * is no coherent state in which they belong to nobody; the licence is what a
+   * human reads before approving them; the truck decides which loads they can
+   * be offered.
+   *
+   * Answers signed in, like the other two. What it does **not** answer is that
+   * they can start working: the account lands `pending`, and `meta.trucker_status`
+   * says so, so the app opens on the waiting screen rather than an empty board.
+   */
+  async registerTrucker(registration: TruckerRegistration): Promise<Me> {
+    const response = await api.postEnvelope<Me>('register/trucker', registration);
 
     api.setToken(String(response.meta?.['token'] ?? ''));
 

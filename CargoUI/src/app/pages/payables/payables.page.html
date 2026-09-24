@@ -1,0 +1,103 @@
+@if (payables(); as p) {
+  <!--
+    The one figure the page exists for.
+
+    "On the way" sits beside it rather than inside it: money already sent but
+    not landed is still owed, and folding the two together would say a
+    transfer had arrived the moment somebody typed it.
+  -->
+  <app-card>
+    <div class="flex flex-wrap items-end justify-between gap-4">
+      <div>
+        <p class="cr-meta">TOTAL OWED</p>
+        <p class="cr-num mt-1 text-[32px] font-bold">{{ money(p.total_cents) }}</p>
+      </div>
+
+      @if (p.in_flight_cents > 0) {
+        <div class="text-right">
+          <p class="cr-meta">ALREADY SENT</p>
+          <p class="cr-num mt-1 text-[20px] font-semibold text-cr-blue">
+            {{ money(p.in_flight_cents) }}
+          </p>
+          <p class="text-[12px] text-cr-ink-muted">waiting to clear</p>
+        </div>
+      }
+    </div>
+  </app-card>
+
+  @if (owesNothing()) {
+    <app-card class="mt-4 block">
+      <app-empty-state
+        icon="wallet"
+        title="Nothing outstanding"
+        body="Every trucker, rented truck and bill is settled." />
+    </app-card>
+  }
+
+  @for (group of groups(); track group.key) {
+    <app-card
+      class="mt-4 block"
+      [heading]="group.label"
+      [icon]="group.icon"
+      [hint]="money(group.total_cents)"
+      [padded]="false">
+      <ul class="flex flex-col">
+        @for (line of group.lines; track line.id) {
+          <li
+            class="flex flex-wrap items-center gap-3 border-b border-cr-line/70 px-4 py-3 last:border-0">
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-[13px] font-semibold">{{ line.name }}</span>
+              <span class="block truncate text-[12px] text-cr-ink-muted">
+                {{ line.detail }}
+                @if (line.due_on) {
+                  · {{ date(line.due_on) }}
+                }
+              </span>
+            </span>
+
+            <span class="text-right">
+              <span class="cr-num block text-[14px] font-semibold">
+                {{ money(line.amount_cents) }}
+              </span>
+              <!--
+                Of what is owed, how much is already out of the door. Only a
+                partner payment can be in this state — a supplier bill is paid
+                or it is not.
+              -->
+              @if (line.in_flight_cents > 0) {
+                <span class="cr-num block text-[11px] font-semibold text-cr-blue">
+                  {{ money(line.in_flight_cents) }} sent
+                </span>
+              }
+            </span>
+
+            <!--
+              Where it is settled.
+
+              A link rather than a button: this page is a roll-up, and the
+              three settle flows behind these lines are genuinely different
+              from one another.
+
+              `settle` carries the row, and it is what makes the link worth
+              following. Without it this dropped the reader on the Truckers
+              roster — the right page, opened on the wrong tab, with nothing
+              saying which of forty partners the ₱33,000 belonged to. Each
+              target page reads the parameter and opens that record: the
+              partner's wallet, the invoice's payment dialog, the expense.
+            -->
+            <a
+              [routerLink]="line.settle_at"
+              [queryParams]="{ settle: line.id }"
+              class="inline-flex h-8 items-center gap-1 rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint"
+              [attr.aria-label]="'Settle ' + line.name">
+              Settle
+              <app-icon name="chevron-right" [size]="14" />
+            </a>
+          </li>
+        }
+      </ul>
+    </app-card>
+  }
+} @else {
+  <app-card><app-skeleton-rows [count]="5" /></app-card>
+}

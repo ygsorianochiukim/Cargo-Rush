@@ -16,6 +16,7 @@ import { Icon } from '@/components/ui/icon';
 import { Wordmark } from '@/components/ui/wordmark';
 import { Brand, Hit, Radius, Spacing } from '@/constants/theme';
 import { SignUpPage } from '@/pages/sign-up/sign-up.page';
+import { TruckerSignUpPage } from '@/pages/sign-up/trucker-sign-up.page';
 import { apiBaseUrl, ApiRequestError } from '@/services/shared/api.service';
 import { useSession } from '@/services/identity/session';
 
@@ -45,7 +46,16 @@ export function SignInPage() {
    * lets a person create for themselves. Registering a *company* is the web's
    * job, and is nothing like the same form.
    */
-  const [signingUp, setSigningUp] = useState(false);
+  /**
+   * Which sign-up form is open, if either.
+   *
+   * Two now rather than one, and they are genuinely different forms: a customer
+   * gives four fields and picks a carrier per load; a trucker gives a licence,
+   * a truck and the fleet they are joining, because a partner's relationship is
+   * a standing one. A single form with half its fields hidden would be worse
+   * than both.
+   */
+  const [signingUp, setSigningUp] = useState<'customer' | 'trucker' | null>(null);
 
   const [email, setEmail] = useState('');
   const [secret, setSecret] = useState('');
@@ -65,7 +75,8 @@ export function SignInPage() {
 
   const ready = email.trim().length > 0 && secret.length > 0;
 
-  if (signingUp) return <SignUpPage onBack={() => setSigningUp(false)} />;
+  if (signingUp === 'customer') return <SignUpPage onBack={() => setSigningUp(null)} />;
+  if (signingUp === 'trucker') return <TruckerSignUpPage onBack={() => setSigningUp(null)} />;
 
   const submit = async () => {
     if (!ready || busy) return;
@@ -173,10 +184,13 @@ export function SignInPage() {
           </Pressable>
         </View>
 
-        {/* The other way in, and the only account anybody creates for
+        {/* The other ways in, and the only accounts anybody creates for
             themselves. A driver's and an office account are made for them, so
-            this speaks only to the person it is for: somebody with a load and
-            nobody carrying it yet. */}
+            these speak only to the two people they are for: somebody with a
+            load and nobody carrying it, and somebody with a truck and nothing
+            on it. Both are offered rather than hidden behind a chooser — two
+            sentences is a smaller ask than a screen that makes somebody pick a
+            noun before it will explain either. */}
         <View style={styles.signUp}>
           <Text style={styles.signUpText}>
             Need a delivery? Sign up as a customer and choose a carrier near you.
@@ -184,9 +198,20 @@ export function SignInPage() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Create a customer account"
-            onPress={() => setSigningUp(true)}
+            onPress={() => setSigningUp('customer')}
             style={styles.signUpBtn}>
             <Text style={styles.signUpBtnText}>Create a customer account</Text>
+          </Pressable>
+
+          <Text style={styles.signUpText}>
+            Own a truck? Register it and take jobs from a fleet near you.
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Register as a trucker"
+            onPress={() => setSigningUp('trucker')}
+            style={styles.signUpBtn}>
+            <Text style={styles.signUpBtnText}>Register as a trucker</Text>
           </Pressable>
         </View>
 

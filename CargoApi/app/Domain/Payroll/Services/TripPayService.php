@@ -53,13 +53,14 @@ use Illuminate\Support\Collection as SupportCollection;
  * fallback `InvoiceDocumentService` bills on, so a haul lands on the same
  * fortnight in payroll as it does on the invoice.
  *
- * ## Driver and helper on the same row
+ * ## Driver and helpers on the same row
  *
- * A ledger row is one truck's day and carries both a driver and a helper, each
- * with their own salary column. The same person is never both on one row, so
- * the two sums are added rather than chosen between — a relief driver who rode
- * as helper on Tuesday and drove on Thursday is paid for both, from two rows.
- * Trips are counted the same way, from either seat.
+ * A ledger row is one truck's day and carries a driver and any number of
+ * helpers — the driver's pay in its column, each helper's on their own line.
+ * The same person is never on one row twice, so the amounts are added rather
+ * than chosen between — a relief driver who rode as a helper on Tuesday and
+ * drove on Thursday is paid for both, from two rows. Trips are counted the
+ * same way, from any seat.
  *
  * ## Unattributed rows count toward nobody
  *
@@ -142,17 +143,23 @@ class TripPayService
             ->whereDate('date', '>=', $periodStart->toDateString())
             ->whereDate('date', '<=', $periodEnd->toDateString())
             ->where(function ($query) use ($driverIds): void {
-                $query->whereIn('driver_id', $driverIds)->orWhereIn('helper_id', $driverIds);
+                $query->whereIn('driver_id', $driverIds)
+                    ->orWhereHas('helpers', static fn ($line) => $line->whereIn('driver_id', $driverIds));
             })
-            ->get(['date', 'driver_id', 'helper_id', 'driver_salary_cents', 'helper_salary_cents']);
+            ->with('helpers:id,ledger_entry_id,driver_id,salary_cents')
+            ->get(['id', 'date', 'driver_id', 'driver_salary_cents']);
 
         foreach ($rows as $row) {
             $day = $row->date->toDateString();
 
-            foreach ([
+            $seats = [
                 [$row->driver_id, (int) $row->driver_salary_cents],
-                [$row->helper_id, (int) $row->helper_salary_cents],
-            ] as [$driverId, $amount]) {
+                // Each helper's own line, not the day's helper total: two
+                // helpers on one day are two people on two rates.
+                ...$row->helpers->map(static fn ($line): array => [$line->driver_id, (int) $line->salary_cents])->all(),
+            ];
+
+            foreach ($seats as [$driverId, $amount]) {
                 $employeeId = $driverId === null ? null : ($byDriver[$driverId] ?? null);
 
                 if ($employeeId === null) {
@@ -190,7 +197,8 @@ class TripPayService
         $trips = Trip::query()
             ->where('status', StatusValue::Delivered->value)
             ->where(function ($query) use ($driverIds): void {
-                $query->whereIn('driver_id', $driverIds)->orWhereIn('helper_id', $driverIds);
+                $query->whereIn('driver_id', $driverIds)
+                    ->orWhereHas('helpers', static fn ($helper) => $helper->whereIn('drivers.id', $driverIds));
             })
             ->where(function ($query) use ($from, $to): void {
                 // Delivered in the window, by the proof of delivery.
@@ -205,10 +213,11 @@ class TripPayService
                         ->whereBetween('scheduled_at', [$from, $to]);
                 });
             })
-            ->get(['id', 'driver_id', 'helper_id']);
+            ->with('helpers:drivers.id')
+            ->get(['id', 'driver_id']);
 
         foreach ($trips as $trip) {
-            foreach ([$trip->driver_id, $trip->helper_id] as $driverId) {
+            foreach ([$trip->driver_id, ...$trip->helperIds()] as $driverId) {
                 $employeeId = $driverId === null ? null : ($byDriver[$driverId] ?? null);
 
                 if ($employeeId === null) {

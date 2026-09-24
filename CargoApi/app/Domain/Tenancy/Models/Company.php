@@ -32,8 +32,16 @@ class Company extends Model
     protected $fillable = [
         'name', 'code', 'logo_path', 'contact_name', 'contact_email', 'contact_phone', 'address', 'status',
         'latitude', 'longitude',
-        'tin', 'vat_registered', 'vat_rate_bp',
-        'payroll_deduct_on', 'payroll_cutoff_days',
+        'tin', 'vat_registered', 'vat_rate_bp', 'withholding_rate_bp', 'prices_include_vat',
+        'payroll_deduct_on', 'payroll_cutoff_days', 'payroll_release_lag_days',
+        // The standing cut of a partner trucker's run. A commercial term, and
+        // the office's to change — see the migration that added it.
+        'trucker_commission_bp',
+        // The firm's own fallback tariff and payment terms. Null on any of
+        // them means the install default; `RateBook` is what resolves that,
+        // and nothing outside it should be reading these columns.
+        'tariff_base_cents', 'tariff_per_km_cents', 'tariff_per_kg_cents', 'tariff_minimum_cents',
+        'billing_terms_days',
     ];
 
     protected function casts(): array
@@ -47,6 +55,14 @@ class Company extends Model
             'longitude' => 'float',
             'vat_registered' => 'boolean',
             'vat_rate_bp' => 'integer',
+            'withholding_rate_bp' => 'integer',
+            'prices_include_vat' => 'boolean',
+            'trucker_commission_bp' => 'integer',
+            'tariff_base_cents' => 'integer',
+            'tariff_per_km_cents' => 'integer',
+            'tariff_per_kg_cents' => 'integer',
+            'tariff_minimum_cents' => 'integer',
+            'billing_terms_days' => 'integer',
             /**
              * Which cutoff the monthly contributions come off.
              *
@@ -71,6 +87,15 @@ class Company extends Model
              * — never the raw array.
              */
             'payroll_cutoff_days' => 'array',
+
+            /**
+             * Days between a cutoff and the money going out.
+             *
+             * Null is the install default; **zero is a real answer** — a firm
+             * paying on the cutoff itself — which is why the two are not the
+             * same state. See `PayrollCalendar::releaseLagDays()`.
+             */
+            'payroll_release_lag_days' => 'integer',
         ];
     }
 

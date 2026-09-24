@@ -9,6 +9,7 @@ use App\Domain\Pricing\Models\PricingZone;
 use App\Domain\Pricing\Services\BracketResolver;
 use App\Domain\Pricing\Services\FuelIndex;
 use App\Domain\Pricing\Services\ZoneResolver;
+use App\Domain\Tenancy\Support\RateBook;
 use App\Domain\Trip\Models\Trip;
 
 /**
@@ -66,6 +67,7 @@ class PricingService
         private readonly ZoneResolver $zones,
         private readonly BracketResolver $brackets,
         private readonly FuelIndex $fuel,
+        private readonly RateBook $rates,
     ) {}
 
     /** The quote for a trip, in centavos. */
@@ -197,7 +199,12 @@ class PricingService
     }
 
     /**
-     * The install-wide tariff, unchanged from before the rate card existed.
+     * The firm's own tariff, unchanged from before the rate card existed.
+     *
+     * The four figures come off the company where it has set them and off
+     * `config/cargo.php` where it has not — `RateBook` resolves that, and it
+     * used to be a bare `config()` call here, which is why a settings screen
+     * could not move it.
      *
      * The fuel adjustment is deliberately *not* applied here. The config rates
      * are a fallback nobody drew at a particular pump price, so there is no
@@ -206,13 +213,13 @@ class PricingService
      */
     private function fromTariff(int $km, int $weightKg, ?PricingZone $zone): QuoteBreakdown
     {
-        $tariff = (array) config('cargo.tariff');
+        $tariff = $this->rates->tariff();
 
-        $price = (int) $tariff['base_cents']
-            + $km * (int) $tariff['per_km_cents']
-            + $weightKg * (int) $tariff['per_kg_cents'];
+        $price = $tariff['base_cents']
+            + $km * $tariff['per_km_cents']
+            + $weightKg * $tariff['per_kg_cents'];
 
-        $price = max($price, (int) $tariff['minimum_cents']);
+        $price = max($price, $tariff['minimum_cents']);
 
         return new QuoteBreakdown(
             cents: $price,
@@ -277,7 +284,7 @@ class PricingService
     /** The currency every quote is in. One install, one currency. */
     public function currency(): string
     {
-        return (string) config('cargo.tariff.currency');
+        return $this->rates->currency();
     }
 
     /**

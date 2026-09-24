@@ -46,4 +46,15 @@ export class VehiclesPage {
 
   protected km = fmt.km;
   protected kg = fmt.kg;
+  protected money = fmt.money;
+
+  /**
+   * Basis points as a percentage.
+   *
+   * 15, not 15.00 — a whole percentage is the ordinary case and the decimals
+   * are noise. A negotiated 7.5% still reads correctly.
+   */
+  protected rate(bp: number): string {
+    return `${(bp / 100).toFixed(bp % 100 === 0 ? 0 : 1)}%`;
+  }
 }

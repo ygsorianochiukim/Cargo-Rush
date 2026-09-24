@@ -239,14 +239,14 @@ describe('the desk confirms it', function (): void {
         $this->actingAs($this->admin)
             ->postJson("/api/v1/trips/{$id}/confirm", [
                 'driver_id' => $this->driver->id,
-                'helper_id' => $this->helper->id,
+                'helper_ids' => [$this->helper->id],
                 'vehicle_id' => $this->vehicle->id,
                 'scheduled_at' => $when->toIso8601String(),
             ])
             ->assertOk()
             ->assertJsonPath('data.status', StatusValue::Assigned->value)
             ->assertJsonPath('data.driver_id', $this->driver->id)
-            ->assertJsonPath('data.helper_id', $this->helper->id)
+            ->assertJsonPath('data.helper_ids', [$this->helper->id])
             ->assertJsonPath('data.vehicle_id', $this->vehicle->id);
     });
 
@@ -281,12 +281,12 @@ describe('the desk confirms it', function (): void {
 
         $this->actingAs($this->admin)->postJson("/api/v1/trips/{$id}/confirm", [
             'driver_id' => $this->driver->id,
-            'helper_id' => $this->driver->id,
+            'helper_ids' => [$this->driver->id],
             'vehicle_id' => $this->vehicle->id,
             'scheduled_at' => now()->addDay()->toIso8601String(),
         ])
             ->assertStatus(422)
-            ->assertJsonValidationErrors('helper_id');
+            ->assertJsonValidationErrors('helper_ids.0');
     });
 
     it('re-quotes when the desk corrects the weight', function (): void {

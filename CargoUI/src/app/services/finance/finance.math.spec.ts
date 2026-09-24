@@ -11,6 +11,7 @@ import {
   tenDayRange,
   totalExpenses,
 } from './finance.math';
+import { fmt } from '../../shared/format';
 
 /**
  * The client's half of the workbook arithmetic — what the entry form shows
@@ -109,8 +110,9 @@ describe('local aggregation', () => {
     // figures copied off the workbook, not a reference to an employee.
     driver_id: e.driver_id ?? null,
     driver_name: null,
-    helper_id: e.helper_id ?? null,
-    helper_name: null,
+    // One unnamed line carrying the whole helper figure — how the workbook's
+    // single column reads once it is on the sheet.
+    helpers: [{ driver_id: null, name: null, salary_cents: e.helper_salary_cents }],
   }));
 
   it('sums a set of rows the same way the API does', () => {
@@ -151,5 +153,43 @@ describe('hasActivity', () => {
 
   it('counts a unit that only spent', () => {
     expect(hasActivity(pnl(0, 380_000))).toBe(true);
+  });
+});
+
+/**
+ * The period pages are documents somebody adds up, and the formatter has to
+ * let them.
+ *
+ * `fmt.money` rounds to whole pesos, which is right on a dashboard tile where
+ * the figure is a size. On the Quarterly Summary it is a bug: a column of
+ * rounded rows does not sum to a rounded total, and the reader is left hunting
+ * for a peso that does not exist. These are the real Q1 2026 figures the
+ * workbook prints, and they are the case that shows it.
+ */
+describe('formatting figures that have to reconcile', () => {
+  /** Net income per unit, Q1 2026, in centavos. `FinanceRollupTest` pins these. */
+  const netByTruck = [7_078_268, 4_899_604, -1_203_235, -719_092, 7_390_457];
+  const total = netByTruck.reduce((sum, cents) => sum + cents, 0);
+
+  /** What is left of a formatted amount once the symbol and commas are gone. */
+  const read = (formatted: string) => Number(formatted.replace(/[₱,]/g, ''));
+
+  it('rounded to whole pesos, the column misses its own total', () => {
+    const column = netByTruck.map((cents) => read(fmt.money(cents)));
+
+    // ₱174,461 printed down the page against ₱174,460 on the TOTAL row. This
+    // is the failure, asserted so nobody puts `money()` back on that table.
+    expect(column.reduce((sum, pesos) => sum + pesos, 0)).toBe(174_461);
+    expect(read(fmt.money(total))).toBe(174_460);
+  });
+
+  it('to the centavo, it adds up exactly', () => {
+    const column = netByTruck.map((cents) => read(fmt.pesos(cents)));
+    const summed = column.reduce((sum, amount) => sum + amount, 0);
+
+    // Compared in centavos, because adding a column of floats is the other way
+    // to lose a peso: 0.1 + 0.2 is famously not 0.3.
+    expect(Math.round(summed * 100)).toBe(total);
+    expect(read(fmt.pesos(total))).toBe(174_460.02);
   });
 });

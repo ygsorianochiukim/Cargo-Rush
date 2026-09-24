@@ -51,6 +51,17 @@ export interface ListQuery {
   /** Expense list: narrow to one category, or one trip's spend. */
   category_id?: string;
   trip_id?: string;
+  /** Who it was bought from — the expense, servicing and bill lists share it. */
+  supplier_id?: string;
+  /**
+   * Truck Maintenance: only the jobs somebody has been charged for.
+   *
+   * A separate question from `status`, and that is why it is its own key: a
+   * job can be `delivered` and still uncosted, because the garage has not
+   * billed yet. "What has servicing come to" wants the costed ones; "what is
+   * the workshop doing" wants the status.
+   */
+  costed?: boolean | number;
   /** Employee roster: the shape of the list rather than a page of it. */
   position?: string;
   department?: string;

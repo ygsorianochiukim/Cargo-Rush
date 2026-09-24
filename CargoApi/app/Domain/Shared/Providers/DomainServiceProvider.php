@@ -37,8 +37,11 @@ use App\Domain\Pricing\Models\TruckCategory;
 use App\Domain\Tenancy\Models\Company;
 use App\Domain\Tenancy\Support\Tenant;
 use App\Domain\Trip\Console\ReconcileOverdueTripsCommand;
+use App\Domain\Trip\Console\RemeasureTripsCommand;
 use App\Domain\Trip\Console\ReleaseDueTripsCommand;
 use App\Domain\Trip\Models\Trip;
+use App\Domain\Trucker\Models\Trucker;
+use App\Domain\Vehicle\Console\ChargeTruckRentCommand;
 use App\Domain\Vehicle\Models\Vehicle;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -103,6 +106,17 @@ class DomainServiceProvider extends ServiceProvider
         // Not `credit`, for the reason `truckCategory` is not `category`:
         // these bind by parameter *name* across every module at once.
         'storeCredit' => StoreCredit::class,
+        /**
+         * The partner, on the office's routes only.
+         *
+         * Note what is *not* bound: the partner's own endpoints take no id for
+         * themselves, and their `{tripId}` and `{vehicleId}` are deliberately
+         * unbound strings. A bound model there would resolve under the caller's
+         * company and hand over any row in it — which is the whole thing
+         * `PartnerController` is scoped to prevent. Same reason the customer
+         * portal spells its parameter `{tripId}`.
+         */
+        'trucker' => Trucker::class,
     ];
 
     public function register(): void
@@ -137,10 +151,17 @@ class DomainServiceProvider extends ServiceProvider
                 // A one-off repair rather than a sweep: nothing schedules it.
                 RequoteInvoicesCommand::class,
                 QuoteUnpricedTripsCommand::class,
+                // The same one-off repair for distances: open trips measured on
+                // the straight line, measured again on the road.
+                RemeasureTripsCommand::class,
                 // A published rate table, loaded into one named company on
                 // purpose. Never scheduled, and never across every company:
                 // prices are one haulier's business with its principal.
                 LoadSubsidyCardCommand::class,
+                // The month's rent on every truck the fleet hires at a flat
+                // fee. Scheduled monthly, and safe to run by hand — the charge
+                // is keyed to the unit and the month.
+                ChargeTruckRentCommand::class,
                 // Demo data, run on purpose and never as part of a deploy.
                 DemoPayrollCommand::class,
             ]);

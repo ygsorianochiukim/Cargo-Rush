@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, effect, inject, input, model, output, signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { Driver } from '../../models/driver/driver.model';
@@ -8,6 +9,7 @@ import { DriverService } from '../../services/driver/driver.service';
 import { TripService } from '../../services/trip/trip.service';
 import { VehicleService } from '../../services/vehicle/vehicle.service';
 import { Field } from '../../shared/field';
+import { HelperPicker } from '../../shared/helper-picker';
 import { fmt } from '../../shared/format';
 import { Modal } from '../../shared/modal';
 
@@ -31,7 +33,7 @@ import { Modal } from '../../shared/modal';
 @Component({
   selector: 'app-confirm-request',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Modal, Field, ReactiveFormsModule],
+  imports: [Modal, Field, HelperPicker, ReactiveFormsModule],
   template: `
     <app-modal
       [(open)]="open"
@@ -63,6 +65,25 @@ import { Modal } from '../../shared/modal';
             <dt class="cr-meta">Asked for</dt>
             <dd class="cr-num text-[13px]">{{ fmt.dateTime(request.scheduled_at) }}</dd>
           </div>
+          <!-- The distance, and how sure it is. It picked the zone the quote
+               came from, so an estimate is worth checking against the route
+               before the price is agreed. -->
+          <div>
+            <dt class="cr-meta">Distance</dt>
+            <dd class="cr-num text-[13px]">
+              @if (request.distance_total_m > 0) {
+                {{ fmt.km(kilometres(request.distance_total_m)) }}
+                <span
+                  class="ml-1 text-[12px]"
+                  [class.text-cr-warning]="request.distance_source === 'estimate'"
+                  [class.text-cr-ink-muted]="request.distance_source !== 'estimate'">
+                  {{ distanceNote(request.distance_source) }}
+                </span>
+              } @else {
+                <span class="text-cr-warning">Not pinned — quoted in the lowest band</span>
+              }
+            </dd>
+          </div>
           <div>
             <dt class="cr-meta">Quoted</dt>
             <dd class="cr-num text-[13px] font-semibold">
@@ -82,14 +103,11 @@ import { Modal } from '../../shared/modal';
           </select>
         </app-field>
 
-        <app-field label="Helper" hint="Optional second crew member." [error]="errorFor('helper_id')">
-          <select formControlName="helper_id" [class]="inputClass">
-            <option value="">None</option>
-            @for (d of drivers(); track d.id) {
-              <option [value]="d.id">{{ d.name }}</option>
-            }
-          </select>
-        </app-field>
+        <app-helper-picker
+          hint="Optional — add as many as the load needs."
+          [drivers]="drivers()"
+          [driverId]="driverId()"
+          [(value)]="helpers" />
 
         <app-field label="Vehicle" required [error]="errorFor('vehicle_id')">
           <select formControlName="vehicle_id" [class]="inputClass">
@@ -170,11 +188,35 @@ export class ConfirmRequestDialog {
 
   protected readonly form = this.fb.nonNullable.group({
     driver_id: ['', Validators.required],
-    helper_id: [''],
     vehicle_id: ['', Validators.required],
     scheduled_at: ['', Validators.required],
     weight_kg: [0, [Validators.required, Validators.min(1)]],
   });
+
+  /** The helpers, as a list of ids beside the form — see `HelperPicker`. */
+  protected readonly helpers = signal<string[]>([]);
+
+  protected readonly driverId = toSignal(this.form.controls.driver_id.valueChanges, {
+    initialValue: this.form.controls.driver_id.value,
+  });
+
+  /** Rounded up, the way the rate card counts a run. */
+  protected kilometres(metres: number): number {
+    return Math.ceil(metres / 1000);
+  }
+
+  protected distanceNote(source: Trip['distance_source']): string {
+    switch (source) {
+      case 'road':
+        return 'by road';
+      case 'estimate':
+        return 'estimated — check the route';
+      case 'manual':
+        return 'entered by the desk';
+      default:
+        return '';
+    }
+  }
 
   protected subtitle(): string {
     const request = this.trip();
@@ -197,11 +239,12 @@ export class ConfirmRequestDialog {
       this.error.set(null);
       this.form.reset({
         driver_id: request?.driver_id ?? '',
-        helper_id: request?.helper_id ?? '',
         vehicle_id: request?.vehicle_id ?? '',
         scheduled_at: request ? request.scheduled_at.slice(0, 16) : '',
         weight_kg: request?.weight_kg ?? 0,
       });
+
+      this.helpers.set(request?.helper_ids ?? []);
     });
   }
 
@@ -238,9 +281,9 @@ export class ConfirmRequestDialog {
     this.tripApi
       .confirm(request.id, {
         driver_id: raw.driver_id,
-        // Cleared rather than omitted: a request confirmed without a helper
-        // has to end up with none, not with whatever was there before.
-        helper_id: raw.helper_id || null,
+        // Always sent: a request confirmed without helpers has to end up with
+        // none, not with whatever was there before.
+        helper_ids: this.helpers().filter((id) => id !== raw.driver_id),
         vehicle_id: raw.vehicle_id,
         scheduled_at: new Date(raw.scheduled_at).toISOString(),
         weight_kg: Number(raw.weight_kg),

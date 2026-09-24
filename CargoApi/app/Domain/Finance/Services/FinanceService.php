@@ -4,14 +4,19 @@ declare(strict_types=1);
 
 namespace App\Domain\Finance\Services;
 
+use App\Domain\Billing\Repositories\InvoiceRepository;
 use App\Domain\Finance\DTO\LedgerEntryData;
 use App\Domain\Finance\Models\LedgerEntry;
 use App\Domain\Finance\Models\Truck;
 use App\Domain\Finance\Repositories\ExpenseRepository;
 use App\Domain\Finance\Repositories\LedgerRepository;
+use App\Domain\Shared\Enums\InvoiceDirection;
+use App\Domain\Trucker\Services\WalletService;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The money side of the business — the server half of `core/finance.ts`.
@@ -20,6 +25,8 @@ use Illuminate\Support\Collection;
  *
  *   total_expenses = fuel + driver_salary + helper_salary + maintenance
  *                    + allowance + categorised expense lines
+ *                    + supplier bills actually paid
+ *                    + payouts actually handed to partner truckers
  *   net_income     = trip_income - total_expenses
  *
  * The five columns are the transcribed workbook's; the lines are everything a
@@ -27,6 +34,71 @@ use Illuminate\Support\Collection;
  * added, not reconciled — a fill-up keyed into `fuel_cents` *and* filed as a
  * Fuel line counts twice, because nothing here can tell that from a second
  * fill-up on the same day.
+ *
+ * ## The supplier bills, and why they count on the day they were paid
+ *
+ * A bill raised against the fleet in Billing was in none of the above. It is
+ * not a ledger column and it is not an `Expense` row — so a quarter's net
+ * income was the takings less what the trucks cost, with the suppliers left out
+ * of it altogether, and read higher than the business had actually made.
+ *
+ * What is counted is the money **allocated to payable invoices by payments
+ * dated inside the window**. Three consequences, each a decision rather than an
+ * accident:
+ *
+ *   A bill nobody has paid counts nothing. It is a commitment, and the figure
+ *   these screens exist to give is what the period actually came to.
+ *
+ *   A bill half paid counts half. The allocations are the money; the face value
+ *   of the document is only what was asked for.
+ *
+ *   A June bill settled in July is July's. The day it left the bank is the only
+ *   date on which it is true.
+ *
+ * That makes this one figure a cash one among accruals, and it is the right
+ * trade here: the alternative is a closed quarter that moves every time
+ * somebody settles an old bill. The accrual view of the same money is the
+ * income statement under Accounting — a different report for a different
+ * reader.
+ *
+ * ## Paying a partner is money leaving, and used to be invisible
+ *
+ * The same hole as the supplier bills, in the place it was least visible.
+ * Paying a partner trucker made the business look **better**: their wallet
+ * balance fell, so `payables_cents` fell with it, so `actual_income_cents`
+ * rose — and nothing anywhere recorded that the money had gone. An office that
+ * settled with three partners on Friday read a healthier quarter on Monday.
+ *
+ * So a payout that has landed is a cost of the window it landed in, on the same
+ * cash footing as a paid bill. `WalletService::paidOutBetween()` is the figure,
+ * and it carries the one exclusion that keeps it honest: the owner of a truck
+ * the fleet hired on a revenue share is left out, because that share is already
+ * on the daily sheet as `owner_share_cents` the day the run was delivered.
+ * Counting the payout too would charge the fleet twice for one haul.
+ *
+ * **What this deliberately does not do** is put the other side of a partner's
+ * run into the income. A run a partner hauled files no sheet row (see
+ * `TripService::putOnTheBooks`), so the customer's side of it is not in
+ * `trip_income_cents` and this does not change that. The figure below is what
+ * left the bank, which is the question the screens are being asked.
+ *
+ * ## And what is still owed, which is not an expense at all
+ *
+ * `payables_cents` is everything the fleet still owes as the period closed —
+ * partner wallets, unsettled spend, unpaid supplier bills — and it is **not**
+ * in `total_expenses_cents` and not in `net_income_cents`. It cannot be: an
+ * unpaid bill has cost the period nothing, and adding it to the expenses would
+ * charge the quarter for money that has not moved and then charge it again on
+ * the day it does.
+ *
+ * It is carried beside them because the question an office actually asks is not
+ * what the quarter earned but what is left of it —
+ *
+ *     actual_income = net_income - payables
+ *
+ * which is the figure to look at before deciding anything can be drawn out. A
+ * quarter that made ₱29,350 and owes ₱40,000 made ₱29,350 and is behind, and
+ * only one of those two numbers says so.
  *
  * Profitability (a 10-day window) and Quarterly Summary (a quarter) are the
  * same roll-up over different date ranges, so they share one code path and
@@ -37,6 +109,10 @@ class FinanceService
     public function __construct(
         private readonly LedgerRepository $ledger,
         private readonly ExpenseRepository $expenses,
+        private readonly InvoiceRepository $invoices,
+        private readonly PayablesService $payables,
+        private readonly WalletService $wallet,
+        private readonly ReceivablesService $receivables,
     ) {}
 
     /** The workbook Table11 quarter boundaries, for a given year. */
@@ -93,6 +169,9 @@ class FinanceService
                 'helper_salary_cents' => (int) $mine->sum('helper_salary_cents'),
                 'maintenance_cents' => (int) $mine->sum('maintenance_cents'),
                 'allowance_cents' => (int) $mine->sum('allowance_cents'),
+                // What the owners of hired trucks took out. Zero for a fleet
+                // that runs only its own.
+                'owner_share_cents' => (int) $mine->sum('owner_share_cents'),
                 // The categorised lines, kept as their own figure so a page can
                 // show what the five columns never had a place for.
                 'other_expenses_cents' => $other,
@@ -123,15 +202,28 @@ class FinanceService
      * charged to the period here and shown as its own line, which is also the
      * honest presentation: it is a real cost that no unit earned.
      *
+     * `$supplierBillsCents` is the same idea for money paid out on bills from
+     * suppliers: it belongs to the period and to no truck, and leaving it out
+     * is what made a period's net income read higher than the bank did.
+     *
      * @param  array<int, array<string, mixed>>  $rows
      * @return array<string, mixed>
      */
-    public function periodTotals(array $rows, int $overheadCents = 0): array
-    {
+    public function periodTotals(
+        array $rows,
+        int $overheadCents = 0,
+        int $supplierBillsCents = 0,
+        int $payablesCents = 0,
+        int $truckerPayoutsCents = 0,
+        int $receivablesCents = 0,
+    ): array {
         $sum = static fn (string $key): int => (int) array_sum(array_column($rows, $key));
 
         $income = $sum('trip_income_cents');
-        $expenses = $sum('total_expenses_cents') + $overheadCents;
+        $expenses = $sum('total_expenses_cents')
+            + $overheadCents
+            + $supplierBillsCents
+            + $truckerPayoutsCents;
 
         return [
             'trip_income_cents' => $income,
@@ -140,10 +232,35 @@ class FinanceService
             'helper_salary_cents' => $sum('helper_salary_cents'),
             'maintenance_cents' => $sum('maintenance_cents'),
             'allowance_cents' => $sum('allowance_cents'),
+            'owner_share_cents' => $sum('owner_share_cents'),
             'other_expenses_cents' => $sum('other_expenses_cents'),
             'overhead_cents' => $overheadCents,
+            // Bills from suppliers, at what was actually paid out over the
+            // window. In the total and in no truck row, like the overhead.
+            'supplier_bills_cents' => $supplierBillsCents,
+            // Money handed to partner truckers and landed over the window. In
+            // the total and in no truck row, like the two above — a partner's
+            // run has no sheet of its own to charge it to.
+            'trucker_payouts_cents' => $truckerPayoutsCents,
             'total_expenses_cents' => $expenses,
             'net_income_cents' => $income - $expenses,
+
+            /**
+             * What is still owed, and what that leaves.
+             *
+             * Deliberately outside `total_expenses_cents` and outside
+             * `net_income_cents` — an unpaid bill has cost the period nothing,
+             * and folding it into the expenses would charge the quarter for
+             * money that has not moved and charge it again the day it does.
+             * `actual_income_cents` is the subtraction stated once here, so no
+             * screen does it for itself and gets a different answer.
+             */
+            'payables_cents' => $payablesCents,
+            'actual_income_cents' => $income - $expenses - $payablesCents,
+            // What customers still owed the fleet at the close. Already in the
+            // trip income above, so it is shown and changes nothing — see
+            // `ReceivablesService`.
+            'receivables_cents' => $receivablesCents,
             'margin' => $income === 0 ? null : ($income - $expenses) / $income,
         ];
     }
@@ -154,6 +271,53 @@ class FinanceService
         return (int) $this->expenses->between($from, $to)
             ->whereNull('truck_id')
             ->sum('amount_cents');
+    }
+
+    /**
+     * What the fleet actually paid its suppliers over the window.
+     *
+     * Payments dated inside it, allocated to payable invoices — see the note at
+     * the top of this class for why it is the payment's date and not the
+     * bill's, and why a bill nobody has paid counts nothing.
+     */
+    public function supplierBillsPaidCents(Carbon $from, Carbon $to): int
+    {
+        return $this->invoices->settledBetween(InvoiceDirection::Payable, $from, $to);
+    }
+
+    /**
+     * The whole period, assembled once.
+     *
+     * Every screen reporting a period's income reads this — Profitability over
+     * ten days, the Quarterly Summary over a quarter, the dashboard over
+     * thirty. They used to assemble it themselves out of the pieces above, and
+     * the dashboard quietly left the overhead out, so its net income was a
+     * different figure from the summary's for the same days. One method, and
+     * that cannot happen.
+     *
+     * @return array{trucks: array<int, array<string, mixed>>, totals: array<string, mixed>}
+     */
+    public function periodRollup(Carbon $from, Carbon $to): array
+    {
+        $rows = $this->pnlByTruck($from, $to);
+
+        return [
+            'trucks' => $rows,
+            'totals' => $this->periodTotals(
+                $rows,
+                $this->overheadCents($from, $to),
+                $this->supplierBillsPaidCents($from, $to),
+                // What was still owed as the window closed. Not an expense of
+                // it — see `periodTotals()` — but the figure that says whether
+                // the period's profit is money anybody can actually draw.
+                $this->payables->outstandingAsOf($to),
+                // And what was handed to partners and landed inside it, which
+                // is the other half of the same cash question.
+                $this->wallet->paidOutBetween($from, $to),
+                // And the other direction: what was still owed to the fleet.
+                $this->receivables->outstandingAsOf($to),
+            ),
+        ];
     }
 
     /* -------------------------------------------------------------- Sales */
@@ -180,6 +344,8 @@ class FinanceService
     {
         $entries = $this->ledger->entriesBetween($from, $to);
         $lines = $this->expenses->between($from, $to);
+        $bills = $this->invoices->settlementsBetween(InvoiceDirection::Payable, $from, $to);
+        $payouts = $this->wallet->payoutsLandedBetween($from, $to);
 
         $buckets = [];
 
@@ -199,6 +365,28 @@ class FinanceService
 
             $buckets[$key] ??= $this->emptyBucket($granularity, $line->date);
             $buckets[$key]['expenses_cents'] += $line->amount_cents;
+        }
+
+        // And what went to suppliers, on the day it went. Bucketed here rather
+        // than added to the totals at the end, so the series and its total say
+        // the same thing and a reader can see which week the money left in.
+        foreach ($bills as $bill) {
+            $paidOn = $bill->payment?->paid_on;
+
+            $key = $this->bucketKey($granularity, $paidOn);
+
+            $buckets[$key] ??= $this->emptyBucket($granularity, $paidOn);
+            $buckets[$key]['expenses_cents'] += $bill->amount_cents;
+        }
+
+        // And what was handed to partners, on the day it was handed over.
+        // Stored negative, because a payout is money leaving; the series wants
+        // a magnitude in its expenses column.
+        foreach ($payouts as $payout) {
+            $key = $this->bucketKey($granularity, $payout->occurred_on);
+
+            $buckets[$key] ??= $this->emptyBucket($granularity, $payout->occurred_on);
+            $buckets[$key]['expenses_cents'] += abs((int) $payout->amount_cents);
         }
 
         ksort($buckets);
@@ -353,12 +541,91 @@ class FinanceService
 
     public function createEntry(LedgerEntryData $data, ?int $userId): LedgerEntry
     {
-        return $this->ledger->create($data->recordedBy($userId));
+        return DB::transaction(function () use ($data, $userId): LedgerEntry {
+            $entry = $this->ledger->create($data->recordedBy($userId));
+            $this->writeHelpers($entry, $data);
+
+            return $entry->refresh();
+        });
     }
 
     public function updateEntry(LedgerEntry $entry, LedgerEntryData $data): LedgerEntry
     {
-        return $this->ledger->update($entry, $data);
+        return DB::transaction(function () use ($entry, $data): LedgerEntry {
+            $updated = $this->ledger->update($entry, $data);
+            $this->writeHelpers($updated, $data);
+
+            return $updated->refresh();
+        });
+    }
+
+    /**
+     * The day's helper lines, from whichever of the two shapes arrived.
+     *
+     * `helpers` is the list, and replaces what was there. A bare
+     * `helper_salary_cents` is what an app built before the lines still sends
+     * — one figure for everybody — and it is honoured where it cannot be
+     * misread: a day with one helper or none takes it as that helper's pay. A
+     * day with several has nowhere to put one number without inventing a split,
+     * so it is refused with the reason rather than guessed at.
+     *
+     * Saying neither leaves the lines alone.
+     */
+    private function writeHelpers(LedgerEntry $entry, LedgerEntryData $data): void
+    {
+        if ($data->wasGiven('helpers')) {
+            $this->syncHelperLines($entry, $data->helpers ?? []);
+
+            return;
+        }
+
+        if (! $data->wasGiven('helper_salary_cents')) {
+            return;
+        }
+
+        $existing = $entry->helpers()->get();
+
+        if ($existing->count() > 1) {
+            throw ValidationException::withMessages([
+                'helper_salary_cents' => 'This day has more than one helper, each paid separately. '
+                    .'Enter each helper’s pay on the sheet, or update the app.',
+            ]);
+        }
+
+        $cents = (int) $data->helper_salary_cents;
+        $driverId = $existing->first()?->driver_id;
+
+        $this->syncHelperLines($entry, $cents === 0 && $driverId === null
+            ? []
+            : [['driver_id' => $driverId, 'salary_cents' => $cents]]);
+    }
+
+    /**
+     * Replace the day's helper lines, and keep the column that sums them true.
+     *
+     * `helper_salary_cents` is what every roll-up reads, so it is written here
+     * and nowhere else once lines exist — the two cannot drift, because there
+     * is only one place that writes either.
+     *
+     * @param  array<int, array{driver_id: ?string, salary_cents: int}>  $lines
+     */
+    public function syncHelperLines(LedgerEntry $entry, array $lines): void
+    {
+        $entry->helpers()->delete();
+
+        foreach (array_values($lines) as $position => $line) {
+            $entry->helpers()->create([
+                'driver_id' => $line['driver_id'] ?? null,
+                'salary_cents' => (int) ($line['salary_cents'] ?? 0),
+                'position' => $position,
+            ]);
+        }
+
+        $entry->forceFill([
+            'helper_salary_cents' => (int) array_sum(array_column($lines, 'salary_cents')),
+        ])->save();
+
+        $entry->unsetRelation('helpers');
     }
 
     public function deleteEntry(LedgerEntry $entry): void
@@ -398,11 +665,12 @@ class FinanceService
         CarbonInterface $date,
         ?string $customerId = null,
         ?string $driverId = null,
-        ?string $helperId = null,
+        /** @var string[] Everyone who rode along, each opened at no pay yet. */
+        array $helperIds = [],
     ): LedgerEntry {
         $truck = $this->truckForVehicle($vehicleId, $plate);
 
-        return $this->openDailyRowForTruck($truck->id, $date, [
+        $row = $this->openDailyRowForTruck($truck->id, $date, [
             'trip_id' => $tripId,
             // Carried from the trip, so the day lands on that customer's
             // history without anybody keying it in. A day covering more than
@@ -420,9 +688,20 @@ class FinanceService
              * the first, and the office can correct it on the sheet.
              */
             'driver_id' => $driverId,
-            'helper_id' => $helperId,
             'route' => $route,
         ]);
+
+        // A line per helper, at nothing yet — the amounts are entered, never
+        // invented, but who they are owed to is known now. Only on a row this
+        // call opened: one already on the sheet is somebody else's to change.
+        if ($row->wasRecentlyCreated && $helperIds !== []) {
+            $this->syncHelperLines($row, array_map(
+                static fn (string $id): array => ['driver_id' => $id, 'salary_cents' => 0],
+                array_values(array_unique($helperIds)),
+            ));
+        }
+
+        return $row;
     }
 
     /**
@@ -491,7 +770,17 @@ class FinanceService
         int $incomeCents,
         ?string $customerId = null,
         ?string $driverId = null,
-        ?string $helperId = null,
+        /** @var string[] */
+        array $helperIds = [],
+        /**
+         * What the truck's owner took out of this run.
+         *
+         * Zero for the fleet's own units and for one hired at a flat monthly
+         * rent — in both, every peso of the income is the fleet's. It is only
+         * non-zero on a revenue-share truck, where the fleet keeps its cut and
+         * the rest is a cost of having used somebody else's wheels.
+         */
+        int $ownerShareCents = 0,
     ): LedgerEntry {
         $row = $this->openDailyRow(
             vehicleId: $vehicleId,
@@ -501,12 +790,67 @@ class FinanceService
             date: $date,
             customerId: $customerId,
             driverId: $driverId,
-            helperId: $helperId,
+            helperIds: $helperIds,
         );
 
         if ($incomeCents !== 0) {
             $row->increment('trip_income_cents', $incomeCents);
         }
+
+        // Incremented rather than set, like the income above: a second run on
+        // the same unit on the same day lands on the same sheet row, and both
+        // owners' shares belong in the day's total.
+        if ($ownerShareCents !== 0) {
+            $row->increment('owner_share_cents', $ownerShareCents);
+        }
+
+        return $row->refresh();
+    }
+
+    /**
+     * Put what a service cost onto the day's row for its unit.
+     *
+     * The maintenance half of the same sync `creditTripIncome()` does for
+     * income: a job done on a truck is money that truck cost, and
+     * `maintenance_cents` is the workbook column it has always belonged in.
+     * Before this there was no way to get a figure into that column except by
+     * typing it, so the service history and the sheet were two records of the
+     * same event that nobody reconciled.
+     *
+     * **A delta, not a total.** The caller passes the difference between what
+     * the job now says and what has already been pushed, so correcting ₱3,200
+     * to ₱3,500 moves the sheet by ₱300 and saving the same job twice moves it
+     * by nothing. `maintenance_jobs.posted_cents` is where that running total
+     * lives; `MaintenanceService` is the only thing that should be computing
+     * this argument.
+     *
+     * A zero delta opens no row. A vehicle whose job was costed at nothing —
+     * a warranty replacement — should not conjure a sheet line for a day the
+     * unit may not even have worked.
+     */
+    public function chargeMaintenance(
+        string $vehicleId,
+        ?string $plate,
+        CarbonInterface $date,
+        int $deltaCents,
+    ): ?LedgerEntry {
+        if ($deltaCents === 0) {
+            return null;
+        }
+
+        $truck = $this->truckForVehicle($vehicleId, $plate);
+
+        $row = $this->openDailyRowForTruck($truck->id, $date);
+
+        // `increment` only takes a positive step, and a correction downwards is
+        // an ordinary thing for somebody who mistyped a figure — so a negative
+        // delta decrements, floored at zero. A column that went negative would
+        // read as the garage having paid *us*.
+        $deltaCents > 0
+            ? $row->increment('maintenance_cents', $deltaCents)
+            : $row->update([
+                'maintenance_cents' => max(0, (int) $row->maintenance_cents + $deltaCents),
+            ]);
 
         return $row->refresh();
     }

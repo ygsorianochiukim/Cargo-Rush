@@ -3,14 +3,29 @@
 declare(strict_types=1);
 
 /**
- * The business's own numbers — the ones a bookkeeper changes, not a developer.
+ * The install's own numbers — the **defaults**, not the last word.
+ *
+ * Almost everything here is a column on the company as well, edited by an
+ * administrator under Access Control → Rates and resolved by `RateBook`: the
+ * tariff, the payment terms, the tax rates and the partner commission. A null
+ * column falls through to the figure here, which is what every company has
+ * until somebody opens that card — so these values still decide what a fresh
+ * install charges, and stop deciding the moment a firm disagrees.
+ *
+ * That matters because two hauliers share an install. A single
+ * `TARIFF_PER_KM_CENTS` cannot describe a firm quoting ₱35 and a firm quoting
+ * ₱45, and correcting either used to mean a deployment.
+ *
+ * What is deliberately *only* here: the payroll contributions, which are the
+ * government's and identical for every firm on the platform, and the currency.
  *
  * Two things in this system are worked out rather than typed: what a haul is
  * charged at, and when the invoice for it falls due. Both used to be a figure
  * somebody keyed in per trip, which is why the same run could be billed two
  * different amounts by two different people. The rates that replace that
- * judgement live here so they can be corrected in one place, per install,
- * without touching the code that applies them.
+ * judgement are in one place rather than scattered through the code that
+ * applies them — here for the install, and on the company for a firm that has
+ * said otherwise.
  *
  * Money is integer centavos throughout (DESIGN.md section 7.1).
  */
@@ -28,7 +43,9 @@ return [
     | dispatcher entered. A trip nobody has pinned has no distance, and the
     | quote is then base plus weight alone — honest, and still not zero.
     |
-    | `PricingService` is the only thing that reads these.
+    | `RateBook` is the only thing that reads these, and `PricingService` the
+    | only thing that reads it. A firm that has set its own four figures on the
+    | settings card never reaches this block.
     |
     */
     'tariff' => [
@@ -88,6 +105,41 @@ return [
     | table does not say.
     |
     */
+    /*
+    |--------------------------------------------------------------------------
+    | Road distance — what picks a trip's zone
+    |--------------------------------------------------------------------------
+    |
+    | A zone is a band of kilometres, so the distance a trip carries decides
+    | which row of the rate card prices it. That distance used to be the
+    | straight line between the two pins, which is the one figure a truck never
+    | drives: CDO to Iligan is 49 km as the crow flies and about 90 by road, so
+    | a run that belongs in band C was quoted in B. Across Northern Mindanao the
+    | road runs 1.15 to 1.8 times the straight line, which is too wide a spread
+    | for any single multiplier to fix.
+    |
+    | So a pinned trip is measured on the road network, by OpenRouteService's
+    | heavy-goods profile — the roads a truck is allowed on, not a car's
+    | shortcuts. `ORS_API_KEY` is a free key from openrouteservice.org.
+    |
+    | `detour_factor` is the fallback, used only when the service cannot be
+    | asked — no key configured, a timeout, a route it cannot find. The straight
+    | line times this is a better guess than the straight line alone, and the
+    | trip records that it was an estimate so the desk can see it and correct it.
+    |
+    | Answers are cached by the pair of pins, rounded to about eleven metres, so
+    | the same depot-to-warehouse run costs one call however often it is booked.
+    |
+    */
+    'routing' => [
+        'ors_key' => env('ORS_API_KEY'),
+        'ors_url' => env('ORS_URL', 'https://api.openrouteservice.org'),
+        'profile' => env('ORS_PROFILE', 'driving-hgv'),
+        'timeout' => (int) env('ORS_TIMEOUT', 6),
+        'detour_factor' => (float) env('ROUTING_DETOUR_FACTOR', 1.4),
+        'cache_days' => (int) env('ROUTING_CACHE_DAYS', 90),
+    ],
+
     'diesel' => [
         'baseline_cents' => (int) env('DIESEL_BASELINE_CENTS', 6_500),
         /**
@@ -192,6 +244,19 @@ return [
     |
     */
     'payroll' => [
+        /**
+         * Days between a cutoff and the money going out.
+         *
+         * Two. A period closing on the 5th is released on the 7th: the gap is
+         * where the office compiles the period's charges and gets the budget
+         * released, with ten days of billing behind it.
+         *
+         * The install default, for a firm that has not set its own —
+         * `companies.payroll_release_lag_days` is the one actually in force,
+         * because two hauliers on one install will not agree on it.
+         */
+        'release_lag_days' => (int) env('PAYROLL_RELEASE_LAG_DAYS', 2),
+
         /**
          * How many pay runs a month, which decides how a monthly contribution
          * is split across them.
@@ -383,6 +448,80 @@ return [
     */
     'billing' => [
         'terms_days' => (int) env('BILLING_TERMS_DAYS', 30),
+    ],
+
+    /*
+    |----------------------------------------------------------------------
+    | Partner truckers
+    |----------------------------------------------------------------------
+    |
+    | What the haulier keeps of what an owner-operator's run bills, in basis
+    | points — 1200 is twelve per cent.
+    |
+    | This is the install-wide fallback and very little should read it. The
+    | rate a firm actually works to is `companies.trucker_commission_bp`, set
+    | on the settings card, because it is a commercial term between that
+    | haulier and the people hauling for it and two companies on this platform
+    | will not agree on it. This answers only for a company row that predates
+    | the column.
+    |
+    | There was a per-partner override, `truckers.commission_bp`, and it is
+    | gone. It could only be set from a number field on one partner's detail
+    | screen — beside an approve button and a wallet — and a cut the office
+    | cannot state in one figure is a cut nobody can check.
+    |
+    | Whichever applies, it is frozen onto the trip at delivery — see
+    | `trips.commission_bp`. Changing either number changes what future runs
+    | are split at and touches nothing already earned.
+    |
+    */
+    'truckers' => [
+        'commission_bp' => (int) env('TRUCKER_COMMISSION_BP', 1200),
+
+        /**
+         * The fleet a trucker registers with — a company `code`, or null.
+         *
+         * Nobody is asked this on the sign-up form. A trucker registers with
+         * the platform's own fleet wherever in the country they are, and that
+         * firm vets them; the choosing happens on the *customer's* side, per
+         * load, between that fleet and whichever vetted truckers are near them.
+         *
+         * Null means the oldest company on the install, which is the one
+         * registration created and the same fallback the seeders use for "this
+         * install's company". Set it only where an install runs more than one
+         * fleet and the first is not the one taking partners.
+         */
+        'registers_with' => env('TRUCKER_REGISTERS_WITH'),
+
+        /**
+         * How far a customer is shown truckers from, in kilometres.
+         *
+         * Tighter than the carrier radius, and deliberately: a haulier two
+         * provinces away is an ordinary answer for a full truckload because it
+         * has a yard, a roster and units it can send. One man with one truck is
+         * not that — if he is 150 km away he is not available this afternoon,
+         * and listing him is offering the customer something that will not
+         * arrive.
+         *
+         * The fleet itself is never filtered out by distance: it is the answer
+         * for every load, near or far, and is always on the list.
+         */
+        'customer_radius_km' => (float) env('TRUCKER_CUSTOMER_RADIUS_KM', 60),
+
+        /**
+         * How stale a partner's reported position may be and still be used to
+         * sort a job board, in minutes.
+         *
+         * Two hours. A pin is reported by the handset rather than derived from
+         * a run, so it goes stale the moment somebody closes the app — and a
+         * board sorted by where a man was on Tuesday sends a load to the wrong
+         * province. Past this the partner still sees every job; they are just
+         * not told which is nearest, because nobody knows.
+         */
+        'position_fresh_minutes' => (int) env('TRUCKER_POSITION_FRESH_MINUTES', 120),
+
+        /** How far a partner is shown work from, in kilometres. */
+        'job_radius_km' => (float) env('TRUCKER_JOB_RADIUS_KM', 150),
     ],
 
     /*

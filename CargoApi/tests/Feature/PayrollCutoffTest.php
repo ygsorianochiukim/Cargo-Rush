@@ -277,18 +277,28 @@ describe('which period is due', function (): void {
 });
 
 describe('what a firm may set', function (): void {
-    it('refuses a third cutoff, because the tax table is semi-monthly', function (): void {
-        ($this->setCutoffs)([10, 20, 31])
+    it('takes a third cutoff, for a firm that pays three times a month', function (): void {
+        // 5th, 15th, 25th — released on the 7th, 17th and 27th. The limit was
+        // two while the arithmetic downstream only knew how to halve a month;
+        // `MonthlyShare` is what replaced the halving and made a third run safe
+        // to pay. See `PayrollCalendar::MAX_CUTOFFS`.
+        ($this->setCutoffs)([5, 15, 25])->assertOk();
+
+        expect(PayrollCalendar::for($this->company->refresh())->days)->toBe([5, 15, 25]);
+    });
+
+    it('still refuses a fourth, which nothing downstream is built for', function (): void {
+        ($this->setCutoffs)([5, 10, 20, 31])
             ->assertStatus(422)
             ->assertJsonPath('errors.payroll_cutoff_days.0',
-                'Payroll is cut off once or twice a month, so give one or two days — not 3. '
+                'Payroll is cut off up to three times a month, so give one, two or three days — not 4. '
                 .'A weekly payroll needs a different tax table and is not set up here.');
     });
 
     it('refuses two cutoffs on the same day', function (): void {
         ($this->setCutoffs)([15, 15])
             ->assertStatus(422)
-            ->assertJsonPath('errors.payroll_cutoff_days.0', 'The two cutoff days have to be different days.');
+            ->assertJsonPath('errors.payroll_cutoff_days.0', 'The cutoff days have to be different days.');
     });
 
     it('refuses a day that is not a day of the month', function (): void {
@@ -409,7 +419,11 @@ describe('the calendar itself', function (): void {
     it('drops anything unusable rather than throwing on a bad row', function (): void {
         // What `of()` is for: it reads a column back, and a payslip is the
         // wrong place to discover somebody wrote something odd by hand.
-        expect(PayrollCalendar::of([15, 31, 20])->days)->toBe([15, 20])
+        // Three is a real calendar now, so a list of three comes back whole —
+        // sorted, which is the other half of what `of()` repairs.
+        expect(PayrollCalendar::of([15, 31, 20])->days)->toBe([15, 20, 31])
+            // Past three is still dropped: nothing downstream is built for it.
+            ->and(PayrollCalendar::of([5, 10, 20, 31])->days)->toBe([5, 10, 20])
             ->and(PayrollCalendar::of([0, 99, 'x'])->days)->toBe([15, 31])
             ->and(PayrollCalendar::of([])->days)->toBe([15, 31]);
     });
@@ -419,10 +433,14 @@ describe('the calendar itself', function (): void {
 
         // A run opened under the old 1st/16th calendar. Not refused — it
         // already exists and has been paid — and answered honestly.
+        // `index` and `count` ride along with the two booleans, because that is
+        // what the money needs: a monthly salary is cut into `count` pieces and
+        // "the second of three" cannot be said with a pair of flags. See
+        // `MonthlyShare`.
         expect($calendar->classify(Carbon::parse('2026-09-01'), Carbon::parse('2026-09-15')))
-            ->toBe(['first' => true, 'only' => false])
+            ->toBe(['first' => true, 'only' => false, 'index' => 0, 'count' => 2])
             ->and($calendar->classify(Carbon::parse('2026-09-16'), Carbon::parse('2026-09-30')))
-            ->toBe(['first' => false, 'only' => false]);
+            ->toBe(['first' => false, 'only' => false, 'index' => 1, 'count' => 2]);
     });
 
     it('names the days the way an office would say them', function (): void {

@@ -67,6 +67,23 @@ class DeliveryRequestRequest extends ApiFormRequest
             // When they would like it collected. In the future, because a
             // pickup cannot be asked for in the past.
             'preferred_at' => ['required', 'date', 'after_or_equal:now'],
+
+            /**
+             * A partner trucker the customer picked off the hauler list.
+             *
+             * Optional, and its absence is the ordinary case: leaving it out
+             * means "whoever the fleet sends", which is what picking Cargo Rush
+             * on that screen does. Naming somebody makes the request an offer
+             * to that one person. Left out, the request waits on the desk —
+             * no trucker sees it, because there is no open board.
+             *
+             * Not validated with `exists` here. The row is tenant-scoped and
+             * this rule would run before the offer is resolved, so a trucker at
+             * another fleet would pass it and fail later with a worse message —
+             * `PortalService::offerTo()` checks it and says what is actually
+             * wrong.
+             */
+            'trucker_id' => ['nullable', 'string', 'max:26'],
         ];
     }
 
@@ -91,6 +108,14 @@ class DeliveryRequestRequest extends ApiFormRequest
         return $id === '' ? null : $id;
     }
 
+    /** The partner they picked, or null for "whoever the fleet sends". */
+    public function truckerId(): ?string
+    {
+        $id = trim((string) $this->input('trucker_id', ''));
+
+        return $id === '' ? null : $id;
+    }
+
     /**
      * The request, as a trip.
      *
@@ -103,11 +128,13 @@ class DeliveryRequestRequest extends ApiFormRequest
     {
         $validated = $this->validated();
 
-        // Neither is a column on `trips`. `preferred_at` becomes
-        // `scheduled_at` below; the carrier is answered for by which company's
-        // tenancy the trip is written in, and `TripData` would refuse an
-        // attribute the model has no field for.
-        unset($validated['preferred_at'], $validated['carrier_id']);
+        // None of the three is a column on `trips` as sent. `preferred_at`
+        // becomes `scheduled_at` below; the carrier is answered for by which
+        // company's tenancy the trip is written in; and the trucker is applied
+        // by `PortalService::offerTo()` after the row exists, because naming
+        // one is an offer with its own rules rather than a field to copy.
+        // `TripData` would refuse an attribute the model has no field for.
+        unset($validated['preferred_at'], $validated['carrier_id'], $validated['trucker_id']);
 
         return TripData::fromArray([
             ...$validated,

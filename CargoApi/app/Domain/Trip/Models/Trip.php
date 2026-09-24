@@ -11,9 +11,13 @@ use App\Domain\Dispatch\Models\DispatchRecord;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Gps\Models\GpsPing;
 use App\Domain\Inspection\Models\Inspection;
+use App\Domain\Pricing\Models\TruckCategory;
+use App\Domain\Shared\Enums\BookingSource;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Support\Geo;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
+use App\Domain\Trucker\Models\Trucker;
+use App\Domain\Trucker\Models\TruckerVehicle;
 use App\Domain\Vehicle\Models\Vehicle;
 use Database\Factories\TripFactory;
 use Illuminate\Database\Eloquent\Builder;
@@ -21,6 +25,7 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -37,11 +42,16 @@ class Trip extends Model
     protected $fillable = [
         'reference', 'customer_id', 'origin', 'destination', 'cargo',
         'origin_lat', 'origin_lng', 'destination_lat', 'destination_lng',
-        'weight_kg', 'pieces', 'handling', 'driver_id', 'helper_id',
+        'weight_kg', 'pieces', 'handling', 'driver_id',
         'vehicle_id', 'truck_category_id', 'status', 'pickup_place', 'dropoff_place',
         'scheduled_at', 'eta', 'distance_total_m',
         'price_cents', 'currency', 'billed_at', 'requested_by',
         'pricing_zone_id', 'pricing_bracket_id', 'fuel_adjustment_bp', 'fuel_surcharge_cents',
+        // The partner half. `booking_source` is fillable because the desk
+        // assigning a run writes it; the two commission columns are not, and
+        // are force-filled once at delivery — see `Trip::isBilled()` for the
+        // rule about what may only happen once.
+        'trucker_id', 'trucker_vehicle_id', 'booking_source',
     ];
 
     protected function casts(): array
@@ -61,6 +71,9 @@ class Trip extends Model
             'scheduled_at' => 'datetime',
             'eta' => 'datetime',
             'status' => StatusValue::class,
+            'booking_source' => BookingSource::class,
+            'commission_bp' => 'integer',
+            'commission_cents' => 'integer',
         ];
     }
 
@@ -74,14 +87,97 @@ class Trip extends Model
         return $this->belongsTo(Driver::class);
     }
 
-    public function helper(): BelongsTo
+    /**
+     * Who rode on the run to load and unload it, in the order the desk named
+     * them. Any number, including none — see the migration that replaced the
+     * single `helper_id` for why one was never enough.
+     */
+    public function helpers(): BelongsToMany
     {
-        return $this->belongsTo(Driver::class, 'helper_id');
+        return $this->belongsToMany(Driver::class, 'trip_helpers')
+            ->withPivot('position')
+            ->withTimestamps()
+            ->orderByPivot('position');
+    }
+
+    /**
+     * Put these people on the run as its helpers, in this order.
+     *
+     * A sync rather than an attach, so naming the crew again replaces it: the
+     * desk editing a trip is stating who is on it, not adding to a list.
+     *
+     * @param  string[]  $driverIds
+     */
+    public function setHelpers(array $driverIds): void
+    {
+        $this->helpers()->sync(collect(array_values(array_unique($driverIds)))
+            ->mapWithKeys(static fn (string $id, int $position): array => [$id => ['position' => $position]])
+            ->all());
+
+        $this->unsetRelation('helpers');
+    }
+
+    /** @return string[] */
+    public function helperIds(): array
+    {
+        return $this->helpers->pluck('id')->all();
     }
 
     public function vehicle(): BelongsTo
     {
         return $this->belongsTo(Vehicle::class);
+    }
+
+    /**
+     * The partner hauling this, when it is not the haulier's own crew.
+     *
+     * A run has a driver or a trucker, never both: one is an employee in a
+     * company truck and the other is an owner-operator in their own, and a row
+     * naming both would be two people claiming the same load. Nothing in the
+     * schema forbids it — a foreign key cannot express "exactly one of these
+     * two" — so `hauledByPartner()` is what the rest of the system asks rather
+     * than testing columns itself.
+     */
+    public function trucker(): BelongsTo
+    {
+        return $this->belongsTo(Trucker::class);
+    }
+
+    public function truckerVehicle(): BelongsTo
+    {
+        return $this->belongsTo(TruckerVehicle::class, 'trucker_vehicle_id');
+    }
+
+    /**
+     * The kind of unit this load asks for, when it asks for one.
+     *
+     * Already on the row — the rate card prices against it — and given a
+     * relation here because the job board has to say "freezer" on a card rather
+     * than a ULID.
+     */
+    public function truckCategory(): BelongsTo
+    {
+        return $this->belongsTo(TruckCategory::class, 'truck_category_id');
+    }
+
+    /** Is a partner carrying this rather than the company's own crew? */
+    public function hauledByPartner(): bool
+    {
+        return $this->trucker_id !== null;
+    }
+
+    /**
+     * Does the haulier collect this run's money?
+     *
+     * Yes for everything it booked itself, including a partner run the desk
+     * assigned; no for one a customer gave straight to a partner, where the money
+     * is between them and the customer. The invoice step reads this and raises
+     * nothing when it is false — billing a customer for a haul somebody has
+     * already been paid for would charge them twice.
+     */
+    public function collectedByCarrier(): bool
+    {
+        return ($this->booking_source ?? BookingSource::CargoRush)->collectedByCarrier();
     }
 
     public function pings(): HasMany
@@ -129,6 +225,13 @@ class Trip extends Model
     public function deliveryLog(): HasOne
     {
         return $this->hasOne(DeliveryLog::class);
+    }
+
+    /** Was this person on the run — driving it, or as a helper on it? */
+    public function isCrewedBy(?string $driverId): bool
+    {
+        return $driverId !== null
+            && ($this->driver_id === $driverId || $this->helpers()->whereKey($driverId)->exists());
     }
 
     /**
@@ -205,10 +308,9 @@ class Trip extends Model
     /**
      * Great-circle distance between the two points, in metres.
      *
-     * Straight-line, not road distance — a road network is a routing service
-     * this system does not have. It is a floor on the real distance and a
-     * sane default for a trip nobody has measured, which beats the zero it
-     * would otherwise carry. A dispatcher can still overwrite it.
+     * Straight-line, and **not** what prices a trip — a truck drives the road,
+     * which in Northern Mindanao is 1.15 to 1.8 times longer. `RoadDistance`
+     * measures the run for the quote; this is what it falls back on.
      */
     public function straightLineDistanceM(): ?int
     {

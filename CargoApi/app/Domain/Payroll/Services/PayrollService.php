@@ -15,6 +15,7 @@ use App\Domain\Payroll\Models\PayComponent;
 use App\Domain\Payroll\Models\PayRun;
 use App\Domain\Payroll\Models\PayRunLine;
 use App\Domain\Payroll\Models\PayRunLineComponent;
+use App\Domain\Payroll\Support\MonthlyShare;
 use App\Domain\Payroll\Support\PayrollCalendar;
 use App\Domain\Shared\Enums\DeductionSchedule;
 use App\Domain\Shared\Enums\JournalCategory;
@@ -305,7 +306,7 @@ class PayrollService
      * a statement about a fortnight and has to keep saying what it said after
      * somebody is promoted. See `PayRunLine`.
      *
-     * @param  array{first: bool, only: bool}  $cutoff
+     * @param  array{first: bool, only: bool, index: int, count: int}  $cutoff
      */
     private function writeLine(
         PayRun $run,
@@ -373,8 +374,8 @@ class PayrollService
         $statutory = $this->deductions->for(
             $monthly,
             $basic + $taxableEarnings,
-            $cutoff['first'],
-            $cutoff['only'],
+            $cutoff['index'],
+            $cutoff['count'],
             $schedule,
             $enrolled,
         );
@@ -501,7 +502,7 @@ class PayrollService
      * percentage-with-a-ceiling — and like that one, every figure it produces
      * is editable on the line by an office that knows better.
      *
-     * @param  array{first: bool, only: bool}  $cutoff
+     * @param  array{first: bool, only: bool, index: int, count: int}  $cutoff
      * @return array{basis: PayBasis, basic_cents: int, monthly_equivalent_cents: int, days_worked: int, sheet_days: int, trips: int}
      */
     private function earningsFor(Employee $employee, array $cutoff, ?array $sheet = null, Carbon|string|null $on = null): array
@@ -513,11 +514,18 @@ class PayrollService
         if ($basis === PayBasis::Monthly) {
             return [
                 'basis' => $basis,
-                'basic_cents' => match (true) {
-                    $cutoff['only'] => $rate,
-                    $cutoff['first'] => intdiv($rate, 2),
-                    default => $rate - intdiv($rate, 2),
-                },
+                /**
+                 * A month's salary, cut into as many pieces as the month has
+                 * runs.
+                 *
+                 * This was `first ? rate/2 : rate - rate/2`, which is correct
+                 * for a fortnightly payroll and silently wrong for any other.
+                 * On a firm cutting off three times a month the first run paid
+                 * half a salary and the other two paid half **each** — so
+                 * everybody was paid one and a half times what they earn, and
+                 * no single payslip looked wrong.
+                 */
+                'basic_cents' => MonthlyShare::forRun($rate, $cutoff['index'], $cutoff['count']),
                 'monthly_equivalent_cents' => $rate,
                 'days_worked' => 0,
                 'sheet_days' => 0,

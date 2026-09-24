@@ -33,3 +33,16 @@ Schedule::command('cargo:trips-overdue')->everyFiveMinutes()->withoutOverlapping
 // Money goes stale on the same clock. Daily rather than by the minute: a due
 // date is a date, so nothing can change between one morning and the next.
 Schedule::command('cargo:invoices-overdue')->dailyAt('00:05')->withoutOverlapping();
+
+/*
+| The rent on every truck the fleet hires at a flat fee.
+|
+| Monthly, on the first, and it bills the month that has just ended — a rent is
+| a cost of a period rather than of a moment, and charging in advance would put
+| a cost in a month the truck has not worked yet.
+|
+| Safe if it is missed and run late, and safe if it runs twice: the charge is
+| keyed to the unit and the month, so a second pass finds the first one's row
+| and does nothing.
+*/
+Schedule::command('cargo:truck-rent')->monthlyOn(1, '00:15')->withoutOverlapping();

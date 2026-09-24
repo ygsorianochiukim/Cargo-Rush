@@ -6,18 +6,25 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { FormBuilder, FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { Customer } from '../models/customer/customer.model';
 import { Driver } from '../models/driver/driver.model';
-import { LedgerEntryPayload, Truck } from '../models/finance/finance.model';
+import { LedgerEntryPayload, LedgerHelperLine, Truck } from '../models/finance/finance.model';
 import { CustomerService } from '../services/customer/customer.service';
 import { DriverService } from '../services/driver/driver.service';
 import { FinanceService } from '../services/finance/finance.service';
 import { Field } from './field';
 import { fmt } from './format';
+import { Icon } from './icon';
 import { LedgerDialog } from './ledger-dialog';
 import { Modal } from './modal';
+
+/** As many as the API takes on one day. */
+const MAX_HELPERS = 5;
+
+/** One helper's line: who, and what they were paid in pesos. */
+type HelperLine = FormGroup<{ driver_id: FormControl<string>; salary: FormControl<number> }>;
 
 /**
  * Create/edit one daily trip row — the workbook's per-truck "Daily Trip
@@ -27,7 +34,7 @@ import { Modal } from './modal';
 @Component({
   selector: 'app-ledger-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Modal, Field, ReactiveFormsModule],
+  imports: [Modal, Field, Icon, ReactiveFormsModule],
   templateUrl: './ledger-form.html',
 })
 export class LedgerForm {
@@ -68,19 +75,25 @@ export class LedgerForm {
     trip_income: [0, [Validators.required, Validators.min(0)]],
     fuel: [0, [Validators.required, Validators.min(0)]],
     driver_salary: [0, [Validators.required, Validators.min(0)]],
-    helper_salary: [0, [Validators.required, Validators.min(0)]],
     maintenance: [0, [Validators.required, Validators.min(0)]],
     allowance: [0, [Validators.required, Validators.min(0)]],
     /**
-     * Who the driver and helper salary figures belong to.
+     * Who the driver salary belongs to.
      *
      * Optional, because plenty of days are recorded before anybody knows or
-     * cares — and because every row filed before these columns existed has
-     * nobody in them. An unattributed row is counted toward nobody's payslip,
+     * cares — and because every row filed before this column existed has
+     * nobody in it. An unattributed row is counted toward nobody's payslip,
      * which is the safe direction.
      */
     driver_id: [''],
-    helper_id: [''],
+    /**
+     * The day's helpers, one line each with their own pay.
+     *
+     * A line per person rather than one figure for all of them, because the
+     * helpers on one day are not on one rate. The day's helper salary is the
+     * sum, and the API works it out the same way.
+     */
+    helpers: this.fb.nonNullable.array<HelperLine>([]),
     customer_id: [''],
     route: [''],
     remarks: [''],
@@ -94,11 +107,45 @@ export class LedgerForm {
     return (
       Number(v.fuel) +
       Number(v.driver_salary) +
-      Number(v.helper_salary) +
+      this.helperTotal() +
       Number(v.maintenance) +
       Number(v.allowance)
     );
   });
+
+  /** The day's helper salary: every line added up. */
+  protected readonly helperTotal = computed(() =>
+    this.values().helpers.reduce((total, line) => total + Number(line.salary), 0),
+  );
+
+  protected readonly maxHelpers = MAX_HELPERS;
+
+  protected get helperLines() {
+    return this.form.controls.helpers;
+  }
+
+  /** Nobody on two lines, and not the driver: either would be paid twice. */
+  protected availableFor(index: number): Driver[] {
+    const v = this.values();
+    const taken = new Set(
+      v.helpers.filter((_, i) => i !== index).map((line) => line.driver_id).concat(v.driver_id),
+    );
+
+    return this.drivers().filter((d) => !taken.has(d.id));
+  }
+
+  protected addHelper(line?: LedgerHelperLine): void {
+    this.helperLines.push(
+      this.fb.nonNullable.group({
+        driver_id: [line?.driver_id ?? ''],
+        salary: [line ? line.salary_cents / 100 : 0, [Validators.required, Validators.min(0)]],
+      }),
+    );
+  }
+
+  protected removeHelper(index: number): void {
+    this.helperLines.removeAt(index);
+  }
 
   protected readonly net = computed(() => Number(this.values().trip_income) - this.totalExpenses());
 
@@ -119,15 +166,17 @@ export class LedgerForm {
         trip_income: e ? e.trip_income_cents / 100 : 0,
         fuel: e ? e.fuel_cents / 100 : 0,
         driver_salary: e ? e.driver_salary_cents / 100 : 0,
-        helper_salary: e ? e.helper_salary_cents / 100 : 0,
         maintenance: e ? e.maintenance_cents / 100 : 0,
         allowance: e ? e.allowance_cents / 100 : 0,
         driver_id: e?.driver_id ?? '',
-        helper_id: e?.helper_id ?? '',
         customer_id: e?.customer_id ?? '',
         route: e?.route ?? '',
         remarks: e?.remarks ?? '',
       });
+      // Rebuilt rather than reset: `reset` keeps the array's length, and a
+      // day with three helpers opened after one with none needs three lines.
+      this.helperLines.clear();
+      (e?.helpers ?? []).forEach((line) => this.addHelper(line));
       this.values.set(this.form.getRawValue());
     });
   }
@@ -163,11 +212,15 @@ export class LedgerForm {
       trip_income_cents: cents(v.trip_income),
       fuel_cents: cents(v.fuel),
       driver_salary_cents: cents(v.driver_salary),
-      helper_salary_cents: cents(v.helper_salary),
+      helper_salary_cents: cents(this.helperTotal()),
       maintenance_cents: cents(v.maintenance),
       allowance_cents: cents(v.allowance),
       driver_id: v.driver_id || null,
-      helper_id: v.helper_id || null,
+      // Always sent, so removing a line really removes it.
+      helpers: v.helpers.map((line) => ({
+        driver_id: line.driver_id || null,
+        salary_cents: cents(line.salary),
+      })),
       customer_id: v.customer_id || null,
       route: v.route || null,
       remarks: v.remarks || null,

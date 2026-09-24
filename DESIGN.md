@@ -238,9 +238,22 @@ The two clients are **different products against one API**, not the same app at 
 
 Nothing outside these maps ships without the map being updated first.
 
-### 5.1 Web — `CargoUI` (12 modules)
+### 5.1 Web — `CargoUI`
 
-Sidebar order and grouping. `key` is what `GET /api/v1/navigation` returns.
+The twelve modules this system was specified from, with the grouping they sit
+in. `key` is what `GET /api/v1/navigation` returns.
+
+**`NavigationSeeder` is the live map**, and it has grown well past this table —
+Truckers, Payables, the Rate Card, the books, the roster and Access Control were
+all added after it. The eight groups in force are Operations, Fleet, Sales &
+Billing, Reports, Accounting, People, Support and Administration.
+
+The grouping is not a label the sidebar gathers by. The API sorts every row by
+`order` and the client starts a new heading when the group name changes, so **a
+group is a contiguous run of orders** — two groups whose numbers interleave each
+render twice with the intruder wedged between the halves. Each group therefore
+owns a hundred and its modules are numbered in tens inside it; `NavigationTest`
+fails on a tie, on a straddled band and on a repeated heading.
 
 | Group | Module (`key`) | Route | Contents |
 | --- | --- | --- | --- |
@@ -249,13 +262,13 @@ Sidebar order and grouping. `key` is what `GET /api/v1/navigation` returns.
 | | Trip Management (`trips`) | `/trips` | Delivery requests awaiting confirmation · trip details · route management (place name plus optional map pin at each end) · cargo management · driver assignment · helpers information · dropoff and pickup location · schedule management · tariff price |
 | | Dispatch Monitoring (`dispatch`) | `/dispatch` | Dispatch records · time and location |
 | | Delivery Logs (`delivery-logs`) | `/delivery-logs` | Delivery and driver/helper record · delivery details · dispatch records · proof-of-delivery logs (system-assigned reference, photograph, signed name) · delivery report (pending / active / complete) |
-| **Assets** | Vehicle Management (`vehicles`) | `/vehicles` | Vehicle details (registration, capacity, status, others) · maintenance |
+| **Fleet** | Vehicle Management (`vehicles`) | `/vehicles` | Vehicle details (registration, capacity, status, others) · maintenance |
 | | Drivers Management (`drivers`) | `/drivers` | LTMS records for violations · personal records · licence · driver status |
 | | Fuel Expense Monitoring (`fuel`) | `/fuel` | Daily fuel budget · budget requests · odometer monitoring · receipt/charge · consumption history · consumption projection |
-| **Finance** | Trip Monitoring (`monitoring`) | `/monitoring` | One daily row per truck: trip income, fuel, driver salary, helper salary, maintenance, allowance, route, remarks |
+| **Reports** | Trip Monitoring (`monitoring`) | `/monitoring` | One daily row per truck: trip income, fuel, driver salary, helper salary, maintenance, allowance, route, remarks |
 | | Profitability (`profitability`) | `/profitability` | 10-day window: income, expenses and net income per unit, best performing truck, expense split |
 | | Quarterly Summary (`summary`) | `/summary` | The same roll-up over a quarter, income against expenses per unit |
-| **Business** | Customer Management (`customers`) | `/customers` | Customer records · transaction history · feedback · the firm's portal login, created with the record |
+| **Sales & Billing** | Customer Management (`customers`) | `/customers` | Customer records · transaction history · feedback · the firm's portal login, created with the record |
 | | Billing & Invoice (`billing`) | `/billing` | Consolidated trip billing and invoice reports · receivables raised automatically on delivery · payment records · payables · payment history logs |
 | **Support** | Incident Management (`incidents`) | `/incidents` | Incident records (time and place, history) |
 | | Notification Management (`notifications`) | `/notifications` | Incident notification |
@@ -282,8 +295,31 @@ Rules that follow from it:
 
 - **The formulas live in `Domain/Finance/Services/FinanceService` and nowhere
   else.** A page never adds up expenses itself; it reads the roll-up the API
-  computed. Profitability and Quarterly Summary hit the same method with
-  different ranges, so the two cannot print different arithmetic.
+  computed. Profitability, Quarterly Summary and the dashboard's 30-day tile all
+  call `periodRollup()` with different ranges, so none of them can print
+  different arithmetic from the others.
+- **A period's expenses are wider than the workbook's five columns.** The
+  categorised `Expense` lines are added to them, the overhead that belongs to no
+  unit is charged to the period, and so is the money that actually left the
+  bank: **supplier bills the fleet has paid** (allocations against a payable
+  invoice, by a payment dated in the window) and **payouts handed to partner
+  truckers** (wallet payouts that have *landed*, dated by the day they were
+  made). Both are cash figures among accruals, deliberately: an unpaid bill is a
+  commitment rather than a cost of the quarter, and a June bill settled in July
+  is July's money. The accrual view of the same bills is the income statement in
+  `Domain/Accounting`, a different report for a different reader.
+- **A revenue-share truck's owner is excluded from the payout figure.** Their
+  cut is already written to the daily sheet as `owner_share_cents` when the run
+  is delivered, so counting the payout as well would charge the fleet twice for
+  one haul. A partner hauling in their own truck files no sheet row at all (see
+  `TripService::putOnTheBooks`), which is why their payout is the only record
+  that the money moved — and why the customer's side of such a run is still not
+  in `trip_income_cents`.
+- **`payables_cents` is what is still owed at the close of the window, and is
+  in neither the expenses nor the net.** `actual_income_cents` is
+  `net_income - payables`. The pairing is what stops settling up from
+  flattering a period: paying somebody moves the figure out of `payables_cents`
+  and into `total_expenses_cents`, and the actual income does not move.
 - **Total expenses and net income are derived, never entered.** Entry forms show
   them updating live so the person recording can sanity-check as they type.
 - **Trip income is derived too, and that is a change.** The workbook's rule was
@@ -292,7 +328,9 @@ Rules that follow from it:
   booking their own delivery — there is nobody to type a figure at that point,
   and quoting one afterwards means billing a price the customer was never shown.
   So a trip is **quoted from a tariff when it is booked**
-  (`Domain/Billing/Services/PricingService`, rates in `config/cargo.php`):
+  (`Domain/Billing/Services/PricingService`, rates resolved by
+  `Domain/Tenancy/Support/RateBook` — the firm's own figures where it has set
+  them under Access Control, and `config/cargo.php` where it has not):
 
   ```
   price = base + (per_km * km) + (per_kg * kg)     floored at the minimum
@@ -306,7 +344,13 @@ Rules that follow from it:
   The **expenses stay entered**. A trip knows what it was charged; it has no
   idea what the fuel cost.
 - **Money is integer centavos** (section 7.1). The workbook's ₱30,721.00 is
-  `3_072_100`. Formatting to pesos happens in the view only.
+  `3_072_100`. Formatting to pesos happens in the view only — and **a figure
+  somebody adds up is formatted to the centavo** (`fmt.pesos`), never rounded to
+  whole pesos (`fmt.money`). The Quarterly Summary, Profitability and Payables
+  are columns against a total; rounding each row independently made the Q1 net
+  income column print ₱174,461 above a TOTAL row saying ₱174,460, and a peso
+  that does not exist is a support call. `money()` is for a dashboard tile,
+  where the figure is a size and the decimals are noise.
 - **A truck with no plate is still a truck.** Units 7 and 8 exist with
   `plate: null` and must render as "Unassigned", not be filtered away.
 - **Losses are first-class.** Three of six units are underwater in the seed

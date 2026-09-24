@@ -90,6 +90,14 @@ final class PayPeriod
      * to the 10th and the 25th changes what the two periods are without
      * changing what either client has to understand.
      */
+    /*
+     * **Not unique past two periods, so never use it as a key.**
+     *
+     * There are three words here and a month may now have three periods, so a
+     * thrice-monthly calendar reports "second" twice. A screen that looked a
+     * period up by this selected the wrong one — see `index`, which is the
+     * position and is unique by construction.
+     */
     public function half(): string
     {
         return match (true) {
@@ -103,13 +111,20 @@ final class PayPeriod
      * The day the period closes and payroll is run: the day after the last day
      * worked, which is what a cutoff is.
      *
-     * Offered as the default pay date and no more than that — when the money
-     * actually leaves the bank is the office's decision, and plenty pay on the
-     * 20th.
+     * **The last day worked, not the day after it.** This used to return
+     * `end + 1`, from the days when payroll was the 1st and the 16th and "cut
+     * off on the 16th" was how an office said "the first half is done". It
+     * stopped being true the moment the cutoff days became the firm's own: a
+     * firm that sets its cutoffs to the 5th, the 15th and the 25th is told its
+     * periods cut off on the 6th, the 16th and the 26th, which are not days it
+     * has ever mentioned.
+     *
+     * It is no longer the default pay date either. That is the cutoff plus the
+     * firm's release lag — see `PayrollCalendar::releaseFor`.
      */
     public function cutoff(): Carbon
     {
-        return $this->end->copy()->addDay();
+        return $this->end->copy();
     }
 
     /** Days in the period, counting both ends. */
@@ -173,7 +188,7 @@ final class PayPeriod
             'end' => $this->end->toDateString(),
             'label' => $this->label(),
             'short' => $this->short(),
-            /** The day the period closes, which is the day after it ends. */
+            /** The day the period closes — its last day worked. */
             'cutoff' => $this->cutoff()->toDateString(),
             'days' => $this->days(),
         ];

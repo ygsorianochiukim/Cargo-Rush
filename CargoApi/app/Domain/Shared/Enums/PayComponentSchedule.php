@@ -82,15 +82,15 @@ enum PayComponentSchedule: string
      * `each_run` and the three monthly cases all mean the same thing there,
      * which is correct rather than a coincidence.
      */
-    public function shareOf(int $monthlyCents, bool $isFirstCutoff, bool $isOnlyRun = false): int
+    public function shareOf(int $monthlyCents, int $index, int $count): int
     {
         return match ($this) {
             // Per payslip, so every payslip gets all of it — including the
             // single run of a monthly payroll.
             self::EachRun => $monthlyCents,
-            self::MonthlySplit => DeductionSchedule::Split->shareOf($monthlyCents, $isFirstCutoff, $isOnlyRun),
-            self::FirstCutoff => DeductionSchedule::FirstCutoff->shareOf($monthlyCents, $isFirstCutoff, $isOnlyRun),
-            self::SecondCutoff => DeductionSchedule::SecondCutoff->shareOf($monthlyCents, $isFirstCutoff, $isOnlyRun),
+            self::MonthlySplit => DeductionSchedule::Split->shareOf($monthlyCents, $index, $count),
+            self::FirstCutoff => DeductionSchedule::FirstCutoff->shareOf($monthlyCents, $index, $count),
+            self::SecondCutoff => DeductionSchedule::SecondCutoff->shareOf($monthlyCents, $index, $count),
         };
     }
 

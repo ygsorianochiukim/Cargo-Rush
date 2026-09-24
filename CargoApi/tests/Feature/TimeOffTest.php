@@ -292,7 +292,9 @@ describe('the queue', function (): void {
         $row = collect($nav->json('data'))->firstWhere('key', 'time-off');
 
         expect($row['badge'])->toBe(2);
-        expect($row['group'])->toBe('HR');
+        // The roster's group, whatever it is called this month — the sidebar's
+        // own shape is `NavigationTest`'s business, not this file's.
+        expect($row['group'])->toBe('People');
     });
 
     it('counts who is away today, and only from approved leave', function (): void {

@@ -4,6 +4,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import {
   PayComponent,
   PayPeriodOption,
+  PayrollCalendar,
   PayRun,
   PayRunLine,
   PayRunLinePayload,
@@ -150,7 +151,7 @@ export class PayrollPage {
    * Which month's periods are on offer, and which of them is chosen.
    *
    * A month and a choice rather than three free date fields, because a pay
-   * period is not a range: payroll is cut off on the 1st and the 16th, so it
+   * period is not a range: payroll is cut off on the firm's own days, so it
    * is the 1st to the 15th or the 16th to the end of the month. The two on
    * offer come from the API — see `PayrollService.periods()` — so this page
    * cannot produce a period the API would refuse, and cannot get February
@@ -158,28 +159,65 @@ export class PayrollPage {
    */
   protected readonly month = signal<string>('');
   protected readonly periods = signal<PayPeriodOption[]>([]);
-  protected readonly half = signal<string>('');
+
+  /**
+   * The firm's own calendar, as the API described it.
+   *
+   * Sent in `meta.calendar` beside the periods so this screen can say *why*
+   * these are the choices without doing any calendar arithmetic of its own —
+   * which is the bug the whole cutoff feature exists to remove, and would be
+   * a poor one to reintroduce on the screen that reads it.
+   */
+  protected readonly calendar = signal<PayrollCalendar | null>(null);
+
+  /**
+   * The firm's calendar in words, shown on hovering the period chips.
+   *
+   * Hardcoded to "Payroll is cut off on the 1st and the 16th" until now, which
+   * was true of the fixed calendar this module started on and of nothing
+   * since. A firm on the 5th, the 15th and the 25th saw its three correct
+   * periods above a sentence naming two days it had never chosen.
+   */
+  protected readonly cutoffHint = computed(
+    () => this.calendar()?.description ?? 'Payroll is cut off on the days your firm has set.',
+  );
+  /**
+   * Which period of the month is chosen, by position.
+   *
+   * Was the `half` string — "first", "second", "month" — which can name at
+   * most two periods. A firm cutting off three times a month has two of them
+   * reporting "second", so looking a period up by it returned whichever came
+   * first: clicking 16–25 selected 6–15, and the summary underneath described
+   * the wrong fortnight.
+   *
+   * `-1` is "nothing chosen yet", which is a real state while the periods are
+   * still loading and is not the same as the first one.
+   */
+  protected readonly periodIndex = signal<number>(-1);
 
   /**
    * When the money leaves the bank.
    *
-   * Follows the cutoff of whichever period is chosen, and stays editable: a
-   * period that closed on the 16th and is paid on the 20th is ordinary, and
-   * the books care when the money moved rather than when the period ended.
+   * Follows the **release** of whichever period is chosen — the cutoff plus the
+   * firm's own lag, so a period closing on the 15th offers the 17th. Stays
+   * editable: paying on the 20th instead is ordinary, and the books care when
+   * the money moved rather than when the period ended.
    */
   protected readonly payDate = signal<string>('');
 
   /** The chosen period, or null while the choice is still loading. */
   protected readonly period = computed(
-    () => this.periods().find((option) => option.half === this.half()) ?? null,
+    () => this.periods().find((option) => option.index === this.periodIndex()) ?? null,
   );
 
   /**
-   * The choice read back as a sentence.
+   * The choice read back, in one short line.
    *
    * The difference between the period, the cutoff and the pay date is exactly
-   * what somebody gets wrong the first time, so all three are said out loud.
-   * Reading it back is cheaper than a help article.
+   * what somebody gets wrong the first time, so all three are still said —
+   * but as four labelled scraps rather than the two sentences this used to be.
+   * The toolbar above it is already three controls and two buttons; a
+   * paragraph under them was read as a warning rather than a read-back.
    */
   protected readonly periodSummary = computed(() => {
     const period = this.period();
@@ -188,12 +226,12 @@ export class PayrollPage {
     if (period === null || pay === '') return null;
 
     const opening =
-      `Covers ${period.label} — ${period.days} ${period.days === 1 ? 'day' : 'days'} of work, ` +
-      `cut off on ${fmt.date(period.cutoff)}.`;
+      `${period.label} · ${period.days} ${period.days === 1 ? 'day' : 'days'} · ` +
+      `cut off ${fmt.date(period.cutoff)}`;
 
     return pay === period.cutoff
-      ? `${opening} The money leaves the bank the same day.`
-      : `${opening} The money leaves the bank on ${fmt.date(pay)}.`;
+      ? `${opening} · paid the same day`
+      : `${opening} · paid ${fmt.date(pay)}`;
   });
 
   /**
@@ -266,10 +304,19 @@ export class PayrollPage {
    * somebody holding `company.manage` — an office manager who can run payroll
    * but not change company policy sees the sentence and not the control.
    */
+  /**
+   * Named for the runs rather than for halves of a month.
+   *
+   * These read "Split across both", "All on the 1st–15th" and "All on the
+   * 16th–end" — all three true of a fortnightly payroll on the old fixed
+   * calendar, and none of them true of a firm closing on the 5th, the 15th and
+   * the 25th. It was offering somebody a choice between two halves of a month
+   * they do not have.
+   */
   protected readonly schedules = [
-    { value: 'split', label: 'Split across both' },
-    { value: 'first', label: 'All on the 1st–15th' },
-    { value: 'second', label: 'All on the 16th–end' },
+    { value: 'split', label: 'Split across every run' },
+    { value: 'first', label: 'All on the first run' },
+    { value: 'second', label: 'All on the second run' },
   ] as const;
 
   protected readonly canSetPolicy = computed(() => this.identity.has('company.manage'));
@@ -321,11 +368,14 @@ export class PayrollPage {
       next: (page) => {
         this.periods.set(page.data);
         this.month.set(String(page.meta?.['month'] ?? month ?? ''));
+        this.calendar.set((page.meta?.['calendar'] as PayrollCalendar | undefined) ?? null);
 
-        const keep = page.data.find((option) => option.half === this.half());
+        // Keep the period somebody was already looking at across a month
+        // change, by position rather than by name.
+        const keep = page.data.find((option) => option.index === this.periodIndex());
         const chosen = keep ?? page.data.find((option) => option.suggested) ?? page.data[0];
 
-        if (chosen !== undefined) this.chooseHalf(chosen.half);
+        if (chosen !== undefined) this.choosePeriod(chosen.index);
       },
       // Not fatal, and not worth an error state over: the run on screen is
       // still readable, only opening a new one is unavailable.
@@ -367,13 +417,21 @@ export class PayrollPage {
     });
   }
 
-  /** Pick a half, and move the pay date to that period's cutoff. */
-  protected chooseHalf(half: string): void {
-    this.half.set(half);
+  /**
+   * Pick a period, and move the pay date to the day that period is released.
+   *
+   * It used to default to the cutoff, which on the old fixed calendar was the
+   * day after the period ended and near enough. It is not near enough now: a
+   * firm that closes on the 5th, the 15th and the 25th releases on the 7th, the
+   * 17th and the 27th, and defaulting to the cutoff had the form offering to
+   * pay two days before the budget exists.
+   */
+  protected choosePeriod(index: number): void {
+    this.periodIndex.set(index);
 
-    const period = this.periods().find((option) => option.half === half);
+    const period = this.periods().find((option) => option.index === index);
 
-    if (period !== undefined) this.payDate.set(period.cutoff);
+    if (period !== undefined) this.payDate.set(period.release);
   }
 
   protected load(): void {

@@ -1,12 +1,16 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
+import { Payables } from '../../models/finance/payables.model';
 import { ApiService } from '../shared/api.service';
 import {
+  DateRange,
+  ExpenseLines,
   LedgerEntry,
   LedgerEntryPayload,
   PeriodRollup,
   QuarterKey,
+  ReceivableLines,
   Truck,
 } from '../../models/finance/finance.model';
 import { Granularity, SalesReport } from '../../models/finance/sales.model';
@@ -68,6 +72,17 @@ export class FinanceService {
   }
 
   /**
+   * Everything the fleet owes, across four modules.
+   *
+   * Read-only: each line names the screen that settles it. `finance.view`,
+   * so a manager can see what the week costs without holding the permissions
+   * that would let them pay any of it.
+   */
+  payables(): Observable<Payables> {
+    return this.api.get<Payables>('finance/payables');
+  }
+
+  /**
    * Sales by day, week or month.
    *
    * The window is left to the API when the caller names none: the useful view
@@ -93,5 +108,15 @@ export class FinanceService {
     return this.api.envelope<PeriodRollup>(
       query === '' ? 'finance/summary' : `finance/summary?${query}`,
     );
+  }
+
+  /** The transactions a period's Total expenses is made of, newest first. */
+  expenseLines(range: DateRange): Observable<ExpenseLines> {
+    return this.api.get<ExpenseLines>('finance/expense-lines', { ...range });
+  }
+
+  /** What was owed to the fleet at a date, most overdue first. */
+  receivableLines(asOf: string): Observable<ReceivableLines> {
+    return this.api.get<ReceivableLines>('finance/receivable-lines', { as_of: asOf });
   }
 }
