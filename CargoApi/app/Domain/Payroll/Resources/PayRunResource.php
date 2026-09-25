@@ -69,10 +69,12 @@ class PayRunResource extends ApiResource
             'is_first_cutoff' => $this->isFirstCutoff(),
             'deduct_on' => $schedule->value,
             'deduct_on_label' => $schedule->label(),
-            'deduct_on_detail' => $schedule->detail(),
+            // Counted from the run's own month, so the sentence says "a third"
+            // for a firm on three cutoffs rather than "half" for everybody.
+            'deduct_on_detail' => $schedule->detail($this->cutoffCount()),
             'carries_contributions' => $schedule->carriedOn(
-                $this->isFirstCutoff(),
-                $this->isOnlyRunOfMonth(),
+                $this->cutoffIndex(),
+                $this->cutoffCount(),
             ),
 
             'staff_count' => $lines->count(),

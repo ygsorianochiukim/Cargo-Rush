@@ -36,7 +36,7 @@ beforeEach(function (): void {
         'cargo' => 'Dry goods, 12 pallets',
         'weight_kg' => 3200,
         'driver_id' => $this->driver->id,
-        'helper_id' => $this->helper->id,
+        'helper_ids' => [$this->helper->id],
         'vehicle_id' => $this->vehicle->id,
         'scheduled_at' => now()->addHours(3)->toIso8601String(),
     ];
@@ -105,7 +105,7 @@ describe('scheduled work becomes due', function (): void {
         // booked on has to produce no row rather than one for everybody.
         ($this->book)([
             'driver_id' => null,
-            'helper_id' => null,
+            'helper_ids' => [],
             'status' => StatusValue::Scheduled->value,
             'scheduled_at' => now()->subMinute()->toIso8601String(),
         ]);
@@ -148,7 +148,7 @@ describe('the driver starts the run', function (): void {
         // names a trip, so this is the check that makes naming one safe.
         $id = ($this->waiting)([
             'driver_id' => $this->helper->id,
-            'helper_id' => $this->driver->id,
+            'helper_ids' => [$this->driver->id],
         ]);
 
         $this->actingAs($this->marco)->postJson("/api/v1/trips/{$id}/start", [])->assertForbidden();

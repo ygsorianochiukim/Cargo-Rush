@@ -81,10 +81,47 @@ export interface Trip extends Timestamped {
   customer: string | null;
   driver_id: string | null;
   driver_name: string | null;
-  helper_id: string | null;
-  helper_name: string | null;
+  /**
+   * Everyone riding along, in the order the desk named them — any number,
+   * including none. The ids for the form to send back, the pairs to print.
+   */
+  helper_ids: string[];
+  helpers: { id: string; name: string }[];
   vehicle_id: string | null;
   vehicle_plate: string | null;
+
+  /**
+   * Who is actually moving this load.
+   *
+   * `company` is the fleet's own crew in the fleet's own truck; `trucker` is a
+   * partner in theirs. Derived by the API rather than inferred here from a null
+   * driver, and that distinction matters on the board: a partner's run has no
+   * driver, no helper and no vehicle — because none of those are the fleet's —
+   * so from the crew columns alone it is indistinguishable from a run nobody
+   * has been assigned to yet.
+   */
+  hauled_by: 'company' | 'trucker';
+
+  trucker_id: string | null;
+  trucker_name: string | null;
+  trucker_phone: string | null;
+  trucker_vehicle_id: string | null;
+  trucker_plate: string | null;
+
+  /**
+   * How the work reached whoever is hauling it — the audit column.
+   *
+   * `cargo_rush`: the desk brokered it, so the fleet quotes, invoices and
+   * collects. `direct`: a partner took it off the open board and bills the
+   * customer themselves. The same percentage applies either way; what differs
+   * is the direction it moves in the partner's wallet.
+   */
+  booking_source: 'cargo_rush' | 'direct';
+  booking_source_label: string;
+
+  /** What was actually taken, frozen at delivery. Null until then. */
+  commission_bp: number | null;
+  commission_cents: number | null;
 
   /**
    * The pre-trip check on this run.
@@ -101,6 +138,13 @@ export interface Trip extends Timestamped {
   scheduled_at: string;
   eta: string | null;
   distance_total_m: number;
+  /**
+   * Where the distance came from, which is what picked the zone: `road`
+   * (measured on the road network), `estimate` (the straight line times a
+   * detour factor, because routing could not answer), `manual` (typed by the
+   * desk). Null on trips from before this was recorded, or with no distance.
+   */
+  distance_source: 'road' | 'estimate' | 'manual' | null;
   /**
    * When delivering put this run on the books — the day's income and the
    * customer's invoice. Null on anything not yet delivered, which is the
@@ -127,7 +171,8 @@ export interface TripPayload {
   pieces?: number;
   handling?: string | null;
   driver_id?: string | null;
-  helper_id?: string | null;
+  /** Replaces the crew when sent; an empty list clears it. */
+  helper_ids?: string[];
   vehicle_id?: string | null;
   status?: StatusValue;
   pickup_place?: string | null;
@@ -150,7 +195,7 @@ export interface TripPayload {
  */
 export interface TripConfirmPayload {
   driver_id: string;
-  helper_id?: string | null;
+  helper_ids?: string[];
   vehicle_id: string;
   scheduled_at: string;
   eta?: string | null;

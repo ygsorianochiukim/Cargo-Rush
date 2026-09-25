@@ -300,6 +300,14 @@ export interface PayPeriodOption {
   end: string;
   /** `1–15 Sep 2026`, or `26 Aug–10 Sep 2026` where the period crosses. */
   label: string;
+  /**
+   * The day this period's money actually leaves the bank.
+   *
+   * The cutoff plus the firm's release lag, worked out by the API — a firm
+   * closing on the 15th with a two-day lag pays on the 17th. Sent rather than
+   * derived here, so two screens cannot disagree about it.
+   */
+  release: string;
   /** `1–15` — for a choice where the month is already on screen. */
   short: string;
   /** The day the period closes and payroll is run: the day after it ends. */
@@ -367,8 +375,19 @@ export interface PayrollCalendar {
   description: string;
   /** `the 15th`, `the last day of the month` — one per cutoff day. */
   day_labels: string[];
+  /**
+   * Days between a cutoff and the money going out.
+   *
+   * The firm this was built for closes on the 5th, 15th and 25th and pays on
+   * the 7th, 17th and 27th — the gap is where the office compiles the period's
+   * charges and gets the budget released.
+   */
+  release_lag_days: number;
   /** What those days come to, for a month, so the office can check them. */
-  example_periods: Omit<PayPeriodOption, 'suggested'>[];
+  example_periods: (Omit<PayPeriodOption, 'suggested'> & {
+    /** The day this period is actually paid. Worked out by the API. */
+    release_on: string;
+  })[];
 }
 
 /** Which side of a payslip a component lands on. */

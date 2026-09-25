@@ -72,6 +72,68 @@ class CompanyProfileRequest extends ApiFormRequest
              * default rather than a state it has to guess its way out of.
              */
             'payroll_cutoff_days' => ['sometimes', 'nullable', 'array', new PayrollCutoffDays],
+
+            /**
+             * Days between a cutoff and the release.
+             *
+             * Nought to fourteen. Zero is a firm paying on the cutoff itself;
+             * past a fortnight is a cash-flow arrangement rather than a payroll
+             * lag, and somebody has mistyped. Null is the install default.
+             */
+            'payroll_release_lag_days' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:14'],
+
+            /*
+            |--------------------------------------------------------------
+            | The rates
+            |--------------------------------------------------------------
+            |
+            | The numbers that used to be environment variables. Every one is
+            | `sometimes` and nullable, and **null is the interesting value**:
+            | it is how a firm goes back to the install default rather than
+            | having to know what that default was and retype it. `RateBook`
+            | resolves the null; nothing here needs to.
+            |
+            | The bounds are sanity rather than policy. A tariff of zero is a
+            | real answer — a firm that prices everything off its rate card and
+            | never wants the fallback to quote anything — so the floors are
+            | zero and only the ceilings are opinions.
+            */
+
+            /**
+             * The haulier's cut of a partner's run.
+             *
+             * Not nullable, unlike the rest: the column is not either. Twelve
+             * per cent is its default and there is no "unset" state to return
+             * to. Nought to fifty — waiving the cut for somebody is a real
+             * arrangement, and a rate over half is a typo rather than a
+             * negotiation.
+             */
+            'trucker_commission_bp' => ['sometimes', 'integer', 'min:0', 'max:5000'],
+
+            /*
+             * The fallback tariff, in centavos. Ten million is ₱100,000 for a
+             * base or a minimum, which no single leg of a domestic haul
+             * reaches — and a figure that large is somebody who typed pesos
+             * into a centavos field twice over.
+             */
+            'tariff_base_cents' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:10000000'],
+            'tariff_per_km_cents' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:1000000'],
+            'tariff_per_kg_cents' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:1000000'],
+            'tariff_minimum_cents' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:10000000'],
+
+            /** Payment terms. A year is the outside edge of a credit term. */
+            'billing_terms_days' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:365'],
+
+            /*
+             * Tax. Whether the firm charges VAT at all is a fact about its
+             * registration, and the rate is the statute's — both are settable
+             * because both have been changed by circular before and will be
+             * again, and neither should need a deployment.
+             */
+            'vat_registered' => ['sometimes', 'boolean'],
+            'vat_rate_bp' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:5000'],
+            'withholding_rate_bp' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:5000'],
+            'prices_include_vat' => ['sometimes', 'nullable', 'boolean'],
         ];
     }
 
@@ -101,12 +163,43 @@ class CompanyProfileRequest extends ApiFormRequest
     {
         $attributes = $this->safe()->only([
             'contact_name', 'contact_email', 'contact_phone', 'address', 'latitude', 'longitude',
-            'payroll_deduct_on', 'payroll_cutoff_days',
+            'payroll_deduct_on', 'payroll_cutoff_days', 'payroll_release_lag_days',
+            'trucker_commission_bp',
+            'tariff_base_cents', 'tariff_per_km_cents', 'tariff_per_kg_cents', 'tariff_minimum_cents',
+            'billing_terms_days',
+            'vat_registered', 'vat_rate_bp', 'withholding_rate_bp', 'prices_include_vat',
         ]);
 
         foreach (['latitude', 'longitude'] as $key) {
             if (array_key_exists($key, $attributes) && $attributes[$key] !== null) {
                 $attributes[$key] = (float) $attributes[$key];
+            }
+        }
+
+        /*
+         * The rates, as the types the columns hold.
+         *
+         * Validation says what a value may be, not what it is: `integer`
+         * accepts the string "1200" that a form post carries, and storing that
+         * leaves the column agreeing with itself only because the cast tidies
+         * it on the way back out. Cast on the way in, so the row is right.
+         *
+         * Null is left alone throughout — it is the setting, not a missing
+         * one, and `(int) null` would silently store a rate of zero.
+         */
+        foreach ([
+            'trucker_commission_bp',
+            'tariff_base_cents', 'tariff_per_km_cents', 'tariff_per_kg_cents', 'tariff_minimum_cents',
+            'billing_terms_days', 'vat_rate_bp', 'withholding_rate_bp', 'payroll_release_lag_days',
+        ] as $key) {
+            if (array_key_exists($key, $attributes) && $attributes[$key] !== null) {
+                $attributes[$key] = (int) $attributes[$key];
+            }
+        }
+
+        foreach (['vat_registered', 'prices_include_vat'] as $key) {
+            if (array_key_exists($key, $attributes) && $attributes[$key] !== null) {
+                $attributes[$key] = filter_var($attributes[$key], FILTER_VALIDATE_BOOLEAN);
             }
         }
 

@@ -116,6 +116,19 @@ cd "$API_DIR"
 log "Running migrations"
 "$PHP" artisan migrate --force --no-interaction
 
+# The sidebar and the permission list are rows, not code: a release that adds
+# a screen changes NavigationSeeder, and without this the deploy goes green
+# while every user keeps the old menu. Both seeders are the platform's
+# definition (DatabaseSeeder says so) and safe to repeat — updateOrCreate, and
+# NavigationSeeder also drops rows for screens that no longer exist.
+#
+# Deliberately not the company-level seeders (roles, positions, categories):
+# those are each company's own to edit, and RoleSeeder re-syncs a role's
+# permissions, which would undo any change the office has made.
+log "Refreshing permissions and navigation"
+"$PHP" artisan db:seed --class='Database\Seeders\PermissionSeeder' --force --no-interaction
+"$PHP" artisan db:seed --class='Database\Seeders\NavigationSeeder' --force --no-interaction
+
 log "Rebuilding caches"
 "$PHP" artisan config:cache
 "$PHP" artisan route:cache

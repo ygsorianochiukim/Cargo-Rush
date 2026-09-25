@@ -109,17 +109,35 @@ class ExpenseController extends ApiController
         );
     }
 
-    /** The window a report covers: this month unless the caller says otherwise. */
+    /**
+     * The window a report covers: this month unless the caller says otherwise.
+     *
+     * Either end can be given alone and the other keeps this month's. An
+     * unreadable date falls back to that default rather than a 500, and ends
+     * given the wrong way round are swapped: somebody who picked the 30th and
+     * then the 1st meant the days in between, not an empty report.
+     */
     private function range(Request $request): array
     {
-        $from = $request->filled('from')
-            ? Carbon::parse($request->string('from')->toString())
-            : now()->startOfMonth();
+        $from = $this->date($request, 'from') ?? now()->startOfMonth();
+        $to = $this->date($request, 'to') ?? now()->endOfMonth();
 
-        $to = $request->filled('to')
-            ? Carbon::parse($request->string('to')->toString())
-            : now()->endOfMonth();
+        return $from->greaterThan($to) ? [$to, $from] : [$from, $to];
+    }
 
-        return [$from, $to];
+    /** A date off the query string, or null when it is missing or unreadable. */
+    private function date(Request $request, string $key): ?Carbon
+    {
+        $value = trim((string) $request->query($key, ''));
+
+        if ($value === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value)->startOfDay();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 }

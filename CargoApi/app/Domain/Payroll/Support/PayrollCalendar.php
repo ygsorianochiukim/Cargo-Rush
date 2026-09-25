@@ -47,11 +47,23 @@ use Illuminate\Support\Carbon;
  */
 final class PayrollCalendar
 {
-    /** See the class note: two payslips is what the statutory maths supports. */
-    public const MAX_CUTOFFS = 2;
+    /**
+     * How many times a month a firm may cut off.
+     *
+     * Three. Two was the limit while the arithmetic downstream only knew how
+     * to halve a month — see `MonthlyShare`, which is what replaced the halving
+     * and made a third run safe to pay.
+     *
+     * The **withholding table has not caught up**. `config/cargo.php` holds the
+     * BIR's semi-monthly brackets, which describe 24 periods a year; a firm on
+     * three cutoffs has 36, and running that table on each of them over-states
+     * the tax on every payslip. The screens say so where somebody can act on
+     * it. Raising this to four would need the same conversation again.
+     */
+    public const MAX_CUTOFFS = 3;
 
     /**
-     * The latest a firm's *earlier* cutoff may fall.
+     * The latest any cutoff but the last may fall.
      *
      * The 27th, and the reason is February. A cutoff clamps to the last day of
      * a short month, so an earlier cutoff on the 28th would collide with a
@@ -66,10 +78,42 @@ final class PayrollCalendar
     public const LAST_DAY = 31;
 
     /**
+     * Days between a cutoff and the release, where nothing says otherwise.
+     *
+     * Two, which is the gap the office needs to compile the period's charges
+     * and get the budget released. Overridden per install in `config/cargo.php`
+     * and per firm on the company.
+     */
+    public const DEFAULT_RELEASE_LAG = 2;
+
+    /**
      * @param  array<int, int>  $days  Ascending, distinct, 1-31, one or two of
      *                                 them. Guaranteed by the constructors.
      */
-    private function __construct(public readonly array $days) {}
+    private function __construct(
+        public readonly array $days,
+        /**
+         * Days between a cutoff and the money going out.
+         *
+         * Part of the calendar rather than a separate lookup, because "when is
+         * this period paid" is the same question as "when does it close" asked
+         * two days later, and a screen showing one wants the other.
+         */
+        public readonly int $releaseLagDays = self::DEFAULT_RELEASE_LAG,
+    ) {}
+
+    /**
+     * The day a period closing on this date is paid.
+     *
+     * Calendar days, not working days. The firm this was built for releases on
+     * the 7th, the 17th and the 27th whatever day of the week those fall on,
+     * and a working-day rule would need a holiday calendar this system does not
+     * have — one invented here would be wrong every Holy Week.
+     */
+    public function releaseFor(Carbon $cutoff): Carbon
+    {
+        return $cutoff->copy()->addDays($this->releaseLagDays);
+    }
 
     /**
      * A calendar from a list of cutoff days.
@@ -84,11 +128,13 @@ final class PayrollCalendar
      *
      * @param  array<int, mixed>  $days
      */
-    public static function of(array $days): self
+    public static function of(array $days, ?int $releaseLagDays = null): self
     {
         $normalised = self::normalise($days);
 
-        return $normalised === [] ? self::default() : new self($normalised);
+        return $normalised === []
+            ? self::default()
+            : new self($normalised, $releaseLagDays ?? self::configuredLag());
     }
 
     /**
@@ -103,7 +149,7 @@ final class PayrollCalendar
     {
         $days = self::normalise(self::configuredDays());
 
-        return new self($days === [] ? [15, self::LAST_DAY] : $days);
+        return new self($days === [] ? [15, self::LAST_DAY] : $days, self::configuredLag());
     }
 
     /** The calendar a given company runs on. Null falls back to the default. */
@@ -111,10 +157,22 @@ final class PayrollCalendar
     {
         $days = $company?->payroll_cutoff_days;
 
-        return is_array($days) && $days !== [] ? self::of($days) : self::default();
+        // `??` rather than `?:` — zero is a firm paying on the cutoff itself,
+        // and only null means "use the install default".
+        $lag = $company?->payroll_release_lag_days ?? self::configuredLag();
+
+        return is_array($days) && $days !== []
+            ? self::of($days, $lag)
+            : new self(self::default()->days, $lag);
     }
 
-    /** How many payslips a month - one or two. */
+    /** The install's release lag, for a firm that has not set its own. */
+    private static function configuredLag(): int
+    {
+        return (int) config('cargo.payroll.release_lag_days', self::DEFAULT_RELEASE_LAG);
+    }
+
+    /** How many payslips a month - one, two or three. */
     public function runsPerMonth(): int
     {
         return count($this->days);
@@ -213,10 +271,29 @@ final class PayrollCalendar
         $period = $this->matching($start, $end);
 
         if ($period !== null) {
-            return ['first' => $period->isFirst(), 'only' => $period->isOnly()];
+            return [
+                'first' => $period->isFirst(),
+                'only' => $period->isOnly(),
+                // Which run of how many, which is what the money actually needs:
+                // a monthly salary and a monthly contribution are both cut into
+                // `count` pieces, and two booleans cannot say "the second of
+                // three". See `MonthlyShare`.
+                'index' => $period->index,
+                'count' => $period->count,
+            ];
         }
 
-        return ['first' => (int) $start->day <= $this->days[0], 'only' => $this->isMonthly()];
+        // A range that is not one of this firm's periods at all. Guessed from
+        // the first cutoff, as it always was, and reported as a run of the
+        // right size so nothing downstream divides by a count it cannot trust.
+        $first = (int) $start->day <= $this->days[0];
+
+        return [
+            'first' => $first,
+            'only' => $this->isMonthly(),
+            'index' => $first ? 0 : 1,
+            'count' => $this->runsPerMonth(),
+        ];
     }
 
     /**
@@ -240,13 +317,38 @@ final class PayrollCalendar
             );
         }
 
+        // Every cutoff and every period it makes, however many there are — the
+        // reader is somebody who typed a sensible-looking range and got a 422,
+        // and a message naming two of their three periods would send them
+        // straight back into the same mistake.
+        $labels = array_map(static fn (int $day): string => self::dayLabel($day), $this->days);
+        $ranges = array_map(static fn (PayPeriod $period): string => $period->label(), $periods);
+
         return sprintf(
-            'Payroll is cut off on %s and %s here, so a pay period runs %s or %s. Choose one of those.',
-            self::dayLabel($this->days[0]),
-            self::dayLabel($this->days[1]),
-            $periods[0]->label(),
-            $periods[1]->label(),
+            'Payroll is cut off on %s here, so a pay period runs %s. Choose one of those.',
+            self::sentenceList($labels),
+            self::sentenceList($ranges, 'or'),
         );
+    }
+
+    /**
+     * "a, b and c" — the join an English sentence wants.
+     *
+     * Here rather than inline because two messages need it and both used to
+     * hardcode exactly two items, which is how a three-cutoff firm was told
+     * about two of its cutoffs.
+     *
+     * @param  array<int, string>  $items
+     */
+    private static function sentenceList(array $items, string $conjunction = 'and'): string
+    {
+        if (count($items) <= 1) {
+            return $items[0] ?? '';
+        }
+
+        $last = array_pop($items);
+
+        return implode(', ', $items).' '.$conjunction.' '.$last;
     }
 
     /** One sentence for the settings screen, in the office's own numbers. */
@@ -256,10 +358,23 @@ final class PayrollCalendar
             return sprintf('Payroll runs once a month, cut off on %s.', self::dayLabel($this->days[0]));
         }
 
+        /**
+         * Built from the list rather than written per case.
+         *
+         * There were two sentences here, one for a monthly payroll and one that
+         * said "twice" and named exactly two days — so a firm on three cutoffs
+         * would have been told it runs twice a month and shown two of its three
+         * dates. A screen that describes a setting has to describe the setting
+         * that is actually there.
+         */
+        $labels = array_map(static fn (int $day): string => self::dayLabel($day), $this->days);
+        $last = array_pop($labels);
+
         return sprintf(
-            'Payroll runs twice a month, cut off on %s and %s.',
-            self::dayLabel($this->days[0]),
-            self::dayLabel($this->days[1]),
+            'Payroll runs %s a month, cut off on %s and %s.',
+            $this->runsPerMonth() === 2 ? 'twice' : 'three times',
+            implode(', ', $labels),
+            $last,
         );
     }
 
@@ -281,8 +396,22 @@ final class PayrollCalendar
             'runs_per_month' => $this->runsPerMonth(),
             'description' => $this->describe(),
             'day_labels' => array_map(static fn (int $day): string => self::dayLabel($day), $this->days),
+            'release_lag_days' => $this->releaseLagDays,
+
+            /**
+             * Each period, with the day it is actually paid.
+             *
+             * The release is what an office plans around — "the 7th, the 17th
+             * and the 27th" is the thing people say to each other — and it is
+             * not the cutoff. Sent with the period rather than left to the
+             * client to add two days to a date, which is how the two screens
+             * end up disagreeing about a Sunday.
+             */
             'example_periods' => array_map(
-                static fn (PayPeriod $period): array => $period->toArray(),
+                fn (PayPeriod $period): array => [
+                    ...$period->toArray(),
+                    'release_on' => $this->releaseFor($period->end)->toDateString(),
+                ],
                 $this->inMonth((int) $month->year, (int) $month->month),
             ),
         ];

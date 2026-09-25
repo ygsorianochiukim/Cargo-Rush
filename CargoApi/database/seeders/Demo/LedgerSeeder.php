@@ -8,7 +8,9 @@ use App\Domain\Finance\Models\LedgerEntry;
 use App\Domain\Finance\Models\Truck;
 use App\Domain\Vehicle\Models\Vehicle;
 use Database\Seeders\Concerns\SeedsIntoACompany;
+use Database\Seeders\Concerns\UpsertsByDay;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Carbon;
 
 /**
  * "v3 Cargorush Master Dashboard 2026.xlsx", transcribed.
@@ -24,7 +26,7 @@ use Illuminate\Database\Seeder;
  */
 class LedgerSeeder extends Seeder
 {
-    use SeedsIntoACompany;
+    use SeedsIntoACompany, UpsertsByDay;
 
     private const TRUCKS = [
         ['Truck 1', 'MAR1390'],
@@ -74,8 +76,21 @@ class LedgerSeeder extends Seeder
         // land on exactly 3_154_068 and not one centavo either side of it.
         $c = static fn (float $peso): int => (int) round($peso * 100);
 
-        LedgerEntry::updateOrCreate(
-            ['truck_id' => $truckId, 'date' => $row[0]],
+        /**
+         * Matched with `whereDate`, not on the string.
+         *
+         * `date` is a date-cast attribute, so Eloquent writes it through the
+         * model's `Y-m-d H:i:s` format and the stored value carries a midnight
+         * time on a driver that keeps one. Comparing it to a bare `Y-m-d`
+         * misses, and a second run of this seeder writes the whole workbook
+         * again beside itself — which doubles every figure the roll-up tests
+         * check. The same reasoning as `FinanceService::openDailyRowForTruck`.
+         */
+        $this->upsertOn(
+            LedgerEntry::class,
+            ['truck_id' => $truckId],
+            'date',
+            Carbon::parse($row[0]),
             [
                 'trip_income_cents' => $c($row[1]),
                 'fuel_cents' => $c($row[2]),

@@ -1,10 +1,14 @@
 <!--
-  The company itself, above the roles.
+  The company itself, and what it charges, above the roles.
 
-  It sits here rather than on a settings page of its own: this is already the
+  They sit here rather than on a settings page of their own: this is already the
   administrator's screen, and a page holding one card is a menu item somebody
-  has to go looking for. Hidden from anybody without `company.manage` — a
-  general manager holds it, an HR officer who can see roles does not.
+  has to go looking for. The rates card below is the same argument — what the
+  firm charges, what it keeps of a partner's run, and what its invoices carry,
+  all of it settled in one place instead of an environment file.
+
+  Hidden from anybody without `company.manage` — a general manager holds it, an
+  HR officer who can see roles does not.
 -->
 @if (canManageCompany()) {
   <!--
@@ -29,6 +33,19 @@
     </div>
     <app-yard-card />
   </div>
+
+  <!--
+    The rates, full width and under the rest.
+
+    Its own row rather than a third cell, because the tariff alone is four
+    number fields side by side and a card holding them at half the width wraps
+    into a column of stacked inputs that reads as a questionnaire.
+
+    It is the only screen in the system where what the firm charges can be
+    changed. The commission on it used to be a field on each partner's own
+    detail page; it is one standing rate now, and this is where it lives.
+  -->
+  <app-rates-card class="mb-4 block" />
 }
 
 <div class="mb-4 flex flex-wrap items-center justify-between gap-3">

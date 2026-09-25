@@ -158,7 +158,7 @@ class PayComponentService
      * reasonably ask about. What components exist is a question for the
      * catalogue screen, not for a payslip.
      *
-     * @param  array{first: bool, only: bool}  $cutoff
+     * @param  array{first: bool, only: bool, index: int, count: int}  $cutoff
      * @return array<int, array{component: PayComponent, name: string, kind: string, taxable: bool, amount_cents: int}>
      */
     public function resolve(
@@ -193,7 +193,7 @@ class PayComponentService
      *
      * @param  iterable<Employee>  $employees
      * @param  array<string, int>  $monthlyBasics  employee id => monthly basic
-     * @param  array{first: bool, only: bool}  $cutoff
+     * @param  array{first: bool, only: bool, index: int, count: int}  $cutoff
      * @return array<string, array<int, array{component: PayComponent, name: string, kind: string, taxable: bool, amount_cents: int}>>
      */
     public function resolveFor(
@@ -241,7 +241,7 @@ class PayComponentService
      * single-employee paths above share it.
      *
      * @param  iterable<EmployeePayComponent>  $assignments
-     * @param  array{first: bool, only: bool}  $cutoff
+     * @param  array{first: bool, only: bool, index: int, count: int}  $cutoff
      * @return array<int, array{component: PayComponent, name: string, kind: string, taxable: bool, amount_cents: int}>
      */
     private function fromAssignments(iterable $assignments, int $monthlyBasicCents, array $cutoff): array
@@ -264,7 +264,7 @@ class PayComponentService
                 $assignment->rate_bp,
             );
 
-            $amount = $component->schedule->shareOf($monthly, $cutoff['first'], $cutoff['only']);
+            $amount = $component->schedule->shareOf($monthly, $cutoff['index'], $cutoff['count']);
 
             if ($amount <= 0) {
                 continue;

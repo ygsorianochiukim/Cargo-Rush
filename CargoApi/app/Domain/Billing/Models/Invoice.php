@@ -9,6 +9,7 @@ use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\VatTreatment;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
+use App\Domain\Tenancy\Support\RateBook;
 use App\Domain\Trip\Models\Trip;
 use Database\Factories\InvoiceFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -31,6 +32,9 @@ class Invoice extends Model
         'trip_id', 'paid_at',
         'net_amount_cents', 'vat_cents', 'withholding_cents',
         'vat_rate_bp', 'withholding_rate_bp', 'vat_treatment',
+        // Payables only: who the bill is from, where the office keeps a
+        // record of them. `payee` stays for the ones it does not.
+        'supplier_id',
     ];
 
     protected function casts(): array
@@ -191,7 +195,7 @@ class Invoice extends Model
      *
      * This exists because of a bug worth remembering. A write's `amount_cents`
      * means *the figure the desk has*: the net haul, or the all-in price when
-     * `cargo.tax.prices_include_vat` is set. A read's `amount_cents` means net
+     * the firm quotes VAT-inclusive. A read's `amount_cents` means net
      * plus VAT. One name, two meanings — and the edit form read the second and
      * posted it back as the first, so saving an invoice without changing
      * anything put 12% on top of a figure that already had 12% in it. Twice
@@ -203,7 +207,7 @@ class Invoice extends Model
      */
     public function taxBaseCents(): int
     {
-        return config('cargo.tax.prices_include_vat')
+        return app(RateBook::class)->pricesIncludeVat()
             ? (int) $this->amount_cents
             : (int) $this->net_amount_cents;
     }

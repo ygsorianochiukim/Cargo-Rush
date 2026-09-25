@@ -35,7 +35,15 @@ final class TripData extends Data
         public readonly ?int $price_cents = null,
         public readonly ?string $currency = null,
         public readonly ?string $driver_id = null,
-        public readonly ?string $helper_id = null,
+        /**
+         * Who rides along to load and unload, in order. Null when the caller
+         * did not mention the crew — which leaves it as it is — and an empty
+         * list when they cleared it. Written to `trip_helpers` by the
+         * service rather than to a column, so it is not in `toArray()`.
+         *
+         * @var string[]|null
+         */
+        public readonly ?array $helper_ids = null,
         public readonly ?string $vehicle_id = null,
         /** The kind of unit the job needs, as asked for at booking. */
         public readonly ?string $truck_category_id = null,
@@ -74,7 +82,7 @@ final class TripData extends Data
             price_cents: isset($attributes['price_cents']) ? (int) $attributes['price_cents'] : null,
             currency: $attributes['currency'] ?? null,
             driver_id: $attributes['driver_id'] ?? null,
-            helper_id: $attributes['helper_id'] ?? null,
+            helper_ids: isset($attributes['helper_ids']) ? array_values(array_map('strval', (array) $attributes['helper_ids'])) : null,
             vehicle_id: $attributes['vehicle_id'] ?? null,
             truck_category_id: $attributes['truck_category_id'] ?? null,
             pricing_zone_id: $attributes['pricing_zone_id'] ?? null,
@@ -105,7 +113,6 @@ final class TripData extends Data
             'price_cents' => $this->price_cents,
             'currency' => $this->currency,
             'driver_id' => $this->driver_id,
-            'helper_id' => $this->helper_id,
             'vehicle_id' => $this->vehicle_id,
             'truck_category_id' => $this->truck_category_id,
             'pricing_zone_id' => $this->pricing_zone_id,

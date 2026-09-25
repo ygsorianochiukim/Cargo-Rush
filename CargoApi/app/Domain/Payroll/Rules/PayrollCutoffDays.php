@@ -92,14 +92,14 @@ class PayrollCutoffDays implements ValidationRule
     public static function problemWith(mixed $value, bool $checkOpenDraft = true): ?string
     {
         if (! is_array($value)) {
-            return 'Cutoff days are a list of one or two day numbers.';
+            return 'Cutoff days are a list of day numbers.';
         }
 
         $days = array_values($value);
 
         if ($days === [] || count($days) > PayrollCalendar::MAX_CUTOFFS) {
             return sprintf(
-                'Payroll is cut off once or twice a month, so give one or two days — not %d. '
+                'Payroll is cut off up to three times a month, so give one, two or three days — not %d. '
                 .'A weekly payroll needs a different tax table and is not set up here.',
                 count($days),
             );
@@ -114,12 +114,22 @@ class PayrollCutoffDays implements ValidationRule
         $days = array_map('intval', $days);
 
         if (count(array_unique($days)) !== count($days)) {
-            return 'The two cutoff days have to be different days.';
+            return 'The cutoff days have to be different days.';
         }
 
         sort($days);
 
-        if (count($days) === 2 && $days[0] > PayrollCalendar::LATEST_FIRST_CUTOFF) {
+        /**
+         * Every cutoff but the last has to leave a day for the one after it.
+         *
+         * Was `count($days) === 2 && $days[0] > 27`, which only looked at the
+         * earlier of a pair. With three cutoffs allowed it has to hold for each
+         * one that has a successor, or a firm could set the 26th, the 28th and
+         * the 31st and find two of them collapsed onto the same day every
+         * February.
+         */
+        if (array_slice($days, 0, -1) !== []
+            && max(array_slice($days, 0, -1)) > PayrollCalendar::LATEST_FIRST_CUTOFF) {
             return sprintf(
                 'The earlier cutoff has to be %s or before. Past that it collides with the second one in February, '
                 .'which would leave the month with only one pay period.',

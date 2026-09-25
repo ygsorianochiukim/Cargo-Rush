@@ -15,6 +15,7 @@ import { AccessService } from '../../services/identity/access.service';
 import { IdentityService } from '../../services/identity/identity.service';
 import { CompanyCard } from './company-card';
 import { PayrollCutoffCard } from './payroll-cutoff-card';
+import { RatesCard } from './rates-card';
 import { YardCard } from './yard-card';
 import { Card } from '../../shared/card';
 import { Confirm } from '../../shared/confirm';
@@ -43,6 +44,7 @@ import { StatusPill } from '../../shared/status-pill';
     Card,
     CompanyCard,
     PayrollCutoffCard,
+    RatesCard,
     YardCard,
     Field,
     Icon,

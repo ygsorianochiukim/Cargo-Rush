@@ -23,8 +23,8 @@ class DeliveryLogRepository extends Repository
     public function query(): Builder
     {
         return DeliveryLog::query()
-            ->with(['trip:id,reference,destination,customer_id,driver_id,helper_id',
-                'trip.customer:id,name', 'trip.driver:id,name', 'trip.helper:id,name'])
+            ->with(['trip:id,reference,destination,customer_id,driver_id',
+                'trip.customer:id,name', 'trip.driver:id,name', 'trip.helpers'])
             ->orderByDesc('delivered_at');
     }
 
@@ -40,7 +40,7 @@ class DeliveryLogRepository extends Repository
         if (! empty($filters['driver_id'])) {
             $query->whereHas('trip', fn (Builder $q) => $q
                 ->where('driver_id', $filters['driver_id'])
-                ->orWhere('helper_id', $filters['driver_id']));
+                ->orWhereHas('helpers', fn (Builder $h) => $h->whereKey($filters['driver_id'])));
         }
 
         return $query;

@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 
 import { BillingService } from '../../services/billing/billing.service';
@@ -28,8 +28,19 @@ type Direction = 'all' | 'receivable' | 'payable';
 export class BillingPage {
   private readonly billingApi = inject(BillingService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly payments = inject(PaymentDialog);
   private readonly spec = invoiceSpec();
+
+  /**
+   * One bill named by a link, waiting for the list to arrive.
+   *
+   * Payables links here at a supplier bill rather than at the module, and the
+   * payment dialog wants the invoice itself, not its id — so the deep link
+   * has to wait for the rows. A plain field rather than a signal because
+   * nothing renders it: it is a latch that fires once and is spent.
+   */
+  private settleId: string | null = this.route.snapshot.queryParamMap.get('settle');
 
   protected readonly list = recordList<Invoice>(this.spec, () =>
     this.billingApi.list().pipe(map((res) => res.data)),
@@ -55,6 +66,35 @@ export class BillingPage {
     // The figures on this page are derived from the payments, so a recorded
     // one changes every card as well as the row.
     this.payments.recorded.pipe(takeUntilDestroyed()).subscribe(() => this.list.refresh());
+
+    /**
+     * Followed a Payables line to a supplier bill — open its payment.
+     *
+     * An effect rather than a subscription on the load, because the rows come
+     * from `recordList`, which owns its own fetch and hands back a signal.
+     * This runs on the first non-null list and then spends the latch, so a
+     * later refresh — including the one the dialog itself triggers on success
+     * — does not reopen the dialog over the payment just recorded.
+     *
+     * The parameter goes with it. Left on the URL it would outlive the visit:
+     * a refresh an hour later would reopen a payment form for a bill already
+     * settled.
+     */
+    effect(() => {
+      const rows = this.all();
+
+      if (this.settleId === null || rows === null) return;
+
+      const invoice = rows.find((row) => row.id === this.settleId);
+
+      this.settleId = null;
+      void this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
+
+      // Nothing to pay on a bill that is already square, and the dialog would
+      // open on a zero. Silence is right here: the row is on screen either
+      // way, showing its own status.
+      if (invoice && invoice.balance_cents > 0) this.payments.forInvoice(invoice);
+    });
   }
 
   /**

@@ -92,6 +92,34 @@ export interface Me {
   customer_address: string | null;
   customer_lat: number | null;
   customer_lng: number | null;
+
+  /**
+   * Present only for a partner trucker — the third of the three handset
+   * identities, beside `driver_id` and `customer_id`.
+   *
+   * `trucker_status` is the one field the app genuinely branches on. A
+   * registration lands `pending` and the job board stays empty until somebody
+   * at the fleet reads the licence and approves it, so an app reading only the
+   * empty board would open on a screen that looks broken. This is what lets it
+   * say "we are checking your details" instead.
+   *
+   * `trucker_online` is the partner's own switch and says nothing about whether
+   * they are approved. Both are reported because collapsing them would leave
+   * the app unable to tell somebody waiting on the office from somebody who is
+   * simply off duty — two different screens.
+   */
+  trucker_id: string | null;
+  trucker_status: string | null;
+  trucker_online: boolean | null;
+  trucker_can_take_work: boolean | null;
+
+  /**
+   * What this partner's runs split at, in basis points. 1200 is 12%.
+   *
+   * On `me` so the job board can state the rate on a card without a second
+   * call. Null for anybody who is not a trucker.
+   */
+  commission_bp: number | null;
 }
 
 /**
@@ -133,12 +161,25 @@ export interface ShipperRegistration {
 /**
  * Who is holding the app.
  *
- * `cargoApp` is one app with two products in it: the driver's cab screens and
- * the customer's portal. This is what it branches on, and it is the only thing
- * it branches on — the tab set, the home screen and the API calls all follow
- * from the role the API reported.
+ * `cargoApp` is one app with three products in it: the driver's cab screens,
+ * the customer's portal, and the partner trucker's board. This is what it
+ * branches on, and it is the only thing it branches on — the tab set, the home
+ * screen and the API calls all follow from the role the API reported.
  */
-export type UserRole = 'administrator' | 'dispatcher' | 'accountant' | 'driver' | 'customer';
+export type UserRole =
+  | 'administrator'
+  | 'dispatcher'
+  | 'accountant'
+  | 'driver'
+  | 'customer'
+  /**
+   * An owner-operator with their own truck.
+   *
+   * Not a driver, and the app never treats them as one: a driver is an
+   * employee working the run they were given, and a trucker chooses which work
+   * to take and is paid a share of what it billed.
+   */
+  | 'trucker';
 
 /** `GET /api/v1/navigation?client=mobile` — the tab bar. */
 export interface NavItem {

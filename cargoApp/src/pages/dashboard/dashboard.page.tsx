@@ -310,6 +310,7 @@ export function DashboardPage() {
         vehicleId={trip.data?.vehicle_id ?? null}
         plate={trip.data?.vehicle_plate ?? null}
         defaultRoute={trip.data?.destination ?? null}
+        helperNames={trip.data?.helper_names ?? []}
       />
 
       {/* The run and the last reported position are passed as context, not as

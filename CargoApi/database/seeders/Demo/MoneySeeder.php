@@ -10,6 +10,7 @@ use App\Domain\Driver\Models\Driver;
 use App\Domain\Fuel\Models\FuelBudget;
 use App\Domain\Fuel\Models\FuelRecord;
 use App\Domain\Vehicle\Models\Vehicle;
+use Database\Seeders\Concerns\AdoptsTrashedRows;
 use Database\Seeders\Concerns\SeedsIntoACompany;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
@@ -17,7 +18,7 @@ use Illuminate\Support\Carbon;
 /** Fuel and billing. Every figure is integer centavos. */
 class MoneySeeder extends Seeder
 {
-    use SeedsIntoACompany;
+    use AdoptsTrashedRows, SeedsIntoACompany;
 
     public function run(): void
     {
@@ -48,7 +49,7 @@ class MoneySeeder extends Seeder
         ];
 
         foreach ($rows as [$plate, $driver, $litres, $cents, $odo, $receipt, $hours, $status]) {
-            FuelRecord::updateOrCreate(['receipt_no' => $receipt], [
+            $this->restoreOrCreate(FuelRecord::class, ['receipt_no' => $receipt], [
                 'vehicle_id' => $vehicles[$plate] ?? null,
                 'driver_id' => $drivers[$driver] ?? null,
                 'litres' => $litres,
@@ -79,7 +80,7 @@ class MoneySeeder extends Seeder
         ];
 
         foreach ($rows as [$number, $customer, $payee, $issued, $due, $cents, $direction, $status]) {
-            Invoice::updateOrCreate(['number' => $number], [
+            $this->restoreOrCreate(Invoice::class, ['number' => $number], [
                 'customer_id' => $customer === null ? null : ($customers[$customer] ?? null),
                 'payee' => $payee,
                 'issued_at' => Carbon::today()->addDays($issued),

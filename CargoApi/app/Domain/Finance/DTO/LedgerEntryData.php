@@ -18,13 +18,27 @@ final class LedgerEntryData extends Data
     public function __construct(
         public readonly ?string $truck_id = null,
         public readonly ?string $customer_id = null,
-        /** Who the day's driver and helper salary belonged to. */
+        /** Who the day's driver salary belonged to. */
         public readonly ?string $driver_id = null,
-        public readonly ?string $helper_id = null,
+        /**
+         * The day's helpers and what each was paid, in order.
+         *
+         * Null when the caller did not mention them. Written to
+         * `ledger_entry_helpers` by `FinanceService`, so not in `toArray()`.
+         *
+         * @var array<int, array{driver_id: ?string, salary_cents: int}>|null
+         */
+        public readonly ?array $helpers = null,
         public readonly ?string $date = null,
         public readonly ?int $trip_income_cents = null,
         public readonly ?int $fuel_cents = null,
         public readonly ?int $driver_salary_cents = null,
+        /**
+         * One figure for all the day's helpers — what a client that predates
+         * the per-helper lines still sends. Never written straight to the
+         * column: `FinanceService` turns it into a line, and the column is
+         * always the sum of the lines.
+         */
         public readonly ?int $helper_salary_cents = null,
         public readonly ?int $maintenance_cents = null,
         public readonly ?int $allowance_cents = null,
@@ -43,7 +57,12 @@ final class LedgerEntryData extends Data
             truck_id: $attributes['truck_id'] ?? null,
             customer_id: $attributes['customer_id'] ?? null,
             driver_id: $attributes['driver_id'] ?? null,
-            helper_id: $attributes['helper_id'] ?? null,
+            helpers: isset($attributes['helpers'])
+                ? array_values(array_map(static fn (array $line): array => [
+                    'driver_id' => $line['driver_id'] ?? null,
+                    'salary_cents' => (int) ($line['salary_cents'] ?? 0),
+                ], (array) $attributes['helpers']))
+                : null,
             date: $attributes['date'] ?? null,
             trip_income_cents: $cents('trip_income_cents'),
             fuel_cents: $cents('fuel_cents'),
@@ -63,12 +82,10 @@ final class LedgerEntryData extends Data
             'truck_id' => $this->truck_id,
             'customer_id' => $this->customer_id,
             'driver_id' => $this->driver_id,
-            'helper_id' => $this->helper_id,
             'date' => $this->date,
             'trip_income_cents' => $this->trip_income_cents,
             'fuel_cents' => $this->fuel_cents,
             'driver_salary_cents' => $this->driver_salary_cents,
-            'helper_salary_cents' => $this->helper_salary_cents,
             'maintenance_cents' => $this->maintenance_cents,
             'allowance_cents' => $this->allowance_cents,
             'route' => $this->route,

@@ -1,5 +1,6 @@
 import { CustomerHomePage } from '@/pages/customer/customer-home.page';
 import { DashboardPage } from '@/pages/dashboard/dashboard.page';
+import { TruckerHomePage } from '@/pages/trucker/trucker-home.page';
 import { useSession } from '@/services/identity/session';
 
 /**
@@ -11,8 +12,9 @@ import { useSession } from '@/services/identity/session';
  * Dashboard does is a change there.
  *
  * **This one route is thicker than the others, deliberately.** `cargoApp` is
- * one app holding two products — the cab screens and the customer portal — and
- * the home tab has to be whichever one the signed-in account belongs to.
+ * one app holding three products — the cab screens, the customer portal and the
+ * partner trucker's board — and the home tab has to be whichever one the
+ * signed-in account belongs to.
  *
  * Doing it here rather than by redirecting: expo-router resolves the tab set
  * at build time, so `index` is always the first tab whoever is holding the
@@ -20,10 +22,13 @@ import { useSession } from '@/services/identity/session';
  * mounts first, fires its five driver-scoped fetches, 404s on every one of
  * them because there is no `drivers` row behind the account, and *then*
  * navigates away. Choosing the page before anything mounts costs nothing and
- * fails nowhere.
+ * fails nowhere — and it matters more with three than it did with two.
  */
 export default function Home() {
   const { me } = useSession();
 
-  return me?.role === 'customer' ? <CustomerHomePage /> : <DashboardPage />;
+  if (me?.role === 'customer') return <CustomerHomePage />;
+  if (me?.role === 'trucker') return <TruckerHomePage />;
+
+  return <DashboardPage />;
 }

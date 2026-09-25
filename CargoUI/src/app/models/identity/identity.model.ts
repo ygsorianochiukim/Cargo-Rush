@@ -125,7 +125,84 @@ export interface Company {
    * wants the second.
    */
   payroll_cutoff_days: number[] | null;
+
+  /**
+   * Days between a cutoff and the release.
+   *
+   * Null is the install default; **zero is a real answer** — a firm paying on
+   * the cutoff itself — so the two are not the same state. What is actually in
+   * force is `payroll_calendar.release_lag_days`.
+   */
+  payroll_release_lag_days: number | null;
+
   payroll_calendar: PayrollCalendar;
+
+  /**
+   * The rates this firm works to, in force.
+   *
+   * Always a complete set of concrete numbers, whatever the columns behind them
+   * hold — a screen drawing a tariff never has to decide what a null means.
+   * Only on the company's own endpoints, where the caller holds
+   * `company.manage`; `Me` does not carry them.
+   */
+  rates: CompanyRates;
+
+  /** What the install would answer for a firm that has set nothing. */
+  rate_defaults: CompanyRates;
+
+  /**
+   * Which of them this firm has actually chosen, as the raw columns.
+   *
+   * The only way to tell "₱35/km because we chose ₱35" from "₱35/km because
+   * nobody has chosen anything" — identical in a number field, and different
+   * the day the install default moves.
+   */
+  rate_overrides: CompanyRateOverrides;
+}
+
+/**
+ * What a haul is charged, what an invoice carries, and what a partner's run is
+ * split at.
+ *
+ * Every rate in basis points rather than a percentage, and every amount in
+ * centavos, which is the rule everywhere else in this system: 1200 is twelve
+ * per cent and there is no float anywhere near a peso. The settings card
+ * divides on the way onto the screen and multiplies on the way back.
+ */
+export interface CompanyRates {
+  /** The fallback quote, for a run no rate-card line covers. */
+  tariff: {
+    base_cents: number;
+    per_km_cents: number;
+    per_kg_cents: number;
+    minimum_cents: number;
+  };
+  /** The haulier's cut of a partner trucker's run. 1200 out of the box. */
+  trucker_commission_bp: number;
+  /** How long a delivered run's invoice has before it is overdue. */
+  billing_terms_days: number;
+  vat_registered: boolean;
+  vat_rate_bp: number;
+  withholding_rate_bp: number;
+  /** Is the tariff quoted with the VAT already inside it? */
+  prices_include_vat: boolean;
+  currency: string;
+}
+
+/**
+ * The columns, null meaning "the install default".
+ *
+ * The commission is not among them: its column is not nullable, twelve per cent
+ * is its default, and there is no unset state to go back to.
+ */
+export interface CompanyRateOverrides {
+  tariff_base_cents: number | null;
+  tariff_per_km_cents: number | null;
+  tariff_per_kg_cents: number | null;
+  tariff_minimum_cents: number | null;
+  billing_terms_days: number | null;
+  withholding_rate_bp: number | null;
+  prices_include_vat: boolean | null;
 }
 
 /** What `POST /api/v1/login` takes. */

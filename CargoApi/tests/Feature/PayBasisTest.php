@@ -107,17 +107,20 @@ beforeEach(function (): void {
     $this->haul = function (string $date, string $driverId, ?string $helperId = null, string $status = 'delivered') {
         static $n = 0;
 
-        return Trip::create([
+        $trip = Trip::create([
             'reference' => 'TRIP-'.str_pad((string) ++$n, 4, '0', STR_PAD_LEFT),
             'origin' => 'Davao City',
             'destination' => 'Tagum City',
             'cargo' => 'Assorted',
             'weight_kg' => 2000,
             'driver_id' => $driverId,
-            'helper_id' => $helperId,
             'status' => $status,
             'scheduled_at' => $date.' 07:00:00',
         ]);
+
+        $trip->setHelpers($helperId === null ? [] : [$helperId]);
+
+        return $trip;
     };
 
     $this->open = fn (array $overrides = []) => $this->actingAs($this->admin)
@@ -426,7 +429,7 @@ describe('the truck sheet naming its crew', function (): void {
 
         expect($row['driver_id'])->toBe($employee->driver_id)
             ->and($row['driver_name'])->toBe('Marco Villanueva')
-            ->and($row['helper_id'])->toBeNull();
+            ->and($row['helpers'])->toBe([]);
     });
 
     it('refuses the same person as driver and helper', function (): void {
@@ -436,9 +439,9 @@ describe('the truck sheet naming its crew', function (): void {
             'truck_id' => $this->truck->id,
             'date' => '2026-09-03',
             'driver_id' => $employee->driver_id,
-            'helper_id' => $employee->driver_id,
+            'helpers' => [['driver_id' => $employee->driver_id, 'salary_cents' => 50_000]],
         ])->assertStatus(422)
-            ->assertJsonPath('errors.helper_id.0', 'The driver and the helper cannot be the same person.');
+            ->assertJsonValidationErrors(['helpers.0.driver_id' => 'The driver and a helper cannot be the same person.']);
     });
 });
 

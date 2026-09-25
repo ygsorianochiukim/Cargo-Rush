@@ -10,6 +10,7 @@ use App\Domain\Identity\Models\Role as RoleRecord;
 use App\Domain\Identity\Notifications\ResetPasswordLink;
 use App\Domain\Shared\Enums\Role;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
+use App\Domain\Trucker\Models\Trucker;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -108,6 +109,19 @@ class User extends Authenticatable
     public function driver(): HasOne
     {
         return $this->hasOne(Driver::class);
+    }
+
+    /**
+     * The partner record behind this login, for an owner-operator.
+     *
+     * The third of the three, and the same pattern as the other two: the
+     * account is one record and the business history is another. A trucker's
+     * runs, their trucks and their wallet belong to the `truckers` row, so a
+     * partner who is issued a new login keeps everything they have earned.
+     */
+    public function trucker(): HasOne
+    {
+        return $this->hasOne(Trucker::class);
     }
 
     /**

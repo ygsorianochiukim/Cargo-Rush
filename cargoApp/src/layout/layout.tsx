@@ -15,13 +15,21 @@ import { useSession } from '@/services/identity/session';
  * This is the mobile Layout — the one piece of chrome every screen inherits,
  * the same role `layout/layout.ts` plays on the web.
  *
- * **Two tab sets, one bar.** `cargoApp` is one app holding two products: the
- * driver's six modules (section 5.2) and the customer's portal. Which set a
- * person gets follows from their role and nothing else — a customer has no
- * `drivers` row, so every driver screen would 404 for them, and a driver has
- * no `customers` row, so every portal screen would 404 for a driver. Neither
- * set is a subset of the other, which is why this is two lists rather than one
- * list with rows hidden.
+ * **Three tab sets, one bar.** `cargoApp` is one app holding three products:
+ * the driver's six modules (section 5.2), the customer's portal, and the
+ * partner trucker's board. Which set a person gets follows from their role and
+ * nothing else — a customer has no `drivers` row, so every driver screen would
+ * 404 for them; a driver has no `customers` row, so every portal screen would
+ * 404 for a driver; and neither has a `truckers` row, so the board and the
+ * wallet would 404 for both. No set is a subset of another, which is why this
+ * is three lists rather than one list with rows hidden.
+ *
+ * The trucker's set is the one worth reading against the driver's, because the
+ * two look superficially alike and share almost nothing. There is no Inspect
+ * tab — a pre-trip check is the fleet looking over the fleet's own unit, and a
+ * partner's truck is not the fleet's to clear. There is a Wallet, because a
+ * partner is paid a share of what each run billed rather than a wage, and that
+ * figure is the reason they open the app.
  *
  * Built on the headless `expo-router/ui` tabs so the bar matches the design
  * system exactly on every platform rather than inheriting native chrome.
@@ -61,13 +69,37 @@ const CUSTOMER_TABS: TabDef[] = [
   { name: 'more', key: 'more', href: '/more', label: 'More', icon: 'profile' },
 ];
 
+/**
+ * The partner trucker's five.
+ *
+ * Jobs first after the dashboard, because it is what they opened the app for,
+ * and it is the one tab here that carries a badge — work sitting on the board
+ * is work somebody else will take. Tracking is shared with the driver's set:
+ * reporting position on a run is the same act whoever is in the cab.
+ */
+const TRUCKER_TABS: TabDef[] = [
+  { name: 'index', key: 'dashboard', href: '/', label: 'Dashboard', icon: 'dashboard' },
+  { name: 'jobs', key: 'jobs', href: '/jobs', label: 'Jobs', icon: 'shipments' },
+  { name: 'my-trips', key: 'my-trips', href: '/my-trips', label: 'My Trips', icon: 'route' },
+  { name: 'wallet', key: 'wallet', href: '/wallet', label: 'Wallet', icon: 'wallet' },
+  { name: 'more', key: 'more', href: '/more', label: 'More', icon: 'profile' },
+];
+
 export function AppLayout() {
   const insets = useSafeAreaInsets();
   const { me } = useSession();
 
   // Read once at mount time from a session that was already verified before
   // these tabs rendered, so there is no frame where the wrong set is drawn.
-  const local = me?.role === 'customer' ? CUSTOMER_TABS : DRIVER_TABS;
+  // The driver's set is the fallback rather than a fourth branch: a back-office
+  // account signing in on a phone gets the cab screens, which is what it has
+  // always done.
+  const local =
+    me?.role === 'customer'
+      ? CUSTOMER_TABS
+      : me?.role === 'trucker'
+        ? TRUCKER_TABS
+        : DRIVER_TABS;
 
   const [tabs, setTabs] = useState<TabDef[]>(local);
 

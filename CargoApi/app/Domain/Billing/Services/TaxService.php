@@ -8,7 +8,7 @@ use App\Domain\Billing\DTO\TaxBreakdown;
 use App\Domain\Customer\Models\Customer;
 use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Enums\VatTreatment;
-use App\Domain\Tenancy\Support\Tenant;
+use App\Domain\Tenancy\Support\RateBook;
 
 /**
  * What tax an invoice carries, worked out once.
@@ -16,8 +16,9 @@ use App\Domain\Tenancy\Support\Tenant;
  * Three parties each hold part of the answer, and none of them holds all of
  * it — which is why this is a service rather than a method on the invoice:
  *
- *   **The statute** sets the rates. `config('cargo.tax')`, so a rate change
- *   is a deployment setting rather than a code change.
+ *   **The statute** sets the rates — and the office may correct them on the
+ *   settings card when a circular moves one, falling back to `config('cargo.tax')`
+ *   for an install that has never touched them. `RateBook` answers both.
  *
  *   **The company** decides whether it charges VAT at all. Below the
  *   registration threshold a haulier files percentage tax instead and issues
@@ -36,7 +37,7 @@ use App\Domain\Tenancy\Support\Tenant;
  */
 class TaxService
 {
-    public function __construct(private readonly Tenant $tenant) {}
+    public function __construct(private readonly RateBook $rates) {}
 
     /**
      * Work out the tax on an amount.
@@ -44,8 +45,8 @@ class TaxService
      * `$amountCents` is the figure the desk has: the tariff price, or what
      * somebody typed on the billing form. Whether that figure is the net haul
      * or an all-in price the customer was quoted is a business decision, not
-     * something to guess — `cargo.tax.prices_include_vat` says which, and this
-     * works backwards from the gross when it has to.
+     * something to guess — the firm's `prices_include_vat` setting says which,
+     * and this works backwards from the gross when it has to.
      *
      * **Payables carry no tax here.** A bill from a supplier arrives with
      * whatever tax that supplier charged, already on the document; computing
@@ -67,7 +68,7 @@ class TaxService
         // Inclusive: the figure already contains the VAT, so the net is what
         // is left once it is taken back out. Integer arithmetic throughout —
         // `intdiv` after multiplying, never a float multiplication on money.
-        $inclusive = (bool) config('cargo.tax.prices_include_vat', false);
+        $inclusive = $this->rates->pricesIncludeVat();
 
         if ($inclusive && $vatRate > 0) {
             $net = intdiv($amountCents * 10_000, 10_000 + $vatRate);
@@ -122,20 +123,25 @@ class TaxService
      */
     private function charges(VatTreatment $treatment): bool
     {
-        return $treatment->charges() && ($this->tenant->company()?->vat_registered ?? true);
+        return $treatment->charges() && $this->rates->chargesVat();
     }
 
     /** The company's own rate, or the statute's where it has not set one. */
     private function vatRateBp(): int
     {
-        return $this->tenant->company()?->vat_rate_bp
-            ?? (int) config('cargo.tax.vat_rate_bp', 1200);
+        return $this->rates->vatRateBp();
     }
 
-    /** The customer's own rate, or the statute's. */
+    /**
+     * The customer's own rate, the firm's standing one, or the statute's.
+     *
+     * Three deep, and the order is the specificity: whether a particular
+     * shipper withholds and at what is a fact about that shipper, so their
+     * column wins; the company's setting is what to assume for the ones nobody
+     * has recorded one against.
+     */
     private function withholdingRateBp(Customer $customer): int
     {
-        return $customer->withholding_rate_bp
-            ?? (int) config('cargo.tax.withholding_rate_bp', 200);
+        return $customer->withholding_rate_bp ?? $this->rates->withholdingRateBp();
     }
 }

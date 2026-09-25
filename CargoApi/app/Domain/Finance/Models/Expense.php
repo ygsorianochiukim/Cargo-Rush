@@ -7,6 +7,7 @@ namespace App\Domain\Finance\Models;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Identity\Models\User;
 use App\Domain\Shared\Enums\StatusValue;
+use App\Domain\Supplier\Models\Supplier;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Vehicle\Models\Vehicle;
@@ -30,7 +31,7 @@ class Expense extends Model
     use BelongsToCompany, HasUlids, SoftDeletes;
 
     protected $fillable = [
-        'category_id', 'truck_id', 'trip_id', 'vehicle_id', 'driver_id',
+        'category_id', 'truck_id', 'trip_id', 'vehicle_id', 'driver_id', 'supplier_id',
         'ledger_entry_id', 'date', 'amount_cents', 'currency',
         'payee', 'reference', 'note', 'status', 'recorded_by',
     ];
@@ -67,6 +68,12 @@ class Expense extends Model
     public function driver(): BelongsTo
     {
         return $this->belongsTo(Driver::class);
+    }
+
+    /** Who it was bought from, where the office keeps a record of them. */
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class);
     }
 
     public function recorder(): BelongsTo

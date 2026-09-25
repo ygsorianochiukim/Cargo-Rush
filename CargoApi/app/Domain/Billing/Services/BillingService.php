@@ -11,6 +11,7 @@ use App\Domain\Billing\Repositories\InvoiceRepository;
 use App\Domain\Customer\Models\Customer;
 use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Enums\StatusValue;
+use App\Domain\Tenancy\Support\RateBook;
 use App\Domain\Trip\Models\Trip;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
@@ -21,6 +22,7 @@ class BillingService
         private readonly InvoiceRepository $invoices,
         private readonly TaxService $tax,
         private readonly PaymentService $payments,
+        private readonly RateBook $rates,
     ) {}
 
     /**
@@ -273,7 +275,7 @@ class BillingService
             'customer_id' => $trip->customer_id,
             'trip_id' => $trip->id,
             'issued_at' => $issued->toDateString(),
-            'due_at' => $issued->copy()->addDays((int) config('cargo.billing.terms_days'))->toDateString(),
+            'due_at' => $issued->copy()->addDays($this->rates->billingTermsDays())->toDateString(),
             'currency' => $trip->currency,
             'direction' => InvoiceDirection::Receivable->value,
             'status' => StatusValue::Pending->value,

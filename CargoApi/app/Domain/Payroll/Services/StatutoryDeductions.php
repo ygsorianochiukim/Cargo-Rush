@@ -52,7 +52,7 @@ class StatutoryDeductions
      *                                  the period being paid.
      * @param  int  $periodGrossCents  What this run actually pays them, which is
      *                                 what the tax table reads.
-     * @param  bool  $isFirstCutoff  Whether this is the 1st-to-15th payslip.
+     * @param  int  $index  Which run of the month this is, from zero.
      * @param  bool  $isOnlyRun  True where payroll runs once a month, so there
      *                           is no second payslip to spread anything onto.
      * @param  array{sss?: bool, philhealth?: bool, pagibig?: bool}  $enrolled  Which
@@ -62,8 +62,8 @@ class StatutoryDeductions
     public function for(
         int $monthlyBasicCents,
         int $periodGrossCents,
-        bool $isFirstCutoff = true,
-        bool $isOnlyRun = false,
+        int $index = 0,
+        int $count = 1,
         ?DeductionSchedule $schedule = null,
         array $enrolled = [],
     ): array {
@@ -84,13 +84,13 @@ class StatutoryDeductions
         $takes = static fn (string $agency): bool => ($enrolled[$agency] ?? true) === true;
 
         $sss = $takes('sss')
-            ? $schedule->shareOf($this->sss($monthlyBasicCents), $isFirstCutoff, $isOnlyRun)
+            ? $schedule->shareOf($this->sss($monthlyBasicCents), $index, $count)
             : 0;
         $philhealth = $takes('philhealth')
-            ? $schedule->shareOf($this->philhealth($monthlyBasicCents), $isFirstCutoff, $isOnlyRun)
+            ? $schedule->shareOf($this->philhealth($monthlyBasicCents), $index, $count)
             : 0;
         $pagibig = $takes('pagibig')
-            ? $schedule->shareOf($this->pagibig($monthlyBasicCents), $isFirstCutoff, $isOnlyRun)
+            ? $schedule->shareOf($this->pagibig($monthlyBasicCents), $index, $count)
             : 0;
 
         /**

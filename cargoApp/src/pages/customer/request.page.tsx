@@ -3,12 +3,14 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Carrier } from '@/models/carrier/carrier.model';
-import { BLANK_LOCATION, GeoPoint, TripLocation, isPinned } from '@/models/geo/geo.model';
+import { asPoint, BLANK_LOCATION, GeoPoint, TripLocation, isPinned } from '@/models/geo/geo.model';
+import { Hauler } from '@/models/portal/hauler.model';
 import { Trip } from '@/models/trip/trip.model';
 import { portalService } from '@/services/portal/portal.service';
 import { useSession } from '@/services/identity/session';
 import { ApiRequestError } from '@/services/shared/api.service';
 import { CarrierPicker } from '@/components/carrier-picker';
+import { HaulerPicker } from '@/components/hauler-picker';
 import { LocationField } from '@/components/location-field';
 import { Screen } from '@/components/screen';
 import { Icon } from '@/components/ui/icon';
@@ -100,6 +102,27 @@ export function RequestPage() {
    */
   const [carrier, setCarrier] = useState<Carrier | null>(null);
   const choosing = me?.chooses_carrier === true;
+
+  /**
+   * Who inside that haulier is being asked — the fleet, or one trucker.
+   *
+   * Every customer gets this question, unlike the carrier list above: it is a
+   * choice within the firm they already deal with rather than between firms.
+   * `HaulerPicker` defaults it to the fleet, so a customer who ignores the card
+   * entirely gets exactly the behaviour this screen has always had.
+   */
+  const [hauler, setHauler] = useState<Hauler | null>(null);
+
+  /**
+   * Where the load is going out from, once it has been pinned.
+   *
+   * What the trucker list is measured from. The pickup rather than the
+   * handset's own position, because the question is who is near the *load* —
+   * somebody booking a collection from their warehouse while sitting at home
+   * would otherwise be shown the trucks near their sofa. Falls back to the
+   * store on file until they pin one.
+   */
+  const pickupPoint: GeoPoint | null = asPoint(origin);
 
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -197,6 +220,16 @@ export function RequestPage() {
         // created is refused for naming any carrier but its own, so a client
         // that sent one regardless would turn every request into a 403.
         ...(choosing && carrier !== null ? { carrier_id: carrier.id } : {}),
+        /**
+         * Sent only when they picked an actual trucker.
+         *
+         * The fleet is the default and is represented by sending nothing at
+         * all — it is not a `trucker_id`, and passing the company's id in this
+         * field would be asking the API to find a partner that does not exist.
+         * Leaving it out puts the request on the open board, which is what
+         * "send it with Cargo Rush" means.
+         */
+        ...(hauler?.kind === 'trucker' ? { trucker_id: hauler.id } : {}),
         origin: origin.place.trim(),
         // Each end travels as a pair or not at all — half a coordinate is not
         // a location, and the API says so with a 422 rather than storing one.
@@ -281,21 +314,30 @@ export function RequestPage() {
           haulier's own tariff — so the choice has to be made before the rest of
           the form means anything. */}
       {choosing ? (
-        <Card heading="Who should carry it?" icon="fleet" hint={carrier ? '1 chosen' : 'Pick one'}>
+        <Card heading="Which fleet?" icon="fleet" hint={carrier ? '1 chosen' : 'Pick one'}>
           <CarrierPicker selected={carrier} onChange={setCarrier} around={store} />
         </Card>
-      ) : (
-        <Card>
-          <View style={styles.heldRow}>
-            <Icon name="fleet" size={16} color={Brand.blue} />
-            <Text style={styles.heldText}>
-              Your deliveries are carried by{' '}
-              <Text style={styles.heldName}>{me?.company_name ?? 'your carrier'}</Text>. They
-              confirm the driver, the unit and the time.
-            </Text>
-          </View>
-        </Card>
-      )}
+      ) : null}
+
+      {/*
+        Who inside that fleet — its own trucks, or a trucker near the pickup.
+
+        A different question from the card above and a different list. That one
+        chooses between *hauliers*, and only a shipper who signed themselves up
+        gets to ask it. This one is inside one haulier and everybody gets it,
+        because every customer can now say "send it with that man whose truck is
+        twenty minutes away" instead of waiting for the depot.
+
+        Measured from the **pickup**, not the handset: somebody booking a
+        collection from their warehouse while sitting at home should be shown
+        the truckers near the warehouse.
+      */}
+      <Card
+        heading="Who should carry it?"
+        icon="shipments"
+        hint={hauler?.kind === 'trucker' ? '1 trucker' : 'The fleet'}>
+        <HaulerPicker selected={hauler} onChange={setHauler} around={pickupPoint ?? store} />
+      </Card>
 
       <Card>
         <LocationField

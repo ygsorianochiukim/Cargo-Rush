@@ -231,9 +231,18 @@ class DashboardService
         $from = now()->subDays($days - 1)->startOfDay();
         $to = now()->endOfDay();
 
-        $ledger = $this->finance->periodTotals(
-            $this->finance->pnlByTruck(Carbon::instance($from), Carbon::instance($to)),
-        );
+        /**
+         * The same roll-up the Quarterly Summary reads, over this window.
+         *
+         * It used to be `periodTotals()` over the truck rows alone, which left
+         * out both the overhead and the supplier bills — so the tile here and
+         * the summary page reported different net income for the same days,
+         * and the tile was always the flattering one.
+         */
+        $ledger = $this->finance->periodRollup(
+            Carbon::instance($from),
+            Carbon::instance($to),
+        )['totals'];
 
         return [
             'pending_payment_cents' => $this->invoices->outstanding(InvoiceDirection::Receivable),

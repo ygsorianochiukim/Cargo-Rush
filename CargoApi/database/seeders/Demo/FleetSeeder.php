@@ -10,6 +10,7 @@ use App\Domain\Identity\Models\User;
 use App\Domain\Shared\Enums\Role;
 use App\Domain\Vehicle\Models\MaintenanceJob;
 use App\Domain\Vehicle\Models\Vehicle;
+use Database\Seeders\Concerns\AdoptsTrashedRows;
 use Database\Seeders\Concerns\SeedsIntoACompany;
 use Database\Seeders\UserSeeder;
 use Illuminate\Database\Seeder;
@@ -24,7 +25,7 @@ use Illuminate\Support\Facades\Hash;
  */
 class FleetSeeder extends Seeder
 {
-    use SeedsIntoACompany;
+    use AdoptsTrashedRows, SeedsIntoACompany;
 
     public function run(): void
     {
@@ -64,7 +65,7 @@ class FleetSeeder extends Seeder
             // Marco alongside it. Everyone else is matched on their licence.
             $key = $userId === null ? ['licence_no' => $licence] : ['user_id' => $userId];
 
-            Driver::updateOrCreate($key, [
+            $this->restoreOrCreate(Driver::class, $key, [
                 'name' => $name,
                 'licence_no' => $licence,
                 'licence_expiry' => $expiry,
@@ -98,7 +99,7 @@ class FleetSeeder extends Seeder
         ];
 
         foreach ($rows as [$plate, $model, $reg, $capacity, $status, $driverName, $odo, $service]) {
-            Vehicle::updateOrCreate(['plate' => $plate], [
+            $this->restoreOrCreate(Vehicle::class, ['plate' => $plate], [
                 'model' => $model,
                 'registration_no' => $reg,
                 'capacity_kg' => $capacity,
@@ -123,7 +124,7 @@ class FleetSeeder extends Seeder
         ];
 
         foreach ($rows as [$plate, $kind, $due, $km, $status]) {
-            MaintenanceJob::updateOrCreate(
+            $this->restoreOrCreate(MaintenanceJob::class,
                 ['vehicle_id' => $plates[$plate], 'kind' => $kind],
                 ['due_at' => $due, 'next_service_km' => $km, 'status' => $status],
             );
@@ -143,7 +144,7 @@ class FleetSeeder extends Seeder
         ];
 
         foreach ($rows as [$name, $contact, $rating, $status]) {
-            Customer::updateOrCreate(['name' => $name], [
+            $this->restoreOrCreate(Customer::class, ['name' => $name], [
                 'contact' => $contact,
                 'rating' => $rating,
                 'status' => $status,

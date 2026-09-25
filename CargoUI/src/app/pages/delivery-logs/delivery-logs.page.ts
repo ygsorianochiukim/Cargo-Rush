@@ -66,7 +66,7 @@ export class DeliveryLogsPage {
   protected readonly columns: Column<DeliveryLog>[] = [
     { label: 'Reference', kind: 'strong', value: (l) => l.reference },
     { label: 'Customer', value: (l) => l.customer },
-    { label: 'Driver', value: (l) => l.driver_name, sub: (l) => l.helper_name ?? 'No helper' },
+    { label: 'Driver', value: (l) => l.driver_name, sub: (l) => (l.helper_names.length > 0 ? l.helper_names.join(', ') : 'No helper') },
     { label: 'Delivered', kind: 'num', value: (l) => fmt.dateTime(l.delivered_at) },
     { label: 'Proof of delivery', kind: 'muted', value: (l) => l.pod_ref ?? 'Not uploaded' },
     { label: 'Status', kind: 'status', status: (l) => l.status },

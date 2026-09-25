@@ -37,7 +37,9 @@ class CurrentTripResource extends ApiResource
             // reformatted and a foreign key does not.
             'vehicle_id' => $this->vehicle_id,
             'vehicle_plate' => $this->vehicle?->plate,
-            'helper_name' => $this->helper?->name,
+            // Who is riding along today, by name — the cab reads them, it
+            // never sends them back.
+            'helper_names' => $this->helpers->pluck('name')->all(),
             'status' => $this->status->value,
             'scheduled_at' => $this->iso($this->scheduled_at),
             'eta' => $this->iso($this->eta),

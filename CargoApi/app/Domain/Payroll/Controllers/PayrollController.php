@@ -84,6 +84,16 @@ class PayrollController extends ApiController
             static fn (PayPeriod $period): array => [
                 ...$period->toArray(),
                 'suggested' => $period->matches($suggested),
+
+                /**
+                 * The day this period's money actually leaves the bank.
+                 *
+                 * Sent with the period so the form can default to it, rather
+                 * than each client adding the firm's lag to a date and two
+                 * clients disagreeing about it. A firm cutting off on the 15th
+                 * with a two-day lag pays on the 17th.
+                 */
+                'release' => $calendar->releaseFor($period->end)->toDateString(),
             ],
             $calendar->inMonth((int) $month->year, (int) $month->month),
         );
@@ -118,9 +128,13 @@ class PayrollController extends ApiController
      * statutory tables still apply to it.
      *
      * `pay_date` is when the money actually goes out, which is a different day
-     * and the one the journal entry is dated. It defaults to the cutoff on
-     * screen and is otherwise left alone: paying on the 20th for a period that
-     * closed on the 16th is ordinary, and the books care when the money moved.
+     * and the one the journal entry is dated. **Optional now**, and derived from
+     * the firm's own release lag when it is left out — a period closing on the
+     * 5th is paid on the 7th, because the office needs the two days to compile
+     * the period's charges and get the budget released.
+     *
+     * Still accepted when sent. Paying on the 20th for a period that closed on
+     * the 16th is ordinary, and the books care when the money actually moved.
      */
     public function store(Request $request): JsonResponse
     {
@@ -130,7 +144,9 @@ class PayrollController extends ApiController
             // Usually the cutoff or a few days after it. Not restricted to the
             // future: an office catching up on last month's payroll is
             // ordinary, and refusing it would send them to the database.
-            'pay_date' => ['required', 'date'],
+            //
+            // Left out means the firm's release day for that period.
+            'pay_date' => ['sometimes', 'date'],
         ]);
 
         $calendar = $this->payroll->calendar();
@@ -153,10 +169,22 @@ class PayrollController extends ApiController
             ]);
         }
 
+        /**
+         * The day the money goes out.
+         *
+         * Derived from the period rather than the request where the caller did
+         * not say: the release is the firm's own rule, and asking every client
+         * to add two days to a cutoff is asking two clients to disagree about
+         * it. See `PayrollCalendar::releaseFor`.
+         */
+        $payDate = isset($validated['pay_date'])
+            ? Carbon::parse($validated['pay_date'])
+            : $calendar->releaseFor($period->end);
+
         $run = $this->payroll->build(
             $period->start,
             $period->end,
-            Carbon::parse($validated['pay_date']),
+            $payDate,
             $this->user($request),
         );
 

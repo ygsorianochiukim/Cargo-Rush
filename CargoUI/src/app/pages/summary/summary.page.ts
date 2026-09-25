@@ -13,6 +13,8 @@ import { FinanceService } from '../../services/finance/finance.service';
 import { Card } from '../../shared/card';
 import { ChartTooltip, TooltipRow } from '../../shared/chart-tooltip';
 import { fmt } from '../../shared/format';
+import { ExpenseLinesDialog } from './expense-lines.dialog';
+import { ReceivableLinesDialog } from './receivable-lines.dialog';
 
 /**
  * Quarterly Summary — the workbook's "Summary" sheet and its quarter slicer.
@@ -24,7 +26,7 @@ import { fmt } from '../../shared/format';
 @Component({
   selector: 'app-summary',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Card, ChartTooltip],
+  imports: [Card, ChartTooltip, ExpenseLinesDialog, ReceivableLinesDialog],
   templateUrl: './summary.page.html',
 })
 export class SummaryPage {
@@ -61,8 +63,50 @@ export class SummaryPage {
 
   protected readonly loading = computed(() => this.rollup() === null);
 
+  /** The Total expenses tile's transaction list. */
+  protected readonly linesOpen = signal(false);
+
+  /** The Receivables tile's invoice list, asked about the quarter's last day. */
+  protected readonly receivablesOpen = signal(false);
+
   protected readonly rows = computed(() => this.rollup()?.trucks ?? []);
   protected readonly totals = computed(() => this.rollup()?.totals ?? emptyTotals());
+
+  /**
+   * The part of the period's expenses that sits in no truck row.
+   *
+   * Office overhead, and the supplier bills actually paid over the window.
+   * Both are real costs of the period and neither is any unit's, so the TOTAL
+   * row is legitimately larger than its own columns add up to — and a reader
+   * who cannot see why will assume the table is broken. The template says the
+   * figure out loud when there is one.
+   */
+  protected readonly unattributed = computed(
+    () =>
+      this.totals().overhead_cents +
+      this.totals().supplier_bills_cents +
+      this.totals().trucker_payouts_cents,
+  );
+
+  /**
+   * The same figure broken out, for the sentence that explains it.
+   *
+   * Only the parts that are actually there. Three `@if`s in the template did
+   * this before and needed a fourth for every figure added, plus an "and"
+   * between each pair — which is how a sentence ends up reading "₱0 overhead
+   * and and ₱500 of payouts".
+   */
+  protected readonly unattributedParts = computed(() => {
+    const t = this.totals();
+
+    return [
+      [t.overhead_cents, 'overhead'] as const,
+      [t.supplier_bills_cents, 'of supplier bills paid'] as const,
+      [t.trucker_payouts_cents, 'paid to truckers'] as const,
+    ]
+      .filter(([cents]) => cents > 0)
+      .map(([cents, what]) => `${fmt.pesos(cents)} ${what}`);
+  });
   protected readonly best = computed(() => this.rollup()?.best_performer ?? null);
 
   /** Charts show only units that actually traded in the period. */
@@ -91,11 +135,11 @@ export class SummaryPage {
    */
   protected breakdown(row: TruckPnl): TooltipRow[] {
     return [
-      { label: 'Trip income', value: fmt.money(row.trip_income_cents) },
-      { label: 'Total expenses', value: fmt.money(row.total_expenses_cents) },
+      { label: 'Trip income', value: fmt.pesos(row.trip_income_cents) },
+      { label: 'Total expenses', value: fmt.pesos(row.total_expenses_cents) },
       {
         label: 'Net income',
-        value: fmt.money(row.net_income_cents),
+        value: fmt.pesos(row.net_income_cents),
         negative: row.net_income_cents < 0,
       },
       { label: 'Days recorded', value: String(row.entry_count) },
@@ -113,5 +157,6 @@ export class SummaryPage {
   }
 
   protected readonly fmt = fmt;
-  protected readonly skeleton = [0, 1, 2, 3];
+  /** One placeholder per tile, so the first paint is the shape of the real one. */
+  protected readonly skeleton = [0, 1, 2, 3, 4, 5, 6];
 }

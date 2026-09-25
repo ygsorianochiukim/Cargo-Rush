@@ -33,6 +33,15 @@ class LedgerEntryResource extends ApiResource
             'helper_salary_cents' => $this->helper_salary_cents,
             'maintenance_cents' => $this->maintenance_cents,
             'allowance_cents' => $this->allowance_cents,
+            /**
+             * What the truck's owner took out of the day.
+             *
+             * Zero on the fleet's own units and on one hired at a flat monthly
+             * rent — in both, every peso of the income is the fleet's. Only a
+             * revenue-share truck carries a figure here, and it is the same one
+             * the owner's wallet was credited with.
+             */
+            'owner_share_cents' => $this->owner_share_cents,
             'total_expenses_cents' => $this->totalExpensesCents(),
             'net_income_cents' => $this->netIncomeCents(),
             'currency' => 'PHP',
@@ -60,8 +69,15 @@ class LedgerEntryResource extends ApiResource
              */
             'driver_id' => $this->driver_id,
             'driver_name' => $this->driver?->name,
-            'helper_id' => $this->helper_id,
-            'helper_name' => $this->helper?->name,
+            // Each helper and what they were paid. `helper_salary_cents`
+            // above is the sum of these salaries.
+            'helpers' => $this->helpers
+                ->map(static fn ($line): array => [
+                    'driver_id' => $line->driver_id,
+                    'name' => $line->driver?->name,
+                    'salary_cents' => $line->salary_cents,
+                ])
+                ->all(),
             'customer' => $this->customer?->name,
 
             ...$this->stamps(),

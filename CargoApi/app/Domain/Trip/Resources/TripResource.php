@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Trip\Resources;
 
 use App\Domain\Inspection\Services\InspectionService;
+use App\Domain\Shared\Enums\BookingSource;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use App\Domain\Trip\Models\Trip;
 use Illuminate\Http\Request;
@@ -46,10 +47,53 @@ class TripResource extends ApiResource
             'customer' => $this->customer?->name,
             'driver_id' => $this->driver_id,
             'driver_name' => $this->driver?->name,
-            'helper_id' => $this->helper_id,
-            'helper_name' => $this->helper?->name,
+            // Everyone riding along, in the order the desk named them. The ids
+            // for a form to send back; the pairs for a screen to print.
+            'helper_ids' => $this->helpers->pluck('id')->all(),
+            'helpers' => $this->helpers
+                ->map(static fn ($helper): array => ['id' => $helper->id, 'name' => $helper->name])
+                ->all(),
             'vehicle_id' => $this->vehicle_id,
             'vehicle_plate' => $this->vehicle?->plate,
+
+            /**
+             * Who is actually moving this load — the company, or a partner.
+             *
+             * `hauled_by` is the one field the board categorises on, and it is
+             * derived here rather than left to each client to infer from a null
+             * `driver_id`. Three clients inferring the same thing three ways is
+             * three chances for one of them to call a partner run an unassigned
+             * one, which is exactly what it looks like from the crew columns:
+             * a partner trip has no driver, no helper and no vehicle, because
+             * none of those are the company's.
+             *
+             * The trucker's own name and plate ride alongside so the column can
+             * print who, not just which kind.
+             */
+            'hauled_by' => $this->hauledByPartner() ? 'trucker' : 'company',
+            'trucker_id' => $this->trucker_id,
+            'trucker_name' => $this->trucker?->name,
+            'trucker_phone' => $this->trucker?->phone,
+            'trucker_vehicle_id' => $this->trucker_vehicle_id,
+            'trucker_plate' => $this->truckerVehicle?->plate,
+
+            /**
+             * How the work reached whoever is hauling it, and what it cost.
+             *
+             * `cargo_rush` means the desk brokered it: the company quoted,
+             * invoices and collects. `direct` means a customer picked the
+             * partner, who bills them themselves. Same percentage,
+             * opposite directions — see `BookingSource` — so this is the column
+             * an audit reads, and the office board shows it beside the hauler
+             * rather than leaving the two to be guessed at together.
+             *
+             * The commission pair is null until the run is delivered, because
+             * that is when the rate is frozen onto it.
+             */
+            'booking_source' => ($this->booking_source ?? BookingSource::CargoRush)->value,
+            'booking_source_label' => ($this->booking_source ?? BookingSource::CargoRush)->label(),
+            'commission_bp' => $this->commission_bp,
+            'commission_cents' => $this->commission_cents,
 
             /**
              * Where the unit's pre-trip check stands.
@@ -72,10 +116,19 @@ class TripResource extends ApiResource
             'scheduled_at' => $this->iso($this->scheduled_at),
             'eta' => $this->iso($this->eta),
             'distance_total_m' => $this->distance_total_m,
+            // `road`, `estimate` or `manual` — see the migration that added
+            // it. An estimate is worth the desk checking before it confirms.
+            'distance_source' => $this->distance_source,
             // Set when the delivery put this run on the books. Null means it
             // has not earned anything yet — which for anything undelivered is
             // the right answer, not a missing one.
             'billed_at' => $this->iso($this->billed_at),
+            // Whether the hand-off photograph arrived. Only where the log was
+            // loaded with the trip, so a list that did not ask costs nothing.
+            'has_pod_photo' => $this->whenLoaded(
+                'deliveryLog',
+                fn (): bool => $this->deliveryLog?->pod_image_path !== null,
+            ),
 
             ...$this->stamps(),
         ];

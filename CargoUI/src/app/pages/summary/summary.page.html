@@ -26,7 +26,7 @@
 </header>
 
 @if (loading()) {
-  <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+  <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
     @for (s of skeleton; track s) {
       <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
         <div class="cr-skeleton h-2 w-24"></div>
@@ -35,35 +35,124 @@
     }
   </div>
 } @else {
-  <section aria-label="Quarter totals" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+  <section aria-label="Quarter totals" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
     <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
       <p class="cr-meta">Trip income</p>
       <p class="cr-num mt-2 text-[28px] leading-none font-semibold">
-        {{ fmt.money(totals().trip_income_cents) }}
+        {{ fmt.pesos(totals().trip_income_cents) }}
       </p>
     </div>
-    <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
-      <p class="cr-meta">Total expenses</p>
-      <p class="cr-num mt-2 text-[28px] leading-none font-semibold">
-        {{ fmt.money(totals().total_expenses_cents) }}
-      </p>
-    </div>
+    <!-- A button, because it opens the transactions the figure is made of. -->
+    <button
+      type="button"
+      class="group rounded-card bg-cr-surface p-4 text-left shadow-card ring-1 ring-cr-line/60 transition-shadow hover:ring-cr-blue focus-visible:ring-2 focus-visible:ring-cr-blue focus-visible:outline-none"
+      aria-haspopup="dialog"
+      (click)="linesOpen.set(true)">
+      <span class="cr-meta flex items-center justify-between">
+        Total expenses
+        <!-- Always shown: a hover-only hint is invisible on a phone. -->
+        <span class="text-[12px] font-semibold tracking-normal text-cr-blue normal-case group-hover:underline">
+          View transactions →
+        </span>
+      </span>
+      <span class="block cr-num mt-2 text-[28px] leading-none font-semibold">
+        {{ fmt.pesos(totals().total_expenses_cents) }}
+      </span>
+      <!--
+        Said on the tile rather than only under the table, because this is the
+        line an office comes to the page for: what the quarter cost once the
+        suppliers and the partners were actually paid. Hidden at zero — "incl.
+        ₱0 of supplier bills" is a sentence that teaches nobody anything.
+      -->
+      @if (totals().supplier_bills_cents > 0) {
+        <span class="block cr-num mt-1.5 text-[12px] text-cr-ink-muted">
+          incl. {{ fmt.pesos(totals().supplier_bills_cents) }} of supplier bills paid
+        </span>
+      }
+      @if (totals().trucker_payouts_cents > 0) {
+        <span class="block cr-num mt-1 text-[12px] text-cr-ink-muted">
+          incl. {{ fmt.pesos(totals().trucker_payouts_cents) }} paid to truckers
+        </span>
+      }
+    </button>
     <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
       <p class="cr-meta">Net income</p>
       <p
         class="cr-num mt-2 text-[28px] leading-none font-semibold"
         [class.text-cr-red]="totals().net_income_cents < 0">
-        {{ fmt.money(totals().net_income_cents) }}
+        {{ fmt.pesos(totals().net_income_cents) }}
+      </p>
+    </div>
+    <!--
+      What is still owed, and what the quarter is really worth once it is.
+
+      These two sit after Net income because they answer the question that
+      follows it. Net income is what the quarter earned; an office deciding
+      whether anything can be drawn out needs to know what is queued up against
+      it, and a partner waiting to be paid is as real a claim as a bill.
+
+      Payables is deliberately **not** in Total expenses above. An unpaid bill
+      has cost the quarter nothing yet — putting it there would charge the
+      period for money that has not moved, and charge it a second time on the
+      day it does. It is a separate figure, and the subtraction is its own tile
+      rather than something a reader does in their head.
+    -->
+    <!--
+      The other direction: what customers still owed us at the close. Already
+      inside Trip income, so it moves no other tile — it says how much of the
+      income has not turned into money yet. A button, like Total expenses,
+      because it opens the invoices it is made of.
+    -->
+    <button
+      type="button"
+      class="group rounded-card bg-cr-surface p-4 text-left shadow-card ring-1 ring-cr-line/60 transition-shadow hover:ring-cr-blue focus-visible:ring-2 focus-visible:ring-cr-blue focus-visible:outline-none"
+      aria-haspopup="dialog"
+      (click)="receivablesOpen.set(true)">
+      <span class="cr-meta flex items-center justify-between">
+        Receivables
+        <span class="text-[12px] font-semibold tracking-normal text-cr-blue normal-case group-hover:underline">
+          View invoices →
+        </span>
+      </span>
+      <span class="block cr-num mt-2 text-[28px] leading-none font-semibold">
+        {{ fmt.pesos(totals().receivables_cents) }}
+      </span>
+      <span class="block mt-1.5 text-[12px] text-cr-ink-muted">
+        Owed to us at the close of the quarter
+      </span>
+    </button>
+    <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+      <p class="cr-meta">Payables</p>
+      <p
+        class="cr-num mt-2 text-[28px] leading-none font-semibold"
+        [class.text-cr-warning]="totals().payables_cents > 0">
+        {{ fmt.pesos(totals().payables_cents) }}
+      </p>
+      <p class="mt-1.5 text-[12px] text-cr-ink-muted">
+        What we still owed at the close of the quarter
       </p>
     </div>
     <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+      <p class="cr-meta">Actual income</p>
+      <p
+        class="cr-num mt-2 text-[28px] leading-none font-semibold"
+        [class.text-cr-red]="totals().actual_income_cents < 0">
+        {{ fmt.pesos(totals().actual_income_cents) }}
+      </p>
+      <p class="mt-1.5 text-[12px] text-cr-ink-muted">
+        Net income less what is owed
+      </p>
+    </div>
+
+    <!-- The seventh tile, so it takes the whole last row rather than leaving a gap. -->
+    <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60 sm:col-span-2 xl:col-span-3">
       <p class="cr-meta">Best performer</p>
       <p class="cr-num mt-2 text-[20px] leading-none font-semibold">
         {{ best()?.truck?.plate ?? '—' }}
       </p>
       @if (best(); as b) {
         <p class="cr-num mt-1.5 text-[12px] text-cr-ink-muted">
-          {{ fmt.money(b.net_income_cents) }} net
+          {{ fmt.pesos(b.net_income_cents) }} net
         </p>
       }
     </div>
@@ -112,7 +201,7 @@
                   class="cr-num text-[13px] font-semibold"
                   [class.text-cr-red]="r.net_income_cents < 0"
                   [class.text-cr-success]="r.net_income_cents > 0">
-                  {{ fmt.money(r.net_income_cents) }} net
+                  {{ fmt.pesos(r.net_income_cents) }} net
                 </span>
               </span>
               <span class="mt-1.5 flex flex-col gap-1">
@@ -170,63 +259,87 @@
                 {{ r.truck.plate ?? 'Unassigned' }}
               </td>
               <td class="cr-num px-4 py-3 text-right text-[13px]">
-                {{ fmt.money(r.trip_income_cents) }}
+                {{ fmt.pesos(r.trip_income_cents) }}
               </td>
-              <td class="cr-num px-4 py-3 text-right text-[13px]">{{ fmt.money(r.fuel_cents) }}</td>
+              <td class="cr-num px-4 py-3 text-right text-[13px]">{{ fmt.pesos(r.fuel_cents) }}</td>
               <td class="cr-num px-4 py-3 text-right text-[13px]">
-                {{ fmt.money(r.driver_salary_cents) }}
-              </td>
-              <td class="cr-num px-4 py-3 text-right text-[13px]">
-                {{ fmt.money(r.helper_salary_cents) }}
+                {{ fmt.pesos(r.driver_salary_cents) }}
               </td>
               <td class="cr-num px-4 py-3 text-right text-[13px]">
-                {{ fmt.money(r.maintenance_cents) }}
+                {{ fmt.pesos(r.helper_salary_cents) }}
               </td>
               <td class="cr-num px-4 py-3 text-right text-[13px]">
-                {{ fmt.money(r.allowance_cents) }}
+                {{ fmt.pesos(r.maintenance_cents) }}
               </td>
               <td class="cr-num px-4 py-3 text-right text-[13px]">
-                {{ fmt.money(r.total_expenses_cents) }}
+                {{ fmt.pesos(r.allowance_cents) }}
+              </td>
+              <td class="cr-num px-4 py-3 text-right text-[13px]">
+                {{ fmt.pesos(r.total_expenses_cents) }}
               </td>
               <td
                 class="cr-num px-4 py-3 text-right text-[13px] font-semibold"
                 [class.text-cr-red]="r.net_income_cents < 0"
                 [class.text-cr-success]="r.net_income_cents > 0">
-                {{ fmt.money(r.net_income_cents) }}
+                {{ fmt.pesos(r.net_income_cents) }}
               </td>
             </tr>
           }
           <tr class="border-t-2 border-cr-line bg-cr-tint/60">
             <td class="px-4 py-3 text-[13px] font-semibold" colspan="2">TOTAL</td>
             <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.money(totals().trip_income_cents) }}
+              {{ fmt.pesos(totals().trip_income_cents) }}
             </td>
             <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.money(totals().fuel_cents) }}
+              {{ fmt.pesos(totals().fuel_cents) }}
             </td>
             <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.money(totals().driver_salary_cents) }}
+              {{ fmt.pesos(totals().driver_salary_cents) }}
             </td>
             <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.money(totals().helper_salary_cents) }}
+              {{ fmt.pesos(totals().helper_salary_cents) }}
             </td>
             <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.money(totals().maintenance_cents) }}
+              {{ fmt.pesos(totals().maintenance_cents) }}
             </td>
             <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.money(totals().allowance_cents) }}
+              {{ fmt.pesos(totals().allowance_cents) }}
             </td>
             <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.money(totals().total_expenses_cents) }}
+              {{ fmt.pesos(totals().total_expenses_cents) }}
             </td>
             <td
               class="cr-num px-4 py-3 text-right text-[13px] font-semibold"
               [class.text-cr-red]="totals().net_income_cents < 0">
-              {{ fmt.money(totals().net_income_cents) }}
+              {{ fmt.pesos(totals().net_income_cents) }}
             </td>
           </tr>
         </tbody>
       </table>
     </div>
+
+    @if (unattributed() > 0) {
+      <!--
+        Why the TOTAL does not add up from the columns above it.
+
+        Two period costs belong to no single unit and are in neither the five
+        workbook columns nor any truck's row: the overhead, and the supplier
+        bills the fleet actually paid over the window. Loading either onto a
+        truck would make that unit look unprofitable for money it never spent,
+        and leaving them out of the total would flatter the business — so they
+        sit in the total, and this line says so rather than leaving a reader to
+        find the difference with a calculator.
+      -->
+      <p class="border-t border-cr-line px-4 py-3 text-[12px] text-cr-ink-muted">
+        Total expenses also carry
+        <span class="cr-num font-medium text-cr-ink">{{ fmt.pesos(unattributed()) }}</span>
+        that belongs to no single truck:
+        <span class="cr-num">{{ unattributedParts().join(', ') }}</span>. So the rows above do not
+        sum to it.
+      </p>
+    }
   </app-card>
 }
+
+<app-expense-lines-dialog [(open)]="linesOpen" [range]="range()" />
+<app-receivable-lines-dialog [(open)]="receivablesOpen" [asOf]="range().to" />

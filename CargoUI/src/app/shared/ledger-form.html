@@ -66,15 +66,6 @@
             [class]="inputClass + ' cr-num'"
           />
         </app-field>
-        <app-field label="Helper salary" [error]="errorFor('helper_salary')">
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            formControlName="helper_salary"
-            [class]="inputClass + ' cr-num'"
-          />
-        </app-field>
         <app-field label="Allowance" [error]="errorFor('allowance')">
           <input
             type="number"
@@ -109,14 +100,74 @@
         </select>
       </app-field>
 
-      <app-field label="Helper" [error]="errorFor('helper_id')" hint="Whose the helper salary is.">
-        <select formControlName="helper_id" [class]="inputClass">
-          <option value="">Not recorded</option>
-          @for (d of drivers(); track d.id) {
-            <option [value]="d.id">{{ d.name }}</option>
-          }
-        </select>
-      </app-field>
+    </div>
+
+    <!--
+      The day's helpers, one line each: who, and what they were paid.
+
+      A line per person because two helpers on one day are two people on two
+      rates. The helper salary is the sum and is shown, never typed — the same
+      rule as the totals below. Not wrapped in app-field: that is a label, and
+      a label holding a remove button hands a click on its text to it.
+    -->
+    <div class="sm:col-span-2" formArrayName="helpers">
+      <div class="flex items-baseline justify-between">
+        <p class="cr-meta">Helpers</p>
+        <p class="cr-num text-[13px] text-cr-ink-muted">
+          Helper salary
+          <span class="font-semibold text-cr-ink">{{ fmt.money(helperTotal() * 100) }}</span>
+        </p>
+      </div>
+
+      @if (helperLines.length === 0) {
+        <p class="mt-1.5 text-[13px] text-cr-ink-muted">No helper on this day.</p>
+      }
+
+      <ul class="mt-1.5 flex flex-col gap-2">
+        @for (line of helperLines.controls; track line; let i = $index) {
+          <li class="flex items-start gap-2" [formGroupName]="i">
+            <select
+              formControlName="driver_id"
+              [class]="inputClass + ' flex-1'"
+              [attr.aria-label]="'Helper ' + (i + 1)"
+            >
+              <option value="">Not recorded</option>
+              @for (d of availableFor(i); track d.id) {
+                <option [value]="d.id">{{ d.name }}</option>
+              }
+            </select>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              formControlName="salary"
+              [class]="inputClass + ' cr-num w-36 flex-none'"
+              [attr.aria-label]="'Salary for helper ' + (i + 1) + ' in pesos'"
+            />
+            <button
+              type="button"
+              class="flex h-10 w-10 flex-none items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
+              [attr.aria-label]="'Remove helper ' + (i + 1)"
+              (click)="removeHelper(i)"
+            >
+              <app-icon name="close" [size]="16" />
+            </button>
+          </li>
+        }
+      </ul>
+
+      @if (helperLines.length < maxHelpers) {
+        <button
+          type="button"
+          class="mt-2 h-9 rounded-control px-3 text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+          (click)="addHelper()"
+        >
+          + Add helper
+        </button>
+      }
+      <p class="mt-1 text-[12px] text-cr-ink-muted">
+        Payroll counts the day for every helper named here.
+      </p>
     </div>
 
     <app-field

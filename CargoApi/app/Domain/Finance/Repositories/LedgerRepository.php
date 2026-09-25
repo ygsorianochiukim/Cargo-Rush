@@ -32,7 +32,7 @@ class LedgerRepository extends Repository
         // reference, and a ledger page is a list — one query apiece would be
         // an N+1 the moment a sheet has a month on it.
         return LedgerEntry::query()
-            ->with(['truck', 'trip:id,reference', 'customer:id,name'])
+            ->with(['truck', 'trip:id,reference', 'customer:id,name', 'driver:id,name', 'helpers.driver:id,name'])
             ->orderByDesc('date');
     }
 

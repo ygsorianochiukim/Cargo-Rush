@@ -62,8 +62,15 @@ class TripRequest extends ApiFormRequest
             // key was sent rather than whether it is empty.
             'price_cents' => ['sometimes', 'integer', 'min:0'],
             'driver_id' => ['nullable', 'string', 'exists:drivers,id'],
-            // A helper who is also the driver is a data-entry slip, not a crew.
-            'helper_id' => ['nullable', 'string', 'exists:drivers,id', 'different:driver_id'],
+            /**
+             * Who rides along — any number up to a truck's worth, or none.
+             *
+             * Each once, and never the driver: the same person twice would be
+             * paid for the run twice, and a helper who is also the driver is a
+             * data-entry slip, not a crew.
+             */
+            'helper_ids' => ['sometimes', 'nullable', 'array', 'max:5'],
+            'helper_ids.*' => ['string', 'distinct', 'exists:drivers,id', 'different:driver_id'],
             'vehicle_id' => ['nullable', 'string', 'exists:vehicles,id'],
 
             /**
@@ -122,7 +129,9 @@ class TripRequest extends ApiFormRequest
     public function messages(): array
     {
         return [
-            'helper_id.different' => 'The helper cannot be the same person as the driver.',
+            'helper_ids.*.different' => 'A helper cannot be the same person as the driver.',
+            'helper_ids.*.distinct' => 'The same helper is named twice.',
+            'helper_ids.max' => 'A run can carry at most five helpers.',
             'eta.after_or_equal' => 'The ETA cannot be earlier than the scheduled departure.',
             'origin_lat.required_with' => 'A longitude needs its latitude.',
             'origin_lng.required_with' => 'A latitude needs its longitude.',

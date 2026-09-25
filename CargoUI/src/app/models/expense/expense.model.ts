@@ -34,6 +34,15 @@ export interface Expense extends Timestamped {
   trip_id: string | null;
   vehicle_id: string | null;
   driver_id: string | null;
+  /**
+   * Who it was bought from, where the office keeps a record of them.
+   *
+   * `payee` below is still here and still written: it holds what was already
+   * typed, and a one-off — a tyre bought in Tagum on a Sunday — does not
+   * deserve a supplier record of its own.
+   */
+  supplier_id: string | null;
+  supplier_name?: string | null;
   driver_name: string | null;
   /** The day sheet this attached itself to, where it names a truck. */
   ledger_entry_id: string | null;
@@ -48,11 +57,19 @@ export interface Expense extends Timestamped {
   status: StatusValue;
 }
 
+/**
+ * What may be filed.
+ *
+ * Narrower than what comes back, and deliberately: no truck and no driver. A
+ * unit's costs are a maintenance job on the unit, a crew's are payroll, and
+ * this form is the supplies and the sundries in between. The API ignores both
+ * rather than refusing them, so an old client keeps working — see
+ * `ExpenseRequest`.
+ */
 export interface ExpensePayload {
   category_id: string;
-  truck_id?: string | null;
   trip_id?: string | null;
-  driver_id?: string | null;
+  supplier_id?: string | null;
   date: string;
   amount_cents: number;
   currency?: string;

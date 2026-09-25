@@ -8,8 +8,10 @@ use App\Domain\Billing\Models\Invoice;
 use App\Domain\Billing\Repositories\InvoiceRepository;
 use App\Domain\Customer\Models\Customer;
 use App\Domain\Identity\Models\User;
+use App\Domain\Notification\Services\NotificationService;
 use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Enums\StatusValue;
+use App\Domain\Shared\Enums\Tone;
 use App\Domain\Tenancy\DTO\CarrierListing;
 use App\Domain\Tenancy\Models\Company;
 use App\Domain\Tenancy\Services\CarrierDirectory;
@@ -18,6 +20,7 @@ use App\Domain\Trip\DTO\TripData;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Trip\Repositories\TripRepository;
 use App\Domain\Trip\Services\TripService;
+use App\Domain\Trucker\Models\Trucker;
 use Illuminate\Support\Collection;
 
 /**
@@ -76,6 +79,9 @@ class PortalService
         private readonly ShipperAccounts $accounts,
         private readonly CarrierDirectory $directory,
         private readonly Tenant $tenant,
+        // Telling a partner a customer has asked for them by name. Unused for
+        // every request that does not pick one, which is most of them.
+        private readonly NotificationService $notifications,
     ) {}
 
     /**
@@ -209,7 +215,7 @@ class PortalService
      * too — read afterwards they would resolve under the caller's own company
      * and come back empty.
      */
-    public function submit(Customer $account, TripData $data): Trip
+    public function submit(Customer $account, TripData $data, ?string $truckerId = null): Trip
     {
         abort_unless(
             $data->customer_id === $account->id,
@@ -217,17 +223,73 @@ class PortalService
             'A delivery request can only be filed against your own account.',
         );
 
-        return $this->tenant->use($account->company_id, function () use ($data): Trip {
+        return $this->tenant->use($account->company_id, function () use ($data, $truckerId): Trip {
             $trip = $this->trips->request($data);
 
-            return $trip->load([
+            if ($truckerId !== null) {
+                $this->offerTo($trip, $truckerId);
+            }
+
+            return $trip->refresh()->load([
                 'company:id,name',
                 'customer:id,name',
                 'driver:id,name',
-                'helper:id,name',
+                'helpers',
                 'vehicle:id,plate',
+                'trucker:id,name,phone',
             ]);
         });
+    }
+
+    /**
+     * Hold a request for the partner the customer picked.
+     *
+     * An **offer**, not an assignment, and the difference is who gets to
+     * decide. The desk assigning a run is the fleet committing a contractor it
+     * has a standing arrangement with; a customer picking somebody off a list
+     * is a stranger asking. So the trip stays `pending` with the partner's name
+     * on it: it appears on their board alone, marked as theirs to take, and it
+     * is not work until they accept it.
+     *
+     * Which is also why nothing here sets `booking_source`. Accepting does
+     * that, and accepting an unclaimed-but-named run marks it `direct` — the
+     * customer found the trucker, so the money is between the two of them and
+     * the fleet takes its cut of a run it never touched.
+     *
+     * A partner who has gone offline, been suspended, or has no truck free is
+     * refused with a sentence rather than silently left for the desk to place. A
+     * customer who picked a name and got somebody else would have been better
+     * off not being offered the choice.
+     */
+    private function offerTo(Trip $trip, string $truckerId): void
+    {
+        $trucker = Trucker::query()->with('vehicles')->find($truckerId);
+
+        abort_if($trucker === null, 404, 'That trucker could not be found.');
+
+        abort_unless(
+            $trucker->canTakeWork(),
+            422,
+            "{$trucker->name} is not available at the moment. Pick somebody else, or leave it to the fleet.",
+        );
+
+        $unit = $trucker->activeVehicle();
+
+        abort_unless(
+            $unit !== null && $unit->canCarry($trip->weight_kg, $trip->truck_category_id),
+            422,
+            "{$trucker->name}'s truck cannot carry that load.",
+        );
+
+        $trip->update(['trucker_id' => $trucker->getKey()]);
+
+        $this->notifications->push(
+            icon: 'shipments',
+            title: 'A customer asked for you',
+            detail: "{$trip->reference} · {$trip->origin} → {$trip->destination}",
+            tone: Tone::Warning,
+            userId: $trucker->user_id,
+        );
     }
 
     /**

@@ -17,6 +17,7 @@ use App\Domain\Dispatch\Controllers\DispatchController;
 use App\Domain\Driver\Controllers\DriverController;
 use App\Domain\Finance\Controllers\ExpenseController;
 use App\Domain\Finance\Controllers\FinanceController;
+use App\Domain\Finance\Controllers\PayablesController;
 use App\Domain\Fuel\Controllers\FuelController;
 use App\Domain\Gps\Controllers\GpsController;
 use App\Domain\Hr\Controllers\ApplicantController;
@@ -38,11 +39,16 @@ use App\Domain\Payroll\Controllers\PayrollController;
 use App\Domain\Payroll\Controllers\PayrollCutoffRequestController;
 use App\Domain\Payroll\Controllers\StoreCreditController;
 use App\Domain\Pricing\Controllers\PricingController;
+use App\Domain\Supplier\Controllers\SupplierController;
 use App\Domain\Tenancy\Controllers\CarrierController;
 use App\Domain\Tenancy\Controllers\CompanyController;
 use App\Domain\Tenancy\Controllers\RegistrationController;
 use App\Domain\Trip\Controllers\DriverTripController;
 use App\Domain\Trip\Controllers\TripController;
+use App\Domain\Trucker\Controllers\PartnerController;
+use App\Domain\Trucker\Controllers\TruckerController;
+use App\Domain\Trucker\Controllers\TruckerRegistrationController;
+use App\Domain\Vehicle\Controllers\MaintenanceController;
 use App\Domain\Vehicle\Controllers\VehicleController;
 use Illuminate\Support\Facades\Route;
 
@@ -90,6 +96,29 @@ Route::prefix('v1')->group(function (): void {
      * unauthenticated call, so the successes are worth metering too.
      */
     Route::post('register/customer', ShipperRegistrationController::class)
+        ->middleware('throttle:register');
+
+    /**
+     * An owner-operator signing themselves up.
+     *
+     * The third public write, and the one that asks for the most: a name, a
+     * number, a login, a licence, a truck — and the fleet they want to haul
+     * for. The last is the difference from the shipper's form above, and it is
+     * not an inconsistency. A shipper picks a carrier per load because that is
+     * a choice made weekly with the load in front of them; a partner's
+     * relationship is a standing one with a rate, a vetting and a running
+     * balance, and none of those can exist with nobody. See
+     * `TruckerRegistrationService`.
+     *
+     * What it does not do is let them start working. The account lands
+     * `pending` and the job board stays empty until somebody at that fleet has
+     * read the licence and said yes.
+     *
+     * Same limiter as the other two registrations: it writes a login on an
+     * unauthenticated call, so the successes are metered as well as the
+     * failures.
+     */
+    Route::post('register/trucker', TruckerRegistrationController::class)
         ->middleware('throttle:register');
 
     /**
@@ -237,7 +266,22 @@ Route::prefix('v1')->group(function (): void {
 
         /* ---------------------------------------------------------- Assets */
 
-        Route::middleware('permission:vehicles.view')->group(function (): void {
+        /**
+         * Reading the fleet is wider than managing it, for the same reason
+         * reading the supplier list is.
+         *
+         * Truck Maintenance asks which truck a garage's bill was for, and the
+         * person answering is whoever files the fleet's spend — an accountant,
+         * who holds `expenses.manage` and no fleet permission at all. Gated on
+         * `vehicles.view` alone, that screen's first field is an empty picker
+         * and the bill cannot be filed by the only person holding it.
+         *
+         * `finance.view` for the same reason on the reporting side: Payables
+         * and Profitability both name units.
+         *
+         * Writing a unit stays where it was — that is the yard's record.
+         */
+        Route::middleware('permission:vehicles.view,expenses.view,finance.view')->group(function (): void {
             Route::get('vehicles', [VehicleController::class, 'index']);
             Route::get('vehicles/{vehicle}', [VehicleController::class, 'show']);
             Route::get('vehicles/{vehicle}/maintenance', [VehicleController::class, 'maintenance']);
@@ -248,6 +292,75 @@ Route::prefix('v1')->group(function (): void {
             Route::match(['put', 'patch'], 'vehicles/{vehicle}', [VehicleController::class, 'update']);
             Route::delete('vehicles/{vehicle}', [VehicleController::class, 'destroy']);
             Route::post('vehicles/{vehicle}/status', [VehicleController::class, 'status']);
+
+            /**
+             * Servicing, and what it came to.
+             *
+             * Under `vehicles.manage` rather than `expenses.manage`, although
+             * a costed job moves money: this is the yard's record of what was
+             * done to a unit, and whoever keeps that is who knows the figure
+             * the garage handed back. The alternative was making somebody hold
+             * the expenses permission to write down an oil change.
+             *
+             * Nested under the unit so a job id from another vehicle cannot be
+             * edited through it — the controller resolves it off the relation.
+             */
+            Route::post('vehicles/{vehicle}/maintenance', [VehicleController::class, 'storeMaintenance']);
+            Route::match(['put', 'patch'], 'vehicles/{vehicle}/maintenance/{jobId}', [VehicleController::class, 'updateMaintenance']);
+            Route::delete('vehicles/{vehicle}/maintenance/{jobId}', [VehicleController::class, 'destroyMaintenance']);
+        });
+
+        /**
+         * Truck Maintenance — the same servicing, across the whole fleet.
+         *
+         * The nested routes above are the yard's view of one unit. These are
+         * the office's view of all of them: what servicing has cost, on which
+         * trucks, from which garages. One set of rows, two screens, and the
+         * money still posts through `MaintenanceService` either way.
+         *
+         * ## Two permissions on the write, and that is deliberate
+         *
+         * `vehicles.manage` because it is the yard's record of what was done to
+         * a unit, and `expenses.manage` because this screen sits in Sales &
+         * Billing beside Other Expenses and the person filing a garage's
+         * receipt is whoever files the fleet's spend. An accountant holds the
+         * second and not the first, and making them ask a dispatcher to key an
+         * invoice they are holding would be the sort of rule that ends with the
+         * figure never being keyed at all.
+         *
+         * Reading is wider still: the fleet screen, the spend screen and a
+         * supplier's history all show these rows.
+         */
+        Route::middleware('permission:vehicles.view,expenses.view,finance.view')->group(function (): void {
+            Route::get('maintenance', [MaintenanceController::class, 'index']);
+            Route::get('maintenance/{job}', [MaintenanceController::class, 'show']);
+        });
+
+        Route::middleware('permission:vehicles.manage,expenses.manage')->group(function (): void {
+            Route::post('maintenance', [MaintenanceController::class, 'store']);
+            Route::match(['put', 'patch'], 'maintenance/{job}', [MaintenanceController::class, 'update']);
+            Route::delete('maintenance/{job}', [MaintenanceController::class, 'destroy']);
+        });
+
+        /**
+         * Suppliers — who the fleet buys from.
+         *
+         * Read is wider than write on purpose. An expense form, a maintenance
+         * job and a payable bill all pick from this list, and the three are
+         * held by three different people; making every one of them hold
+         * `suppliers.manage` to *choose* a garage would be handing out the
+         * right to rename one.
+         */
+        Route::middleware('permission:suppliers.view,expenses.view,billing.view,vehicles.view')->group(function (): void {
+            Route::get('suppliers', [SupplierController::class, 'index']);
+            Route::get('suppliers/{supplier}', [SupplierController::class, 'show']);
+            Route::get('suppliers/{supplier}/history', [SupplierController::class, 'history']);
+        });
+
+        Route::middleware('permission:suppliers.manage')->group(function (): void {
+            Route::post('suppliers', [SupplierController::class, 'store']);
+            Route::match(['put', 'patch'], 'suppliers/{supplier}', [SupplierController::class, 'update']);
+            Route::delete('suppliers/{supplier}', [SupplierController::class, 'destroy']);
         });
 
         /**
@@ -277,6 +390,132 @@ Route::prefix('v1')->group(function (): void {
             Route::post('drivers/{driver}/availability', [DriverController::class, 'availability']);
         });
 
+        /* ------------------------------------------- Partner truckers */
+
+        /**
+         * The partner's own screens — the third tab set in `cargoApp`.
+         *
+         * Declared before the office's `truckers/*` routes and under a prefix
+         * of their own, because they are a different product rather than a
+         * filtered view of the same one. Nothing under `partner` takes an id
+         * that identifies the caller: every path resolves to the `truckers` row
+         * behind the account and to nothing else, exactly as the driver's
+         * `trips/*` resolve to a `drivers` row and the customer's `portal/*` to
+         * a `customers` row.
+         *
+         * Gated on `partner.view`, which only the trucker role holds. Not on
+         * `trips.view` — that is the whole board, and the whole point of these
+         * endpoints is that a partner never sees it.
+         */
+        Route::prefix('partner')->middleware('permission:partner.view')->group(function (): void {
+            Route::get('me', [PartnerController::class, 'profile']);
+
+            // The switch and the pin. Under `partner.view` rather than
+            // `partner.jobs`: a partner may always go offline, including one
+            // the office has just stood down, and needing the job permission to
+            // stop working would be exactly backwards.
+            Route::post('availability', [PartnerController::class, 'availability']);
+            Route::post('position', [PartnerController::class, 'position']);
+
+            // Their money. Read-only from the handset — a partner watches the
+            // balance and the office moves it.
+            Route::get('wallet', [PartnerController::class, 'wallet']);
+
+            // Their trucks. `vehicles` before `vehicles/{id}` for the usual
+            // reason, and both theirs by construction.
+            Route::get('vehicles', [PartnerController::class, 'vehicles']);
+            Route::post('vehicles', [PartnerController::class, 'saveVehicle']);
+            Route::match(['put', 'patch'], 'vehicles/{vehicleId}', [PartnerController::class, 'saveVehicle']);
+
+            /**
+             * The work itself, behind `partner.jobs`.
+             *
+             * Its own permission so a fleet can keep a partner on the roster
+             * and off the board without suspending them — the standing on the
+             * record is the loud version of that, and this is the quiet one.
+             *
+             * `current` and `history` are declared before `trips/{tripId}`
+             * would be, and there is deliberately no such route: a partner
+             * reads their own queue as a list, and a run they were never given
+             * is not theirs to fetch by id.
+             */
+            Route::middleware('permission:partner.jobs')->group(function (): void {
+                Route::get('jobs', [PartnerController::class, 'jobs']);
+                Route::post('jobs/{tripId}/accept', [PartnerController::class, 'accept']);
+
+                Route::get('trips/current', [PartnerController::class, 'current']);
+                Route::get('trips/history', [PartnerController::class, 'history']);
+                Route::get('trips', [PartnerController::class, 'trips']);
+
+                Route::post('trips/{tripId}/start', [PartnerController::class, 'start']);
+                // The hand-off, on the same permission a driver needs for it:
+                // whoever is at the door signs the run off.
+                Route::post('trips/{tripId}/deliver', [PartnerController::class, 'deliver'])
+                    ->middleware('permission:delivery.write');
+                // And the photograph that could not go up at the gate.
+                Route::post('trips/{tripId}/proof', [PartnerController::class, 'proof'])
+                    ->middleware('permission:delivery.write');
+            });
+        });
+
+        /**
+         * The office's roster of partners — CargoUI's Truckers module.
+         *
+         * `available` before `truckers/{trucker}`, so it is never read as an
+         * id. The wallet is under `truckers.view` with the rest of the reading:
+         * what a partner is owed is part of knowing who hauls for you, and an
+         * office that could see the roster but not the balance would have to
+         * ask the accountant what it already knows.
+         */
+        Route::middleware('permission:truckers.view')->group(function (): void {
+            Route::get('truckers/available', [TruckerController::class, 'available']);
+            Route::get('truckers', [TruckerController::class, 'index']);
+            Route::get('truckers/{trucker}', [TruckerController::class, 'show']);
+            Route::get('truckers/{trucker}/wallet', [TruckerController::class, 'wallet']);
+            Route::get('truckers/{trucker}/vehicles', [TruckerController::class, 'vehicles']);
+        });
+
+        /**
+         * Vetting, rates and money.
+         *
+         * All three under one permission, and all three consequential in
+         * different ways: approving hands a stranger a customer's cargo,
+         * a rate decides what every future run of theirs splits at, and a
+         * payout moves money. None of them belongs to whoever merely answers
+         * the phone.
+         */
+        Route::middleware('permission:truckers.manage')->group(function (): void {
+            Route::post('truckers/{trucker}/approve', [TruckerController::class, 'approve']);
+            Route::post('truckers/{trucker}/suspend', [TruckerController::class, 'suspend']);
+            Route::post('truckers/{trucker}/wallet', [TruckerController::class, 'settle']);
+
+            /**
+             * Confirming a payment has landed.
+             *
+             * The second half of paying somebody, on `truckers.manage` like
+             * the first. Deliberately **not** something the partner can do
+             * from the handset: confirming that your own payment arrived is
+             * not a thing the person being paid should be able to assert, and
+             * the balance turns on it.
+             */
+            Route::post('truckers/{trucker}/wallet/{entryId}/confirm', [TruckerController::class, 'confirmPayment']);
+
+            Route::post('truckers/{trucker}/vehicles', [TruckerController::class, 'saveVehicle']);
+            Route::match(['put', 'patch'], 'truckers/{trucker}/vehicles/{vehicleId}', [TruckerController::class, 'saveVehicle']);
+
+            /**
+             * Handing a run to a partner, and taking it back.
+             *
+             * Under the trucker permission rather than `trips.manage`, and the
+             * distinction is real: this is not booking work, it is deciding who
+             * outside the company gets paid to haul it. A dispatcher who can
+             * assign the fleet's own drivers is not thereby somebody who can
+             * put a contractor on a customer's load.
+             */
+            Route::post('trips/{trip}/assign-trucker', [TruckerController::class, 'assign']);
+            Route::delete('trips/{trip}/assign-trucker', [TruckerController::class, 'release']);
+        });
+
         Route::get('fuel/budget', [FuelController::class, 'budget'])->middleware('permission:fuel.view');
         Route::get('fuel', [FuelController::class, 'index'])->middleware('permission:fuel.view');
         Route::get('fuel/{fuel}', [FuelController::class, 'show'])->middleware('permission:fuel.view');
@@ -295,6 +534,21 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('routes', [FinanceController::class, 'routes']);
                 Route::get('profitability', [FinanceController::class, 'profitability']);
                 Route::get('summary', [FinanceController::class, 'summary']);
+                // What a period's Total expenses is made of, row by row.
+                Route::get('expense-lines', [FinanceController::class, 'expenseLines']);
+                // And what customers still owed at a date, invoice by invoice.
+                Route::get('receivable-lines', [FinanceController::class, 'receivableLines']);
+
+                /**
+                 * Everything the fleet owes, across four modules.
+                 *
+                 * `finance.view` because it is a money overview, and
+                 * read-only because it is a roll-up: each line names the
+                 * screen that settles it, and settling still needs that
+                 * module's own permission. Somebody can be trusted to see
+                 * what the week costs without being able to pay any of it.
+                 */
+                Route::get('payables', PayablesController::class);
             });
 
             Route::middleware('permission:finance.manage')->group(function (): void {
@@ -638,6 +892,19 @@ Route::prefix('v1')->group(function (): void {
              * id.
              */
             Route::get('carriers', [PortalController::class, 'carriers']);
+
+            /**
+             * Who could carry this load, inside one haulier.
+             *
+             * The fleet, and the vetted truckers near the pickup. Distinct from
+             * `carriers` above, which lists companies across the platform: this
+             * is how a customer chooses between "send it with Cargo Rush" and
+             * "send it with that man whose truck is twenty minutes away".
+             *
+             * Before `requests/{tripId}`, so "haulers" is never read as a trip
+             * id.
+             */
+            Route::get('haulers', [PortalController::class, 'haulers']);
 
             Route::get('requests', [PortalController::class, 'index']);
             /**

@@ -20,6 +20,7 @@ use App\Domain\Shared\Enums\Tone;
 use App\Domain\Trip\DTO\TripData;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Trip\Repositories\TripRepository;
+use App\Domain\Trucker\Services\WalletService;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -63,6 +64,11 @@ class TripService
         // here, so the rule about what counts as a passing check lives in one
         // place — see `mustBeCleared()`.
         private readonly InspectionService $inspections,
+        // A partner's share of what the run billed. Does nothing at all for a
+        // run the haulier's own crew hauled, which is most of them.
+        private readonly WalletService $wallet,
+        // How far the truck actually drives, which is what picks the zone.
+        private readonly RoadDistance $roads,
     ) {}
 
     /**
@@ -87,7 +93,8 @@ class TripService
     {
         return DB::transaction(function () use ($data): Trip {
             $trip = $this->trips->create($data);
-            $this->fillDistance($trip);
+            $this->fillHelpers($trip, $data);
+            $this->fillDistance($trip, $data);
             $this->fillPrice($trip, $data);
 
             DeliveryLog::create([
@@ -101,11 +108,14 @@ class TripService
 
     public function update(Trip $trip, TripData $data): Trip
     {
-        $updated = $this->trips->update($trip, $data);
-        $this->fillDistance($updated);
-        $this->fillPrice($updated, $data);
+        return DB::transaction(function () use ($trip, $data): Trip {
+            $updated = $this->trips->update($trip, $data);
+            $this->fillHelpers($updated, $data);
+            $this->fillDistance($updated, $data);
+            $this->fillPrice($updated, $data);
 
-        return $updated->refresh();
+            return $updated->refresh();
+        });
     }
 
     /**
@@ -167,7 +177,8 @@ class TripService
 
         $confirmed = DB::transaction(function () use ($trip, $data): Trip {
             $updated = $this->trips->update($trip, $data);
-            $this->fillDistance($updated);
+            $this->fillHelpers($updated, $data);
+            $this->fillDistance($updated, $data);
             // The weight or the route may have been corrected on the way
             // through, so the quote is taken again here — and not once the
             // trip has been billed, which `shouldQuote` is the judge of.
@@ -193,24 +204,64 @@ class TripService
     }
 
     /**
-     * Set the trip distance from its two points, when it has them and nobody
-     * has given one.
+     * Name the run's helpers, when the caller named them.
      *
-     * Only when it is still zero: a dispatcher who knows the road distance has
-     * entered something better than a straight line, and this must not
-     * overwrite it every time the trip is saved.
+     * Only when `helper_ids` was sent: leaving it out of a PATCH leaves the
+     * crew alone, and sending an empty list clears it.
      */
-    private function fillDistance(Trip $trip): void
+    private function fillHelpers(Trip $trip, TripData $data): void
     {
-        if ($trip->distance_total_m > 0) {
+        if ($data->wasGiven('helper_ids')) {
+            $trip->setHelpers($data->helper_ids ?? []);
+        }
+    }
+
+    /**
+     * Measure the run on the road, which is what picks its zone.
+     *
+     * Three cases, in order:
+     *
+     *   The desk typed a distance on this save. They know the route; it is
+     *   kept exactly and marked `manual`.
+     *
+     *   The pins are new or moved on this save — a booking, a customer's
+     *   request, a dispatcher correcting the destination. The run is measured
+     *   again, even over a figure somebody typed before: that figure was for
+     *   the old route. This used to fill a distance only while it was zero, so
+     *   moving a pin kept the old kilometres and the old zone for good.
+     *
+     *   Nothing about the route changed. The distance is left alone, so a save
+     *   that corrects the cargo does not spend a routing call or move a price.
+     *
+     * An unpinned trip is not measured: there is nothing to measure between,
+     * and it is quoted in the lowest band until somebody pins it.
+     */
+    private function fillDistance(Trip $trip, TripData $data): void
+    {
+        if ($data->wasGiven('distance_total_m') && (int) $data->distance_total_m > 0) {
+            $trip->forceFill(['distance_source' => 'manual'])->save();
+
             return;
         }
 
-        $distance = $trip->straightLineDistanceM();
+        $pinsMoved = $trip->wasRecentlyCreated
+            || $trip->wasChanged(['origin_lat', 'origin_lng', 'destination_lat', 'destination_lng']);
 
-        if ($distance !== null) {
-            $trip->forceFill(['distance_total_m' => $distance])->save();
+        if (! $trip->isMapped() || ($trip->distance_total_m > 0 && ! $pinsMoved)) {
+            return;
         }
+
+        $measured = $this->roads->between(
+            (float) $trip->origin_lat,
+            (float) $trip->origin_lng,
+            (float) $trip->destination_lat,
+            (float) $trip->destination_lng,
+        );
+
+        $trip->forceFill([
+            'distance_total_m' => $measured['metres'],
+            'distance_source' => $measured['source'],
+        ])->save();
     }
 
     /**
@@ -347,12 +398,56 @@ class TripService
      * picked — and a trip with no customer raises no invoice. Neither stops
      * the delivery, and neither stops `billed_at` being stamped: the billing
      * step ran, and its answer for this trip was "nothing to do".
+     *
+     * ## A partner's run takes a different path through all three
+     *
+     * **No ledger row.** The daily sheet is one company truck's costs and
+     * income — diesel, the crew, the maintenance — and a partner's truck has
+     * none of those in this system. `vehicle_id` is null on such a run, so the
+     * existing guard already does the right thing, and that is not luck: the
+     * sheet has always been per unit, and there is no unit.
+     *
+     * **An invoice only when the haulier is collecting.** A run the desk
+     * brokered is billed exactly as it always was. A run a customer gave
+     * straight to a partner is not billed at all, because the partner has
+     * already billed them — raising a receivable for it would charge the
+     * customer twice and put money in the aging report that nobody is owed.
+     *
+     * **The wallet either way.** One row, credited or charged depending on
+     * which of those two it was. See `WalletService::settleTrip`.
      */
     private function putOnTheBooks(Trip $trip, CarbonInterface $at): ?Invoice
     {
         if ($trip->isBilled()) {
             return $trip->invoice;
         }
+
+        /**
+         * Who, if anyone, is owed a share of this run — and **exactly one of
+         * them**.
+         *
+         * Two parties can be owed for a haul and they are mutually exclusive
+         * by construction: either a partner carried it in their own truck, or
+         * the fleet's crew carried it in a truck the fleet hired on a share.
+         * A run cannot be both, because a partner's truck is a
+         * `trucker_vehicle` and never sits in `vehicles`.
+         *
+         * It is written as an explicit either/or all the same, because "cannot
+         * happen" was not true: a trip row carrying a `trucker_id` *and* a
+         * revenue-share `vehicle_id` made both paths fire, the second insert
+         * hit the unique index on (`trip_id`, `kind`), and the whole delivery
+         * rolled back with a 500 — so the driver could not close the run at
+         * all. The index was right to refuse it; the mistake was asking twice.
+         *
+         * The partner wins, because they are the one who demonstrably hauled
+         * it. The vehicle is the fleet's record of a truck, and a run with
+         * somebody else's name on it was not on that truck.
+         */
+        $partnerShare = $this->wallet->settleTrip($trip, $at);
+
+        $ownerShare = $partnerShare === null
+            ? $this->wallet->settleOwnerShare($trip, $at)
+            : null;
 
         if ($trip->vehicle_id !== null) {
             $this->finance->creditTripIncome(
@@ -368,11 +463,33 @@ class TripService
                 // anybody paid per trip — without this the sheet says what the
                 // crew was paid and not who to.
                 driverId: $trip->driver_id,
-                helperId: $trip->helper_id,
+                helperIds: $trip->helperIds(),
+                /**
+                 * The owner's cut, as a cost of running that unit that day.
+                 *
+                 * The same figure the wallet was just credited with, not a
+                 * second calculation — so Trip Monitoring, Profitability and
+                 * the owner's own statement are three views of one number.
+                 * Without it a rented-share truck shows its full income
+                 * against almost no costs and reads as the best performer on
+                 * the fleet, when the fleet in fact keeps fifteen per cent.
+                 */
+                ownerShareCents: $ownerShare === null ? 0 : abs($ownerShare->amount_cents),
             );
         }
 
-        $invoice = $this->billing->raiseForTrip($trip);
+        /**
+         * The receivable last.
+         *
+         * Both shares above are computed from `price_cents` — the quote, which
+         * is what every side agreed to — and raising the invoice neither
+         * changes nor depends on it. Settling first means a failure to bill a
+         * customer cannot leave somebody uncredited for work they have
+         * demonstrably done.
+         */
+        $invoice = $trip->collectedByCarrier()
+            ? $this->billing->raiseForTrip($trip)
+            : null;
 
         $trip->forceFill(['billed_at' => $at])->save();
 

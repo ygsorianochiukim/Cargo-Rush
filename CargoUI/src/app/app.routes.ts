@@ -105,6 +105,24 @@ export const routes: Routes = [
         data: { title: 'Drivers Management' },
         loadComponent: () => import('./pages/drivers/drivers.page').then((m) => m.DriversPage),
       },
+      // Beside the drivers rather than under Business, because it answers the
+      // same question they do: who can move this load. What differs is that a
+      // trucker is a contractor with their own truck and their own running
+      // account, not an employee — see the page.
+      {
+        path: 'truckers',
+        title: 'Truckers · Cargo Rush',
+        data: { title: 'Truckers' },
+        loadComponent: () => import('./pages/truckers/truckers.page').then((m) => m.TruckersPage),
+      },
+      // Everything the fleet owes, across four modules. Read-only: each line
+      // links to the screen that settles it — see the page.
+      {
+        path: 'payables',
+        title: 'Payables · Cargo Rush',
+        data: { title: 'Payables' },
+        loadComponent: () => import('./pages/payables/payables.page').then((m) => m.PayablesPage),
+      },
       {
         path: 'fuel',
         title: 'Fuel Expense · Cargo Rush',
@@ -214,6 +232,36 @@ export const routes: Routes = [
         title: 'Billing & Invoice · Cargo Rush',
         data: { title: 'Billing & Invoice' },
         loadComponent: () => import('./pages/billing/billing.page').then((m) => m.BillingPage),
+      },
+      /**
+       * Suppliers — who the fleet buys from.
+       *
+       * This was missing while the sidebar row for it was not, so clicking
+       * Suppliers fell through to the `**` wildcard and landed on the
+       * dashboard. A nav row is a promise that a route exists; the two are
+       * added together or neither is.
+       */
+      {
+        path: 'suppliers',
+        title: 'Suppliers · Cargo Rush',
+        data: { title: 'Suppliers' },
+        loadComponent: () =>
+          import('./pages/suppliers/suppliers.page').then((m) => m.SuppliersPage),
+      },
+      /**
+       * Truck Maintenance — the fleet's servicing, read as spend.
+       *
+       * Beside Other Expenses because it is filed by the same person at the
+       * same desk, and separate from it because a service belongs to one truck
+       * and lands on that unit's own sheet. The yard keeps its view of a single
+       * unit's servicing on the vehicle's screen; this is every unit at once.
+       */
+      {
+        path: 'maintenance',
+        title: 'Truck Maintenance · Cargo Rush',
+        data: { title: 'Truck Maintenance' },
+        loadComponent: () =>
+          import('./pages/maintenance/maintenance.page').then((m) => m.MaintenancePage),
       },
       {
         path: 'pricing',

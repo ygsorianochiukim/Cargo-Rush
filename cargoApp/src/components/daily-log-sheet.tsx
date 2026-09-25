@@ -57,6 +57,7 @@ export function DailyLogSheet({
   vehicleId,
   plate,
   defaultRoute,
+  helperNames = [],
 }: {
   open: boolean;
   onClose: () => void;
@@ -69,6 +70,14 @@ export function DailyLogSheet({
   /** Null when no unit is assigned — the sheet says so rather than guessing. */
   plate: string | null;
   defaultRoute?: string | null;
+  /**
+   * Who rode along today, so the helper field can say whose pay it is.
+   *
+   * Named on the label rather than given a field each: the current trip
+   * carries helpers by name only, and a line per person the office cannot tell
+   * apart would be worse than one total it splits itself.
+   */
+  helperNames?: string[];
 }) {
   const [amounts, setAmounts] = useState<Amounts>(EMPTY);
   const [route, setRoute] = useState(defaultRoute ?? '');
@@ -188,6 +197,12 @@ export function DailyLogSheet({
           {EXPENSE_FIELDS.map((f) => (
             <View key={f.key} style={styles.cell}>
               <Text style={styles.cellLabel}>{f.label}</Text>
+              {f.key === 'helper_salary' && helperNames.length > 0 ? (
+                <Text style={styles.cellHint} numberOfLines={2}>
+                  {helperNames.length > 1 ? `All ${helperNames.length}: ` : ''}
+                  {helperNames.join(', ')}
+                </Text>
+              ) : null}
               <TextInput
                 value={amounts[f.key]}
                 onChangeText={(v) => set(f.key, v)}
@@ -279,6 +294,7 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.three, marginTop: 2 },
   cell: { width: '47%', flexGrow: 1, minWidth: 0 },
   cellLabel: { fontSize: 12, color: Brand.ink, marginTop: 6 },
+  cellHint: { fontSize: 11, color: Brand.inkMuted },
 
   chips: { gap: Spacing.two, paddingVertical: 6 },
   chip: {

@@ -11,7 +11,9 @@ use App\Domain\Finance\Requests\LedgerEntryRequest;
 use App\Domain\Finance\Requests\TruckRequest;
 use App\Domain\Finance\Resources\LedgerEntryResource;
 use App\Domain\Finance\Resources\TruckResource;
+use App\Domain\Finance\Services\ExpenseLinesService;
 use App\Domain\Finance\Services\FinanceService;
+use App\Domain\Finance\Services\ReceivablesService;
 use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -29,6 +31,8 @@ class FinanceController extends ApiController
     public function __construct(
         private readonly FinanceService $finance,
         private readonly LedgerRepository $ledger,
+        private readonly ExpenseLinesService $expenseLines,
+        private readonly ReceivablesService $receivables,
     ) {}
 
     /** The units the workbook keeps a sheet per, unassigned ones included. */
@@ -168,22 +172,81 @@ class FinanceController extends ApiController
     }
 
     /**
+     * The transactions behind a period's Total expenses.
+     *
+     * What the Summary tile opens. The window defaults to this quarter, the
+     * Summary's own opening view; an unreadable date falls back to that
+     * default, and ends given the wrong way round are swapped.
+     */
+    public function expenseLines(Request $request): JsonResponse
+    {
+        $from = $this->date($request, 'from') ?? now()->startOfQuarter();
+        $to = $this->date($request, 'to') ?? now()->endOfQuarter()->startOfDay();
+
+        [$from, $to] = $from->greaterThan($to) ? [$to, $from] : [$from, $to];
+
+        return $this->payload($this->expenseLines->between($from, $to));
+    }
+
+    /**
+     * What was owed to the fleet at a date, invoice by invoice.
+     *
+     * What the Summary's Receivables tile opens, asked about the close of the
+     * quarter it shows. Today when no date, or an unreadable one, is given.
+     */
+    public function receivableLines(Request $request): JsonResponse
+    {
+        $asOf = $this->date($request, 'as_of') ?? now()->startOfDay();
+        $lines = $this->receivables->linesAsOf($asOf);
+
+        return $this->payload([
+            'as_of' => $asOf->toDateString(),
+            'lines' => $lines,
+            'total_cents' => (int) array_sum(array_column($lines, 'amount_cents')),
+            'currency' => 'PHP',
+        ]);
+    }
+
+    /** A date off the query string, or null when it is missing or unreadable. */
+    private function date(Request $request, string $key): ?Carbon
+    {
+        $value = trim((string) $request->query($key, ''));
+
+        if ($value === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value)->startOfDay();
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
      * One roll-up, used by both period views so they cannot drift apart.
      *
      * @param  array<string, mixed>  $meta
      */
     private function rollup(Carbon $from, Carbon $to, array $meta = []): JsonResponse
     {
-        $rows = $this->finance->pnlByTruck($from, $to);
-        // Spend that belongs to the period but to no unit, so it reaches the
-        // totals without distorting any truck's profitability.
-        $overhead = $this->finance->overheadCents($from, $to);
+        /**
+         * One call, and the two figures that belong to no truck come with it.
+         *
+         * The overhead — office rent, an annual permit — and the supplier bills
+         * actually paid over the window. Both reach the totals without
+         * distorting any unit's profitability, and both used to be assembled
+         * here, which is how the dashboard came to report a different net
+         * income for the same days. See `FinanceService::periodRollup`.
+         */
+        $rollup = $this->finance->periodRollup($from, $to);
+        $rows = $rollup['trucks'];
 
         return $this->payload(
             [
                 'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
                 'trucks' => $rows,
-                'totals' => $this->finance->periodTotals($rows, $overhead),
+                'totals' => $rollup['totals'],
                 'average_profit_per_truck' => $this->finance->averageProfitPerTruck($rows),
                 // Null when nobody is in profit, which really does happen.
                 'best_performer' => $this->finance->bestPerformer($rows),

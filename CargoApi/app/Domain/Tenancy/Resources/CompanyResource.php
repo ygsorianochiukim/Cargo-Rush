@@ -7,6 +7,7 @@ namespace App\Domain\Tenancy\Resources;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use App\Domain\Tenancy\Models\Company;
 use App\Domain\Tenancy\Services\LogoStore;
+use App\Domain\Tenancy\Support\RateBook;
 use Illuminate\Http\Request;
 
 /**
@@ -65,7 +66,9 @@ class CompanyResource extends ApiResource
              */
             'payroll_deduct_on' => $this->payroll_deduct_on?->value,
             'payroll_deduct_on_label' => $this->payroll_deduct_on?->label(),
-            'payroll_deduct_on_detail' => $this->payroll_deduct_on?->detail(),
+            'payroll_deduct_on_detail' => $this->payroll_deduct_on?->detail(
+                $this->payrollCalendar()->runsPerMonth(),
+            ),
 
             /**
              * When this firm's pay periods close.
@@ -79,8 +82,54 @@ class CompanyResource extends ApiResource
              * the thing an office can check.
              */
             'payroll_cutoff_days' => $this->payroll_cutoff_days,
+
+            /**
+             * Days between a cutoff and the money going out.
+             *
+             * The raw column, which may be null — "the install default" — for a
+             * settings form to edit. What is actually in force rides along
+             * inside `payroll_calendar`, with the release day worked out for
+             * each of the month's periods.
+             */
+            'payroll_release_lag_days' => $this->payroll_release_lag_days,
             'payroll_calendar' => $this->payrollCalendar()->toArray(),
 
+            /**
+             * The rates this firm works to, what the install would say
+             * instead, and which of them the firm has actually chosen.
+             *
+             * Three blocks rather than one, because a settings form needs all
+             * three and can derive none of them. `rates` is what is in force
+             * and is always a complete set of concrete numbers — a screen
+             * drawing a tariff never has to decide what a null means.
+             * `rate_defaults` is the install's answer, shown beside the form so
+             * an office can see what it is departing from. `rate_overrides` is
+             * the raw columns, and it is the only way to tell "₱35/km because
+             * we chose ₱35" from "₱35/km because nobody has chosen anything" —
+             * identical in a number field, different the day the install
+             * default moves.
+             *
+             * Only on the company's own endpoints, where the caller holds
+             * `company.manage`. What a firm charges is not something every
+             * signed-in account needs, and `MeResource` does not carry it.
+             */
+            'rates' => $this->rates()->inForce(),
+            'rate_defaults' => $this->rates()->defaults(),
+            'rate_overrides' => $this->rates()->overrides(),
+
         ];
+    }
+
+    /**
+     * This company's rate book.
+     *
+     * Bound to the row being serialised rather than to the tenant in force.
+     * They are the same company on every route that reaches here — there is no
+     * id on any of them — and a resource that quietly relied on that would be
+     * wrong the first time one is rendered from a console command.
+     */
+    private function rates(): RateBook
+    {
+        return app(RateBook::class)->for($this->resource);
     }
 }

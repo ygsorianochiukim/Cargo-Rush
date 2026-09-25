@@ -9,6 +9,7 @@ use App\Domain\Billing\Models\PaymentAllocation;
 use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Repositories\Repository;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -127,6 +128,45 @@ class InvoiceRepository extends Repository
         return (int) PaymentAllocation::query()
             ->whereHas('invoice', static fn (Builder $q) => $q->where('direction', $direction->value))
             ->sum('amount_cents');
+    }
+
+    /**
+     * Money that actually moved in one direction over a window, in centavos.
+     *
+     * `collected()` for a period, and dated by **when the payment was made**
+     * rather than by when the document was raised. That is the whole point of
+     * it: a bill dated June and settled in July is July's money leaving the
+     * bank, and a quarter that claimed it in June would be describing a
+     * payment that had not happened yet.
+     *
+     * Summed from the allocations, so a part-paid document contributes only
+     * the part paid — which is the honest figure for "what did we actually
+     * hand over", and the reason this is not `where status = paid`.
+     */
+    public function settledBetween(InvoiceDirection $direction, CarbonInterface $from, CarbonInterface $to): int
+    {
+        return (int) $this->settlementsBetween($direction, $from, $to)->sum('amount_cents');
+    }
+
+    /**
+     * The same money, payment by payment, each with the day it moved.
+     *
+     * For a report that buckets by date rather than taking one total — Sales
+     * does, and a figure dropped into the wrong week there is worse than no
+     * figure at all. Built from the same query as `settledBetween()` so the
+     * total and the series cannot disagree about what counts.
+     *
+     * @return Collection<int, PaymentAllocation>
+     */
+    public function settlementsBetween(InvoiceDirection $direction, CarbonInterface $from, CarbonInterface $to): Collection
+    {
+        return PaymentAllocation::query()
+            ->with('payment:id,paid_on')
+            ->whereHas('invoice', static fn (Builder $q) => $q->where('direction', $direction->value))
+            ->whereHas('payment', static fn (Builder $q) => $q
+                ->whereDate('paid_on', '>=', $from->toDateString())
+                ->whereDate('paid_on', '<=', $to->toDateString()))
+            ->get();
     }
 
     /**

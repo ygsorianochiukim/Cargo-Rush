@@ -4,6 +4,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Company } from '../../models/identity/identity.model';
 import { CompanyService } from '../../services/identity/company.service';
 import { Card } from '../../shared/card';
+import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 
 /**
@@ -54,10 +55,16 @@ import { Icon } from '../../shared/icon';
         -->
         <ul class="mt-3 space-y-1">
           @for (period of row.payroll_calendar.example_periods; track period.start) {
-            <li class="flex items-center gap-2 text-[13px] text-cr-ink-muted">
+            <li class="flex flex-wrap items-center gap-2 text-[13px] text-cr-ink-muted">
               <app-icon name="calendar" [size]="14" />
               <span class="font-medium text-cr-ink">{{ period.label }}</span>
               <span>· {{ period.days }} days</span>
+              <!--
+                The day it is actually paid, which is the one an office plans
+                around: "the 7th, the 17th and the 27th" is what people say to
+                each other, and it is not the cutoff.
+              -->
+              <span class="cr-num text-cr-blue">· paid {{ date(period.release_on) }}</span>
             </li>
           }
         </ul>
@@ -95,8 +102,8 @@ import { Icon } from '../../shared/icon';
             once — the second cutoff is not "disabled" in the monthly case,
             it does not exist, and a greyed-out control would suggest it did.
           -->
-          <div class="mt-4 grid gap-3 sm:grid-cols-2">
-            @if (shape() === 'twice') {
+          <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            @if (shape() !== 'once') {
               <label class="block">
                 <span class="cr-meta">First cutoff</span>
                 <select
@@ -111,8 +118,23 @@ import { Icon } from '../../shared/icon';
               </label>
             }
 
+            @if (shape() === 'thrice') {
+              <label class="block">
+                <span class="cr-meta">Second cutoff</span>
+                <select
+                  class="mt-1 h-10 w-full rounded-control border border-cr-line bg-cr-surface px-3 text-[14px]"
+                  [value]="middleDay()"
+                  (change)="setMiddle($event)"
+                >
+                  @for (day of firstDayChoices; track day) {
+                    <option [value]="day">{{ dayLabel(day) }}</option>
+                  }
+                </select>
+              </label>
+            }
+
             <label class="block">
-              <span class="cr-meta">{{ shape() === 'twice' ? 'Second cutoff' : 'Cutoff' }}</span>
+              <span class="cr-meta">{{ lastCutoffLabel() }}</span>
               <select
                 class="mt-1 h-10 w-full rounded-control border border-cr-line bg-cr-surface px-3 text-[14px]"
                 [value]="lastDay()"
@@ -131,12 +153,55 @@ import { Icon } from '../../shared/icon';
             clamps to the last day of a short month, so a first cutoff any
             later would collide with the second and leave the month one period.
           -->
-          @if (shape() === 'twice') {
+          @if (shape() !== 'once') {
             <p class="cr-meta mt-2">
-              The first cutoff stops at the 27th so it still leaves a second period in February.
+              Every cutoff but the last stops at the 27th, so each still leaves a period after it in
+              February.
             </p>
           }
+
+          <!--
+            When the money actually goes out.
+
+            Beside the cutoffs rather than on a screen of its own, because they
+            are one decision: a firm closing on the 5th and paying on the 7th
+            has chosen the pair, and the two days are where the office compiles
+            the period's charges and gets the budget released.
+          -->
+          <label class="mt-4 block max-w-[260px]">
+            <span class="cr-meta">Released this many days after each cutoff</span>
+            <input
+              type="number"
+              min="0"
+              max="14"
+              class="mt-1 h-10 w-full rounded-control border border-cr-line bg-cr-surface px-3 text-[14px]"
+              [value]="lag()"
+              (change)="setLag($event)" />
+            <span class="cr-meta mt-1 block">
+              Nought pays on the cutoff itself. Calendar days, not working days.
+            </span>
+          </label>
         </fieldset>
+
+        <!--
+          The one thing three cutoffs does not fix.
+
+          The withholding brackets in the install config are the BIR's
+          semi-monthly ones — 24 periods a year. A firm on three cutoffs has 36,
+          and running that table on each of them over-states the tax on every
+          payslip. The contributions are split correctly; the tax is not, and
+          saying so here is cheaper than somebody finding out at year end.
+        -->
+        @if (row.payroll_calendar.runs_per_month > 2) {
+          <p
+            class="mt-4 rounded-control bg-cr-warning-bg px-3 py-2 text-[12px] text-cr-ink"
+            role="status">
+            <span class="font-semibold">Withholding tax is not yet right for three runs.</span>
+            SSS, PhilHealth and Pag-IBIG are split correctly across the three, but the tax table
+            here is the BIR's semi-monthly one and will over-state the tax on each payslip. Correct
+            it on the payslip until this is settled.
+          </p>
+        }
 
         @if (failure(); as message) {
           <p role="alert" class="mt-3 text-[12px] font-medium text-cr-red">{{ message }}</p>
@@ -184,13 +249,18 @@ export class PayrollCutoffCard {
   protected readonly failure = signal<string | null>(null);
 
   /** One cutoff a month or two. The days follow from the answer. */
-  protected readonly shape = signal<'once' | 'twice'>('twice');
-  protected readonly firstDay = signal(15);
+  protected readonly shape = signal<'once' | 'twice' | 'thrice'>('twice');
+  protected readonly firstDay = signal(5);
+  protected readonly middleDay = signal(15);
   protected readonly lastDay = signal(31);
 
+  /** Days between a cutoff and the release. See the note on the control. */
+  protected readonly lag = signal(2);
+
   protected readonly schedules = [
-    { key: 'twice' as const, label: 'Twice a month' },
     { key: 'once' as const, label: 'Once a month' },
+    { key: 'twice' as const, label: 'Twice a month' },
+    { key: 'thrice' as const, label: 'Three times a month' },
   ];
 
   /**
@@ -208,14 +278,36 @@ export class PayrollCutoffCard {
 
     const current = row.payroll_cutoff_days ?? row.payroll_calendar.cutoff_days;
 
-    return current.join(',') !== this.days().join(',');
+    // The release lag counts as a change too. It is the other half of the same
+    // decision — a firm closing on the 5th and paying on the 7th has chosen the
+    // pair — and leaving it out of this left the Save button dead for somebody
+    // who had only moved the pay day.
+    return (
+      current.join(',') !== this.days().join(',') ||
+      row.payroll_calendar.release_lag_days !== this.lag()
+    );
   });
+
+  /**
+   * What the final cutoff is called, which depends on how many there are.
+   *
+   * "Second cutoff" is right on a twice-monthly payroll and wrong on a thrice —
+   * where the second is the middle one and this is the third.
+   */
+  protected readonly lastCutoffLabel = computed(() => {
+    if (this.shape() === 'once') return 'Cutoff';
+
+    return this.shape() === 'twice' ? 'Second cutoff' : 'Third cutoff';
+  });
+
+  /** A date as the office reads it. */
+  protected readonly date = (value: string): string => fmt.date(value);
 
   constructor() {
     this.load();
   }
 
-  protected chooseShape(shape: 'once' | 'twice'): void {
+  protected chooseShape(shape: 'once' | 'twice' | 'thrice'): void {
     this.shape.set(shape);
   }
 
@@ -258,6 +350,7 @@ export class PayrollCutoffCard {
     this.companyApi
       .updateProfile({
         payroll_cutoff_days: this.days(),
+        payroll_release_lag_days: this.lag(),
       })
       .subscribe({
         next: (company) => {
@@ -292,7 +385,23 @@ export class PayrollCutoffCard {
   }
 
   private days(): number[] {
-    return this.shape() === 'once' ? [this.lastDay()] : [this.firstDay(), this.lastDay()];
+    if (this.shape() === 'once') return [this.lastDay()];
+    if (this.shape() === 'twice') return [this.firstDay(), this.lastDay()];
+
+    return [this.firstDay(), this.middleDay(), this.lastDay()];
+  }
+
+  protected setMiddle(event: Event): void {
+    this.middleDay.set(Number((event.target as HTMLSelectElement).value));
+  }
+
+  protected setLag(event: Event): void {
+    const days = Number((event.target as HTMLInputElement).value);
+
+    // Clamped rather than left to the API to refuse: the control has the same
+    // bounds on it, and a 422 for something a spinner produced is a poor way to
+    // find out.
+    this.lag.set(Number.isFinite(days) ? Math.min(14, Math.max(0, Math.round(days))) : 0);
   }
 
   private load(): void {
@@ -314,9 +423,19 @@ export class PayrollCutoffCard {
 
     const days = company.payroll_cutoff_days ?? company.payroll_calendar.cutoff_days;
 
-    this.shape.set(days.length === 1 ? 'once' : 'twice');
-    this.firstDay.set(days.length === 1 ? 15 : days[0]);
+    this.shape.set(days.length === 1 ? 'once' : days.length === 2 ? 'twice' : 'thrice');
+
+    // Defaults for the pickers a shorter calendar does not fill: a firm moving
+    // from twice a month to three times should find sensible days waiting
+    // rather than whatever the last render left behind.
+    this.firstDay.set(days.length === 1 ? 5 : days[0]);
+    this.middleDay.set(days.length === 3 ? days[1] : 15);
     this.lastDay.set(days[days.length - 1]);
+
+    // From the calendar rather than the column: the column is null for a firm
+    // on the install default, and the pay day it is actually running on is the
+    // thing the control should show.
+    this.lag.set(company.payroll_calendar.release_lag_days);
   }
 
   /**
