@@ -13,8 +13,9 @@ import {
 } from '../../models/identity/access.model';
 import { AccessService } from '../../services/identity/access.service';
 import { IdentityService } from '../../services/identity/identity.service';
-import { CompanyCard } from './company-card';
 import { PayrollCutoffCard } from './payroll-cutoff-card';
+import { BenefitsCard } from './benefits-card';
+import { CategoriesCard } from './categories-card';
 import { RatesCard } from './rates-card';
 import { YardCard } from './yard-card';
 import { Card } from '../../shared/card';
@@ -42,8 +43,9 @@ import { StatusPill } from '../../shared/status-pill';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     Card,
-    CompanyCard,
     PayrollCutoffCard,
+    BenefitsCard,
+    CategoriesCard,
     RatesCard,
     YardCard,
     Field,

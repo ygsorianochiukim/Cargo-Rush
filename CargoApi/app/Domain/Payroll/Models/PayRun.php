@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
 /**
  * One payroll period, and everybody paid on it.
@@ -49,7 +50,7 @@ class PayRun extends Model
     public const PAID = 'paid';
 
     protected $fillable = [
-        'reference', 'period_start', 'period_end', 'pay_date', 'status', 'notes',
+        'reference', 'period_start', 'period_end', 'pay_date', 'status', 'notes', 'links_trips',
     ];
 
     protected function casts(): array
@@ -60,6 +61,8 @@ class PayRun extends Model
             'pay_date' => 'date',
             'approved_at' => 'datetime',
             'paid_at' => 'datetime',
+            'remitted_on' => 'date',
+            'links_trips' => 'boolean',
         ];
     }
 
@@ -92,6 +95,37 @@ class PayRun extends Model
     public function isPaid(): bool
     {
         return $this->status === self::PAID;
+    }
+
+    /** Have the contributions and tax on this run been recorded as sent? */
+    public function isRemitted(): bool
+    {
+        return $this->remitted_on !== null;
+    }
+
+    /**
+     * What this run owes the agencies once it is paid: the SSS, PhilHealth,
+     * Pag-IBIG and withholding tax taken from the payslips, and the firm's own
+     * share on top — remitted on the same forms, on the same deadline.
+     */
+    public function owedToAgenciesCents(): int
+    {
+        $s = $this->statutoryCents();
+
+        return $s['sss'] + $s['philhealth'] + $s['pagibig'] + $s['withholding_tax']
+            + $this->employerContributionsCents()['total'];
+    }
+
+    /**
+     * The latest the agencies would have it: the end of the month after the
+     * period closed. Payables presumes it owed until then when nobody has
+     * recorded the remittance.
+     */
+    public function remittanceDueOn(): Carbon
+    {
+        $closed = $this->period_end ?? $this->pay_date ?? $this->paid_at ?? now();
+
+        return Carbon::parse($closed->toDateString())->addMonthNoOverflow()->endOfMonth();
     }
 
     /** Past changing: approved or paid. */
@@ -153,6 +187,33 @@ class PayRun extends Model
             'other' => (int) $this->lines->sum('other_deductions_cents')
                 + (int) $this->lines->sum('component_deductions_cents')
                 + (int) $this->lines->sum('store_deduction_cents'),
+        ];
+    }
+
+    /**
+     * What the firm owes the agencies on top of this run, per agency.
+     *
+     * Apart from `statutoryCents()` because that is what was **withheld** —
+     * inside the gross, and what the journal's wage debit already covers —
+     * while this is an extra cost with a debit of its own. Summed into one
+     * figure the two would stop answering "what did the staff lose" and "what
+     * did the firm spend" separately.
+     *
+     * @return array{sss: int, ec: int, philhealth: int, pagibig: int, total: int}
+     */
+    public function employerContributionsCents(): array
+    {
+        $sss = (int) $this->lines->sum('employer_sss_cents');
+        $ec = (int) $this->lines->sum('employer_ec_cents');
+        $philhealth = (int) $this->lines->sum('employer_philhealth_cents');
+        $pagibig = (int) $this->lines->sum('employer_pagibig_cents');
+
+        return [
+            'sss' => $sss,
+            'ec' => $ec,
+            'philhealth' => $philhealth,
+            'pagibig' => $pagibig,
+            'total' => $sss + $ec + $philhealth + $pagibig,
         ];
     }
 
@@ -253,6 +314,28 @@ class PayRun extends Model
             ->where('reference', 'like', $prefix.'%')
             ->orderByDesc('reference')
             ->value('reference');
+
+        $n = $last === null ? 0 : (int) substr((string) $last, strlen($prefix));
+
+        return $prefix.str_pad((string) ($n + 1), 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * The next remittance number in the REM-YYYY-#### series.
+     *
+     * Numbered within the year the money was sent, by the same rule as a pay
+     * run's reference — and `withTrashed` for the same reason: a number quoted
+     * to an agency is never handed out twice.
+     */
+    public static function nextRemittanceNo(?int $year = null): string
+    {
+        $year ??= (int) now()->format('Y');
+        $prefix = "REM-{$year}-";
+
+        $last = static::withTrashed()
+            ->where('remittance_no', 'like', $prefix.'%')
+            ->orderByDesc('remittance_no')
+            ->value('remittance_no');
 
         $n = $last === null ? 0 : (int) substr((string) $last, strlen($prefix));
 

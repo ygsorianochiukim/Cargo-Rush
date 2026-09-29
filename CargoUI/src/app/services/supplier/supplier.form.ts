@@ -14,6 +14,14 @@ import { SupplierService } from './supplier.service';
 export function supplierSpec(): RecordSpec<Supplier> {
   const suppliers = inject(SupplierService);
 
+  // Active categories only; the list itself is kept on Access Control.
+  const categories: { value: string; label: string }[] = [];
+
+  suppliers.categories(true).subscribe((rows) => {
+    categories.length = 0;
+    categories.push(...rows.map((c) => ({ value: c.id, label: c.name })));
+  });
+
   return {
     noun: 'supplier',
     icon: 'customers',
@@ -27,6 +35,14 @@ export function supplierSpec(): RecordSpec<Supplier> {
         wide: true,
         placeholder: 'Davao Lubes & Parts',
         hint: 'One per haulier — the name is how a second record of the same shop is caught.',
+      },
+      {
+        key: 'category_id',
+        label: 'Category',
+        kind: 'select',
+        wide: true,
+        options: () => categories,
+        hint: 'Garage, mall, food… Add or rename categories on Access Control.',
       },
       {
         key: 'contact',
@@ -64,6 +80,7 @@ export function supplierSpec(): RecordSpec<Supplier> {
         key: 'status',
         label: 'Status',
         kind: 'select',
+        wide: true,
         options: statusOptions(['active', 'inactive']),
         hint: 'Inactive keeps their history and takes them out of the pickers.',
       },
@@ -73,6 +90,7 @@ export function supplierSpec(): RecordSpec<Supplier> {
 
     toForm: (supplier) => ({
       name: supplier.name,
+      category_id: supplier.category_id ?? '',
       contact: supplier.contact ?? '',
       address: supplier.address ?? '',
       supplies: supplier.supplies ?? '',
@@ -82,6 +100,7 @@ export function supplierSpec(): RecordSpec<Supplier> {
 
     toPayload: (values) => ({
       name: values['name'] as string,
+      category_id: (values['category_id'] as string) || null,
       // Empty means "not recorded", which is a null rather than an empty
       // string — the same boundary every other optional text field crosses.
       contact: (values['contact'] as string) || null,

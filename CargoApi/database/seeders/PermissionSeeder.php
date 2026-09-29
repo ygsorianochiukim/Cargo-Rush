@@ -139,6 +139,7 @@ class PermissionSeeder extends Seeder
          */
         ['partner.view', 'Trucker app', 'Portal', 'A partner reading their own profile and wallet.'],
         ['partner.jobs', 'Take jobs', 'Portal', 'A partner taking work off the board and running it.'],
+        ['crew.trips', 'Run a trucker\'s trips', 'Portal', 'A trucker\'s driver running the trips their trucker handed them.'],
     ];
 
     public function run(): void

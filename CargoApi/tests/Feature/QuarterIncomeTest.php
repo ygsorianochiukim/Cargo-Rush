@@ -319,30 +319,31 @@ describe('paying the truckers', function (): void {
         ]);
     });
 
-    it('does not let paying a partner make the quarter look better', function (): void {
+    it('treats a partner\'s share as theirs: not income, not a cost, before or after paying it', function (): void {
         ($this->owed)();
 
-        // Owed but unpaid: a claim against the quarter, not a cost of it.
+        // Owed: it shows as payable, and as held for them — so it is not
+        // taken off the fleet's income, which never included it.
         $before = ($this->quarter)();
 
         expect($before['payables_cents'])->toBe(880_000)
+            ->and($before['held_for_partners_cents'])->toBe(880_000)
             ->and($before['trucker_payouts_cents'])->toBe(0)
             ->and($before['net_income_cents'])->toBe(10_000_000)
-            ->and($before['actual_income_cents'])->toBe(9_120_000);
+            ->and($before['actual_income_cents'])->toBe(10_000_000);
 
         ($this->paid)();
 
-        // Paid: the claim is gone and the money is gone with it. This is the
-        // whole point — the figure used to spring back to ₱100,000 the moment
-        // the office settled up, and an office that paid three partners on
-        // Friday read a healthier quarter on Monday.
+        // Paid: the payout is shown, and still costs the fleet nothing — the
+        // money was the partner's. Neither figure moves.
         $after = ($this->quarter)();
 
         expect($after['payables_cents'])->toBe(0)
+            ->and($after['held_for_partners_cents'])->toBe(0)
             ->and($after['trucker_payouts_cents'])->toBe(880_000)
-            ->and($after['total_expenses_cents'])->toBe(880_000)
-            ->and($after['net_income_cents'])->toBe(9_120_000)
-            ->and($after['actual_income_cents'])->toBe(9_120_000);
+            ->and($after['total_expenses_cents'])->toBe(0)
+            ->and($after['net_income_cents'])->toBe(10_000_000)
+            ->and($after['actual_income_cents'])->toBe(10_000_000);
     });
 
     it('waits for the money to land before counting it', function (): void {
@@ -425,9 +426,9 @@ describe('paying the truckers', function (): void {
             ->assertOk()
             ->json('data');
 
-        expect(collect($body['series'])->firstWhere('key', '2026-07-20')['expenses_cents'])
-            ->toBe(880_000)
-            ->and($body['totals']['expenses_cents'])->toBe(880_000);
+        // Handing a partner their share is not a cost on Sales either.
+        expect(collect($body['series'])->firstWhere('key', '2026-07-20'))->toBeNull()
+            ->and($body['totals']['expenses_cents'])->toBe(0);
     });
 });
 

@@ -103,7 +103,9 @@
         >
           <option value="">Choose an account…</option>
           @for (customer of roster(); track customer.id) {
-            <option [value]="customer.id">{{ customer.name }}</option>
+            <option [value]="customer.id" [selected]="customer.id === customerId()">
+              {{ customer.name }}
+            </option>
           }
         </select>
       </app-field>

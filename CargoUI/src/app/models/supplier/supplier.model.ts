@@ -1,5 +1,13 @@
 import { StatusValue } from '../shared/status.model';
 
+/** What kind of place a supplier is — GARAGE, MALL, FOODS. Kept on Access Control. */
+export interface SupplierCategory {
+  id: string;
+  name: string;
+  status: StatusValue;
+  suppliers_count?: number;
+}
+
 /**
  * Somebody the fleet buys from — `GET /api/v1/suppliers`.
  *
@@ -11,6 +19,9 @@ import { StatusValue } from '../shared/status.model';
 export interface Supplier {
   id: string;
   name: string;
+  /** Null for a shop nobody has sorted yet. */
+  category_id: string | null;
+  category_name: string | null;
   contact: string | null;
   address: string | null;
   /** What they sell, in the office's own words. A sentence, not a category. */
@@ -39,6 +50,7 @@ export interface Supplier {
 
 export interface SupplierPayload {
   name: string;
+  category_id?: string | null;
   contact?: string | null;
   address?: string | null;
   supplies?: string | null;

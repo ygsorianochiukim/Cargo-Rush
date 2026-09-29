@@ -114,8 +114,14 @@ export class ExpenseLinesDialog {
       case 'expense':
         void this.router.navigate(['/expenses'], { queryParams: { settle: line.record_id } });
         break;
+      case 'fuel_log':
+        void this.router.navigate(['/fuel']);
+        break;
       case 'supplier_bill':
         void this.router.navigate(['/billing', line.record_id]);
+        break;
+      case 'payroll':
+        void this.router.navigate(['/payroll']);
         break;
       case 'trucker_payout':
         void this.router.navigate(['/truckers']);

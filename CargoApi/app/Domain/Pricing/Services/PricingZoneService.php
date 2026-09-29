@@ -140,13 +140,11 @@ class PricingZoneService extends CrudService
     }
 
     /**
-     * The firm's plain distance card — the lines that belong to no zone.
+     * The old plain distance card — the lines that belong to no zone.
      *
-     * The rate card used to be reachable only through a zone, which made the
-     * place compulsory: a haulier whose price is simply "450 km is ₱5,000" had
-     * to invent a zone per town before it could say so. These lines apply
-     * wherever nothing more specific does, and for most firms they are the
-     * whole card.
+     * These no longer price anything (pricing is zone-only), and
+     * `PricingCardRequest` refuses a line with no id, so this can edit or
+     * delete the rows an install already has but never add one.
      *
      * Reconciled by id exactly as a zone's card is, and for the same reason: a
      * bracket's id is on every trip it ever priced, so rows are matched and
@@ -332,7 +330,7 @@ class PricingZoneService extends CrudService
             // Whether the guard rail is what is holding the figure back. If it
             // is, the card needs redrawing rather than the surcharge stretching.
             'capped' => abs($adjustmentBp) >= abs((int) config('cargo.diesel.cap_bp')),
-            'currency' => (string) config('cargo.tariff.currency'),
+            'currency' => (string) config('cargo.currency', 'PHP'),
         ];
     }
 

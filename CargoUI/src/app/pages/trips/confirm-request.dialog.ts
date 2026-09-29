@@ -87,7 +87,15 @@ import { Modal } from '../../shared/modal';
           <div>
             <dt class="cr-meta">Quoted</dt>
             <dd class="cr-num text-[13px] font-semibold">
-              {{ fmt.money(request.price_cents, request.currency) }}
+              @if (request.price_cents === null) {
+                <!-- Confirming an unpriced run is refused; say why up front. -->
+                <span class="text-cr-warning">Needs a zone</span>
+                @if (request.pricing_note) {
+                  <span class="block text-[12px] font-normal text-cr-ink-muted">{{ request.pricing_note }}</span>
+                }
+              } @else {
+                {{ fmt.money(request.price_cents, request.currency) }}
+              }
             </dd>
           </div>
         </dl>

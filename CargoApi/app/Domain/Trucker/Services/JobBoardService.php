@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Domain\Trucker\Services;
 
+use App\Domain\Billing\Services\PricingService;
 use App\Domain\Delivery\DTO\ProofData;
 use App\Domain\Delivery\Services\DeliveryService;
+use App\Domain\Inspection\Services\InspectionService;
 use App\Domain\Notification\Services\NotificationService;
 use App\Domain\Shared\Enums\BookingSource;
 use App\Domain\Shared\Enums\Role;
@@ -15,6 +17,9 @@ use App\Domain\Shared\Support\Geo;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Trip\Services\TripService;
 use App\Domain\Trucker\Models\Trucker;
+use App\Domain\Trucker\Models\TruckerDriver;
+use App\Domain\Trucker\Models\TruckerVehicle;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -63,6 +68,7 @@ class JobBoardService
     public function __construct(
         private readonly TripService $trips,
         private readonly NotificationService $notifications,
+        private readonly InspectionService $inspections,
     ) {}
 
     /**
@@ -99,14 +105,14 @@ class JobBoardService
         // Not vetted, or between trucks: an empty board rather than an error.
         // The app says why — an approval they are waiting on is a state to
         // explain, not a failure to report.
-        $unit = $trucker->activeVehicle();
-
-        if (! $trucker->isVetted() || $unit === null) {
+        if (! $trucker->isVetted() || $trucker->activeVehicle() === null) {
             return new Collection;
         }
 
         $jobs = Trip::query()
-            ->with(['customer:id,name', 'truckCategory:id,name'])
+            // The tax columns too: the partner's quoted take is split on the
+            // net of VAT, and whether a price carries VAT is the customer's.
+            ->with(['customer:id,name,vat_treatment,withholds_tax,withholding_rate_bp', 'truckCategory:id,name'])
             ->where('status', StatusValue::Pending->value)
             // Never one of the fleet's own crew's.
             ->whereNull('driver_id')
@@ -119,10 +125,20 @@ class JobBoardService
              * board is what they have been offered, not a market.
              */
             ->where('trucker_id', $trucker->getKey())
+            /**
+             * Priced, or not shown.
+             *
+             * A request the zone card does not cover has no figure yet, so
+             * there is no take to quote the partner and nothing they could
+             * agree to. It reaches their board once the office adds the zone
+             * line or types a price.
+             */
+            ->whereNotNull('price_cents')
             ->orderByDesc('created_at')
             ->limit(100)
             ->get()
-            ->filter(static fn (Trip $trip): bool => $unit->canCarry($trip->weight_kg, $trip->truck_category_id));
+            // Any of their trucks will do — which one goes is theirs to pick.
+            ->filter(static fn (Trip $trip): bool => $trucker->fittingVehicle($trip->weight_kg, $trip->truck_category_id) !== null);
 
         return $this->nearestFirst($jobs, $trucker, $lat, $lng);
     }
@@ -145,16 +161,14 @@ class JobBoardService
             'Your registration is still being reviewed. You will be able to take work once it is approved.',
         );
 
-        $unit = $trucker->activeVehicle();
-
-        abort_if($unit === null, 422, 'Add a truck to your profile before taking work.');
+        abort_if($trucker->activeVehicle() === null, 422, 'Add a truck to your profile before taking work.');
         abort_unless(
             $trucker->is_online,
             422,
             'Go online before taking work.',
         );
 
-        return DB::transaction(function () use ($trucker, $tripId, $unit): Trip {
+        return DB::transaction(function () use ($trucker, $tripId): Trip {
             /**
              * Locked, then checked.
              *
@@ -193,10 +207,14 @@ class JobBoardService
             );
 
             abort_unless(
-                $unit->canCarry($trip->weight_kg, $trip->truck_category_id),
+                $trucker->fittingVehicle($trip->weight_kg, $trip->truck_category_id) !== null,
                 422,
-                'Your truck cannot carry that load.',
+                'None of your trucks can carry that load.',
             );
+
+            // Never on the board unpriced, and never accepted unpriced by a
+            // caller holding the id either.
+            PricingService::mustBePriced($trip);
 
             /**
              * Always `direct`, because everything that reaches here is a
@@ -215,7 +233,12 @@ class JobBoardService
              */
             $trip->update([
                 'trucker_id' => $trucker->getKey(),
-                'trucker_vehicle_id' => $unit->getKey(),
+                // No truck yet: the trucker picks which of theirs takes it, on
+                // My Trips, before it can start. See `mustHaveATruck()`.
+                'trucker_vehicle_id' => null,
+                // Nor one of the fleet's: a stray `vehicle_id` beside a
+                // trucker once booked the whole price as company income.
+                'vehicle_id' => null,
                 'booking_source' => BookingSource::Direct->value,
                 'status' => StatusValue::Assigned->value,
             ]);
@@ -231,11 +254,10 @@ class JobBoardService
      *
      * @return Collection<int, Trip>
      */
-    public function mine(Trucker $trucker): Collection
+    public function mine(Trucker $trucker, ?TruckerDriver $crew = null): Collection
     {
-        return Trip::query()
-            ->with(['customer:id,name', 'truckerVehicle:id,plate'])
-            ->where('trucker_id', $trucker->getKey())
+        return $this->scoped($trucker, $crew)
+            ->with(['customer:id,name', 'truckerVehicle:id,plate', 'truckerDriver:id,name'])
             ->whereIn('status', [
                 StatusValue::Assigned->value,
                 StatusValue::InTransit->value,
@@ -253,24 +275,22 @@ class JobBoardService
      * The mirror of `TripService::currentForDriver`. A partner can only be on
      * one run at a time, and the handset's home screen is built around that.
      */
-    public function current(Trucker $trucker): ?Trip
+    public function current(Trucker $trucker, ?TruckerDriver $crew = null): ?Trip
     {
-        return Trip::query()
-            ->with(['customer:id,name', 'truckerVehicle:id,plate'])
-            ->where('trucker_id', $trucker->getKey())
+        return $this->scoped($trucker, $crew)
+            ->with(['customer:id,name', 'truckerVehicle:id,plate', 'truckerDriver:id,name'])
             ->where('status', StatusValue::InTransit->value)
             ->latest('updated_at')
             ->first();
     }
 
     /** What they have already closed out, newest first. */
-    public function history(Trucker $trucker, int $limit = 50): Collection
+    public function history(Trucker $trucker, int $limit = 50, ?TruckerDriver $crew = null): Collection
     {
-        return Trip::query()
+        return $this->scoped($trucker, $crew)
             // The log too, so each finished run can say whether its photo
             // arrived — the Finished tab offers to send one when it did not.
-            ->with(['customer:id,name', 'deliveryLog'])
-            ->where('trucker_id', $trucker->getKey())
+            ->with(['customer:id,name', 'deliveryLog', 'truckerDriver:id,name'])
             ->whereIn('status', [StatusValue::Delivered->value, StatusValue::Cancelled->value])
             ->orderByDesc('updated_at')
             ->limit($limit)
@@ -291,14 +311,32 @@ class JobBoardService
      * Dispatch Monitoring screen must not show a gap for a run that plainly
      * left.
      */
-    public function start(Trucker $trucker, string $tripId, ?string $location = null): Trip
+    public function start(Trucker $trucker, string $tripId, ?string $location = null, ?TruckerDriver $crew = null): Trip
     {
-        $trip = $this->ownedBy($trucker, $tripId);
+        $trip = $this->ownedBy($trucker, $tripId, $crew);
 
         abort_unless(
             in_array($trip->status, [StatusValue::Assigned, StatusValue::Overdue], true),
             422,
             "That run cannot be started — it is {$trip->status->value}.",
+        );
+
+        $this->mustHaveATruck($trip);
+
+        // A trucker's own driver runs the pre-trip check first, exactly as a
+        // Cargo Rush driver does. The owner starting a run themselves does
+        // not — see above for why that stays their call.
+        if ($crew !== null) {
+            $this->mustBeCleared($trip, $crew);
+        }
+
+        // A run handed to one of their drivers is that driver's to start. The
+        // owner starting it too would put two people on one run and skip the
+        // driver's check; they take it back first if they mean to drive it.
+        abort_if(
+            $crew === null && $trip->trucker_driver_id !== null,
+            422,
+            'This run is handed to one of your drivers. Take it back first if you are driving it yourself.',
         );
 
         // `dispatch()` answers with the dispatch record; the run is what the
@@ -317,9 +355,9 @@ class JobBoardService
      * partner's wallet is credited by the same call, from inside the same
      * transaction — see `TripService::putOnTheBooks`.
      */
-    public function deliver(Trucker $trucker, string $tripId, ProofData $proof): Trip
+    public function deliver(Trucker $trucker, string $tripId, ProofData $proof, ?TruckerDriver $crew = null): Trip
     {
-        $trip = $this->ownedBy($trucker, $tripId);
+        $trip = $this->ownedBy($trucker, $tripId, $crew);
 
         $delivered = $this->trips->complete($trip, $proof);
 
@@ -339,9 +377,9 @@ class JobBoardService
      * Only for delivered runs. One still on the road is handed over through
      * `deliver()`, which is the call that pays the partner.
      */
-    public function attachProof(Trucker $trucker, string $tripId, ProofData $proof): Trip
+    public function attachProof(Trucker $trucker, string $tripId, ProofData $proof, ?TruckerDriver $crew = null): Trip
     {
-        $trip = $this->ownedBy($trucker, $tripId);
+        $trip = $this->ownedBy($trucker, $tripId, $crew);
 
         abort_unless(
             $trip->status === StatusValue::Delivered && $trip->deliveryLog !== null,
@@ -362,15 +400,106 @@ class JobBoardService
      * they were never given must get the same answer as one holding an id that
      * does not exist.
      */
-    private function ownedBy(Trucker $trucker, string $tripId): Trip
+    public function ownedBy(Trucker $trucker, string $tripId, ?TruckerDriver $crew = null): Trip
     {
-        $trip = Trip::query()
-            ->where('trucker_id', $trucker->getKey())
-            ->find($tripId);
+        $trip = $this->scoped($trucker, $crew)->find($tripId);
 
         abort_if($trip === null, 404, 'That run is not yours.');
 
         return $trip;
+    }
+
+    /**
+     * Which of the trucker's trucks takes the run is theirs to pick, and it has
+     * to be picked before it leaves — the check, the map and the hand-off all
+     * belong to a truck.
+     */
+    private function mustHaveATruck(Trip $trip): void
+    {
+        if ($trip->trucker_vehicle_id !== null) {
+            return;
+        }
+
+        $only = $this->onlyFittingTruck($trip);
+
+        abort_if(
+            $only === null,
+            422,
+            'Choose which truck takes this run first — tap Change on My Trips.',
+        );
+
+        $trip->update(['trucker_vehicle_id' => $only->getKey()]);
+    }
+
+    /**
+     * The trucker's one truck that can take this run, when there is exactly one.
+     *
+     * With a single fitting truck there is nothing to choose, and asking would
+     * be a tap for nothing. With two or more it is the trucker's call, and this
+     * answers null so they are asked.
+     */
+    public function onlyFittingTruck(Trip $trip): ?TruckerVehicle
+    {
+        $fitting = $trip->trucker?->vehicles()->get()
+            ->filter(static fn (TruckerVehicle $v): bool => $v->canCarry($trip->weight_kg, $trip->truck_category_id))
+            ?? collect();
+
+        return $fitting->count() === 1 ? $fitting->first() : null;
+    }
+
+    /**
+     * A passed pre-trip check for this run, or a 422 that says what to do.
+     *
+     * The same switch the Cargo Rush driver's gate reads
+     * (`cargo.inspection.required_before_start`), so an install that turns
+     * the gate off turns it off for everybody.
+     */
+    private function mustBeCleared(Trip $trip, TruckerDriver $crew): void
+    {
+        if (! config('cargo.inspection.required_before_start', true)) {
+            return;
+        }
+
+        $clearance = $this->inspections->clearanceFor($trip);
+
+        // It has to be this driver's look at this truck. A pass from before
+        // the owner swapped the truck, or by the driver it was handed to
+        // before, cleared a different departure.
+        if (
+            $clearance !== null
+            && $clearance->trucker_vehicle_id === $trip->trucker_vehicle_id
+            && $clearance->trucker_driver_id === $crew->getKey()
+        ) {
+            return;
+        }
+
+        abort_if(
+            $clearance !== null,
+            422,
+            'The truck or the driver on this run changed since it was checked. Run the pre-trip check again on Inspect.',
+        );
+
+        $attempt = $trip->latestInspection;
+
+        abort(422, $attempt === null
+            ? 'Run the pre-trip check on Inspect before you leave — the truck has not been checked for this run.'
+            : sprintf(
+                'This truck is held on its pre-trip check: %s. Get it seen to, then check it again.',
+                implode(', ', $attempt->failures()) ?: 'the checklist was not finished',
+            ));
+    }
+
+    /**
+     * The trucker's runs — or, for one of their drivers, only the runs the
+     * trucker handed that driver. Never another trucker's, never Cargo Rush's.
+     *
+     * @return Builder<Trip>
+     */
+    private function scoped(Trucker $trucker, ?TruckerDriver $crew): Builder
+    {
+        return Trip::query()
+            ->where('trucker_id', $trucker->getKey())
+            ->when($crew !== null, static fn (Builder $query) => $query->where('trucker_driver_id', $crew->getKey()));
     }
 
     /**

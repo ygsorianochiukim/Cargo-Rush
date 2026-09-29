@@ -53,15 +53,20 @@ class ZoneResolver
      * The zone that prices a run: the one the desk chose, or the band's
      * default.
      *
-     * A chosen zone is honoured whatever the distance says, and deliberately.
-     * The desk overriding the band is the mechanism by which a run gets priced
-     * as A2 rather than A1, and a resolver that second-guessed it — refusing a
-     * zone whose band does not hold the distance — would make the override
-     * work for one half of the table's ambiguities and not the other.
+     * A chosen zone is honoured only while its band still covers the run. The
+     * pick exists to settle A1 against A2 over the same kilometres; it is not
+     * a way to price a 700 km run off a 1–40 km line. And `trips.pricing_zone_id`
+     * is also where the trace is written, so a trip booked with no distance
+     * carries A1 — honouring that after a dispatcher pins the route at 200 km
+     * would quote a 200 km haul at the 1–40 km rate for ever. A run that has
+     * moved out of its band is re-banded from the distance, and a desk that
+     * meant A2 and then corrected the distance out of A2's range picks again.
      */
     public function resolve(?string $zoneId, int $km): ?PricingZone
     {
-        return $this->byId($zoneId) ?? $this->default($km);
+        $chosen = $this->byId($zoneId);
+
+        return $chosen !== null && $chosen->covers($km) ? $chosen : $this->default($km);
     }
 
     /** A zone by id, if it is one this company can still quote from. */

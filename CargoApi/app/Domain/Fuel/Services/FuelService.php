@@ -14,7 +14,10 @@ use Illuminate\Support\Facades\DB;
 
 class FuelService
 {
-    public function __construct(private readonly FuelRepository $fuel) {}
+    public function __construct(
+        private readonly FuelRepository $fuel,
+        private readonly FuelPostingService $posting,
+    ) {}
 
     /**
      * @param  array<string, mixed>  $filters
@@ -41,18 +44,30 @@ class FuelService
                     ->update(['odometer_km' => $data->odometer_km]);
             }
 
-            return $record;
+            // An active fill is on its truck's sheet from the moment it exists
+            // — see `FuelPostingService`.
+            return $this->posting->sync($record)->refresh();
         });
     }
 
+    /**
+     * A corrected amount, day, vehicle or status moves the sheet with it: the
+     * old posting comes off in full and the fill posts again as it now stands.
+     */
     public function update(FuelRecord $record, FuelRecordData $data): FuelRecord
     {
-        return $this->fuel->update($record, $data);
+        return DB::transaction(fn (): FuelRecord => $this->posting
+            ->sync($this->fuel->update($record, $data))
+            ->refresh());
     }
 
+    /** Off the sheet first, so a deleted fill leaves nothing behind. */
     public function delete(FuelRecord $record): void
     {
-        $this->fuel->delete($record);
+        DB::transaction(function () use ($record): void {
+            $this->posting->takeOff($record);
+            $this->fuel->delete($record);
+        });
     }
 
     /**
@@ -74,7 +89,10 @@ class FuelService
         return [
             'date' => $day->toDateString(),
             'daily_budget_cents' => $budget?->daily_budget_cents ?? 0,
+            // Active fills only, as Finance counts them.
             'spent_today_cents' => $spentToday,
+            // Requests waiting on approval — beside the spend, not in it.
+            'pending_today_cents' => $this->fuel->pendingBetween($day->copy()->startOfDay(), $day->copy()->endOfDay()),
             'currency' => $budget?->currency ?? 'PHP',
             'projection_cents' => $this->monthProjection($day),
             'open_requests' => $this->fuel->openRequests(),

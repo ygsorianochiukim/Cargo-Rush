@@ -238,7 +238,7 @@
                 </span>
                 <span class="text-[12px] text-cr-ink-muted">{{ candidate.period_label }}</span>
                 <span class="cr-num text-[13px]">
-                  {{ fmt.money(candidate.net_cents, candidate.currency) }}
+                  {{ fmt.pesos(candidate.net_cents, candidate.currency) }}
                   <span class="text-[12px] text-cr-ink-muted">
                     take-home ·
                     {{ candidate.staff_count }}
@@ -429,6 +429,19 @@
                 {{ fmt.pesos(slip.net_cents, current.currency) }}
               </p>
             </div>
+            <!-- What the company paid on this person's behalf, on top — shown
+                 so the payslip matches the agency's records, and said plainly
+                 not to have come out of the pay above. -->
+            @if (slip.employer_contributions_cents) {
+              <p class="mt-3 text-[12px] text-cr-ink-muted">
+                Employer contributions (not deducted from pay):
+                <span class="cr-num">{{ fmt.pesos(slip.employer_contributions_cents) }}</span>
+                — SSS {{ fmt.pesos(slip.employer_sss_cents) }}, EC
+                {{ fmt.pesos(slip.employer_ec_cents) }}, PhilHealth
+                {{ fmt.pesos(slip.employer_philhealth_cents) }}, Pag-IBIG
+                {{ fmt.pesos(slip.employer_pagibig_cents) }}.
+              </p>
+            }
           </section>
 
           <!-- Signed for on receipt, which is what a payroll file needs to
@@ -592,21 +605,21 @@
               <div>
                 <p class="cr-meta">Total earned</p>
                 <p class="cr-num mt-1 text-[22px] leading-none font-semibold">
-                  {{ fmt.money(current.gross_cents, current.currency) }}
+                  {{ fmt.pesos(current.gross_cents, current.currency) }}
                 </p>
                 <p class="text-[11px] text-cr-ink-muted">what it costs the company</p>
               </div>
               <div>
                 <p class="cr-meta">Held back</p>
                 <p class="cr-num mt-1 text-[22px] leading-none font-semibold">
-                  {{ fmt.money(current.deductions_cents, current.currency) }}
+                  {{ fmt.pesos(current.deductions_cents, current.currency) }}
                 </p>
                 <p class="text-[11px] text-cr-ink-muted">goes to the funds and the BIR</p>
               </div>
               <div>
                 <p class="cr-meta">Take-home pay</p>
                 <p class="cr-num mt-1 text-[22px] leading-none font-semibold text-cr-blue">
-                  {{ fmt.money(current.net_cents, current.currency) }}
+                  {{ fmt.pesos(current.net_cents, current.currency) }}
                 </p>
                 <p class="text-[11px] text-cr-ink-muted">what the staff receive</p>
               </div>
@@ -1249,6 +1262,32 @@
                 </span>
               </p>
             }
+          </app-card>
+
+          <!-- The company's own share: a cost on top of the run, owed to the
+               same agencies, and never taken from anybody's pay. -->
+          <app-card
+            class="cr-remittances"
+            heading="Employer contributions — paid by the company on top"
+            icon="badge"
+            [hint]="fmt.pesos(current.employer_contributions.total, current.currency)"
+          >
+            <dl class="grid grid-cols-2 gap-y-3 text-[13px] sm:grid-cols-4 sm:gap-x-4">
+              @for (item of employerShares(); track item.label) {
+                <div>
+                  <dt class="cr-meta">{{ item.label }}</dt>
+                  <dd class="cr-num mt-0.5 text-[15px] font-semibold">
+                    {{ fmt.pesos(item.cents, current.currency) }}
+                  </dd>
+                  <dd class="text-[11px] text-cr-ink-muted">to {{ item.goesTo }}</dd>
+                </div>
+              }
+            </dl>
+            <p class="mt-3 text-[12px] text-cr-ink-muted">
+              Not deducted from pay. This is the company's own share, remitted with what was held
+              back above, and it is part of what the payroll cost — recording the run as paid books
+              it as an expense and adds it to what the company owes each agency.
+            </p>
           </app-card>
         </div>
       }

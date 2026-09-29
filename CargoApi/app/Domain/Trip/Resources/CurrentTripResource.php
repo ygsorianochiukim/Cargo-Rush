@@ -36,7 +36,8 @@ class CurrentTripResource extends ApiResource
             // matches its ledger sheet on, because a plate gets corrected and
             // reformatted and a foreign key does not.
             'vehicle_id' => $this->vehicle_id,
-            'vehicle_plate' => $this->vehicle?->plate,
+            // A trucker's run is on the trucker's own truck, never a fleet unit.
+            'vehicle_plate' => $this->vehicle?->plate ?? $this->truckerVehicle?->plate,
             // Who is riding along today, by name — the cab reads them, it
             // never sends them back.
             'helper_names' => $this->helpers->pluck('name')->all(),

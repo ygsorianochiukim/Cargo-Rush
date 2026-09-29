@@ -212,6 +212,12 @@ class JournalService
             'void_reason' => $reason,
         ])->save();
 
+        // A record superseding its own posting is bookkeeping, not news — see
+        // `tellTheOffice()`.
+        if ($entry->isAutomatic()) {
+            return $entry->refresh()->load('lines.account');
+        }
+
         $this->notifications->pushToRoles(
             roles: [Role::Administrator, Role::Accountant],
             icon: 'clipboard',
@@ -307,10 +313,15 @@ class JournalService
      * driver, and an opening balance is not news to anybody — it is the one
      * category that is a statement of where the books began rather than
      * something that happened today.
+     *
+     * Nor is an automatic posting. Every delivery, fill and payment now posts
+     * itself (`AutoPostingService`), and a bell that rang for each of them
+     * would ring all day and be ignored — including on the day an entry
+     * somebody wrote by hand was the one worth reading.
      */
     private function tellTheOffice(JournalEntry $entry): void
     {
-        if ($entry->category === JournalCategory::Opening) {
+        if ($entry->category === JournalCategory::Opening || $entry->isAutomatic()) {
             return;
         }
 

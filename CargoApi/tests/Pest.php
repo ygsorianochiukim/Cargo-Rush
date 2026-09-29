@@ -3,6 +3,8 @@
 use App\Domain\Hr\Models\Contract;
 use App\Domain\Hr\Models\Employee;
 use App\Domain\Hr\Services\ContractService;
+use App\Domain\Pricing\Models\PricingBracket;
+use App\Domain\Pricing\Models\PricingZone;
 use App\Domain\Shared\Enums\PayBasis;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -73,4 +75,51 @@ function payContract(
         $amountCents,
         $from ?? $employee->hired_on ?? now()->subYear(),
     );
+}
+
+/**
+ * A zone card that charges exactly what the old fallback tariff did.
+ *
+ * Pricing is zone-only: with no zone covering a run, a trip is saved unpriced
+ * and cannot be confirmed, dispatched, delivered or billed. Most of the suite
+ * is about those transitions and not about pricing, and it was written when a
+ * missing card fell through to the config tariff — ₱1,500 + ₱35/km + ₱2/kg,
+ * floored at ₱1,500.
+ *
+ * So this lays down one open-ended zone (0 km and beyond) with one general
+ * line at those four figures. Every figure a test worked out from the old
+ * tariff is still the right answer, and it is now reached the way production
+ * reaches it — off a zone line — rather than off a fallback that no longer
+ * exists. Tests *about* pricing build their own card instead.
+ */
+function zoneCard(
+    int $baseCents = 150_000,
+    int $perKmCents = 3_500,
+    int $perKgCents = 200,
+    int $minimumCents = 150_000,
+    ?int $maxKm = null,
+    ?string $truckCategoryId = null,
+): PricingZone {
+    $zone = PricingZone::create([
+        'name' => 'Everywhere',
+        'code' => 'ALL',
+        'min_km' => 0,
+        'max_km' => $maxKm,
+        'position' => 0,
+        'status' => 'active',
+    ]);
+
+    PricingBracket::create([
+        'zone_id' => $zone->id,
+        'truck_category_id' => $truckCategoryId,
+        'label' => 'Any run',
+        'base_cents' => $baseCents,
+        'per_km_cents' => $perKmCents,
+        'per_kg_cents' => $perKgCents,
+        'minimum_cents' => $minimumCents,
+        'diesel_step_cents' => 0,
+        'position' => 0,
+    ]);
+
+    return $zone->refresh();
 }

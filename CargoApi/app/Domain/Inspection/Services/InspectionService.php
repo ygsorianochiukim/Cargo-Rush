@@ -11,6 +11,7 @@ use App\Domain\Notification\Services\NotificationService;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\Tone;
 use App\Domain\Trip\Models\Trip;
+use App\Domain\Trucker\Models\TruckerDriver;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
@@ -121,7 +122,7 @@ class InspectionService
             'required' => $trip->status === StatusValue::Assigned,
             'passed' => $passed,
             'inspected_at' => $inspection?->inspected_at?->format('Y-m-d\\TH:i:s\\Z'),
-            'checked_by' => $show ? $inspection?->driver?->name : null,
+            'checked_by' => $show ? $inspection?->inspectorName() : null,
             'notes' => $show ? $inspection?->notes : null,
             /**
              * The checklist as answered — label and verdict per item.
@@ -163,6 +164,54 @@ class InspectionService
             'passed' => array_key_exists($item['key'], $results) ? (bool) $results[$item['key']] : null,
             'critical' => in_array($item['key'], self::CRITICAL, true),
         ], self::CHECKLIST));
+    }
+
+    /**
+     * A trucker's driver checking the trucker's truck before a run.
+     *
+     * The same checklist and the same verdict as a Cargo Rush driver's — the
+     * API decides `good_to_go`, never the handset. What differs is whose it is:
+     * the truck is a `trucker_vehicles` row and the driver a `trucker_drivers`
+     * row, and a failed check is the **trucker's** to sort out, so it goes to
+     * the owner rather than to Cargo Rush's office, whose unit it is not.
+     *
+     * @param  array<string, bool>  $results
+     */
+    public function submitForCrew(Trip $trip, TruckerDriver $crew, array $results, ?string $notes = null): Inspection
+    {
+        return DB::transaction(function () use ($trip, $crew, $results, $notes): Inspection {
+            $goodToGo = $this->isGoodToGo($results);
+
+            $inspection = Inspection::create([
+                'trip_id' => $trip->getKey(),
+                'trucker_vehicle_id' => $trip->trucker_vehicle_id,
+                'trucker_driver_id' => $crew->getKey(),
+                'results' => $results,
+                'notes' => $notes,
+                'inspected_at' => now(),
+                'good_to_go' => $goodToGo,
+            ]);
+
+            $owner = $crew->trucker?->user_id;
+
+            if (! $goodToGo && $owner !== null) {
+                $this->notifications->push(
+                    icon: 'incident',
+                    title: 'A truck failed its pre-trip check',
+                    detail: sprintf(
+                        '%s checked %s for %s and it did not pass: %s',
+                        $crew->name,
+                        $inspection->truckerVehicle?->plate ?? 'a truck',
+                        $trip->reference,
+                        implode(', ', $inspection->failures()),
+                    ),
+                    tone: Tone::Danger,
+                    userId: $owner,
+                );
+            }
+
+            return $inspection;
+        });
     }
 
     /**

@@ -7,6 +7,8 @@ namespace App\Domain\Inspection\Models;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
 use App\Domain\Trip\Models\Trip;
+use App\Domain\Trucker\Models\TruckerDriver;
+use App\Domain\Trucker\Models\TruckerVehicle;
 use App\Domain\Vehicle\Models\Vehicle;
 use Database\Factories\InspectionFactory;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -25,6 +27,9 @@ class Inspection extends Model
 
     protected $fillable = [
         'trip_id', 'vehicle_id', 'driver_id', 'results',
+        // A trucker's truck and driver — never set together with the two
+        // fleet columns above. See the migration that added them.
+        'trucker_vehicle_id', 'trucker_driver_id',
         'good_to_go', 'notes', 'inspected_at',
     ];
 
@@ -50,6 +55,22 @@ class Inspection extends Model
     public function driver(): BelongsTo
     {
         return $this->belongsTo(Driver::class);
+    }
+
+    public function truckerVehicle(): BelongsTo
+    {
+        return $this->belongsTo(TruckerVehicle::class);
+    }
+
+    public function truckerDriver(): BelongsTo
+    {
+        return $this->belongsTo(TruckerDriver::class);
+    }
+
+    /** Whoever did the check — a Cargo Rush driver or a trucker's. */
+    public function inspectorName(): ?string
+    {
+        return $this->driver?->name ?? $this->truckerDriver?->name;
     }
 
     /** Which checklist keys came back failed. */

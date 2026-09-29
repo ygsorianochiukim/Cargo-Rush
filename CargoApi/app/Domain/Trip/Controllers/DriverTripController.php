@@ -13,7 +13,9 @@ use App\Domain\Trip\Requests\StartTripRequest;
 use App\Domain\Trip\Resources\CargoResource;
 use App\Domain\Trip\Resources\CurrentTripResource;
 use App\Domain\Trip\Resources\TripResource;
+use App\Domain\Trip\Services\DispatchChecklistService;
 use App\Domain\Trip\Services\TripService;
+use App\Domain\Trip\Services\TripTicketService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -117,6 +119,33 @@ class DriverTripController extends ApiController
      * no driver row, and a 404 says that plainly rather than returning an
      * empty list that looks like an idle day.
      */
+    /** The dispatch checklist's lines, for the phone to ask. */
+    public function dispatchChecklist(): JsonResponse
+    {
+        return $this->payload(TripTicketService::checklist());
+    }
+
+    /**
+     * The driver's answers to the dispatch checklist for one of their runs.
+     *
+     * Their own run only — the same rule Start applies — so a driver cannot
+     * tick somebody else's sheet.
+     */
+    public function answerDispatchChecklist(Request $request, Trip $trip, DispatchChecklistService $checklists): JsonResponse
+    {
+        $validated = $request->validate(DispatchChecklistService::rules());
+        $driver = $this->driver($request);
+
+        abort_unless($trip->driver_id === $driver->id, 403, 'This run is not yours to check.');
+
+        return $this->item(new TripResource($checklists->record(
+            $trip,
+            $validated['answers'],
+            $validated['remarks'] ?? null,
+            $driver->name,
+        )));
+    }
+
     private function driver(Request $request): Driver
     {
         $driver = $this->drivers->forUser($request->user()->id);

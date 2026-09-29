@@ -70,6 +70,9 @@ class CompanyResource extends ApiResource
                 $this->payrollCalendar()->runsPerMonth(),
             ),
 
+            // Whether payroll takes SSS, PhilHealth and Pag-IBIG at all.
+            'payroll_benefits_enabled' => $this->payroll_benefits_enabled ?? true,
+
             /**
              * When this firm's pay periods close.
              *
@@ -101,7 +104,7 @@ class CompanyResource extends ApiResource
              * Three blocks rather than one, because a settings form needs all
              * three and can derive none of them. `rates` is what is in force
              * and is always a complete set of concrete numbers — a screen
-             * drawing a tariff never has to decide what a null means.
+             * drawing a rate never has to decide what a null means.
              * `rate_defaults` is the install's answer, shown beside the form so
              * an office can see what it is departing from. `rate_overrides` is
              * the raw columns, and it is the only way to tell "₱35/km because

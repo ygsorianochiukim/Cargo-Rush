@@ -39,12 +39,14 @@ use App\Domain\Payroll\Controllers\PayrollController;
 use App\Domain\Payroll\Controllers\PayrollCutoffRequestController;
 use App\Domain\Payroll\Controllers\StoreCreditController;
 use App\Domain\Pricing\Controllers\PricingController;
+use App\Domain\Supplier\Controllers\SupplierCategoryController;
 use App\Domain\Supplier\Controllers\SupplierController;
 use App\Domain\Tenancy\Controllers\CarrierController;
 use App\Domain\Tenancy\Controllers\CompanyController;
 use App\Domain\Tenancy\Controllers\RegistrationController;
 use App\Domain\Trip\Controllers\DriverTripController;
 use App\Domain\Trip\Controllers\TripController;
+use App\Domain\Trucker\Controllers\CrewController;
 use App\Domain\Trucker\Controllers\PartnerController;
 use App\Domain\Trucker\Controllers\TruckerController;
 use App\Domain\Trucker\Controllers\TruckerRegistrationController;
@@ -225,10 +227,17 @@ Route::prefix('v1')->group(function (): void {
             // Starting names a trip, because several may be waiting. The
             // service checks it is the caller's before acting on it.
             Route::post('{trip}/start', [DriverTripController::class, 'start']);
+
+            // The dispatch checklist, answered on the phone and printed on
+            // the dispatch sheet. Before `trips/{trip}` for the reason above.
+            Route::get('dispatch-checklist', [DriverTripController::class, 'dispatchChecklist']);
+            Route::post('{trip}/dispatch-checklist', [DriverTripController::class, 'answerDispatchChecklist']);
         });
 
         Route::get('trips', [TripController::class, 'index'])->middleware('permission:trips.view');
         Route::get('trips/{trip}', [TripController::class, 'show'])->middleware('permission:trips.view');
+        // The Official Trip Ticket and the dispatch checklist, filled in for printing.
+        Route::get('trips/{trip}/ticket', [TripController::class, 'ticket'])->middleware('permission:trips.view');
 
         // Everything that changes the board needs `trips.manage`. Confirming is
         // the desk's one action on a customer's request: it names the crew, the
@@ -355,12 +364,17 @@ Route::prefix('v1')->group(function (): void {
             Route::get('suppliers', [SupplierController::class, 'index']);
             Route::get('suppliers/{supplier}', [SupplierController::class, 'show']);
             Route::get('suppliers/{supplier}/history', [SupplierController::class, 'history']);
+            // The kinds of supplier, which label and order every shop picker.
+            Route::get('supplier-categories', [SupplierCategoryController::class, 'index']);
         });
 
         Route::middleware('permission:suppliers.manage')->group(function (): void {
             Route::post('suppliers', [SupplierController::class, 'store']);
             Route::match(['put', 'patch'], 'suppliers/{supplier}', [SupplierController::class, 'update']);
             Route::delete('suppliers/{supplier}', [SupplierController::class, 'destroy']);
+            Route::post('supplier-categories', [SupplierCategoryController::class, 'store']);
+            Route::match(['put', 'patch'], 'supplier-categories/{supplierCategory}', [SupplierCategoryController::class, 'update']);
+            Route::delete('supplier-categories/{supplierCategory}', [SupplierCategoryController::class, 'destroy']);
         });
 
         /**
@@ -427,6 +441,13 @@ Route::prefix('v1')->group(function (): void {
             Route::post('vehicles', [PartnerController::class, 'saveVehicle']);
             Route::match(['put', 'patch'], 'vehicles/{vehicleId}', [PartnerController::class, 'saveVehicle']);
 
+            // Their own drivers, each with a login of their own. Theirs by
+            // construction, and never Cargo Rush's — a different table.
+            Route::get('drivers', [PartnerController::class, 'drivers']);
+            Route::post('drivers', [PartnerController::class, 'saveDriver']);
+            Route::match(['put', 'patch'], 'drivers/{driverId}', [PartnerController::class, 'saveDriver']);
+            Route::delete('drivers/{driverId}', [PartnerController::class, 'removeDriver']);
+
             /**
              * The work itself, behind `partner.jobs`.
              *
@@ -448,6 +469,8 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('trips', [PartnerController::class, 'trips']);
 
                 Route::post('trips/{tripId}/start', [PartnerController::class, 'start']);
+                // Hand a run to one of their drivers, or take it back.
+                Route::post('trips/{tripId}/driver', [PartnerController::class, 'assignDriver']);
                 // The hand-off, on the same permission a driver needs for it:
                 // whoever is at the door signs the run off.
                 Route::post('trips/{tripId}/deliver', [PartnerController::class, 'deliver'])
@@ -456,6 +479,31 @@ Route::prefix('v1')->group(function (): void {
                 Route::post('trips/{tripId}/proof', [PartnerController::class, 'proof'])
                     ->middleware('permission:delivery.write');
             });
+        });
+
+        /**
+         * A trucker's driver, on their own login.
+         *
+         * The runs their trucker handed them, and nothing else of the
+         * trucker's — see `CrewController`. Gated on `crew.trips`, which only
+         * the `trucker_driver` role holds.
+         */
+        Route::prefix('crew')->middleware('permission:crew.trips')->group(function (): void {
+            Route::get('me', [CrewController::class, 'profile']);
+            // The pre-trip check, on the trucker's truck — the same checklist a
+            // Cargo Rush driver answers, and the same gate before Start.
+            Route::get('inspections/checklist', [CrewController::class, 'checklist']);
+            Route::post('trips/{tripId}/inspection', [CrewController::class, 'inspect']);
+            Route::get('dispatch-checklist', [CrewController::class, 'dispatchChecklist']);
+            Route::post('trips/{tripId}/dispatch-checklist', [CrewController::class, 'answerDispatchChecklist']);
+            Route::get('trips/current', [CrewController::class, 'current']);
+            Route::get('trips/history', [CrewController::class, 'history']);
+            Route::get('trips', [CrewController::class, 'trips']);
+            Route::post('trips/{tripId}/start', [CrewController::class, 'start']);
+            Route::post('trips/{tripId}/deliver', [CrewController::class, 'deliver'])
+                ->middleware('permission:delivery.write');
+            Route::post('trips/{tripId}/proof', [CrewController::class, 'proof'])
+                ->middleware('permission:delivery.write');
         });
 
         /**
@@ -588,6 +636,8 @@ Route::prefix('v1')->group(function (): void {
                  * ordering rule as `billing/statement`.
                  */
                 Route::get('periods', [PayrollController::class, 'periods']);
+                // The REM number the next remittance will be given. Before `{run}` too.
+                Route::get('remittance-number', [PayrollController::class, 'remittanceNumber']);
 
                 /**
                  * The firm's salary structure — its allowances and deductions.
@@ -691,6 +741,7 @@ Route::prefix('v1')->group(function (): void {
                 Route::delete('{run}/lines/{line}/deductions/{component}', [PayrollController::class, 'removeDeduction']);
                 Route::post('{run}/approve', [PayrollController::class, 'approve']);
                 Route::post('{run}/pay', [PayrollController::class, 'pay']);
+                Route::post('{run}/remit', [PayrollController::class, 'remit']);
                 Route::delete('{run}', [PayrollController::class, 'destroy']);
             });
         });

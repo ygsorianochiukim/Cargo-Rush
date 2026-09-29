@@ -25,12 +25,22 @@
     </div>
   </app-card>
 
+  @if (failure(); as message) {
+    <p
+      role="alert"
+      class="mt-4 rounded-control bg-cr-red-bg px-3 py-2 text-[13px] font-medium text-cr-red"
+    >
+      {{ message }}
+    </p>
+  }
+
   @if (owesNothing()) {
     <app-card class="mt-4 block">
       <app-empty-state
         icon="wallet"
         title="Nothing outstanding"
-        body="Every trucker, rented truck and bill is settled." />
+        body="Every trucker, rented truck and bill is settled."
+      />
     </app-card>
   }
 
@@ -40,11 +50,13 @@
       [heading]="group.label"
       [icon]="group.icon"
       [hint]="money(group.total_cents)"
-      [padded]="false">
+      [padded]="false"
+    >
       <ul class="flex flex-col">
         @for (line of group.lines; track line.id) {
           <li
-            class="flex flex-wrap items-center gap-3 border-b border-cr-line/70 px-4 py-3 last:border-0">
+            class="flex flex-wrap items-center gap-3 border-b border-cr-line/70 px-4 py-3 last:border-0"
+          >
             <span class="min-w-0 flex-1">
               <span class="block truncate text-[13px] font-semibold">{{ line.name }}</span>
               <span class="block truncate text-[12px] text-cr-ink-muted">
@@ -74,30 +86,51 @@
             <!--
               Where it is settled.
 
-              A link rather than a button: this page is a roll-up, and the
-              three settle flows behind these lines are genuinely different
-              from one another.
-
-              `settle` carries the row, and it is what makes the link worth
-              following. Without it this dropped the reader on the Truckers
-              roster — the right page, opened on the wrong tab, with nothing
-              saying which of forty partners the ₱33,000 belonged to. Each
-              target page reads the parameter and opens that record: the
-              partner's wallet, the invoice's payment dialog, the expense.
+              In place, always: the button opens the dialog that owns the debt
+              — the partner's wallet, the bill's payment form, the expense, or
+              a payroll confirmation — over this page, so the reader stays on
+              the list they are working through.
             -->
-            <a
-              [routerLink]="line.settle_at"
-              [queryParams]="{ settle: line.id }"
-              class="inline-flex h-8 items-center gap-1 rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint"
-              [attr.aria-label]="'Settle ' + line.name">
-              Settle
+            <button
+              type="button"
+              class="inline-flex h-8 items-center gap-1 rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint disabled:opacity-60"
+              [disabled]="opening() === line.id"
+              [attr.aria-label]="'Settle ' + line.name"
+              (click)="settle(line)"
+            >
+              {{ opening() === line.id ? 'Opening…' : 'Settle' }}
               <app-icon name="chevron-right" [size]="14" />
-            </a>
+            </button>
           </li>
         }
       </ul>
     </app-card>
   }
+} @else if (failure(); as message) {
+  <app-error-state [message]="message" />
 } @else {
   <app-card><app-skeleton-rows [count]="5" /></app-card>
+}
+
+<!-- A partner's wallet, opened from a Settle button, over the list. -->
+@if (walletFor(); as line) {
+  <app-modal
+    [open]="true"
+    [title]="line.name"
+    subtitle="Settle from their wallet"
+    icon="wallet"
+    size="lg"
+    (closed)="closeWallet()"
+  >
+    <app-wallet-panel [truckerId]="line.id" (changed)="reload()" />
+  </app-modal>
+}
+
+<!-- A payroll line: confirm the pay was released, or the contributions remitted. -->
+@if (payrollFor(); as line) {
+  <app-payroll-settle-dialog
+    [line]="line"
+    (settled)="payrollSettled()"
+    (closed)="payrollFor.set(null)"
+  />
 }

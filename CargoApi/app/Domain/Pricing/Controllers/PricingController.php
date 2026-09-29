@@ -48,17 +48,13 @@ class PricingController extends ApiController
     }
 
     /**
-     * `GET pricing/card` — the firm's plain distance card.
+     * `GET pricing/card` — the old plain distance card, read-only in effect.
      *
-     * The lines that belong to no zone, which apply wherever nothing more
-     * specific does. For most hauliers this *is* the rate card: "450 km is
-     * ₱5,000", with the zone editor reserved for the firms that genuinely
-     * price one route differently from another.
-     *
-     * Its own endpoint rather than a zone with a magic id, because it is not a
-     * zone — it is what a quote falls back to, and giving it a fake place
-     * would put a row called "Everywhere" on the zone list for somebody to
-     * wonder about.
+     * The lines that belong to no zone. They used to price any run no zone
+     * covered, and no longer price anything: pricing is zone-only, and a run
+     * the zones miss is left unpriced for the office. The endpoint stays so an
+     * install that has such rows can see them and delete them — `saveCard`
+     * refuses to add new ones (see `PricingCardRequest`).
      */
     public function card(): JsonResponse
     {
@@ -184,6 +180,9 @@ class PricingController extends ApiController
     /**
      * What a run would be quoted, which band priced it, and the bands that
      * also cover the distance.
+     *
+     * Where no zone line covers it, the answer is `needs_zone: true` with the
+     * reason and a null `cents` — never a fallback figure, and never ₱0.
      *
      * A POST for something that changes nothing, which is now the weaker of
      * its two original reasons — the destination that used to make a query

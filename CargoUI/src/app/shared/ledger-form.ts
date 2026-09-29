@@ -102,6 +102,14 @@ export class LedgerForm {
   /** Live derivation, mirroring the two workbook formulas. */
   private readonly values = signal(this.form.getRawValue());
 
+  /**
+   * A hired truck owner's cut on this day, in pesos — posted by a delivery,
+   * never typed, so it is read off the saved row rather than the form. It is
+   * inside the API's total expenses, and leaving it out of this preview made
+   * the net shown here higher than the one the sheet saves.
+   */
+  protected readonly ownerShare = computed(() => (this.entry()?.owner_share_cents ?? 0) / 100);
+
   protected readonly totalExpenses = computed(() => {
     const v = this.values();
     return (
@@ -109,7 +117,8 @@ export class LedgerForm {
       Number(v.driver_salary) +
       this.helperTotal() +
       Number(v.maintenance) +
-      Number(v.allowance)
+      Number(v.allowance) +
+      this.ownerShare()
     );
   });
 

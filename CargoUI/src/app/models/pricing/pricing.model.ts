@@ -193,9 +193,13 @@ export interface ZoneAlternative {
 
 /** A quote, and the reasoning behind it. */
 export interface QuoteBreakdown {
-  cents: number;
+  /**
+   * What to charge, in centavos — or null when no zone line covers the run.
+   * Never print a null as ₱0: check `needs_zone` and show `reason` instead.
+   */
+  cents: number | null;
   /** The card figure before diesel — a table's `Current Price`. */
-  card_cents: number;
+  card_cents: number | null;
   /** Basis points, on a line priced as a percentage of the fare. */
   fuel_adjustment_bp: number;
   /** What diesel added, signed, whichever rule applied. */
@@ -214,16 +218,19 @@ export interface QuoteBreakdown {
   weight_kg: number;
   currency: string;
   /**
-   * Which card priced it.
+   * What priced it.
    *
-   *   `zone`    — a band of the rate table
-   *   `card`    — the firm's plain distance card, with no band in it
-   *   `tariff`  — nothing covered the run, so the configured fallback
+   *   `zone`     — a line of a zone that covers the run
+   *   `unzoned`  — no zone line covers it, so it is not priced yet
    *
-   * Three words rather than two, because 'which card was this?' is the first
-   * question anybody asks of a price they disagree with.
+   * Pricing is zone-only: there is no distance-card or tariff fallback any
+   * more, so a run the zones miss waits for a zone line or a typed price.
    */
-  source: 'zone' | 'card' | 'tariff';
+  source: 'zone' | 'unzoned';
+  /** True when no zone line covers the run. `reason` says why. */
+  needs_zone: boolean;
+  /** "No zone covers 712 km for a Brand New Truck." Null on a priced quote. */
+  reason: string | null;
   zone: { id: string; code: string; name: string; band: string } | null;
   /**
    * The other bands covering this distance.

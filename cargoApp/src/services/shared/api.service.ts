@@ -126,6 +126,13 @@ export const api = {
 
     return (await unwrap<T>(response)).data;
   },
+
+  /** DELETE. The API answers 204, which `unwrap` treats as an empty envelope. */
+  async delete(path: string): Promise<void> {
+    const response = await fetch(url(path), { method: 'DELETE', headers: headers() });
+
+    await unwrap<unknown>(response);
+  },
 };
 
 function headers(): Record<string, string> {

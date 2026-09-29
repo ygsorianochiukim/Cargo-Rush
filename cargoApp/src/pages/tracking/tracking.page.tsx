@@ -1,4 +1,11 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+
+import { ProofOfDeliverySheet } from '@/components/proof-of-delivery-sheet';
+import { CurrentTrip } from '@/models/trip/trip.model';
+import { useSession } from '@/services/identity/session';
+import { crewService } from '@/services/trucker/crew.service';
 
 import { RouteMap } from '@/components/route-map';
 import { TrackingControl } from '@/components/tracking-control';
@@ -10,6 +17,7 @@ import { Brand, Radius, Spacing } from '@/constants/theme';
 import { fmt } from '@/constants/format';
 import { useApi } from '@/hooks/use-api';
 import { useCurrentTrip } from '@/hooks/use-current-trip';
+import { useRefreshOnFocus } from '@/hooks/use-refresh-on-focus';
 
 /**
  * GPS Tracking — DESIGN.md section 5.2: average speed, location point A to B.
@@ -25,9 +33,17 @@ export function TrackingPage() {
     [trip.data?.id],
   );
 
+  // Straight from Inspect after a pass, or from another tab: the run that
+  // just started has to be here without reloading the app.
+  useRefreshOnFocus(trip.reload, reload);
+  const refresh = () => {
+    trip.reload();
+    reload();
+  };
+
   if (trip.loading) {
     return (
-      <Screen title="Tracking">
+      <Screen onRefresh={refresh} title="Tracking">
         <Card>
           <SkeletonRows count={4} />
         </Card>
@@ -39,7 +55,7 @@ export function TrackingPage() {
   // there is no trip to attach the positions to.
   if (trip.data === null) {
     return (
-      <Screen title="Tracking">
+      <Screen onRefresh={refresh} title="Tracking">
         <Card>
           <EmptyState
             title="No active trip"
@@ -55,8 +71,9 @@ export function TrackingPage() {
   // control that can fix it.
   if (!data) {
     return (
-      <Screen title="Tracking" subtitle={trip.data.reference}>
+      <Screen onRefresh={refresh} title="Tracking" subtitle={trip.data.reference}>
         <TrackingControl trip={trip.data} />
+        <CrewDeliver trip={trip.data} />
 
         {/* The route comes first, and before any position has been reported.
             This is the screen a driver lands on straight after the pre-trip
@@ -82,7 +99,7 @@ export function TrackingPage() {
   const remaining = Math.max(0, data.distance_total_m - data.distance_done_m);
 
   return (
-    <Screen title="Tracking" subtitle={data.reference}>
+    <Screen onRefresh={refresh} title="Tracking" subtitle={data.reference}>
       <TrackingControl trip={trip.data} />
 
       {/* The road ahead, with the unit on it. Above the figures because a
@@ -170,6 +187,17 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 const styles = StyleSheet.create({
+  deliver: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.two,
+    minHeight: 48,
+    borderRadius: Radius.control,
+    backgroundColor: Brand.success,
+  },
+  deliverText: { color: Brand.surface, fontSize: 15, fontWeight: '700' },
+
   metaLabel: { fontSize: 10, fontWeight: '500', letterSpacing: 0.6, color: Brand.inkMuted },
 
   speedRow: { flexDirection: 'row', gap: Spacing.three },
@@ -229,3 +257,44 @@ const styles = StyleSheet.create({
   locPlace: { fontSize: 15, fontWeight: '600', color: Brand.ink },
   locSub: { marginTop: 2, fontSize: 12, color: Brand.inkMuted },
 });
+
+/**
+ * Mark delivered, for a trucker's driver — on the map, where a run ends.
+ *
+ * A Cargo Rush driver hands over from the Dashboard; a trucker's driver has no
+ * Dashboard, and this is the screen they are on when they reach the drop. The
+ * same proof sheet, sent to `crew/*`. Nothing for anybody else.
+ */
+function CrewDeliver({ trip }: { trip: CurrentTrip }) {
+  const { me } = useSession();
+  const [handing, setHanding] = useState(false);
+
+  if (me?.role !== 'trucker_driver' || trip.status !== 'in_transit') return null;
+
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Mark ${trip.reference} delivered`}
+        onPress={() => setHanding(true)}
+        style={({ pressed }) => [styles.deliver, pressed && { opacity: 0.85 }]}>
+        <Icon name="check" size={16} color={Brand.surface} />
+        <Text style={styles.deliverText}>Mark delivered</Text>
+      </Pressable>
+
+      {handing ? (
+        <ProofOfDeliverySheet
+          open
+          onClose={() => setHanding(false)}
+          onDelivered={() => {
+            setHanding(false);
+            router.replace('/');
+          }}
+          reference={trip.reference}
+          destination={trip.destination}
+          deliver={(proof) => crewService.deliver(trip.id, proof)}
+        />
+      ) : null}
+    </>
+  );
+}

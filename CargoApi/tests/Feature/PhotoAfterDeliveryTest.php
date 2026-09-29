@@ -27,6 +27,10 @@ use Illuminate\Support\Facades\Storage;
  * afterwards, from the phone, by whoever handed the load over and nobody else.
  */
 beforeEach(function (): void {
+    // Pricing is zone-only, and an unpriced run cannot go out or be billed.
+    // One card at the old tariff's figures, so every run here is priced.
+    zoneCard();
+
     Storage::fake('public');
 
     $this->seed(NavigationSeeder::class);

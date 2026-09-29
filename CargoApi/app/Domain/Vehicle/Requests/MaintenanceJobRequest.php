@@ -72,6 +72,18 @@ class MaintenanceJobRequest extends ApiFormRequest
             'completed_on' => ['sometimes', 'nullable', 'date'],
 
             'supplier_id' => ['sometimes', 'nullable', 'string', 'exists:suppliers,id'],
+
+            /**
+             * The garage's bill for this work, when it was raised in Billing.
+             *
+             * The job already posts its cost to the sheet; naming the bill is
+             * what stops its payment being counted a second time as a
+             * supplier bill. Payables only — a receivable is somebody paying us.
+             */
+            'invoice_id' => [
+                'sometimes', 'nullable', 'string',
+                Rule::exists('invoices', 'id')->where('direction', 'payable'),
+            ],
             'reference' => ['sometimes', 'nullable', 'string', 'max:60'],
             'note' => ['sometimes', 'nullable', 'string', 'max:255'],
         ];
@@ -99,7 +111,7 @@ class MaintenanceJobRequest extends ApiFormRequest
     {
         return $this->safe()->only([
             'kind', 'due_at', 'next_service_km', 'status',
-            'cost_cents', 'completed_on', 'supplier_id', 'reference', 'note',
+            'cost_cents', 'completed_on', 'supplier_id', 'invoice_id', 'reference', 'note',
         ]);
     }
 }

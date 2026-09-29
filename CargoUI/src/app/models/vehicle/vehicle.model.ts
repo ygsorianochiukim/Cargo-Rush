@@ -110,6 +110,8 @@ export interface MaintenanceJob extends Timestamped {
   completed_on: string | null;
   supplier_id: string | null;
   supplier_name?: string | null;
+  /** The garage's payable bill for this job, when one was raised and linked. */
+  invoice_id: string | null;
   reference: string | null;
   note: string | null;
   /**
@@ -132,6 +134,7 @@ export interface MaintenanceJobPayload {
   cost_cents?: number | null;
   completed_on?: string | null;
   supplier_id?: string | null;
+  invoice_id?: string | null;
   reference?: string | null;
   note?: string | null;
 }

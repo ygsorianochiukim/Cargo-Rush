@@ -6,6 +6,8 @@ namespace App\Domain\Trucker\Requests;
 
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
+use App\Domain\Tenancy\Support\Tenant;
+use Illuminate\Validation\Rule;
 
 /**
  * A partner's truck, added or corrected.
@@ -19,7 +21,17 @@ class TruckerVehicleRequest extends ApiFormRequest
     public function rules(): array
     {
         return [
-            'plate' => [$this->requiredOnCreate(), 'string', 'max:20'],
+            /**
+             * Once per company, as the index says — asked here first so a
+             * plate already on the books is a sentence, not a 500. Deleted
+             * rows count, because the index counts them.
+             */
+            'plate' => [
+                $this->requiredOnCreate(), 'string', 'max:20',
+                Rule::unique('trucker_vehicles', 'plate')
+                    ->where('company_id', app(Tenant::class)->id())
+                    ->ignore($this->route('vehicleId')),
+            ],
             'model' => [$this->requiredOnCreate(), 'string', 'max:120'],
             'capacity_kg' => [$this->requiredOnCreate(), 'integer', 'min:100', 'max:100000'],
             'truck_category_id' => ['nullable', 'string', 'max:26'],
@@ -40,6 +52,7 @@ class TruckerVehicleRequest extends ApiFormRequest
     {
         return [
             'capacity_kg.required' => 'How much can it carry? It decides which jobs you are offered.',
+            'plate.unique' => 'A truck with that plate is already registered.',
         ];
     }
 }

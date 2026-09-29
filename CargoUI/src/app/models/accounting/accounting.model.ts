@@ -143,6 +143,14 @@ export interface JournalEntry extends Timestamped {
   source: string;
   source_type: string | null;
   source_id: string | null;
+  /**
+   * Posted by a record — a day on the sheet, an invoice, a payment — and kept
+   * true by it. Correct the record, not the entry: a change to it voids this
+   * and posts the replacement.
+   */
+  automatic: boolean;
+  /** What kind of record posted it ("Daily sheet", "Invoice"), or null for a manual one. */
+  source_label: string | null;
 
   posted_at: string | null;
   posted_by_name: string | null;

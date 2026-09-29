@@ -15,6 +15,7 @@ use App\Domain\Payroll\Models\PayComponent;
 use App\Domain\Payroll\Models\PayRun;
 use App\Domain\Payroll\Models\PayRunLine;
 use App\Domain\Payroll\Models\PayRunLineComponent;
+use App\Domain\Payroll\Models\PayRunLineTrip;
 use App\Domain\Payroll\Support\MonthlyShare;
 use App\Domain\Payroll\Support\PayrollCalendar;
 use App\Domain\Shared\Enums\DeductionSchedule;
@@ -24,6 +25,7 @@ use App\Domain\Shared\Enums\PayComponentKind;
 use App\Domain\Shared\Enums\Role;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\Tone;
+use App\Domain\Tenancy\Models\Company;
 use App\Domain\Tenancy\Support\Tenant;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -136,6 +138,12 @@ class PayrollService
         }
 
         return DB::transaction(function () use ($periodStart, $periodEnd, $payDate, $author, $existing): PayRun {
+            $this->lockPayroll();
+
+            if ($existing === null) {
+                $this->mustNotOverlap($periodStart, $periodEnd);
+            }
+
             $run = $existing ?? new PayRun;
 
             $run->fill([
@@ -143,6 +151,10 @@ class PayrollService
                 'period_end' => $periodEnd->toDateString(),
                 'pay_date' => $payDate->toDateString(),
                 'status' => PayRun::DRAFT,
+                // Built since payslips began recording their trips — which is
+                // what lets a later run look back for late ones. See the
+                // migration that adds `pay_run_line_trips`.
+                'links_trips' => true,
             ]);
 
             if ($author !== null && $run->created_by === null) {
@@ -158,7 +170,11 @@ class PayrollService
              */
             $byHand = $this->handAddedComponents($run);
 
-            // Wholesale, not merged. See the note above.
+            // Wholesale, not merged. See the note above. The trip rows go with
+            // their lines — a draft's are only a reservation.
+            PayRunLineTrip::query()
+                ->whereIn('pay_run_line_id', $run->lines()->select('id'))
+                ->delete();
             $run->lines()->delete();
 
             // Which cutoff this is, worked out once for the whole run rather
@@ -219,10 +235,15 @@ class PayrollService
              *
              * One query for the whole roster, like the sheet and the
              * components above.
+             *
+             * Less whatever another open draft has already reserved: two
+             * drafts built side by side used to each take the whole tab. See
+             * `StoreCreditService::available()`.
              */
-            $tabs = $this->storeCredit->balances(
+            $tabs = $this->storeCredit->available(
                 $payable->modelKeys(),
                 $run->period_end->toDateString(),
+                $run->getKey(),
             );
 
             foreach ($payable as $employee) {
@@ -335,6 +356,9 @@ class PayrollService
         $componentEarnings = 0;
         $componentDeductions = 0;
         $taxableEarnings = 0;
+        // The same taxable earnings as a month's worth, for the exemption
+        // test — see `StatutoryDeductions::isExempt()`.
+        $monthlyTaxableEarnings = 0;
 
         foreach ($components as $component) {
             if ($component['kind'] === PayComponentKind::Earning->value) {
@@ -342,6 +366,7 @@ class PayrollService
 
                 if ($component['taxable']) {
                     $taxableEarnings += $component['amount_cents'];
+                    $monthlyTaxableEarnings += (int) ($component['monthly_cents'] ?? $component['amount_cents']);
                 }
 
                 continue;
@@ -369,11 +394,24 @@ class PayrollService
          * firm that has not thought about this gets exactly the arithmetic
          * payroll did before components existed.
          */
-        $enrolled = $employee->statutoryEnrolment();
+        $enrolled = $this->benefitsEnabled()
+            ? $employee->statutoryEnrolment()
+            : ['sss' => false, 'philhealth' => false, 'pagibig' => false];
 
         $statutory = $this->deductions->for(
             $monthly,
             $basic + $taxableEarnings,
+            $cutoff['index'],
+            $cutoff['count'],
+            $schedule,
+            $enrolled,
+            $monthlyTaxableEarnings,
+        );
+
+        // The firm's own share, on the same basic, cutoff and enrolment — a
+        // cost on top of the payslip, not a deduction from it.
+        $employer = $this->deductions->employerFor(
+            $monthly,
             $cutoff['index'],
             $cutoff['count'],
             $schedule,
@@ -414,6 +452,9 @@ class PayrollService
             // frozen, because "₱12,400" with no indication of what it was
             // 12,400 *of* is a figure nobody holding it can check.
             'pay_basis' => $earned['basis']->value,
+            // Trip crew — anybody with a `drivers` record — or office. Decides
+            // which expense the wage posts to. See `post()`.
+            'crew' => $employee->driver_id !== null,
             'basic_cents' => $basic,
             'days_worked' => $earned['days_worked'],
             'sheet_days' => $earned['sheet_days'],
@@ -430,6 +471,10 @@ class PayrollService
             'philhealth_cents' => $statutory['philhealth'],
             'pagibig_cents' => $statutory['pagibig'],
             'withholding_tax_cents' => $statutory['withholding_tax'],
+            'employer_sss_cents' => $employer['sss'],
+            'employer_ec_cents' => $employer['ec'],
+            'employer_philhealth_cents' => $employer['philhealth'],
+            'employer_pagibig_cents' => $employer['pagibig'],
             // Frozen beside the figures: "SSS ₱0.00" has two quite different
             // explanations, and only one of them is for the office to fix.
             'sss_enrolled' => $enrolled['sss'],
@@ -463,6 +508,16 @@ class PayrollService
                 'taxable' => $component['taxable'],
                 'amount_cents' => $component['amount_cents'],
                 'added_by_hand' => $component['added_by_hand'] ?? false,
+            ]);
+        }
+
+        // Which hauls this payslip counted. One insert each for the tenancy
+        // stamp, as above.
+        foreach (array_unique($earned['trip_ids'] ?? []) as $tripId) {
+            PayRunLineTrip::create([
+                'pay_run_line_id' => $line->getKey(),
+                'trip_id' => $tripId,
+                'employee_id' => $employee->getKey(),
             ]);
         }
 
@@ -503,7 +558,7 @@ class PayrollService
      * is editable on the line by an office that knows better.
      *
      * @param  array{first: bool, only: bool, index: int, count: int}  $cutoff
-     * @return array{basis: PayBasis, basic_cents: int, monthly_equivalent_cents: int, days_worked: int, sheet_days: int, trips: int}
+     * @return array{basis: PayBasis, basic_cents: int, monthly_equivalent_cents: int, days_worked: int, sheet_days: int, trips: int, trip_ids: list<string>}
      */
     private function earningsFor(Employee $employee, array $cutoff, ?array $sheet = null, Carbon|string|null $on = null): array
     {
@@ -530,13 +585,16 @@ class PayrollService
                 'days_worked' => 0,
                 'sheet_days' => 0,
                 'trips' => 0,
+                // Recorded whatever the basis, so a haul this salary covered is
+                // never paid again per trip after a change of contract.
+                'trip_ids' => $sheet['trip_ids'] ?? [],
             ];
         }
 
         // Read for the whole run in one pass and handed in — see `build()`.
         // Nothing for this person is an ordinary answer, not a missing one:
         // they simply did not work this period.
-        $sheet ??= ['earned_cents' => 0, 'days' => 0, 'trips' => 0];
+        $sheet ??= ['earned_cents' => 0, 'days' => 0, 'trips' => 0, 'trip_ids' => []];
 
         // The rate times what the period actually holds. Days off the truck
         // sheet for a daily hand, hauls off the trip record for a per-trip one.
@@ -560,6 +618,7 @@ class PayrollService
             'sheet_days' => $sheet['days'],
             // What a per-trip rate was multiplied by.
             'trips' => $basis === PayBasis::PerTrip ? $sheet['trips'] : 0,
+            'trip_ids' => $sheet['trip_ids'] ?? [],
         ];
     }
 
@@ -573,6 +632,19 @@ class PayrollService
     public function schedule(): DeductionSchedule
     {
         return $this->tenant->company()?->payroll_deduct_on ?? DeductionSchedule::Split;
+    }
+
+    /**
+     * Whether this firm's payroll takes SSS, PhilHealth and Pag-IBIG at all.
+     *
+     * Off, every payslip is built as though nobody were enrolled — employee
+     * and employer share alike — and the snapshot on the line says so. The
+     * people's own flags are left alone, so switching it back on restores them.
+     * Withholding tax is not a benefit and still comes off.
+     */
+    public function benefitsEnabled(): bool
+    {
+        return $this->tenant->company()?->payroll_benefits_enabled ?? true;
     }
 
     /**
@@ -607,6 +679,8 @@ class PayrollService
      * correcting a payslip has not asked for the tax to move under them. A run
      * that needs the tax redone is rebuilt.
      *
+     * Refused when it would leave the net below zero — see `settleTotals()`.
+     *
      * @param  array<string, mixed>  $changes
      */
     public function adjustLine(PayRunLine $line, array $changes): PayRunLine
@@ -616,6 +690,7 @@ class PayrollService
         $line->fill(array_intersect_key($changes, array_flip([
             'allowance_cents', 'overtime_cents', 'adjustments_cents', 'adjustment_note',
             'sss_cents', 'philhealth_cents', 'pagibig_cents', 'withholding_tax_cents',
+            'employer_sss_cents', 'employer_ec_cents', 'employer_philhealth_cents', 'employer_pagibig_cents',
             'other_deductions_cents', 'deduction_note',
         ])));
 
@@ -706,17 +781,21 @@ class PayrollService
 
         abort_if($name === '', 422, 'Give the deduction a name, or pick one from the list.');
 
-        PayRunLineComponent::create([
-            'pay_run_line_id' => $line->getKey(),
-            'pay_component_id' => $catalogue?->getKey(),
-            'name' => $name,
-            'kind' => PayComponentKind::Deduction->value,
-            'taxable' => false,
-            'amount_cents' => max(0, (int) $data['amount_cents']),
-            'added_by_hand' => true,
-        ]);
+        // One transaction, so a deduction the payslip cannot bear is refused
+        // whole rather than left itemised on a line whose totals ignore it.
+        return DB::transaction(function () use ($line, $catalogue, $name, $data): PayRunLine {
+            PayRunLineComponent::create([
+                'pay_run_line_id' => $line->getKey(),
+                'pay_component_id' => $catalogue?->getKey(),
+                'name' => $name,
+                'kind' => PayComponentKind::Deduction->value,
+                'taxable' => false,
+                'amount_cents' => max(0, (int) $data['amount_cents']),
+                'added_by_hand' => true,
+            ]);
 
-        return $this->recountComponents($line->refresh());
+            return $this->recountComponents($line->refresh());
+        });
     }
 
     /**
@@ -740,9 +819,11 @@ class PayrollService
             .'be back the next time the run is worked out.',
         );
 
-        $component->delete();
+        return DB::transaction(function () use ($component, $line): PayRunLine {
+            $component->delete();
 
-        return $this->recountComponents($line->refresh());
+            return $this->recountComponents($line->refresh());
+        });
     }
 
     /**
@@ -769,11 +850,62 @@ class PayrollService
         return $this->settleTotals($line);
     }
 
+    /**
+     * Settle a line somebody has just changed — and refuse it below nothing.
+     *
+     * A correction used to be saved whatever it left, so a ₱5,000 cash advance
+     * typed onto a ₱3,000 payslip produced a net of minus ₱2,000: a payslip
+     * that pays the person a negative amount, and a paid run whose journal
+     * could not balance, because a negative net has no cash side to post to.
+     *
+     * The store tab gives way first, because it always has — it is a recovery
+     * floored at what the payslip can bear (see `writeLine()`), and a
+     * correction that shrinks the payslip shrinks what the tab can take, the
+     * rest staying on the tab. It grows back the same way when a correction
+     * leaves more room, up to what is still owed. Anything that leaves the net
+     * negative after that is refused, and nothing is saved.
+     */
     private function settleTotals(PayRunLine $line): PayRunLine
     {
-        $this->totalsOn($line)->save();
+        $this->recapStore($line);
+        $this->totalsOn($line);
+
+        abort_if($line->net_cents < 0, 422, sprintf(
+            'That would leave %s with a net pay of ₱%s. A payslip cannot pay less than nothing — '
+            .'reduce the deduction, or carry the rest to the next run.',
+            $line->name,
+            number_format($line->net_cents / 100, 2),
+        ));
+
+        $line->save();
 
         return $line->refresh();
+    }
+
+    /**
+     * The store deduction, worked out again against what the line now bears.
+     *
+     * What is owed (less other drafts' reservations, as at build) and capped by
+     * the person's own limit, then by the payslip's room after every other
+     * deduction.
+     */
+    private function recapStore(PayRunLine $line): void
+    {
+        $employee = $line->employee;
+        $run = $line->payRun;
+
+        $wanted = $employee === null || $run === null
+            ? (int) $line->store_deduction_cents
+            : $this->storeCredit->deductionFor($employee, $this->storeCredit->available(
+                [$employee->getKey()],
+                $run->period_end->toDateString(),
+                $run->getKey(),
+            )[$employee->getKey()] ?? 0);
+
+        $room = $line->computedGrossCents()
+            - ($line->computedDeductionsCents() - (int) $line->store_deduction_cents);
+
+        $line->store_deduction_cents = min($wanted, max(0, $room));
     }
 
     /**
@@ -802,15 +934,50 @@ class PayrollService
      */
     public function approve(PayRun $run, ?User $author = null): PayRun
     {
+        return DB::transaction(fn (): PayRun => $this->approveLocked($run, $author));
+    }
+
+    /**
+     * Approval, under the firm's payroll lock.
+     *
+     * Everything a draft was built against can have moved by the time somebody
+     * presses approve, and two people can press it on two drafts at once. So
+     * the things that must be true of a frozen run are checked again here,
+     * with the lock held, rather than trusted from the build:
+     *
+     *   no other approved or paid run covers any of these days,
+     *   no trip on it has been paid on another run meanwhile, and
+     *   no store deduction takes more than the tab still owes.
+     */
+    private function approveLocked(PayRun $run, ?User $author): PayRun
+    {
+        $this->lockPayroll();
+
+        // Read again under the lock — the status in hand may be a request old.
+        $run = PayRun::query()->lockForUpdate()->findOrFail($run->getKey());
+
         $this->mustBeOpen($run);
 
-        $run->load('lines.components');
+        $run->load('lines.components', 'lines.tripLinks');
 
         abort_if(
             $run->lines->isEmpty(),
             422,
             'This run has nobody on it. Build it again — only active employees with a basic salary on record are paid here.',
         );
+
+        $this->mustNotOverlap($run->period_start, $run->period_end, $run);
+        $this->mustNotRepayTrips($run);
+        $this->capStoreAtApproval($run);
+
+        $negative = $run->lines->first(fn (PayRunLine $line): bool => (int) $line->net_cents < 0);
+
+        abort_if($negative !== null, 422, sprintf(
+            '%s’s payslip comes to ₱%s net. Correct the deductions on it before approving — a run '
+            .'cannot pay anybody less than nothing, and it could not be put in the books.',
+            $negative?->name,
+            number_format(((int) $negative?->net_cents) / 100, 2),
+        ));
 
         $run->forceFill([
             'status' => PayRun::APPROVED,
@@ -859,6 +1026,8 @@ class PayrollService
      *       Cr  SSS/PhilHealth/Pag-IBIG payable    the contributions
      *       Cr  Withholding tax payable            the tax
      *       Cr  Cash in bank                       what the staff were handed
+     *     Dr  Salaries expense           the employer's contributions
+     *       Cr  SSS/PhilHealth/Pag-IBIG payable    the same
      *
      * One entry, balanced by construction — the gross *is* the deductions plus
      * the net — and posted, because the money has moved. If the chart is
@@ -939,16 +1108,87 @@ class PayrollService
             ];
         };
 
-        // The whole cost of employing people this period, on one debit.
-        $push($codes['salaries_expense'] ?? '5200', 'debit', $run->grossCents(), 'Salaries and wages');
+        /**
+         * The cost of employing people this period — on two debits, not one.
+         *
+         * Drivers' and helpers' wages are a cost of services and the office's
+         * are an administrative expense, and the income statement measures
+         * gross profit between the two. Everything used to go to 5200 "Office
+         * salaries", which put the fleet's largest direct cost below that line
+         * and overstated what the hauling earned. `crew` is frozen on the line
+         * at build, so this reads what the payslip was, not what the person's
+         * record says today.
+         *
+         * An older chart with no crew-wages account keeps posting the lot to
+         * salaries rather than refusing to post at all.
+         */
+        $salaries = $codes['salaries_expense'] ?? '5200';
+        $crewWages = $codes['crew_wages_expense'] ?? '5020';
+
+        if (! $accounts->has($crewWages)) {
+            $crewWages = $salaries;
+        }
+
+        $crewGross = (int) $run->lines->where('crew', true)->sum('gross_cents');
+
+        $push($crewWages, 'debit', $crewGross, 'Drivers’ and helpers’ wages');
+        $push($salaries, 'debit', $run->grossCents() - $crewGross, 'Office salaries and wages');
+
+        /**
+         * The firm's own SSS, EC, PhilHealth and Pag-IBIG — a cost the gross
+         * does not contain, owed to the same payable as what was withheld.
+         *
+         * Split crew and office like the wages, because it is part of what
+         * employing that person cost and belongs on the same side of the gross
+         * profit line as their pay. Its own debit and its own credit, so the
+         * entry still balances line by line: none of it touches the net. An
+         * account missing from the chart falls back to that side's wage
+         * account, as the crew wages do.
+         */
+        $crewEmployerAccount = $codes['crew_employer_contributions_expense'] ?? $crewWages;
+        $officeEmployerAccount = $codes['employer_contributions_expense'] ?? $salaries;
+
+        if (! $accounts->has($crewEmployerAccount)) {
+            $crewEmployerAccount = $crewWages;
+        }
+
+        if (! $accounts->has($officeEmployerAccount)) {
+            $officeEmployerAccount = $salaries;
+        }
+
+        $employer = $run->employerContributionsCents()['total'];
+        $crewEmployer = (int) $run->lines->where('crew', true)
+            ->sum(static fn (PayRunLine $line): int => $line->employerContributionsCents());
+
+        $push($crewEmployerAccount, 'debit', $crewEmployer, 'SSS, PhilHealth and Pag-IBIG — employer share, drivers and helpers');
+        $push($officeEmployerAccount, 'debit', $employer - $crewEmployer, 'SSS, PhilHealth and Pag-IBIG — employer share, office');
 
         // What each agency is now owed, and what the staff were handed.
         $push($codes['statutory_payable'] ?? '2200', 'credit', $contributions, 'SSS, PhilHealth and Pag-IBIG withheld');
+        $push($codes['statutory_payable'] ?? '2200', 'credit', $employer, 'SSS, PhilHealth and Pag-IBIG — employer share');
         $push($codes['withholding_payable'] ?? '2160', 'credit', $statutory['withholding_tax'], 'Withholding tax on wages');
         // Anything the firm is recovering — a cash advance — reduces what goes
         // out and lands against wages payable rather than cash.
         $push($codes['accrued_wages'] ?? '2100', 'credit', $other, 'Advances and other deductions recovered');
         $push($codes['cash'] ?? '1020', 'credit', $run->netCents(), 'Net pay');
+
+        /**
+         * Balanced by construction — every line's gross is its deductions plus
+         * its net, and no line may be negative (see `settleTotals()` and the
+         * approval check). Asserted anyway, with a message that names the
+         * cause, because the alternative is `JournalService`'s balance error
+         * naming none.
+         */
+        $debits = array_sum(array_map(static fn (array $l): int => $l['side'] === 'debit' ? $l['amount_cents'] : 0, $lines));
+        $credits = array_sum(array_map(static fn (array $l): int => $l['side'] === 'credit' ? $l['amount_cents'] : 0, $lines));
+
+        abort_if($debits !== $credits, 422, sprintf(
+            '%s does not add up — its payslips total ₱%s gross against ₱%s deducted and paid. '
+            .'A payslip on it has been changed outside payroll; work the figures out again.',
+            $run->reference,
+            number_format($debits / 100, 2),
+            number_format($credits / 100, 2),
+        ));
 
         return $this->journal->create(JournalEntryData::fromArray([
             'entry_date' => $run->pay_date?->toDateString() ?? now()->toDateString(),
@@ -965,6 +1205,105 @@ class PayrollService
         ]), $author);
     }
 
+    /**
+     * The contributions and tax on a paid run have been sent to the agencies.
+     *
+     * Records the day and the office's reference, and posts the payment:
+     *
+     *     Dr  SSS/PhilHealth/Pag-IBIG payable   withheld + employer share
+     *     Dr  Withholding tax payable           tax withheld
+     *         Cr  Cash                          the lot
+     *
+     * — the exact reverse of what paying the run credited to those payables, so
+     * both are square once this posts. From that day the run is off Payables.
+     * Once only: a second remittance for the same run is refused, because it
+     * would pay the agencies twice in the books.
+     */
+    public function remit(PayRun $run, string $on, ?string $reference = null, ?User $author = null): PayRun
+    {
+        abort_unless($run->isPaid(), 422, "Mark {$run->reference} paid before recording what was sent to the agencies.");
+        abort_if($run->isRemitted(), 422, sprintf(
+            '%s was already recorded as remitted on %s.',
+            $run->reference,
+            $run->remitted_on?->format('M j, Y'),
+        ));
+
+        $run->load('lines.components');
+
+        return DB::transaction(function () use ($run, $on, $reference, $author): PayRun {
+            // Our own number, always — numbered in the year the money was sent.
+            $number = PayRun::nextRemittanceNo((int) substr($on, 0, 4));
+            $entry = $this->postRemittance($run, $on, $number, $reference, $author);
+
+            $run->forceFill([
+                'remitted_on' => $on,
+                'remittance_no' => $number,
+                'remittance_reference' => $reference,
+                'remittance_entry_id' => $entry?->getKey(),
+            ])->save();
+
+            return $run->refresh()->load(['lines.components', 'journalEntry']);
+        });
+    }
+
+    /** The journal entry for a remittance. Null on an install with no chart. */
+    private function postRemittance(PayRun $run, string $on, string $number, ?string $reference, ?User $author): ?JournalEntry
+    {
+        $codes = (array) config('cargo.payroll.accounts', []);
+        $accounts = Account::query()->whereIn('code', array_values($codes))->get()->keyBy('code');
+
+        if ($accounts->isEmpty()) {
+            return null;
+        }
+
+        $statutory = $run->statutoryCents();
+        $contributions = $statutory['sss'] + $statutory['philhealth'] + $statutory['pagibig']
+            + $run->employerContributionsCents()['total'];
+        $tax = $statutory['withholding_tax'];
+
+        if ($contributions + $tax <= 0) {
+            return null;
+        }
+
+        $lines = [];
+
+        foreach ([
+            [$codes['statutory_payable'] ?? '2200', 'debit', $contributions, 'SSS, PhilHealth and Pag-IBIG remitted'],
+            [$codes['withholding_payable'] ?? '2160', 'debit', $tax, 'Withholding tax remitted to the BIR'],
+            [$codes['cash'] ?? '1020', 'credit', $contributions + $tax, 'Remittance'],
+        ] as [$code, $side, $amount, $memo]) {
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $account = $accounts->get($code);
+
+            abort_if($account === null, 422, sprintf('Account %s is missing from the chart, so this remittance cannot be posted.', $code));
+
+            $lines[] = ['account_id' => $account->getKey(), 'side' => $side, 'amount_cents' => $amount, 'memo' => $memo];
+        }
+
+        return $this->journal->create(JournalEntryData::fromArray([
+            'entry_date' => $on,
+            'category' => JournalCategory::Payroll->value,
+            'memo' => sprintf(
+                '%s · remittance for payroll %s · %s%s',
+                $number,
+                $run->reference,
+                $run->periodLabel(),
+                $reference ? " · agency ref {$reference}" : '',
+            ),
+            'status' => JournalEntry::POSTED,
+            'source' => 'payroll',
+            'source_type' => PayRun::class,
+            'source_id' => $run->getKey(),
+            // Its own rule, so it sits beside the run's own entry rather than
+            // colliding with it on the source index.
+            'source_rule' => 'remittance',
+            'lines' => $lines,
+        ]), $author);
+    }
+
     /** Delete a draft. An approved run has been shown to people. */
     public function delete(PayRun $run): void
     {
@@ -974,6 +1313,126 @@ class PayrollService
             $run->lines()->delete();
             $run->delete();
         });
+    }
+
+    /**
+     * Serialise payroll writes for this firm.
+     *
+     * The company row, locked for the rest of the transaction. Opening a run
+     * and approving one both check what other runs exist and then act on the
+     * answer, and two requests doing that at once would both see "nothing
+     * here" — the duplicate run this guard exists to stop. SQLite has no row
+     * locks and serialises writers anyway, so this is a no-op there.
+     */
+    private function lockPayroll(): void
+    {
+        $companyId = $this->tenant->id();
+
+        if ($companyId !== null) {
+            Company::query()->whereKey($companyId)->lockForUpdate()->first();
+        }
+    }
+
+    /**
+     * One period, one run.
+     *
+     * Two runs covering the same days paid everybody on them twice, and
+     * nothing stopped it: pressing "open run" twice, or two people opening the
+     * same fortnight, left two drafts that could both be approved and both be
+     * paid. So a new run is refused when any other run — draft, approved or
+     * paid — shares a day with it; a deleted draft does not count.
+     *
+     * At approval (`$approving` given) only a frozen run blocks, since that is
+     * the one somebody may already have been paid on. A duplicate draft left
+     * over from before this rule can still be approved once; its twin cannot.
+     */
+    private function mustNotOverlap(Carbon $start, Carbon $end, ?PayRun $approving = null): void
+    {
+        $clash = PayRun::query()
+            ->when($approving !== null, fn ($query) => $query
+                ->whereKeyNot($approving->getKey())
+                ->whereIn('status', [PayRun::APPROVED, PayRun::PAID]))
+            ->whereDate('period_start', '<=', $end->toDateString())
+            ->whereDate('period_end', '>=', $start->toDateString())
+            ->orderBy('period_start')
+            ->first();
+
+        abort_if($clash !== null, 422, sprintf(
+            '%s already covers %s. A period is paid on one run only — open that one%s.',
+            $clash?->reference,
+            $clash?->periodLabel(),
+            $clash?->isDraft() ? ', or delete it first' : '',
+        ));
+    }
+
+    /**
+     * Has any trip on this run been paid on another one since it was built?
+     *
+     * A late trip can be picked up by two drafts at once — each reaches back
+     * for what no *frozen* payslip has counted, and neither is frozen yet. The
+     * first to be approved has paid it; the second has to be worked out again,
+     * which drops it.
+     */
+    private function mustNotRepayTrips(PayRun $run): void
+    {
+        $links = $run->lines->flatMap->tripLinks;
+
+        if ($links->isEmpty()) {
+            return;
+        }
+
+        $paid = PayRunLineTrip::query()
+            ->settled()
+            ->whereNotIn('pay_run_line_id', $run->lines->modelKeys())
+            ->whereIn('trip_id', $links->pluck('trip_id')->unique()->all())
+            ->get(['employee_id', 'trip_id'])
+            ->filter(fn (PayRunLineTrip $settled): bool => $links->contains(
+                fn (PayRunLineTrip $mine): bool => $mine->trip_id === $settled->trip_id
+                    && $mine->employee_id === $settled->employee_id,
+            ));
+
+        abort_if($paid->isNotEmpty(), 422, sprintf(
+            '%d trip(s) on %s have been paid on another run since it was worked out. '
+            .'Work it out again before approving — that takes them off.',
+            $paid->count(),
+            $run->reference,
+        ));
+    }
+
+    /**
+     * Cap each store deduction at what the tab still owes, as the run freezes.
+     *
+     * The build read the tab as it was then, less other drafts' reservations.
+     * Between then and now another run can have been approved and written its
+     * repayment — so this reads the tab again, with no reservations (this run
+     * is the one being frozen), and takes no more than is left. The net only
+     * rises. The other drafts meet the same check at their own approval, which
+     * is what keeps a tab from being driven below zero.
+     */
+    private function capStoreAtApproval(PayRun $run): void
+    {
+        $taking = $run->lines->filter(fn (PayRunLine $line): bool => (int) $line->store_deduction_cents > 0
+            && $line->employee_id !== null);
+
+        if ($taking->isEmpty()) {
+            return;
+        }
+
+        $owed = $this->storeCredit->available(
+            $taking->pluck('employee_id')->all(),
+            $run->period_end->toDateString(),
+            $run->getKey(),
+            reservations: false,
+        );
+
+        foreach ($taking as $line) {
+            $left = $owed[$line->employee_id] ?? 0;
+
+            if ((int) $line->store_deduction_cents > $left) {
+                $line->store_deduction_cents = $left;
+                $this->totalsOn($line)->save();
+            }
+        }
     }
 
     /**

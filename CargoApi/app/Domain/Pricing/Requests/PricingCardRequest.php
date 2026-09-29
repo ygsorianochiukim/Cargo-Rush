@@ -10,16 +10,18 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 /**
- * The firm's plain distance card — the lines that belong to no zone.
+ * The old plain distance card — the lines that belong to no zone.
  *
- * "450 km is ₱5,000", said without inventing a zone per town first. These lines
- * apply wherever nothing more specific does, and for most hauliers they are the
- * whole rate card: the zone editor is for the firms that genuinely price Davao
- * differently from Tagum.
+ * These no longer price anything. Pricing is zone-only (see `PricingService`):
+ * a run is charged off a line of a zone that covers it, or left unpriced for
+ * the office. So this form can no longer **add** a zoneless line — every line
+ * it saves must be one that already exists, and a line with no `id` is refused
+ * with a pointer to the zone editor. What it still does is let an office tidy
+ * up or delete the rows it has, which are otherwise left untouched in the
+ * table rather than dropped behind anybody's back.
  *
- * The whole card arrives at once, as the zone editor's does, because that is
- * how it is edited — somebody adds a line, corrects a rate on another, deletes
- * a third and presses save once.
+ * The whole card arrives at once, as the zone editor's does: lines left out
+ * are deleted.
  */
 class PricingCardRequest extends ApiFormRequest
 {
@@ -27,7 +29,7 @@ class PricingCardRequest extends ApiFormRequest
     {
         return [
             'brackets' => ['present', 'array', 'max:40'],
-            'brackets.*.id' => ['nullable', 'string', 'exists:pricing_brackets,id'],
+            'brackets.*.id' => ['required', 'string', 'exists:pricing_brackets,id'],
             'brackets.*.label' => ['required', 'string', 'max:60'],
             'brackets.*.min_km' => ['required', 'integer', 'min:0', 'max:100000'],
             'brackets.*.max_km' => ['nullable', 'integer', 'min:1', 'max:100000'],
@@ -119,6 +121,13 @@ class PricingCardRequest extends ApiFormRequest
                 $seen[$category][] = [$min, $max];
             }
         });
+    }
+
+    public function messages(): array
+    {
+        return [
+            'brackets.*.id.required' => 'The distance card no longer prices trips. Add this line to a zone on the Pricing card instead.',
+        ];
     }
 
     /**

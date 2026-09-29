@@ -72,6 +72,18 @@ export const routes: Routes = [
         data: { title: 'GPS Dashboard' },
         loadComponent: () => import('./pages/gps/gps.page').then((m) => m.GpsPage),
       },
+      /**
+       * The paperwork a truck leaves with — the Official Trip Ticket and the
+       * dispatch checklist — as a page, for the print stylesheet to strip the
+       * shell off. Before `trips`, like `billing/:invoice` before `billing`.
+       */
+      {
+        path: 'trips/:trip/ticket',
+        title: 'Trip ticket · Cargo Rush',
+        data: { title: 'Trip ticket' },
+        loadComponent: () =>
+          import('./pages/trip-ticket/trip-ticket.page').then((m) => m.TripTicketPage),
+      },
       {
         path: 'trips',
         title: 'Trip Management · Cargo Rush',

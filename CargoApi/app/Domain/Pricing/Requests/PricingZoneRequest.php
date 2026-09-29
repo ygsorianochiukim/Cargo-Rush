@@ -22,8 +22,11 @@ use Illuminate\Validation\Validator;
  * Two things a caller can no longer send. `aliases` is gone, because a zone is
  * not a place. And a line inside a zone can no longer carry its own
  * kilometres: the band belongs to the zone, and letting a line restate it is
- * how the two come to disagree about what 40 km means. The plain distance card
- * keeps its kilometres — see `PricingCardRequest`.
+ * how the two come to disagree about what 40 km means.
+ *
+ * This is now the only way to put a line on the card that prices anything:
+ * pricing is zone-only, and the old zoneless distance card takes no new lines
+ * (`PricingCardRequest`).
  */
 class PricingZoneRequest extends ApiFormRequest
 {

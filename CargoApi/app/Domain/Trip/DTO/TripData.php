@@ -13,7 +13,7 @@ use App\Domain\Shared\Enums\StatusValue;
  * `reference` is absent on purpose: the API assigns it (DESIGN.md section 5.3
  * makes it the human-readable id), so a client cannot choose one.
  *
- * `price_cents` is present but almost never sent. The tariff quotes it
+ * `price_cents` is present but almost never sent. The zone card quotes it
  * (`PricingService`), and the only reason it is here at all is the negotiated
  * rate — a price the office agreed by hand, which the service must be able to
  * tell from a price it derived. `Data::wasGiven()` is how it tells.

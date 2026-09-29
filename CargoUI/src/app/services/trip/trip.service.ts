@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { ApiService } from '../shared/api.service';
 import { Envelope, ListQuery } from '../../models/shared/envelope.model';
 import { Trip, TripConfirmPayload, TripPayload } from '../../models/trip/trip.model';
+import { TripTicket } from '../../models/trip/trip-ticket.model';
 
 /**
  * Trip Management — DESIGN.md section 5.1.
@@ -22,6 +23,11 @@ export class TripService {
 
   find(id: string): Observable<Trip> {
     return this.api.get<Trip>(`trips/${id}`);
+  }
+
+  /** The trip ticket and dispatch checklist, filled in for printing. */
+  ticket(id: string): Observable<TripTicket> {
+    return this.api.get<TripTicket>(`trips/${id}/ticket`);
   }
 
   /** The API assigns the id and the reference, so read the row back. */

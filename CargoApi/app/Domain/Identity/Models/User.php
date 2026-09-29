@@ -11,6 +11,7 @@ use App\Domain\Identity\Notifications\ResetPasswordLink;
 use App\Domain\Shared\Enums\Role;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
 use App\Domain\Trucker\Models\Trucker;
+use App\Domain\Trucker\Models\TruckerDriver;
 use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -122,6 +123,12 @@ class User extends Authenticatable
     public function trucker(): HasOne
     {
         return $this->hasOne(Trucker::class);
+    }
+
+    /** Their record when they drive for a trucker rather than for Cargo Rush. */
+    public function truckerDriver(): HasOne
+    {
+        return $this->hasOne(TruckerDriver::class);
     }
 
     /**

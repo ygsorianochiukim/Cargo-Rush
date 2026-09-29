@@ -57,4 +57,14 @@ export interface Receivables {
   paid_count: number;
   window_days: number;
   currency: string;
+  /**
+   * Collection over the window, measured on one set of invoices: those issued
+   * in the window, net of withholding, capped per invoice so an overpayment
+   * does not lift the rate. `rate_pct` is null when nothing was billed.
+   */
+  collection: {
+    billed_cents: number;
+    collected_cents: number;
+    rate_pct: number | null;
+  };
 }

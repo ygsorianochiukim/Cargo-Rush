@@ -17,6 +17,7 @@ use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Support\Geo;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
 use App\Domain\Trucker\Models\Trucker;
+use App\Domain\Trucker\Models\TruckerDriver;
 use App\Domain\Trucker\Models\TruckerVehicle;
 use App\Domain\Vehicle\Models\Vehicle;
 use Database\Factories\TripFactory;
@@ -47,11 +48,12 @@ class Trip extends Model
         'scheduled_at', 'eta', 'distance_total_m',
         'price_cents', 'currency', 'billed_at', 'requested_by',
         'pricing_zone_id', 'pricing_bracket_id', 'fuel_adjustment_bp', 'fuel_surcharge_cents',
+        'pricing_source', 'pricing_note',
         // The partner half. `booking_source` is fillable because the desk
         // assigning a run writes it; the two commission columns are not, and
         // are force-filled once at delivery — see `Trip::isBilled()` for the
         // rule about what may only happen once.
-        'trucker_id', 'trucker_vehicle_id', 'booking_source',
+        'trucker_id', 'trucker_vehicle_id', 'trucker_driver_id', 'booking_source',
     ];
 
     protected function casts(): array
@@ -69,6 +71,10 @@ class Trip extends Model
             'fuel_surcharge_cents' => 'integer',
             'billed_at' => 'datetime',
             'scheduled_at' => 'datetime',
+            // The dispatch checklist as the driver answered it — see
+            // `DispatchChecklistService`. Written by that service only.
+            'dispatch_checklist' => 'array',
+            'dispatch_checked_at' => 'datetime',
             'eta' => 'datetime',
             'status' => StatusValue::class,
             'booking_source' => BookingSource::class,
@@ -141,6 +147,13 @@ class Trip extends Model
     public function trucker(): BelongsTo
     {
         return $this->belongsTo(Trucker::class);
+    }
+
+    /** Which of the trucker's own drivers is running it, if not the owner. */
+    public function truckerDriver(): BelongsTo
+    {
+        // Trashed too: a removed driver still drove the runs they finished.
+        return $this->belongsTo(TruckerDriver::class)->withTrashed();
     }
 
     public function truckerVehicle(): BelongsTo
@@ -259,6 +272,24 @@ class Trip extends Model
     public function isBilled(): bool
     {
         return $this->billed_at !== null;
+    }
+
+    /**
+     * Is there a price on this run at all?
+     *
+     * Null is "not priced yet" — no zone line covers it and nobody has typed a
+     * figure — and it is not zero, which is a real price. See `PricingService`
+     * for what an unpriced run may and may not do.
+     */
+    public function isPriced(): bool
+    {
+        return $this->price_cents !== null;
+    }
+
+    /** Was the figure typed by somebody who manages the card? */
+    public function isManuallyPriced(): bool
+    {
+        return $this->pricing_source === 'manual';
     }
 
     /** The statuses that mean a unit is out on the road right now. */

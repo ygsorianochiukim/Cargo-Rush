@@ -21,6 +21,8 @@ class TruckerResource extends ApiResource
         return [
             'id' => $this->id,
             'name' => $this->name,
+            // The trucking service. Null on partners from before sign-up asked.
+            'business_name' => $this->business_name,
             'phone' => $this->phone,
             'licence_no' => $this->licence_no,
             'licence_expiry' => $this->licence_expiry?->toDateString(),
@@ -61,6 +63,7 @@ class TruckerResource extends ApiResource
             'user_id' => $this->user_id,
 
             'vehicles' => TruckerVehicleResource::collection($this->whenLoaded('vehicles')),
+            'drivers' => TruckerDriverResource::collection($this->whenLoaded('drivers')),
 
             ...$this->stamps(),
         ];

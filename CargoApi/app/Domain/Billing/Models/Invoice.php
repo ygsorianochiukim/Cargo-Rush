@@ -250,7 +250,9 @@ class Invoice extends Model
             return StatusValue::Partial;
         }
 
-        return $this->due_at->isPast() ? StatusValue::Overdue : StatusValue::Pending;
+        // Late from the day after it fell due, not on the day itself — the same
+        // line the aging buckets draw.
+        return $this->due_at->lt(today()) ? StatusValue::Overdue : StatusValue::Pending;
     }
 
     /** Who the document is addressed to, whichever direction it points. */

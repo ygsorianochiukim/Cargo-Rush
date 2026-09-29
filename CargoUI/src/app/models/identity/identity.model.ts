@@ -112,6 +112,12 @@ export interface Company {
   payroll_deduct_on_detail: string;
 
   /**
+   * Whether payroll takes SSS, PhilHealth and Pag-IBIG at all. Off overrides
+   * every person's own enrolment; on leaves it to them.
+   */
+  payroll_benefits_enabled: boolean;
+
+  /**
    * The days this firm's pay periods close on.
    *
    * The other payroll policy, and the one that used to be an environment
@@ -141,7 +147,7 @@ export interface Company {
    * The rates this firm works to, in force.
    *
    * Always a complete set of concrete numbers, whatever the columns behind them
-   * hold — a screen drawing a tariff never has to decide what a null means.
+   * hold — a screen drawing a rate never has to decide what a null means.
    * Only on the company's own endpoints, where the caller holds
    * `company.manage`; `Me` does not carry them.
    */
@@ -170,13 +176,6 @@ export interface Company {
  * divides on the way onto the screen and multiplies on the way back.
  */
 export interface CompanyRates {
-  /** The fallback quote, for a run no rate-card line covers. */
-  tariff: {
-    base_cents: number;
-    per_km_cents: number;
-    per_kg_cents: number;
-    minimum_cents: number;
-  };
   /** The haulier's cut of a partner trucker's run. 1200 out of the box. */
   trucker_commission_bp: number;
   /** How long a delivered run's invoice has before it is overdue. */
@@ -184,7 +183,7 @@ export interface CompanyRates {
   vat_registered: boolean;
   vat_rate_bp: number;
   withholding_rate_bp: number;
-  /** Is the tariff quoted with the VAT already inside it? */
+  /** Is the rate card quoted with the VAT already inside it? */
   prices_include_vat: boolean;
   currency: string;
 }
@@ -196,10 +195,6 @@ export interface CompanyRates {
  * is its default, and there is no unset state to go back to.
  */
 export interface CompanyRateOverrides {
-  tariff_base_cents: number | null;
-  tariff_per_km_cents: number | null;
-  tariff_per_kg_cents: number | null;
-  tariff_minimum_cents: number | null;
   billing_terms_days: number | null;
   withholding_rate_bp: number | null;
   prices_include_vat: boolean | null;

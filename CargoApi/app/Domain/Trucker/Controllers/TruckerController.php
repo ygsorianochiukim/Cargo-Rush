@@ -57,7 +57,7 @@ class TruckerController extends ApiController
     public function show(Trucker $trucker): JsonResponse
     {
         return $this->item(
-            new TruckerResource($trucker->loadMissing('vehicles.category')),
+            new TruckerResource($trucker->loadMissing(['vehicles.category', 'drivers'])),
             // The balance rides along, because the roster's detail screen opens
             // on it — a partner's record and what they are owed are one
             // question at the desk, not two.

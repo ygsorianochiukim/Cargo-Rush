@@ -22,6 +22,15 @@ export interface TooltipRow {
 @Component({
   selector: 'app-chart-tooltip',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  /**
+   * `display: contents`, so the element itself takes no space.
+   *
+   * The tooltip is absolutely positioned, but its host element was still a
+   * box in the layout — inside a flex column with a gap, every hover added a
+   * gap's worth of height and pushed the chart down, then snapped it back on
+   * mouse-out. That was the "graph keeps moving when I hover".
+   */
+  host: { class: 'contents' },
   template: `
     <div
       class="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 -translate-x-1/2

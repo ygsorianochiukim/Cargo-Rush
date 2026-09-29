@@ -16,6 +16,7 @@ use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Vehicle\Models\Vehicle;
 use Database\Seeders\Concerns\AdoptsTrashedRows;
+use Database\Seeders\Concerns\NeedsAZoneCard;
 use Database\Seeders\Concerns\SeedsIntoACompany;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
@@ -30,7 +31,7 @@ use Illuminate\Support\Collection;
  */
 class OperationsSeeder extends Seeder
 {
-    use AdoptsTrashedRows, SeedsIntoACompany;
+    use AdoptsTrashedRows, NeedsAZoneCard, SeedsIntoACompany;
 
     public function __construct(private readonly PricingService $pricing) {}
 
@@ -62,6 +63,8 @@ class OperationsSeeder extends Seeder
 
     private function seed(): void
     {
+        $this->ensureZoneCard();
+
         $drivers = Driver::query()->pluck('id', 'name');
         $vehicles = Vehicle::query()->pluck('id', 'plate');
         $customers = Customer::query()->pluck('id', 'name');
@@ -89,7 +92,7 @@ class OperationsSeeder extends Seeder
                 'distance_total_m' => random_int(60, 220) * 1000,
             ]);
 
-            // Quoted from the same tariff a real booking goes through, so the
+            // Quoted off the same zone card a real booking goes through, so the
             // demo board shows the prices a walkthrough is about to talk about
             // rather than a column of zeros. Written after the create because
             // the quote reads the distance, which is set in it.

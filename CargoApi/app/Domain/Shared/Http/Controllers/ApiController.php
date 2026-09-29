@@ -46,7 +46,23 @@ abstract class ApiController extends Controller
     ): JsonResponse {
         $meta = array_merge($this->listMeta($source), $meta);
 
-        return $resource->additional(['meta' => $meta])->response();
+        $response = $resource->additional(['meta' => $meta])->response();
+
+        /*
+         * A resource over a paginator writes Laravel's own `meta` and `links`,
+         * and `additional()` merges into them recursively — so `total` came
+         * out as `[3, 3]`. The envelope is section 7.1's and nothing else:
+         * put our `meta` back whole and drop the links nobody reads.
+         */
+        if ($source instanceof LengthAwarePaginator) {
+            $body = $response->getData(true);
+            $body['meta'] = $meta;
+            unset($body['links']);
+
+            $response->setData($body);
+        }
+
+        return $response;
     }
 
     /**

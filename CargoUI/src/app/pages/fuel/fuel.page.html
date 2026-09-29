@@ -13,6 +13,11 @@
         {{ fmt.money(b.spent_today_cents, b.currency) }}
       </p>
       <p class="cr-meta mt-1">Spent of {{ fmt.money(b.daily_budget_cents, b.currency) }}</p>
+      @if (b.pending_today_cents > 0) {
+        <p class="cr-meta mt-1">
+          + {{ fmt.money(b.pending_today_cents, b.currency) }} awaiting approval
+        </p>
+      }
 
       <div class="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-cr-line">
         <div

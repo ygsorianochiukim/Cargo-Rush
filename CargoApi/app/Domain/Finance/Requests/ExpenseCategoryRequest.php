@@ -7,6 +7,7 @@ namespace App\Domain\Finance\Requests;
 use App\Domain\Finance\DTO\ExpenseCategoryData;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
+use App\Domain\Tenancy\Support\Tenant;
 use Illuminate\Validation\Rule;
 
 class ExpenseCategoryRequest extends ApiFormRequest
@@ -28,6 +29,13 @@ class ExpenseCategoryRequest extends ApiFormRequest
             'icon' => ['nullable', 'string', 'max:40'],
             'position' => ['sometimes', 'integer', 'min:0', 'max:999'],
             'status' => ['sometimes', Rule::in([StatusValue::Active->value, StatusValue::Inactive->value])],
+            // An account in this company's chart, or nothing for the default.
+            'account_code' => [
+                'nullable', 'string', 'max:20',
+                Rule::exists('accounts', 'code')
+                    ->where('company_id', app(Tenant::class)->id())
+                    ->whereNull('deleted_at'),
+            ],
         ];
     }
 

@@ -55,9 +55,17 @@ class JournalEntry extends Model
     /** Somebody at a keyboard, as opposed to a document posting itself. */
     public const MANUAL = 'manual';
 
+    /**
+     * Posted by an operational record — a delivery, an invoice, a day on the
+     * sheet — through `AutoPostingService`, and kept true by it: a change to
+     * the record voids this and posts its replacement. Payroll keeps its own
+     * `payroll` source, which predates this.
+     */
+    public const AUTO = 'auto';
+
     protected $fillable = [
         'reference', 'entry_date', 'category', 'memo',
-        'source', 'source_type', 'source_id', 'status',
+        'source', 'source_type', 'source_id', 'source_rule', 'source_revision', 'status',
     ];
 
     protected function casts(): array
@@ -67,6 +75,7 @@ class JournalEntry extends Model
             'category' => JournalCategory::class,
             'posted_at' => 'datetime',
             'voided_at' => 'datetime',
+            'source_revision' => 'integer',
         ];
     }
 
@@ -119,6 +128,12 @@ class JournalEntry extends Model
      * void entry would be editing the record of a correction, which is the one
      * thing an audit trail must not allow.
      */
+    /** Did a record post this itself, rather than somebody at a keyboard? */
+    public function isAutomatic(): bool
+    {
+        return $this->source === self::AUTO;
+    }
+
     public function isLocked(): bool
     {
         return ! $this->isDraft();

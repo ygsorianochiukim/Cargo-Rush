@@ -6,6 +6,7 @@ namespace App\Domain\Accounting\Resources;
 
 use App\Domain\Accounting\Models\JournalEntry;
 use App\Domain\Accounting\Models\JournalLine;
+use App\Domain\Accounting\Services\AutoPostingService;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use Illuminate\Http\Request;
 
@@ -60,6 +61,10 @@ class JournalEntryResource extends ApiResource
             'source' => $this->source,
             'source_type' => $this->source_type,
             'source_id' => $this->source_id,
+            // Posted by a record rather than by somebody at a keyboard, and
+            // kept true by it — correct the record, not the entry.
+            'automatic' => $this->resource->isAutomatic(),
+            'source_label' => AutoPostingService::sourceLabel($this->source_type),
 
             'posted_at' => $this->iso($this->posted_at),
             'posted_by_name' => $this->postedBy?->name,

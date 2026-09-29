@@ -336,6 +336,28 @@ export class PayrollPage {
     ];
   });
 
+  /**
+   * What the company pays on top of the run, per agency.
+   *
+   * A card of its own rather than more rows in the one above, because that
+   * card is what came *off* the payslips and this is a cost the company bears
+   * *beside* them — adding the two together would answer neither question.
+   */
+  protected readonly employerShares = computed(() => {
+    const run = this.run();
+
+    if (run === null) return [];
+
+    const share = run.employer_contributions;
+
+    return [
+      { label: 'SSS', goesTo: 'Social Security System', cents: share.sss },
+      { label: 'EC', goesTo: 'SSS, for Employees’ Compensation', cents: share.ec },
+      { label: 'PhilHealth', goesTo: 'PhilHealth', cents: share.philhealth },
+      { label: 'Pag-IBIG', goesTo: 'Pag-IBIG Fund', cents: share.pagibig },
+    ];
+  });
+
   constructor() {
     this.load();
     // No month asked for: the API answers with the one holding the period that

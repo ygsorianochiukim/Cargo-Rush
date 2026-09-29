@@ -38,7 +38,10 @@ export interface FuelRecordPayload {
 export interface FuelBudget {
   date: string;
   daily_budget_cents: number;
+  /** Approved fills only — the figure Finance counts. */
   spent_today_cents: number;
+  /** Fills logged today still awaiting approval: not spent until they are. */
+  pending_today_cents: number;
   currency: string;
   /** Month-end spend, straight-lined from the rate so far. */
   projection_cents: number;

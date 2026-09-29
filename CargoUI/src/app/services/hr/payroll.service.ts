@@ -122,6 +122,27 @@ export class PayrollService {
     return this.api.post<PayRun>(`payroll/${id}/pay`, {});
   }
 
+  /**
+   * What a paid run withheld has been sent to SSS, PhilHealth, Pag-IBIG and
+   * the BIR. Posts the remittance and takes the run off Payables.
+   */
+  /** The REM number the next remittance will be given — a preview; it is taken on save. */
+  nextRemittanceNo(on?: string): Observable<string> {
+    return this.api
+      .get<{ remittance_no: string }>(
+        'payroll/remittance-number',
+        on ? ({ on } as never) : undefined,
+      )
+      .pipe(map((row) => row.remittance_no));
+  }
+
+  remit(
+    id: string,
+    payload: { remitted_on: string; reference?: string | null },
+  ): Observable<PayRun> {
+    return this.api.post<PayRun>(`payroll/${id}/remit`, payload);
+  }
+
   /** Delete a draft. An approved run has been shown to people. */
   remove(id: string): Observable<void> {
     return this.api.delete(`payroll/${id}`);

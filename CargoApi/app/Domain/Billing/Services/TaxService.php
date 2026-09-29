@@ -64,41 +64,79 @@ class TaxService
 
         $treatment = $customer?->vatTreatment() ?? VatTreatment::Vatable;
         $vatRate = $this->charges($treatment) ? $this->vatRateBp() : 0;
+        $withholdingRate = $customer?->withholdsTax() === true ? $this->withholdingRateBp($customer) : 0;
 
+        return $this->atRates($amountCents, $vatRate, $withholdingRate, $treatment);
+    }
+
+    /**
+     * The same arithmetic, at rates the caller already holds.
+     *
+     * `on()` looks the rates up; this is for a document whose rates are
+     * **frozen** on it. A re-quote of an old invoice must use what applied on
+     * the day it was issued, not what the settings card says now, or repairing
+     * one figure would quietly restate another.
+     *
+     * ## Rounding: half-up, to the centavo
+     *
+     * It used to be `intdiv`, which truncates — a VAT of ₱12.345 came out as
+     * ₱12.34, and every calculator a customer checks the document against
+     * says ₱12.35. Still integer arithmetic throughout: never a float
+     * multiplication on money.
+     */
+    public function atRates(
+        int $amountCents,
+        int $vatRateBp,
+        int $withholdingRateBp,
+        VatTreatment $treatment = VatTreatment::Vatable,
+    ): TaxBreakdown {
         // Inclusive: the figure already contains the VAT, so the net is what
-        // is left once it is taken back out. Integer arithmetic throughout —
-        // `intdiv` after multiplying, never a float multiplication on money.
+        // is left once it is taken back out.
         $inclusive = $this->rates->pricesIncludeVat();
 
-        if ($inclusive && $vatRate > 0) {
-            $net = intdiv($amountCents * 10_000, 10_000 + $vatRate);
-            // The remainder goes to VAT rather than being rounded away, so
-            // net + vat is exactly the figure the customer was quoted.
+        if ($inclusive && $vatRateBp > 0) {
+            $net = self::roundDiv($amountCents * 10_000, 10_000 + $vatRateBp);
+            // The remainder goes to VAT rather than being rounded separately,
+            // so net + vat is exactly the figure the customer was quoted.
             $vat = $amountCents - $net;
         } else {
             $net = $amountCents;
-            $vat = intdiv($net * $vatRate, 10_000);
+            $vat = self::roundDiv($net * $vatRateBp, 10_000);
         }
 
         /**
-         * Withholding is on the **gross**, VAT included.
+         * Withholding is on the **net** — the tax base, VAT excluded.
          *
-         * That is how the BIR computes it, and it is the detail most worth
-         * getting right: applying 2% to the net instead understates the
-         * deduction on every invoice the business ever raises, and the error
-         * only shows up when a customer pays less than expected.
+         * The creditable withholding tax a customer keeps back is a percentage
+         * of the income payment *exclusive of VAT*: the VAT on the same
+         * invoice is the government's, passing through us, and not income of
+         * ours to withhold on. It used to be taken on the gross, which
+         * over-withheld by 12% of the rate on every document — the customer
+         * remitted less than the BIR form they issued said, and the two never
+         * agreed.
          */
-        $withholdingRate = $customer?->withholdsTax() === true ? $this->withholdingRateBp($customer) : 0;
-        $withholding = intdiv(($net + $vat) * $withholdingRate, 10_000);
+        $withholding = self::roundDiv($net * $withholdingRateBp, 10_000);
 
         return new TaxBreakdown(
             net_cents: $net,
             vat_cents: $vat,
             withholding_cents: $withholding,
-            vat_rate_bp: $vatRate,
-            withholding_rate_bp: $withholdingRate,
+            vat_rate_bp: $vatRateBp,
+            withholding_rate_bp: $withholdingRateBp,
             treatment: $treatment,
         );
+    }
+
+    /**
+     * Integer division rounded half away from zero — half-up on the positive
+     * amounts every invoice carries, and symmetric on a negative adjustment so
+     * a credit mirrors the charge it reverses.
+     */
+    public static function roundDiv(int $numerator, int $denominator): int
+    {
+        $sign = ($numerator < 0) !== ($denominator < 0) ? -1 : 1;
+
+        return $sign * intdiv(2 * abs($numerator) + abs($denominator), 2 * abs($denominator));
     }
 
     /** A breakdown with no tax on it — a payable, or an untaxed company. */

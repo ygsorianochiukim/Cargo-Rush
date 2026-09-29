@@ -7,6 +7,7 @@ namespace App\Domain\Trip\Services;
 use App\Domain\Billing\Models\Invoice;
 use App\Domain\Billing\Services\BillingService;
 use App\Domain\Billing\Services\PricingService;
+use App\Domain\Billing\Services\TaxService;
 use App\Domain\Delivery\DTO\ProofData;
 use App\Domain\Delivery\Models\DeliveryLog;
 use App\Domain\Delivery\Services\ProofStore;
@@ -69,6 +70,9 @@ class TripService
         private readonly WalletService $wallet,
         // How far the truck actually drives, which is what picks the zone.
         private readonly RoadDistance $roads,
+        // Which part of a price is ours and which is the government's, worked
+        // out exactly as the invoice works it out.
+        private readonly TaxService $tax,
     ) {}
 
     /**
@@ -96,6 +100,7 @@ class TripService
             $this->fillHelpers($trip, $data);
             $this->fillDistance($trip, $data);
             $this->fillPrice($trip, $data);
+            $this->mustBePricedToGoOut($trip);
 
             DeliveryLog::create([
                 'trip_id' => $trip->id,
@@ -108,14 +113,36 @@ class TripService
 
     public function update(Trip $trip, TripData $data): Trip
     {
+        $this->mustLeaveTheBooksAlone($trip, $data);
+
         return DB::transaction(function () use ($trip, $data): Trip {
             $updated = $this->trips->update($trip, $data);
             $this->fillHelpers($updated, $data);
             $this->fillDistance($updated, $data);
             $this->fillPrice($updated, $data);
+            $this->mustBePricedToGoOut($updated);
 
             return $updated->refresh();
         });
+    }
+
+    /**
+     * Only a request may sit unpriced.
+     *
+     * A `pending` run is somebody asking, and a `cancelled` one is nobody's
+     * work, so either may carry no price while the office sorts the card out.
+     * Every other status is the firm committed to a haul — scheduled, crewed,
+     * on the road — and committing to one at no agreed figure is the exact
+     * thing zone-only pricing exists to stop. Checked after the quote, inside
+     * the transaction, so a refused save leaves nothing behind.
+     */
+    private function mustBePricedToGoOut(Trip $trip): void
+    {
+        if (in_array($trip->status, [StatusValue::Pending, StatusValue::Cancelled], true)) {
+            return;
+        }
+
+        PricingService::mustBePriced($trip);
     }
 
     /**
@@ -126,6 +153,10 @@ class TripService
      * know is where the load is, where it is going, what it is and what it
      * weighs — and that is enough to quote them a price on the spot, which is
      * the difference between a request and a hopeful message.
+     *
+     * Where the zone card does not cover the run it is accepted all the same,
+     * unpriced, and waits for the office to add the line or type a figure.
+     * Refusing it would lose the work rather than price it.
      *
      * It lands as `pending`, and the desk is told, because a request nobody
      * sees is a customer waiting on silence.
@@ -183,6 +214,11 @@ class TripService
             // through, so the quote is taken again here — and not once the
             // trip has been billed, which `shouldQuote` is the judge of.
             $this->fillPrice($updated, $data);
+
+            // Confirming is the office committing to the haul, and it may
+            // not do that at no price. Inside the transaction, so a refusal
+            // leaves the request exactly as it was.
+            PricingService::mustBePriced($updated);
 
             return $updated->refresh();
         });
@@ -271,11 +307,40 @@ class TripService
      * the distance it actually covers rather than for the zero it carried a
      * moment earlier. A price sent explicitly is a negotiated rate and is left
      * exactly as it arrived — including a deliberate zero, which is how the
-     * office books its own freight.
+     * office books its own freight — and marked `manual`, so no later save
+     * re-derives it. Only somebody with `pricing.manage` gets this far with a
+     * price (`TripRequest`).
+     *
+     * A price sent as **null** is the opposite: hand the run back to the card.
+     *
+     * A run the card does not cover is stored unpriced — a null figure and the
+     * reason — rather than at some fallback number nobody agreed.
      */
     private function fillPrice(Trip $trip, TripData $data): void
     {
-        if (! $this->pricing->shouldQuote($trip, $data->wasGiven('price_cents'))) {
+        $given = $data->wasGiven('price_cents');
+
+        if ($given && $data->price_cents !== null && ! $trip->isBilled()) {
+            $trip->forceFill([
+                'pricing_source' => 'manual',
+                'pricing_note' => null,
+                // Nothing on the card priced it, and the trace must not claim
+                // a line did. The band stays: it may be the desk's pick.
+                'pricing_bracket_id' => null,
+                'fuel_adjustment_bp' => 0,
+                'fuel_surcharge_cents' => 0,
+            ])->save();
+
+            return;
+        }
+
+        $handedBack = $given && $data->price_cents === null;
+
+        if ($handedBack && ! $trip->isBilled()) {
+            $trip->forceFill(['pricing_source' => null])->save();
+        }
+
+        if (! $this->pricing->shouldQuote($trip, $given && ! $handedBack)) {
             return;
         }
 
@@ -293,7 +358,50 @@ class TripService
 
     public function delete(Trip $trip): void
     {
+        abort_if(
+            $trip->isBilled(),
+            422,
+            "{$trip->reference} has been delivered and billed, so it cannot be deleted. "
+                .'Its income, its invoice and any trucker settlement are already on the books.',
+        );
+
         $this->trips->delete($trip);
+    }
+
+    /**
+     * Once a run is billed, the money on it is settled.
+     *
+     * Delivering wrote the price to the day's sheet, raised the invoice and
+     * settled any partner's wallet — all additive, all guarded by `billed_at`
+     * so they happen once, and none of them reversed by an edit. So moving
+     * the price, the unit, the customer or the status afterwards would leave
+     * the trip saying one thing and every book it touched saying another.
+     *
+     * Only a field that is sent *and differs* is refused, so a form that
+     * re-sends the whole trip unchanged still saves a corrected note. Who
+     * hauled it is not on this form at all: `trucker_id` is set only by
+     * `TruckerService::assign`, which refuses delivered work.
+     */
+    private function mustLeaveTheBooksAlone(Trip $trip, TripData $data): void
+    {
+        if (! $trip->isBilled()) {
+            return;
+        }
+
+        $moved = array_keys(array_filter([
+            'price' => $data->wasGiven('price_cents') && (int) $data->price_cents !== (int) $trip->price_cents,
+            'unit' => $data->wasGiven('vehicle_id') && $data->vehicle_id !== $trip->vehicle_id,
+            'customer' => $data->wasGiven('customer_id') && $data->customer_id !== $trip->customer_id,
+            'status' => $data->wasGiven('status') && $data->status !== $trip->status,
+        ]));
+
+        abort_if(
+            $moved !== [],
+            422,
+            "{$trip->reference} has been delivered and billed, so its ".implode(', ', $moved)
+                .' can no longer be changed: its income, its invoice and any trucker settlement are already on the books. '
+                .'Notes and other details can still be edited.',
+        );
     }
 
     /**
@@ -302,6 +410,8 @@ class TripService
      */
     public function dispatch(Trip $trip, string $location): DispatchRecord
     {
+        PricingService::mustBePriced($trip);
+
         return DB::transaction(function () use ($trip, $location): DispatchRecord {
             $trip->update(['status' => StatusValue::InTransit->value]);
 
@@ -339,7 +449,7 @@ class TripService
      * the belt to this braces — the office and the driver can both press
      * their button, and the money still moves once.
      */
-    public function complete(Trip $trip, ProofData $proof): Trip
+    public function complete(Trip $trip, ProofData $proof, ?CarbonInterface $at = null): Trip
     {
         abort_if(
             $trip->status === StatusValue::Delivered,
@@ -347,8 +457,14 @@ class TripService
             "{$trip->reference} has already been delivered.",
         );
 
-        return DB::transaction(function () use ($trip, $proof): Trip {
-            $now = now();
+        // Delivering bills the run, and nothing is billed at no price.
+        PricingService::mustBePriced($trip);
+
+        return DB::transaction(function () use ($trip, $proof, $at): Trip {
+            // `$at` is for a past trip entered after the fact: the log, the
+            // day's sheet, the wallet and the invoice all carry the day it
+            // was really delivered, not the day it was typed in.
+            $now = $at ?? now();
 
             $trip->update(['status' => StatusValue::Delivered->value]);
 
@@ -403,9 +519,12 @@ class TripService
      *
      * **No ledger row.** The daily sheet is one company truck's costs and
      * income — diesel, the crew, the maintenance — and a partner's truck has
-     * none of those in this system. `vehicle_id` is null on such a run, so the
-     * existing guard already does the right thing, and that is not luck: the
-     * sheet has always been per unit, and there is no unit.
+     * none of those in this system. The company keeps only its commission,
+     * which reaches income through the wallet; the partner's share is theirs,
+     * passing through. `vehicle_id` should be null on such a run, and every
+     * way a partner is put on one now clears it — but the guard below asks
+     * "was this a partner's run?" rather than trusting the column, because an
+     * older row carrying both once booked the whole price as ours.
      *
      * **An invoice only when the haulier is collecting.** A run the desk
      * brokered is billed exactly as it always was. A run a customer gave
@@ -445,18 +564,36 @@ class TripService
          */
         $partnerShare = $this->wallet->settleTrip($trip, $at);
 
-        $ownerShare = $partnerShare === null
-            ? $this->wallet->settleOwnerShare($trip, $at)
-            : null;
+        $ownerShare = $trip->hauledByPartner()
+            ? null
+            : $this->wallet->settleOwnerShare($trip, $at);
 
-        if ($trip->vehicle_id !== null) {
+        /**
+         * The fleet's own runs only.
+         *
+         * Asked of the trip, not of `$partnerShare`: a zero-priced partner run
+         * settles nothing, and must still not open a sheet row. Before this,
+         * a partner's ₱10,000 run with a stray unit on it was booked as
+         * ₱10,000 of fleet income *and* ₱1,200 of commission.
+         */
+        if ($trip->vehicle_id !== null && ! $trip->hauledByPartner()) {
             $this->finance->creditTripIncome(
                 vehicleId: $trip->vehicle_id,
                 plate: $trip->vehicle?->plate,
                 tripId: $trip->id,
                 route: "{$trip->origin} → {$trip->destination}",
                 date: $at,
-                incomeCents: $trip->price_cents,
+                /**
+                 * Net of VAT, always.
+                 *
+                 * Where the company quotes all-in, a ₱10,000 price holds
+                 * ₱1,071.43 of output VAT that is the BIR's, and VAT is shown
+                 * beside income, never inside it. This is the breakdown the
+                 * invoice freezes, so the sheet's income plus the invoice's
+                 * VAT is exactly the price. Quoted exclusive, the net is the
+                 * price and nothing moves.
+                 */
+                incomeCents: $this->tax->on((int) $trip->price_cents, $trip->customer)->net_cents,
                 customerId: $trip->customer_id,
                 // Who was in the cab, so the day's driver and helper salary
                 // columns have somebody to belong to. Payroll reads them for
@@ -488,7 +625,7 @@ class TripService
          * demonstrably done.
          */
         $invoice = $trip->collectedByCarrier()
-            ? $this->billing->raiseForTrip($trip)
+            ? $this->billing->raiseForTrip($trip, $at)
             : null;
 
         $trip->forceFill(['billed_at' => $at])->save();

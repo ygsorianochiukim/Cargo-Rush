@@ -63,11 +63,11 @@ export class PricingService {
 /**
  * The firm's plain distance card, and the kinds of unit it runs.
  *
- * Kept apart from `PricingService` above, which is the band editor: these are
- * the two halves of a card with **no bands in it** — "450 km is ₱5,000", and
- * "a freezer costs more than a dry van". For a haulier with no published rate
- * table that is the whole card; for one working from a table it is what prices
- * a run past the last band.
+ * Kept apart from `PricingService` above, which is the band editor. The plain
+ * distance card ("450 km is ₱5,000") no longer prices anything — pricing is
+ * zone-only — so `card`/`saveCard` exist only to see and tidy up the lines an
+ * install still has; the API refuses a new one. The kinds of unit ("a freezer
+ * costs more than a dry van") are live and used by the zones' lines.
  */
 @Injectable({ providedIn: 'root' })
 export class RateCardService {

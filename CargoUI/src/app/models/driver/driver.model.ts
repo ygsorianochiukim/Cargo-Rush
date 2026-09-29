@@ -20,6 +20,18 @@ export interface Driver extends Timestamped {
   trips_completed: number;
   on_time_rate: number;
   user_id: number | null;
+  /**
+   * Who they drive for. Always `fleet` on this list — a trucker's drivers are
+   * on the trucker's record (`TruckerDriver`) and never reach Drivers
+   * Management.
+   */
+  employer?: DriverEmployer;
+}
+
+/** The identifier that keeps Cargo Rush's drivers and truckers' drivers apart. */
+export interface DriverEmployer {
+  kind: 'fleet' | 'trucker';
+  label: string;
 }
 
 export interface DriverPayload {

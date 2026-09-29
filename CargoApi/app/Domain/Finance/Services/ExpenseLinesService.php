@@ -5,23 +5,27 @@ declare(strict_types=1);
 namespace App\Domain\Finance\Services;
 
 use App\Domain\Billing\Models\PaymentAllocation;
-use App\Domain\Billing\Repositories\InvoiceRepository;
 use App\Domain\Finance\Models\Expense;
 use App\Domain\Finance\Models\LedgerEntry;
 use App\Domain\Finance\Repositories\ExpenseRepository;
 use App\Domain\Finance\Repositories\LedgerRepository;
-use App\Domain\Shared\Enums\InvoiceDirection;
-use App\Domain\Trucker\Models\WalletEntry;
-use App\Domain\Trucker\Services\WalletService;
+use App\Domain\Fuel\Models\FuelRecord;
+use App\Domain\Fuel\Repositories\FuelRepository;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 /**
  * The transactions behind a period's Total expenses, one row each.
  *
- * `FinanceService::periodTotals()` adds four sources into one figure: the
- * daily sheet's cost columns, the categorised expense lines, the supplier bills
- * paid, and the payouts handed to partners. A tile showing that figure has to
+ * `FinanceService::periodTotals()` adds five sources into one figure: the
+ * daily sheet's cost columns, the categorised expense lines, the fills logged
+ * in the Fuel module that no sheet row carries, the supplier bills paid, and
+ * payroll paid beyond the sheet's crew pay. A fill that posted onto a sheet row
+ * is listed as its own receipt and taken out of that row's Fuel line, so it is
+ * in the list once, as it is in the total. Payouts to partners are not
+ * among them — a partner's share was their money, passing through (see
+ * "Income from partners" on `FinanceService`). A tile showing that figure has to
  * be able to say what it is made of, and the list has to add up to it to the
  * centavo — a breakdown that is ₱200 off the number it breaks down is worse
  * than none. So every row here comes from the same query the roll-up sums, with
@@ -46,8 +50,9 @@ class ExpenseLinesService
     public function __construct(
         private readonly LedgerRepository $ledger,
         private readonly ExpenseRepository $expenses,
-        private readonly InvoiceRepository $invoices,
-        private readonly WalletService $wallet,
+        private readonly FuelRepository $fuel,
+        private readonly FinanceService $finance,
+        private readonly PayrollCostService $payroll,
     ) {}
 
     /**
@@ -57,11 +62,19 @@ class ExpenseLinesService
     {
         $trucks = $this->ledger->trucks()->keyBy('id');
 
+        // Fills that posted onto a listed truck's row in the window. Each is
+        // listed as its own receipt, and taken out of the sheet's Fuel line
+        // for that day so the two do not both claim it.
+        $posted = $this->fuel->postedBetween($from, $to)
+            ->filter(static fn (FuelRecord $fill): bool => $trucks->has($fill->posted_truck_id))
+            ->values();
+
         $lines = [
-            ...$this->sheetLines($from, $to, $trucks),
+            ...$this->sheetLines($from, $to, $trucks, $posted),
             ...$this->expenseLines($from, $to, $trucks),
+            ...$this->fuelLogLines($from, $to, $trucks, $posted),
             ...$this->supplierBillLines($from, $to),
-            ...$this->payoutLines($from, $to),
+            ...$this->payrollLines($from, $to),
         ];
 
         // Newest first, like every other list of money in the app. The key
@@ -82,7 +95,7 @@ class ExpenseLinesService
      * Only days on a truck the fleet still lists — the roll-up is built truck
      * by truck, so a day on any other would be in this list and not the total.
      */
-    private function sheetLines(Carbon $from, Carbon $to, Collection $trucks): array
+    private function sheetLines(Carbon $from, Carbon $to, Collection $trucks, Collection $posted): array
     {
         $lines = [];
 
@@ -90,11 +103,26 @@ class ExpenseLinesService
             ->filter(static fn (LedgerEntry $entry): bool => $trucks->has($entry->truck_id))
             ->load('helpers.driver:id,name');
 
+        // What `/fuel` put on each truck's day, to take back out of that day's
+        // Fuel column — the fills are listed as receipts of their own below.
+        $fromFills = $posted->groupBy(static fn (FuelRecord $fill): string => $fill->posted_truck_id.'|'.$fill->posted_on->toDateString())
+            ->map(static fn (Collection $fills): int => (int) $fills->sum('posted_cents'))
+            ->all();
+
         foreach ($entries as $entry) {
             $truck = $trucks->get($entry->truck_id);
 
             foreach (self::COLUMNS as $column => $label) {
                 $cents = (int) $entry->{$column};
+
+                // Only the part of the Fuel column somebody typed. Several
+                // rows on one truck's day share the day's fills, first come.
+                if ($column === 'fuel_cents') {
+                    $day = $entry->truck_id.'|'.$entry->date->toDateString();
+                    $taken = min($cents, $fromFills[$day] ?? 0);
+                    $fromFills[$day] = ($fromFills[$day] ?? 0) - $taken;
+                    $cents -= $taken;
+                }
 
                 if ($cents === 0) {
                     continue;
@@ -164,10 +192,93 @@ class ExpenseLinesService
             ->all();
     }
 
+    /**
+     * The fills logged in Fuel Expense Monitoring, one receipt each.
+     *
+     * Two kinds, counted once each: a fill that posted onto a listed truck's
+     * row (its figure was taken out of that row's Fuel line above), and a
+     * fill no row carries — overhead when no truck points at its vehicle, and
+     * its plate is still printed: it is the only name the fill has.
+     */
+    private function fuelLogLines(Carbon $from, Carbon $to, Collection $trucks, Collection $posted): array
+    {
+        $truckOf = $trucks->whereNotNull('vehicle_id')->pluck('id', 'vehicle_id');
+
+        $unposted = $this->fuel->unpostedBetween($from, $to);
+
+        return (new EloquentCollection([...$posted->all(), ...$unposted->all()]))
+            ->load(['vehicle:id,plate', 'driver:id,name'])
+            ->map(function (FuelRecord $fill) use ($trucks, $truckOf): array {
+                $truck = $fill->isPosted()
+                    ? $trucks->get($fill->posted_truck_id)
+                    : $trucks->get($truckOf[$fill->vehicle_id] ?? '');
+
+                return $this->line(
+                    key: "fuel:{$fill->id}",
+                    source: 'fuel_log',
+                    date: ($fill->isPosted() ? $fill->posted_on : $fill->logged_at)->toDateString(),
+                    kind: 'Fuel',
+                    description: trim($fill->receipt_no.' · '.($fill->driver?->name ?? ''), ' ·'),
+                    truck: $truck === null ? $fill->vehicle?->plate : ($truck->plate ?? $truck->label),
+                    cents: $fill->isPosted() ? (int) $fill->posted_cents : (int) $fill->amount_cents,
+                    recordId: $fill->id,
+                );
+            })
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Pay runs paid in the window, at what the roll-up counts of each — the
+     * gross beyond what the sheet's crew columns already recorded for the
+     * same people — and, on a row of its own, the employer's contributions on
+     * top, which no sheet ever carries. Two rows because they are two
+     * different costs: a reader checking wages against payslips should not
+     * find ₱3,980 a head they cannot account for. See `PayrollCostService`.
+     */
+    private function payrollLines(Carbon $from, Carbon $to): array
+    {
+        $lines = [];
+
+        foreach ($this->payroll->paidBetween($from, $to) as $run) {
+            $label = $run['run']->reference.' · '.$run['run']->periodLabel();
+
+            if ($run['wages_cents'] !== 0) {
+                $lines[] = $this->line(
+                    key: "payroll:{$run['run']->id}",
+                    source: 'payroll',
+                    date: $run['date'],
+                    kind: 'Payroll',
+                    description: trim($label
+                        .($run['sheet_cents'] > 0 ? ' · less crew pay already on the sheet' : ''), ' ·'),
+                    truck: null,
+                    cents: $run['wages_cents'],
+                    recordId: $run['run']->id,
+                );
+            }
+
+            if ($run['employer_cents'] !== 0) {
+                $lines[] = $this->line(
+                    key: "payroll:{$run['run']->id}:employer",
+                    source: 'payroll',
+                    date: $run['date'],
+                    kind: 'Employer contributions',
+                    description: trim($label.' · SSS, EC, PhilHealth and Pag-IBIG, employer share', ' ·'),
+                    truck: null,
+                    cents: $run['employer_cents'],
+                    recordId: $run['run']->id,
+                );
+            }
+        }
+
+        return $lines;
+    }
+
     /** Supplier bills, at what each payment put against them, on the day it was paid. */
     private function supplierBillLines(Carbon $from, Carbon $to): array
     {
-        return $this->invoices->settlementsBetween(InvoiceDirection::Payable, $from, $to)
+        // The roll-up's own query, garage bills a service job carries and all.
+        return $this->finance->supplierBillSettlements($from, $to)
             ->load('invoice')
             ->map(fn (PaymentAllocation $allocation): array => $this->line(
                 key: "bill:{$allocation->id}",
@@ -178,25 +289,6 @@ class ExpenseLinesService
                 truck: null,
                 cents: (int) $allocation->amount_cents,
                 recordId: $allocation->invoice_id,
-            ))
-            ->values()
-            ->all();
-    }
-
-    /** What partners were handed. Stored negative, as money leaving; shown as a cost. */
-    private function payoutLines(Carbon $from, Carbon $to): array
-    {
-        return $this->wallet->payoutsLandedBetween($from, $to)
-            ->load(['trucker:id,name', 'trip:id,reference'])
-            ->map(fn (WalletEntry $payout): array => $this->line(
-                key: "payout:{$payout->id}",
-                source: 'trucker_payout',
-                date: $payout->occurred_on->toDateString(),
-                kind: 'Trucker payout',
-                description: trim(($payout->trucker?->name ?? '').' · '.$payout->describe(), ' ·'),
-                truck: null,
-                cents: abs((int) $payout->amount_cents),
-                recordId: $payout->trucker_id,
             ))
             ->values()
             ->all();

@@ -1,0 +1,517 @@
+<style>
+  /* The two forms, drawn like the paper ones: ruled boxes, shaded headings. */
+  .tt-sheet {
+    background: #fff;
+    color: #111;
+    width: 100%;
+    max-width: 210mm;
+    margin: 0 auto;
+    padding: 12mm 12mm 10mm;
+    font-size: 11.5px;
+    line-height: 1.35;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .tt-sheet + .tt-sheet {
+    margin-top: 24px;
+  }
+  .tt-grid {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+  }
+  .tt-grid td,
+  .tt-grid th {
+    border: 1px solid #333;
+    padding: 4px 6px;
+    vertical-align: middle;
+    word-break: break-word;
+  }
+  .tt-grid th {
+    background: #dbe5f1;
+    font-weight: 700;
+    text-align: center;
+  }
+  .tt-label {
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .tt-value {
+    text-align: center;
+    text-transform: uppercase;
+  }
+  .tt-heading {
+    margin: 10px 0 3px;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 12px;
+  }
+  .tt-row td {
+    height: 26px;
+  }
+  .tt-band {
+    background: #1f3b57;
+    color: #fff;
+    font-weight: 700;
+    text-transform: uppercase;
+    padding: 3px 6px;
+    font-size: 11px;
+  }
+  .tt-band-soft {
+    background: #2e6a8e;
+  }
+  .tt-box {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border: 1px solid #333;
+    margin-right: 3px;
+    vertical-align: -1px;
+  }
+  /* A box the driver ticked in the app: a check mark drawn in the box. */
+  .tt-ticked {
+    position: relative;
+  }
+  .tt-ticked::after {
+    content: '';
+    position: absolute;
+    left: 2px;
+    top: -2px;
+    width: 4px;
+    height: 8px;
+    border: solid #111;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+  }
+  .tt-sign {
+    border-top: 1px solid #333;
+    padding-top: 2px;
+    text-align: center;
+    font-size: 10.5px;
+  }
+  /* The checklist sheet carries twice the rows in the same page, as the paper does. */
+  .tt-compact {
+    font-size: 10.5px;
+    line-height: 1.25;
+  }
+  .tt-compact .tt-grid td,
+  .tt-compact .tt-grid th {
+    padding: 2px 6px;
+  }
+  .tt-compact .tt-row td {
+    height: 20px;
+  }
+  .tt-compact .tt-band {
+    padding: 2px 6px;
+    font-size: 10px;
+  }
+  .tt-warning {
+    color: #b3261e;
+    font-weight: 700;
+    text-transform: uppercase;
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+  }
+
+  @media print {
+    @page {
+      size: A4;
+      margin: 8mm;
+    }
+    .tt-sheet {
+      max-width: none;
+      padding: 0;
+      box-shadow: none !important;
+      border: 0 !important;
+    }
+    .tt-wrap {
+      overflow: visible !important;
+    }
+    .tt-sheet {
+      min-width: 0 !important;
+    }
+    .tt-sheet + .tt-sheet {
+      margin-top: 0;
+      break-before: page;
+    }
+    /* One form per page. */
+    .tt-sheet {
+      break-after: page;
+    }
+    .tt-sheet:last-child {
+      break-after: auto;
+    }
+  }
+</style>
+
+<!-- Toolbar: never printed. -->
+<div class="cr-no-print mb-4 flex flex-wrap items-center justify-between gap-3">
+  <a
+    routerLink="/trips"
+    class="inline-flex h-10 items-center gap-1.5 rounded-control px-3 text-[14px] font-semibold text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-ink"
+  >
+    <app-icon name="chevron-left" [size]="16" />
+    Trip Management
+  </a>
+  <div class="flex items-center gap-3">
+    <p class="hidden text-[12px] text-cr-ink-muted sm:block">
+      Prints on two A4 pages. Choose “Save as PDF” in the print dialog for a file.
+    </p>
+    <button
+      type="button"
+      class="inline-flex h-10 items-center gap-1.5 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
+      [disabled]="!ticket()"
+      (click)="print()"
+    >
+      <app-icon name="clipboard" [size]="16" />
+      Print or save as PDF
+    </button>
+  </div>
+</div>
+
+@if (ticket(); as t) {
+  <div class="tt-wrap overflow-x-auto">
+    <!-- ========================================================= Sheet 1 -->
+    <section class="tt-sheet rounded-panel shadow-panel min-w-[640px]">
+      <header class="flex items-center gap-4">
+        <img [src]="logo()" alt="" class="h-16 w-16 flex-none object-contain" />
+        <div>
+          <p class="text-[17px] font-bold uppercase tracking-wide">{{ t.issuer.name }}</p>
+          @if (t.issuer.address) {
+            <p>{{ t.issuer.address }}</p>
+          }
+          <p>
+            @if (t.issuer.contact_email) {
+              Email: {{ t.issuer.contact_email }}
+            }
+            @if (t.issuer.contact_phone) {
+              · Tel: {{ t.issuer.contact_phone }}
+            }
+          </p>
+        </div>
+      </header>
+
+      <p class="mt-3 mb-1 text-center text-[14px] font-bold uppercase tracking-wide">
+        Official Trip Ticket
+      </p>
+
+      <table class="tt-grid">
+        <colgroup>
+          <col style="width: 17%" />
+          <col style="width: 33%" />
+          <col style="width: 17%" />
+          <col style="width: 33%" />
+        </colgroup>
+        <tr>
+          <td class="tt-label">Trip Ticket No:</td>
+          <td class="tt-value">{{ t.trip.reference }}</td>
+          <td class="tt-label">Dispatch Date:</td>
+          <td class="tt-value">{{ date(t.trip.dispatch_date) }}</td>
+        </tr>
+        <tr>
+          <td class="tt-label">Driver:</td>
+          <td class="tt-value">{{ t.crew.driver }}</td>
+          <td class="tt-label">License No.:</td>
+          <td class="tt-value">{{ t.crew.licence_no }}</td>
+        </tr>
+        <tr>
+          <td class="tt-label">Helper 1:</td>
+          <td class="tt-value">{{ t.crew.helper_1 }}</td>
+          <td class="tt-label">Helper 2:</td>
+          <td class="tt-value">{{ t.crew.helper_2 }}</td>
+        </tr>
+        @if (t.crew.more_helpers.length || t.crew.partner) {
+          <tr>
+            <td class="tt-label">{{ t.crew.partner ? 'Partner:' : 'Other helpers:' }}</td>
+            <td class="tt-value" colspan="3">
+              {{ t.crew.partner ?? ''
+              }}{{ t.crew.partner && t.crew.more_helpers.length ? ' · ' : ''
+              }}{{ t.crew.more_helpers.join(', ') }}
+            </td>
+          </tr>
+        }
+      </table>
+
+      <p class="tt-heading">Vehicle &amp; Cargo Manifest</p>
+      <table class="tt-grid">
+        <colgroup>
+          <col style="width: 17%" />
+          <col style="width: 33%" />
+          <col style="width: 17%" />
+          <col style="width: 33%" />
+        </colgroup>
+        <tr>
+          <td class="tt-label">Truck Model:</td>
+          <td class="tt-value">{{ t.vehicle.model }}</td>
+          <td class="tt-label">Plate / Body No.:</td>
+          <td class="tt-value">{{ t.vehicle.plate }}</td>
+        </tr>
+        <tr>
+          <td class="tt-label">Client Name:</td>
+          <td class="tt-value">{{ t.customer.name }}</td>
+          <td class="tt-label">Waybill / DR No.:</td>
+          <td></td>
+        </tr>
+        <tr>
+          <td class="tt-label">Cargo Details:</td>
+          <td class="tt-value">{{ t.trip.cargo }}</td>
+          <td class="tt-label">Weight / Volume:</td>
+          <td class="tt-value">{{ weight() }}</td>
+        </tr>
+      </table>
+
+      <p class="tt-heading">Route, Mileage &amp; Time Log</p>
+      <table class="tt-grid">
+        <colgroup>
+          <col style="width: 26%" />
+          <col style="width: 30%" />
+          <col style="width: 22%" />
+          <col style="width: 22%" />
+        </colgroup>
+        <tr>
+          <th>Leg Segment / Destination</th>
+          <th>Location / Hub Landmark</th>
+          <th>Actual Date &amp; Time</th>
+          <th>Odometer (KM)</th>
+        </tr>
+        @for (leg of legs(); track leg.label) {
+          <tr class="tt-row">
+            <td class="tt-label">{{ leg.label }}</td>
+            <td class="tt-value">{{ leg.place }}</td>
+            <td></td>
+            <td></td>
+          </tr>
+        }
+        <tr class="tt-row">
+          <td colspan="3" class="text-center font-bold">TOTAL</td>
+          <td></td>
+        </tr>
+      </table>
+
+      <p class="tt-heading">Trip Expenses &amp; Fuel Tracking</p>
+      <table class="tt-grid">
+        <colgroup>
+          <col style="width: 28%" />
+          <col style="width: 20%" />
+          <col style="width: 17%" />
+          <col style="width: 15%" />
+          <col style="width: 20%" />
+        </colgroup>
+        <tr>
+          <th>Expense Item</th>
+          <th>Receipt / PO Number</th>
+          <th>Price Per Liter</th>
+          <th>Liters</th>
+          <th>Total Amount</th>
+        </tr>
+        @for (item of expenses; track item) {
+          <tr class="tt-row">
+            <td class="tt-label">{{ item }}</td>
+            <td></td>
+            <td></td>
+            <td></td>
+            <td></td>
+          </tr>
+        }
+        <tr class="tt-row">
+          <td colspan="4" class="text-center font-bold">TOTAL</td>
+          <td></td>
+        </tr>
+      </table>
+
+      <table class="tt-grid mt-3">
+        <tr>
+          <td class="w-1/2 p-3 align-top">
+            <p class="text-center text-[12px] font-bold uppercase">Certification</p>
+            <p class="mt-1 text-center text-[10.5px]">
+              I hereby certify that all information and entries in this Official Trip Ticket are
+              true and correct.
+            </p>
+            <p class="tt-sign mt-10">Driver or Helper Signature Over Printed Name</p>
+            <p class="mt-3 text-[10.5px]">Date &amp; Time: ______________________</p>
+          </td>
+          <td class="w-1/2 p-3 align-top">
+            <p class="text-center text-[12px] font-bold uppercase">Received By:</p>
+            <p class="tt-sign mt-[52px]">Operations or Admin Signature Over Printed Name</p>
+            <p class="mt-3 text-[10.5px]">Date &amp; Time: ______________________</p>
+          </td>
+        </tr>
+      </table>
+    </section>
+
+    <!-- ========================================================= Sheet 2 -->
+    <section class="tt-sheet tt-compact rounded-panel shadow-panel min-w-[640px]">
+      <header class="flex flex-col items-center text-center">
+        <img [src]="logo()" alt="" class="h-10 w-10 object-contain" />
+        <p class="mt-1 text-[14px] font-bold uppercase tracking-wide">{{ t.issuer.name }}</p>
+        <p class="text-[11px] font-semibold uppercase">
+          Allowance Disbursement &amp; Safety, LTO and Warehouse Compliance Checklist
+        </p>
+      </header>
+
+      <table class="tt-grid mt-3">
+        <colgroup>
+          <col style="width: 18%" />
+          <col style="width: 32%" />
+          <col style="width: 14%" />
+          <col style="width: 36%" />
+        </colgroup>
+        <tr>
+          <td class="tt-label">Request ID:</td>
+          <td class="tt-value">{{ t.trip.reference }}</td>
+          <td class="tt-label">Date:</td>
+          <td class="tt-value">{{ longDate(t.trip.dispatch_date) }}</td>
+        </tr>
+        <tr>
+          <td class="tt-label">Driver's Name:</td>
+          <td class="tt-value">{{ t.crew.driver }}</td>
+          <td class="tt-label">Plate No.:</td>
+          <td class="tt-value">{{ t.vehicle.plate }}</td>
+        </tr>
+        <tr>
+          <td class="tt-label">Helper 1:</td>
+          <td class="tt-value">{{ t.crew.helper_1 }}</td>
+          <td class="tt-label">Helper 2:</td>
+          <td class="tt-value">{{ t.crew.helper_2 }}</td>
+        </tr>
+        <tr>
+          <td class="tt-label">Client Name:</td>
+          <td class="tt-value">{{ t.customer.name }}</td>
+          <td class="tt-label">Type:</td>
+          <td class="tt-value">{{ t.vehicle.type }}</td>
+        </tr>
+        <tr>
+          <td class="tt-label">Client Contact No.:</td>
+          <td class="tt-value">{{ t.customer.contact }}</td>
+          <td class="tt-label">Route:</td>
+          <td class="tt-value">{{ route() }}</td>
+        </tr>
+      </table>
+
+      <!-- Request type -->
+      <p class="tt-band mt-3">Request Type</p>
+      <div class="flex flex-wrap gap-x-8 gap-y-1 border border-t-0 border-[#333] px-3 py-2">
+        @for (kind of ['Fuel', 'Bank Transfer', 'Allowance', 'Other']; track kind) {
+          <span><span class="tt-box"></span>{{ kind }}</span>
+        }
+      </div>
+
+      <!-- Itemized particulars -->
+      <table class="tt-grid">
+        <colgroup>
+          <col style="width: 30%" />
+          <col style="width: 45%" />
+          <col style="width: 25%" />
+        </colgroup>
+        <tr>
+          <th class="!bg-[#1f3b57] !text-white">Itemized Particulars</th>
+          <th class="!bg-[#1f3b57] !text-white">Purpose</th>
+          <th class="!bg-[#1f3b57] !text-white">Amount</th>
+        </tr>
+        <tr class="tt-row">
+          <td class="tt-label">Allowance</td>
+          <td class="tt-value">{{ t.trip.destination }}</td>
+          <td class="text-right">{{ amount(t.allowance_cents) }}</td>
+        </tr>
+        <tr class="tt-row">
+          <td></td>
+          <td></td>
+          <td></td>
+        </tr>
+        <tr class="tt-row">
+          <td colspan="2" class="text-right font-bold">TOTAL</td>
+          <td class="text-right font-bold">{{ amount(t.allowance_cents) }}</td>
+        </tr>
+      </table>
+
+      <!-- Release method -->
+      <p class="tt-band mt-3">Release Method</p>
+      <div class="flex flex-wrap gap-x-8 gap-y-1 border border-t-0 border-[#333] px-3 py-2">
+        @for (kind of ['Cash', 'Bank Transfer', 'Fuel Card', 'Cheque']; track kind) {
+          <span><span class="tt-box"></span>{{ kind }}</span>
+        }
+      </div>
+
+      <!-- The checklist -->
+      <p class="tt-band mt-3 text-center">Safety, LTO and Warehouse Compliance Checklist</p>
+      <p class="border border-t-0 border-[#333] py-0.5 text-center text-[10px] italic">
+        Check one box for every item.
+      </p>
+      <table class="tt-grid">
+        <colgroup>
+          <col style="width: 70%" />
+          <col style="width: 30%" />
+        </colgroup>
+        @for (group of t.checklist; track group.section) {
+          <tr>
+            <td colspan="2" class="tt-band tt-band-soft !border-[#333]">{{ group.section }}</td>
+          </tr>
+          @for (item of group.items; track item.key) {
+            <tr>
+              <td>{{ item.label }}</td>
+              <!-- Ticked from the driver's answer in the app; empty if unanswered. -->
+              <td class="whitespace-nowrap text-center">
+                <span class="mr-3"
+                  ><span class="tt-box" [class.tt-ticked]="item.answer === 'yes'"></span>YES</span
+                >
+                <span class="mr-3"
+                  ><span class="tt-box" [class.tt-ticked]="item.answer === 'no'"></span>NO</span
+                >
+                <span
+                  ><span class="tt-box" [class.tt-ticked]="item.answer === 'na'"></span>N/A</span
+                >
+              </td>
+            </tr>
+          }
+        }
+        <tr>
+          <td colspan="2" class="h-14 align-top">
+            <span class="tt-label">REMARKS:</span>
+            @if (t.checked.remarks) {
+              <span class="ml-1">{{ t.checked.remarks }}</span>
+            }
+            @if (t.checked.at) {
+              <span class="mt-1 block text-[9.5px] italic text-[#555]">
+                Checklist answered in the app{{ t.checked.by ? ' by ' + t.checked.by : '' }} on
+                {{ stamp(t.checked.at) }}.
+              </span>
+            }
+          </td>
+        </tr>
+      </table>
+
+      <!-- Approvals: roles only; the names are signed in. -->
+      <div class="mt-4 grid grid-cols-4 gap-4">
+        @for (
+          role of [
+            ['Checked by', 'Operations Supervisor'],
+            ['Prepared by', 'Admin Manager'],
+            ['Approved by', 'General Manager'],
+            ['Disbursed by', 'Finance / Disbursement Manager'],
+          ];
+          track role[0]
+        ) {
+          <div>
+            <p class="text-[10.5px]">{{ role[0] }}:</p>
+            <p class="tt-sign mt-7">Signature Over Printed Name</p>
+            <p class="text-center text-[10px] italic">{{ role[1] }}</p>
+          </div>
+        }
+      </div>
+
+      <div class="mt-5 grid grid-cols-2 gap-6 text-[10.5px]">
+        <p>Received by / Signature: ______________________________</p>
+        <p>Date / Time: ______________________________</p>
+      </div>
+
+      <p class="tt-warning mt-4">
+        No funds released or units dispatched without complete approvals and compliance.
+      </p>
+    </section>
+  </div>
+} @else if (failure(); as message) {
+  <app-error-state [message]="message" />
+} @else {
+  <app-skeleton-rows [count]="8" />
+}

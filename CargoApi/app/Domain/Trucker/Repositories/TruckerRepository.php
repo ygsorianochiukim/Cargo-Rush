@@ -23,7 +23,7 @@ class TruckerRepository extends Repository
         // detail screen shows the list, and `canTakeWork()` reads the
         // collection. Eager here rather than at four call sites, one of which
         // would forget and quietly issue a query per partner.
-        return Trucker::query()->with('vehicles')->orderBy('name');
+        return Trucker::query()->with(['vehicles', 'drivers'])->orderBy('name');
     }
 
     protected function searchable(): array

@@ -17,17 +17,23 @@ use App\Domain\Tenancy\Models\Company;
  * integer; it never sees a null, never reads `config()`, and cannot be the one
  * place that forgot the fallback.
  *
- * That was the actual bug this replaces. The tariff was read straight out of
- * configuration in `PricingService`, the payment terms in `BillingService`, the
- * VAT-inclusive flag in two places that had each grown their own `config()`
- * call — so "what does this install charge" had four answers and a settings
- * screen could only have moved one of them.
+ * That was the actual bug this replaces. The payment terms were read straight
+ * out of configuration in `BillingService`, the VAT-inclusive flag in two
+ * places that had each grown their own `config()` call — so "what does this
+ * install charge" had several answers and a settings screen could only have
+ * moved one of them.
  *
  * ## What is not here
  *
  * The rate card. A zone, a truck class and a diesel step are a **table**, with
- * its own screens and its own model, and this is a handful of scalars. The
- * tariff below is only what answers when no line of that table covers a run.
+ * its own screens and its own model, and this is a handful of scalars.
+ *
+ * Nor, any more, a fallback tariff. There used to be one — base, per-km,
+ * per-kg and a minimum — answering for any run the card did not cover, and it
+ * was retired when pricing became zone-only: a run the card misses is now left
+ * unpriced for the office rather than charged a figure nobody published. The
+ * company's four `tariff_*` columns are still in the table, unread, so a
+ * firm's old figures are not lost.
  *
  * The payroll contributions. SSS, PhilHealth and Pag-IBIG are the government's
  * figures, identical for every firm on the platform, and a form that invited an
@@ -39,7 +45,7 @@ use App\Domain\Tenancy\Models\Company;
  * `Tenant::company()` is resolved on every call rather than cached here: a
  * console command sweeping the install moves the company in force between
  * iterations, and a rate book holding the first one would price company four's
- * runs on company one's tariff. The lookup is a single already-loaded model.
+ * runs on company one's terms. The lookup is a single already-loaded model.
  */
 class RateBook
 {
@@ -65,23 +71,6 @@ class RateBook
         $book->subject = $company;
 
         return $book;
-    }
-
-    /**
-     * The fallback tariff, in centavos.
-     *
-     * @return array{base_cents: int, per_km_cents: int, per_kg_cents: int, minimum_cents: int}
-     */
-    public function tariff(): array
-    {
-        $company = $this->company();
-
-        return [
-            'base_cents' => (int) ($company?->tariff_base_cents ?? config('cargo.tariff.base_cents')),
-            'per_km_cents' => (int) ($company?->tariff_per_km_cents ?? config('cargo.tariff.per_km_cents')),
-            'per_kg_cents' => (int) ($company?->tariff_per_kg_cents ?? config('cargo.tariff.per_kg_cents')),
-            'minimum_cents' => (int) ($company?->tariff_minimum_cents ?? config('cargo.tariff.minimum_cents')),
-        ];
     }
 
     /**
@@ -146,7 +135,7 @@ class RateBook
     /** The currency every quote is in. One install, one currency. */
     public function currency(): string
     {
-        return (string) config('cargo.tariff.currency', 'PHP');
+        return (string) config('cargo.currency', 'PHP');
     }
 
     /**
@@ -161,7 +150,6 @@ class RateBook
     public function inForce(): array
     {
         return [
-            'tariff' => $this->tariff(),
             'trucker_commission_bp' => $this->truckerCommissionBp(),
             'billing_terms_days' => $this->billingTermsDays(),
             'vat_registered' => $this->chargesVat(),
@@ -184,12 +172,6 @@ class RateBook
     public function defaults(): array
     {
         return [
-            'tariff' => [
-                'base_cents' => (int) config('cargo.tariff.base_cents'),
-                'per_km_cents' => (int) config('cargo.tariff.per_km_cents'),
-                'per_kg_cents' => (int) config('cargo.tariff.per_kg_cents'),
-                'minimum_cents' => (int) config('cargo.tariff.minimum_cents'),
-            ],
             'trucker_commission_bp' => (int) config('cargo.truckers.commission_bp', 1200),
             'billing_terms_days' => (int) config('cargo.billing.terms_days', 30),
             'vat_registered' => true,
@@ -214,10 +196,6 @@ class RateBook
         $company = $this->company();
 
         return [
-            'tariff_base_cents' => $company?->tariff_base_cents,
-            'tariff_per_km_cents' => $company?->tariff_per_km_cents,
-            'tariff_per_kg_cents' => $company?->tariff_per_kg_cents,
-            'tariff_minimum_cents' => $company?->tariff_minimum_cents,
             'billing_terms_days' => $company?->billing_terms_days,
             'withholding_rate_bp' => $company?->withholding_rate_bp,
             'prices_include_vat' => $company?->prices_include_vat,

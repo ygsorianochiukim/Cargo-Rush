@@ -176,13 +176,6 @@ export class ExpensesPage {
     }));
   });
 
-  protected readonly overheadShare = computed(() => {
-    const report = this.report();
-    if (!report || report.total_cents === 0) return 0;
-
-    return Math.round((report.overhead_cents / report.total_cents) * 100);
-  });
-
   protected readonly label = (expense: Expense) =>
     `${expense.category_name ?? 'expense'} of ${fmt.money(expense.amount_cents, expense.currency)}`;
 

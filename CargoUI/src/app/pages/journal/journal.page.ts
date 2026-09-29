@@ -401,13 +401,28 @@ export class JournalPage {
   /* ---------------------------------------------------------------- Table */
 
   protected readonly columns: Column<JournalEntry>[] = [
-    { label: 'Reference', kind: 'strong', value: (e) => e.reference, sub: (e) => e.category_label },
+    { label: 'Reference', kind: 'strong', value: (e) => e.reference, sub: (e) => this.origin(e) },
     { label: 'Date', kind: 'num', value: (e) => fmt.date(e.entry_date) },
     { label: 'Narration', value: (e) => e.memo, sub: (e) => this.accountsOf(e) },
     { label: 'Debit', kind: 'num', value: (e) => fmt.money(e.debit_cents, e.currency) },
     { label: 'Credit', kind: 'num', value: (e) => fmt.money(e.credit_cents, e.currency) },
     { label: 'Status', kind: 'status', status: (e) => this.pill(e) },
   ];
+
+  /**
+   * The category, and — for an entry a record posted itself — which record.
+   *
+   * Said on every row because it changes what the reader should do: a manual
+   * entry is corrected here, an automatic one by correcting the invoice or the
+   * sheet day behind it, which voids and replaces the entry on its own.
+   */
+  protected origin(entry: JournalEntry): string {
+    if (entry.source === 'manual') {
+      return entry.category_label;
+    }
+
+    return `${entry.category_label} · auto-posted · ${entry.source_label ?? entry.source}`;
+  }
 
   /**
    * Which accounts an entry touched, under the narration.

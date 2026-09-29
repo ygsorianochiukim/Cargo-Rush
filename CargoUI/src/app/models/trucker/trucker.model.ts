@@ -1,3 +1,4 @@
+import { DriverEmployer } from '../driver/driver.model';
 import { StatusValue } from '../shared/status.model';
 
 /**
@@ -18,8 +19,11 @@ import { StatusValue } from '../shared/status.model';
 export interface Trucker {
   id: string;
   name: string;
+  /** The trucking service. Null on partners from before sign-up asked for it. */
+  business_name: string | null;
   phone: string;
-  licence_no: string;
+  /** Optional: the owner may never drive. Each of their drivers has one. */
+  licence_no: string | null;
   licence_expiry: string | null;
 
   /** `pending` until vetted, `active` once approved, `inactive` on hold. */
@@ -47,9 +51,28 @@ export interface Trucker {
   user_id: number | null;
 
   vehicles?: TruckerVehicle[];
+  drivers?: TruckerDriver[];
 
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Somebody a trucker employs to drive their trucks, with their own app login.
+ *
+ * Never one of Cargo Rush's drivers and never in Drivers Management — the
+ * trucker adds them, and `employer` says whose they are.
+ */
+export interface TruckerDriver {
+  id: string;
+  trucker_id: string;
+  name: string;
+  phone: string | null;
+  licence_no: string;
+  licence_expiry: string | null;
+  status: StatusValue;
+  email?: string | null;
+  employer: DriverEmployer;
 }
 
 /**

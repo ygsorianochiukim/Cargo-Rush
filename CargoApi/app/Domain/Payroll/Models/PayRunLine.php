@@ -34,11 +34,12 @@ class PayRunLine extends Model
 
     protected $fillable = [
         'pay_run_id', 'employee_id', 'employee_no', 'name', 'position',
-        'pay_basis', 'days_worked', 'sheet_days', 'trips',
+        'pay_basis', 'crew', 'days_worked', 'sheet_days', 'trips',
         'basic_cents', 'allowance_cents', 'overtime_cents',
         'adjustments_cents', 'adjustment_note',
         'component_earnings_cents', 'component_deductions_cents',
         'sss_cents', 'philhealth_cents', 'pagibig_cents',
+        'employer_sss_cents', 'employer_ec_cents', 'employer_philhealth_cents', 'employer_pagibig_cents',
         'sss_enrolled', 'philhealth_enrolled', 'pagibig_enrolled',
         'withholding_tax_cents', 'other_deductions_cents', 'deduction_note',
         'store_deduction_cents',
@@ -55,6 +56,9 @@ class PayRunLine extends Model
              * March's payslip start describing itself as a monthly one.
              */
             'pay_basis' => PayBasis::class,
+            // A driver's or helper's payslip — a cost of services, posted apart
+            // from the office's. Frozen at build like the rest.
+            'crew' => 'boolean',
             'days_worked' => 'integer',
             'sheet_days' => 'integer',
             'trips' => 'integer',
@@ -68,6 +72,11 @@ class PayRunLine extends Model
             'philhealth_cents' => 'integer',
             'pagibig_cents' => 'integer',
             'withholding_tax_cents' => 'integer',
+            // The firm's share, on top of the payslip rather than off it.
+            'employer_sss_cents' => 'integer',
+            'employer_ec_cents' => 'integer',
+            'employer_philhealth_cents' => 'integer',
+            'employer_pagibig_cents' => 'integer',
             'other_deductions_cents' => 'integer',
             'store_deduction_cents' => 'integer',
             // Which contributions this payslip was subject to, as it was on
@@ -97,6 +106,15 @@ class PayRunLine extends Model
     public function components(): HasMany
     {
         return $this->hasMany(PayRunLineComponent::class, 'pay_run_line_id');
+    }
+
+    /**
+     * The hauls this payslip counted — the `trips` figure, itemised, and the
+     * record that stops a trip being paid on two of them. See `PayRunLineTrip`.
+     */
+    public function tripLinks(): HasMany
+    {
+        return $this->hasMany(PayRunLineTrip::class, 'pay_run_line_id');
     }
 
     /**
@@ -184,6 +202,21 @@ class PayRunLine extends Model
 
         return 'The sheet has '.$this->sheet_days.' day(s) for this person, but their daily rate is '
             .'zero. Write them a contract with a rate and work the run out again.';
+    }
+
+    /**
+     * What the firm pays the agencies on top of this payslip.
+     *
+     * Deliberately outside the gross, the deductions and the net: none of it is
+     * the person's money or comes out of it. It is the rest of what employing
+     * them cost.
+     */
+    public function employerContributionsCents(): int
+    {
+        return (int) $this->employer_sss_cents
+            + (int) $this->employer_ec_cents
+            + (int) $this->employer_philhealth_cents
+            + (int) $this->employer_pagibig_cents;
     }
 
     /** What the person is actually handed. */

@@ -141,16 +141,21 @@ class FinanceController extends ApiController
     /**
      * Profitability — the workbook's 10-day window by default, or any range
      * the caller names.
+     *
+     * Ten days **inclusive**: the nine before today and today, or the named
+     * start and the nine after it. Both ends used to be ten days out, which is
+     * an eleven-day window under a ten-day label. `FinanceService::tenDayRange`
+     * is the one statement of the length.
      */
     public function profitability(Request $request): JsonResponse
     {
         $from = $request->filled('from')
             ? Carbon::parse($request->string('from')->toString())
-            : now()->subDays(10);
+            : now()->subDays(9)->startOfDay();
 
         $to = $request->filled('to')
             ? Carbon::parse($request->string('to')->toString())
-            : $from->copy()->addDays(10);
+            : Carbon::parse($this->finance->tenDayRange($from)['to']);
 
         return $this->rollup($from, $to);
     }

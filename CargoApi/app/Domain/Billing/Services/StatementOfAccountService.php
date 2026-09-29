@@ -14,6 +14,7 @@ use App\Domain\Tenancy\Services\LogoStore;
 use App\Domain\Tenancy\Support\Tenant;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 /**
  * A statement of account: what one firm owed, what moved, and what is left.
@@ -50,6 +51,12 @@ use Illuminate\Support\Collection;
  */
 class StatementOfAccountService
 {
+    /**
+     * Within one day: the document, then the withholding kept back on it,
+     * then any money received.
+     */
+    private const KIND_ORDER = ['invoice' => 0, 'withholding' => 1, 'payment' => 2];
+
     public function __construct(
         private readonly Tenant $tenant,
         private readonly LogoStore $logos,
@@ -85,7 +92,7 @@ class StatementOfAccountService
             ->sortBy(fn (array $line): string => sprintf(
                 '%s|%d|%s',
                 (string) $line['date'],
-                $line['charge_cents'] > 0 ? 0 : 1,
+                self::KIND_ORDER[$line['kind']] ?? 9,
                 (string) $line['reference'],
             ))
             ->values();
@@ -182,12 +189,15 @@ class StatementOfAccountService
             return 0;
         }
 
+        // What was due, not the face value: the withholding on each earlier
+        // document is a credit line of its own on the day it was raised, so
+        // it is already behind the opening balance too.
         $billed = (int) Invoice::query()
             ->where('customer_id', $customer->getKey())
             ->where('direction', $direction->value)
             ->where('status', '!=', StatusValue::Cancelled->value)
             ->whereDate('issued_at', '<', $from)
-            ->sum('amount_cents');
+            ->sum(DB::raw('amount_cents - withholding_cents'));
 
         $received = (int) PaymentAllocation::query()
             ->whereHas('invoice', fn ($query) => $query
@@ -223,22 +233,50 @@ class StatementOfAccountService
             ->when($from !== null, fn ($query) => $query->whereDate('issued_at', '>=', $from))
             ->whereDate('issued_at', '<=', $to)
             ->get()
-            ->map(fn (Invoice $invoice): array => [
-                'date' => $invoice->issued_at?->toDateString(),
-                'kind' => 'invoice',
-                'reference' => $invoice->number,
-                'detail' => $invoice->trip?->reference === null
-                    ? 'Invoice'
-                    : 'Invoice · '.$invoice->trip->reference,
-                'invoice_id' => $invoice->getKey(),
-                'due_at' => $invoice->due_at?->toDateString(),
-                // The document's face value. Withholding is not netted off
-                // here: it is deducted when the payment is made, and showing it
-                // early would make every line disagree with the invoice the
-                // customer holds.
-                'charge_cents' => (int) $invoice->amount_cents,
-                'credit_cents' => 0,
-            ]);
+            ->flatMap(fn (Invoice $invoice): array => array_values(array_filter([
+                [
+                    'date' => $invoice->issued_at?->toDateString(),
+                    'kind' => 'invoice',
+                    'reference' => $invoice->number,
+                    'detail' => $invoice->trip?->reference === null
+                        ? 'Invoice'
+                        : 'Invoice · '.$invoice->trip->reference,
+                    'invoice_id' => $invoice->getKey(),
+                    'due_at' => $invoice->due_at?->toDateString(),
+                    // The document's face value, so the line agrees with the
+                    // invoice the customer holds.
+                    'charge_cents' => (int) $invoice->amount_cents,
+                    'credit_cents' => 0,
+                ],
+                /**
+                 * The withholding, as its own credit on the same day.
+                 *
+                 * The customer keeps it back and remits it to the BIR for us,
+                 * so it is never going to arrive as a payment — and payments
+                 * are capped at the due, gross less withholding. Charging the
+                 * gross with nothing to offset the withheld part left every
+                 * withholding customer's statement open by exactly that much,
+                 * forever. Shown rather than netted into the charge, so the
+                 * charge still matches the document and the 2307 the customer
+                 * issues has a line to be ticked against.
+                 */
+                $invoice->withholding_cents > 0 ? [
+                    'date' => $invoice->issued_at?->toDateString(),
+                    'kind' => 'withholding',
+                    'reference' => $invoice->number,
+                    'detail' => sprintf(
+                        'Withholding tax%s · kept back on %s',
+                        $invoice->withholding_rate_bp > 0
+                            ? ' ('.rtrim(rtrim(number_format($invoice->withholding_rate_bp / 100, 2), '0'), '.').'%)'
+                            : '',
+                        $invoice->number,
+                    ),
+                    'invoice_id' => $invoice->getKey(),
+                    'due_at' => null,
+                    'charge_cents' => 0,
+                    'credit_cents' => (int) $invoice->withholding_cents,
+                ] : null,
+            ])));
 
         $payments = PaymentAllocation::query()
             ->with(['payment', 'invoice:id,number'])
@@ -280,8 +318,20 @@ class StatementOfAccountService
     {
         $buckets = ['current' => 0, 'days_1_30' => 0, 'days_31_60' => 0, 'days_61_90' => 0, 'over_90' => 0];
 
+        /**
+         * Paid **as at the statement's date**, not as at today.
+         *
+         * A statement to the end of June aged against every payment to date
+         * showed a July receipt as already clearing a June balance — so the
+         * aging disagreed with the closing balance above it, which counts only
+         * money received by the 30th.
+         */
         $open = Invoice::query()
-            ->withSum('allocations', 'amount_cents')
+            ->withSum(
+                ['allocations as paid_by_then' => static fn ($query) => $query
+                    ->whereHas('payment', static fn ($payment) => $payment->whereDate('paid_on', '<=', $asOf))],
+                'amount_cents',
+            )
             ->where('customer_id', $customer->getKey())
             ->where('direction', $direction->value)
             ->where('status', '!=', StatusValue::Cancelled->value)
@@ -289,9 +339,11 @@ class StatementOfAccountService
             ->get();
 
         foreach ($open as $invoice) {
-            $balance = $invoice->balanceCents();
+            // Not `balanceCents()`: with nothing paid by then the sum is null,
+            // and that method would fall back to every payment to date.
+            $balance = max(0, $invoice->dueCents() - (int) ($invoice->paid_by_then ?? 0));
 
-            if ($balance === 0) {
+            if ($balance <= 0) {
                 continue;
             }
 

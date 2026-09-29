@@ -22,7 +22,15 @@ import {
  * workbook prints.
  */
 
-/** fuel + driver + helper + maintenance + allowance. */
+/**
+ * fuel + driver + helper + maintenance + allowance + owner share — exactly
+ * `LedgerEntry::totalExpensesCents()` on the API.
+ *
+ * The owner's share is what a hired truck's owner took out of the day's runs.
+ * It is posted by a delivery, never typed, so an entry form's payload has none
+ * (zero); a saved row carries it, and leaving it out made the row's net here
+ * read higher than the one the API returned beside it.
+ */
 export function totalExpenses(
   e: Pick<
     LedgerEntryPayload,
@@ -31,19 +39,20 @@ export function totalExpenses(
     | 'helper_salary_cents'
     | 'maintenance_cents'
     | 'allowance_cents'
-  >,
+  > & { owner_share_cents?: number | null },
 ): number {
   return (
     e.fuel_cents +
     e.driver_salary_cents +
     e.helper_salary_cents +
     e.maintenance_cents +
-    e.allowance_cents
+    e.allowance_cents +
+    (e.owner_share_cents ?? 0)
   );
 }
 
 /** trip income - total expenses. Negative is a real, first-class loss. */
-export function netIncome(e: LedgerEntryPayload): number {
+export function netIncome(e: LedgerEntryPayload & { owner_share_cents?: number | null }): number {
   return e.trip_income_cents - totalExpenses(e);
 }
 
@@ -51,17 +60,21 @@ export function netIncome(e: LedgerEntryPayload): number {
 /* Periods                                                                     */
 /* -------------------------------------------------------------------------- */
 
-/** The workbook's default view: a 10-day window from a chosen start. */
+/**
+ * The workbook's default view: a 10-day window from a chosen start, both ends
+ * included — the 5th to the 14th. `+ 10` made it eleven days.
+ */
 export function tenDayRange(from: string): DateRange {
   const start = new Date(`${from}T00:00:00Z`);
   const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 10);
+  end.setUTCDate(end.getUTCDate() + 9);
 
   return { from, to: end.toISOString().slice(0, 10) };
 }
 
 /**
- * The start of a 10-day window ending today — what the API itself defaults to.
+ * The start of a 10-day window ending today (inclusive) — what the API itself
+ * defaults to.
  *
  * Profitability used to open on the workbook's 5 April 2026, which was the
  * transcription's opening view rather than a date that means anything now. A
@@ -70,7 +83,7 @@ export function tenDayRange(from: string): DateRange {
  */
 export function currentTenDayStart(): string {
   const start = new Date();
-  start.setUTCDate(start.getUTCDate() - 10);
+  start.setUTCDate(start.getUTCDate() - 9);
 
   return start.toISOString().slice(0, 10);
 }
@@ -109,11 +122,16 @@ export function pnlFromEntries(entries: LedgerEntry[]): PeriodTotals {
 
   return {
     trip_income_cents: income,
+    // The column, which already holds every fill posted from Fuel monitoring.
     fuel_cents: sum((e) => e.fuel_cents),
+    // Zero: a row cannot say which of its fuel came from Fuel monitoring.
+    fuel_log_cents: 0,
     driver_salary_cents: sum((e) => e.driver_salary_cents),
     helper_salary_cents: sum((e) => e.helper_salary_cents),
     maintenance_cents: sum((e) => e.maintenance_cents),
     allowance_cents: sum((e) => e.allowance_cents),
+    // A hired truck's owner's cut. Inside `totalExpenses()`, as on the API.
+    owner_share_cents: sum((e) => e.owner_share_cents ?? 0),
     // Zero, and honestly so: a ledger row carries the five workbook columns and
     // knows nothing about the categorised expense lines filed against its day.
     // This function is a local preview over rows the client already holds, and
@@ -123,9 +141,17 @@ export function pnlFromEntries(entries: LedgerEntry[]): PeriodTotals {
     // Zero for the same reason: a supplier bill is a document in Billing, not
     // a ledger row, and this preview only has ledger rows in its hands.
     supplier_bills_cents: 0,
+    // A pay run is a person's fortnight, not a ledger row.
+    payroll_cents: 0,
     // Zero again, and for the same reason: a partner's wallet is not
     // something a ledger row can see.
     trucker_payouts_cents: 0,
+    trucker_commission_cents: 0,
+    other_income_cents: 0,
+    total_income_cents: income,
+    vat_collected_cents: 0,
+    held_for_partners_cents: 0,
+    payables_already_costed_cents: 0,
     total_expenses_cents: expenses,
     net_income_cents: income - expenses,
     // And zero again: what the fleet owes lives in Billing and in the
@@ -159,14 +185,23 @@ export function emptyTotals(): PeriodTotals {
   return {
     trip_income_cents: 0,
     fuel_cents: 0,
+    fuel_log_cents: 0,
     driver_salary_cents: 0,
     helper_salary_cents: 0,
     maintenance_cents: 0,
     allowance_cents: 0,
+    owner_share_cents: 0,
     other_expenses_cents: 0,
     overhead_cents: 0,
     supplier_bills_cents: 0,
+    payroll_cents: 0,
     trucker_payouts_cents: 0,
+    trucker_commission_cents: 0,
+    other_income_cents: 0,
+    total_income_cents: 0,
+    vat_collected_cents: 0,
+    held_for_partners_cents: 0,
+    payables_already_costed_cents: 0,
     total_expenses_cents: 0,
     net_income_cents: 0,
     payables_cents: 0,

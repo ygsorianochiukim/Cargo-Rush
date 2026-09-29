@@ -20,8 +20,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * of truck. `min_km`/`max_km` are null, because the zone already said 1–40 km
  * and repeating it here is how the two end up disagreeing.
  *
- * **A zoneless line** is the firm's plain distance card — "450 km is ₱5,000" —
- * and carries its own kilometres, exactly as it always did.
+ * **A zoneless line** is the old plain distance card — "450 km is ₱5,000" —
+ * and carries its own kilometres. It no longer prices anything: pricing is
+ * zone-only (`PricingService`), no new zoneless line can be saved, and any an
+ * install still holds are left in the table unread.
  *
  * The arithmetic lives here rather than in the service because this is the
  * thing that holds the rates, and a quote that reads five columns off a model

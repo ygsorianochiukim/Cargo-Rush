@@ -33,10 +33,5 @@ export class Sidebar {
   /** Already sorted and permission-filtered by the API; grouped here. */
   protected readonly groups = this.identity.navGroups;
 
-  /** Whose system this is. Null until `me` has come back. */
-  protected readonly company = this.identity.company;
-  protected readonly companyLogo = this.identity.companyLogo;
-  protected readonly companyInitials = this.identity.companyInitials;
-
   protected readonly skeletonRows = [0, 1, 2, 3, 4, 5, 6, 7];
 }

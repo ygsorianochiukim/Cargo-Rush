@@ -30,6 +30,10 @@ use Illuminate\Support\Facades\Storage;
  * read the mime type, so a declared one exercises them exactly the same way.
  */
 beforeEach(function (): void {
+    // Pricing is zone-only, and an unpriced run cannot go out or be billed.
+    // One card at the old tariff's figures, so every run here is priced.
+    zoneCard();
+
     Storage::fake('public');
 
     $this->seed(NavigationSeeder::class);

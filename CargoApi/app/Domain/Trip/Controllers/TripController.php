@@ -4,15 +4,20 @@ declare(strict_types=1);
 
 namespace App\Domain\Trip\Controllers;
 
+use App\Domain\Delivery\DTO\ProofData;
+use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Http\Controllers\ApiController;
+use App\Domain\Trip\DTO\TripData;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Trip\Requests\ConfirmTripRequest;
 use App\Domain\Trip\Requests\DeliverTripRequest;
 use App\Domain\Trip\Requests\TripRequest;
 use App\Domain\Trip\Resources\TripResource;
 use App\Domain\Trip\Services\TripService;
+use App\Domain\Trip\Services\TripTicketService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 /**
  * Trip Management — DESIGN.md section 5.1.
@@ -37,16 +42,64 @@ class TripController extends ApiController
         return $this->item(new TripResource($trip));
     }
 
+    /** What the trip ticket and the dispatch checklist print — see `TripTicketService`. */
+    public function ticket(Trip $trip, TripTicketService $tickets): JsonResponse
+    {
+        return $this->payload($tickets->build($trip));
+    }
+
     public function store(TripRequest $request): JsonResponse
     {
-        $trip = $this->trips->create($request->toData());
+        if (! $this->isPastDelivery($request)) {
+            return $this->item(new TripResource($this->trips->create($request->toData())), status: 201);
+        }
 
-        return $this->item(new TripResource($trip), status: 201);
+        // A trip that already happened: booked as ordinary work, then put
+        // through the real delivery, dated the day it was delivered.
+        $trip = $this->trips->create($this->asAssigned($request));
+
+        return $this->item(new TripResource($this->recordDelivery($request, $trip)), status: 201);
     }
 
     public function update(TripRequest $request, Trip $trip): JsonResponse
     {
-        return $this->item(new TripResource($this->trips->update($trip, $request->toData())));
+        if (! $this->isPastDelivery($request) || $trip->status === StatusValue::Delivered) {
+            return $this->item(new TripResource($this->trips->update($trip, $request->toData())));
+        }
+
+        $updated = $this->trips->update($trip, $this->asAssigned($request));
+
+        return $this->item(new TripResource($this->recordDelivery($request, $updated)));
+    }
+
+    /** Is the office entering this as already delivered? See `TripRequest`. */
+    private function isPastDelivery(TripRequest $request): bool
+    {
+        return $request->input('status') === StatusValue::Delivered->value;
+    }
+
+    /** The trip's details, held as `assigned` until the delivery closes it. */
+    private function asAssigned(TripRequest $request): TripData
+    {
+        return TripData::fromArray([...$request->payload(), 'status' => StatusValue::Assigned->value]);
+    }
+
+    /**
+     * The real delivery, back-dated: the log, the day's sheet income, the
+     * wallet and the invoice all carry the delivered date — the scheduled time
+     * when none is given — so an old trip is on the books as if closed then.
+     */
+    private function recordDelivery(TripRequest $request, Trip $trip): Trip
+    {
+        $at = $request->filled('delivered_at')
+            ? Carbon::parse($request->input('delivered_at'))
+            : $trip->scheduled_at;
+
+        return $this->trips->complete(
+            $trip,
+            new ProofData(receiver_name: $request->string('receiver_name')->value() ?: 'Recorded by the office'),
+            $at,
+        );
     }
 
     public function destroy(Trip $trip): JsonResponse

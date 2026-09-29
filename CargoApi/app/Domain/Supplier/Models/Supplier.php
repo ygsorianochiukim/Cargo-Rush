@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -49,7 +50,7 @@ class Supplier extends Model
     /** @use HasFactory<SupplierFactory> */
     use BelongsToCompany, HasFactory, HasUlids, SoftDeletes;
 
-    protected $fillable = ['name', 'contact', 'address', 'supplies', 'note', 'status'];
+    protected $fillable = ['category_id', 'name', 'contact', 'address', 'supplies', 'note', 'status'];
 
     protected function casts(): array
     {
@@ -57,6 +58,12 @@ class Supplier extends Model
     }
 
     /** Spend filed as an expense — consumables, meals, tolls. */
+    /** What kind of place this is — GARAGE, MALL, FOODS. Null for a shop nobody has sorted. */
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(SupplierCategory::class, 'category_id');
+    }
+
     public function expenses(): HasMany
     {
         return $this->hasMany(Expense::class);

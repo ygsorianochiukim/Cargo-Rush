@@ -27,7 +27,7 @@ export interface Payables {
 }
 
 export interface PayableGroup {
-  key: 'truckers' | 'rented_trucks' | 'supplier_bills' | 'other';
+  key: 'truckers' | 'rented_trucks' | 'supplier_bills' | 'payroll' | 'other';
   label: string;
   icon: string;
   count: number;
@@ -49,10 +49,11 @@ export interface PayableLine {
   /**
    * What kind of arrangement this is.
    *
-   * For a partner it says which of the three they are — "Rented 10-wheeler
-   * owner · TEN-1", "Sub-contractor · ABC-123", "Partner trucker" — because
-   * "trucker" covers all three and somebody writing a cheque is choosing
-   * between them.
+   * For a partner it says which kind they are — "Sub-contractor · ABC-123",
+   * "Partner trucker" — because somebody writing a cheque is choosing
+   * between them. For a rented truck it says the terms: the month a flat
+   * rent covers, or the fleet's cut and how many runs a share owner is
+   * still owed for. Share owners are listed there, not under truckers.
    */
   detail: string;
   /** What is left to pay, not what was originally billed. */

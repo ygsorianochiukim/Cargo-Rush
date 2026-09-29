@@ -2,6 +2,7 @@ import { inject } from '@angular/core';
 
 import { MaintenanceJob } from '../../models/vehicle/vehicle.model';
 import { RecordSpec, statusOptions } from '../../shared/record-form-spec';
+import { BillingService } from '../billing/billing.service';
 import { SupplierService } from '../supplier/supplier.service';
 import { VehicleService } from '../vehicle/vehicle.service';
 import { MaintenanceService } from './maintenance.service';
@@ -39,9 +40,11 @@ export function maintenanceSpec(): RecordSpec<MaintenanceJob> {
   const jobs = inject(MaintenanceService);
   const vehicles = inject(VehicleService);
   const suppliers = inject(SupplierService);
+  const billing = inject(BillingService);
 
   const fleet: { value: string; label: string }[] = [];
   const shops: { value: string; label: string }[] = [];
+  const bills: { value: string; label: string }[] = [];
 
   vehicles.list().subscribe((res) => {
     fleet.length = 0;
@@ -51,9 +54,17 @@ export function maintenanceSpec(): RecordSpec<MaintenanceJob> {
   // Active only, as every other picker does: an inactive supplier is one the
   // office has stopped using, and offering them puts new spend back on a shop
   // nobody buys from.
-  suppliers.list({ active: 1 } as never).subscribe((res) => {
+  suppliers.options().subscribe((rows) => {
     shops.length = 0;
-    shops.push(...res.data.map((s) => ({ value: s.id, label: s.name })));
+    shops.push(...rows);
+  });
+
+  // Payables only: the garage's bill for this work. Linking it is what stops
+  // the same repair counting twice — once as this job's cost on the sheet,
+  // and again as a supplier bill paid.
+  billing.list({ direction: 'payable', per_page: 100 } as never).subscribe((res) => {
+    bills.length = 0;
+    bills.push(...res.data.map((b) => ({ value: b.id, label: `${b.number} · ${b.payee ?? b.customer}` })));
   });
 
   return {
@@ -100,6 +111,13 @@ export function maintenanceSpec(): RecordSpec<MaintenanceJob> {
         options: () => shops,
         hint: 'Who did the work, so what the fleet spends there adds up.',
       },
+      {
+        key: 'invoice_id',
+        label: 'Garage bill',
+        kind: 'select',
+        options: () => bills,
+        hint: 'The supplier bill for this job, if one was raised. Linked, its payment is not counted a second time.',
+      },
       { key: 'reference', label: 'Reference', kind: 'text', placeholder: 'SO-24817' },
       {
         key: 'status',
@@ -122,6 +140,7 @@ export function maintenanceSpec(): RecordSpec<MaintenanceJob> {
       // booked job does not quietly declare it free.
       cost: job.cost_cents === null ? '' : job.cost_cents / 100,
       supplier_id: job.supplier_id ?? '',
+      invoice_id: job.invoice_id ?? '',
       reference: job.reference ?? '',
       status: job.status,
       note: job.note ?? '',
@@ -143,6 +162,7 @@ export function maintenanceSpec(): RecordSpec<MaintenanceJob> {
         ? null
         : Math.round(Number(values['cost']) * 100),
       supplier_id: values['supplier_id'] || null,
+      invoice_id: values['invoice_id'] || null,
       reference: values['reference'] || null,
       status: values['status'] || 'scheduled',
       note: values['note'] || null,

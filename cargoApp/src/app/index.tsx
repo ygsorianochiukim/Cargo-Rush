@@ -1,5 +1,6 @@
 import { CustomerHomePage } from '@/pages/customer/customer-home.page';
 import { DashboardPage } from '@/pages/dashboard/dashboard.page';
+import { MyTripsPage } from '@/pages/trucker/my-trips.page';
 import { TruckerHomePage } from '@/pages/trucker/trucker-home.page';
 import { useSession } from '@/services/identity/session';
 
@@ -29,6 +30,8 @@ export default function Home() {
 
   if (me?.role === 'customer') return <CustomerHomePage />;
   if (me?.role === 'trucker') return <TruckerHomePage />;
+  // A trucker's driver: the runs their trucker handed them, and nothing else.
+  if (me?.role === 'trucker_driver') return <MyTripsPage crew />;
 
   return <DashboardPage />;
 }

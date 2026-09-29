@@ -30,6 +30,10 @@ Artisan::command('inspire', function () {
 Schedule::command('cargo:trips-release')->everyMinute()->withoutOverlapping();
 Schedule::command('cargo:trips-overdue')->everyFiveMinutes()->withoutOverlapping();
 
+// A run no zone line covered waits unpriced. Once somebody adds the line on
+// the Pricing card, this is what prices it — without anybody re-saving the trip.
+Schedule::command('cargo:trips-quote')->everyFiveMinutes()->withoutOverlapping();
+
 // Money goes stale on the same clock. Daily rather than by the minute: a due
 // date is a date, so nothing can change between one morning and the next.
 Schedule::command('cargo:invoices-overdue')->dailyAt('00:05')->withoutOverlapping();

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Payroll\Services;
 
 use App\Domain\Hr\Models\Employee;
+use App\Domain\Payroll\Models\PayRun;
 use App\Domain\Payroll\Models\PayRunLine;
 use App\Domain\Payroll\Models\StoreCredit;
 use App\Domain\Shared\Enums\StoreCreditKind;
@@ -103,6 +104,83 @@ class StoreCreditService
          * one.
          */
         return array_map(static fn (int $balance): int => max(0, $balance), $balances);
+    }
+
+    /**
+     * What a run may still take off each person's tab.
+     *
+     * Not the same question as `balances()`, and the difference is two ways a
+     * tab used to be taken twice:
+     *
+     *   **Another open draft.** Repayments are written at approval, so two
+     *   drafts built side by side each read the whole tab and each deducted
+     *   it — approve both and a ₱1,000 tab was ₱2,000 off two payslips. So
+     *   what every *other* draft's lines have reserved is taken off first.
+     *   Pass `$reservations = false` at approval, where the run being frozen
+     *   wins and the other drafts are re-capped when their turn comes.
+     *
+     *   **A repayment dated after the period.** The balance reads the tab as
+     *   at the period end, which is right for charges (the rice taken on the
+     *   18th belongs to the next payslip) and wrong for repayments: a later run
+     *   approved first writes its repayment on its own pay date, invisible to
+     *   an earlier period, which then took the same money again. Charges up to
+     *   the period end, repayments whenever they were made.
+     *
+     * This run's own repayment rows are left out — a retried approval must not
+     * read what it is about to overwrite. Never below zero.
+     *
+     * @param  array<int, string>  $employeeIds
+     * @return array<string, int> keyed by employee id; every id present
+     */
+    public function available(array $employeeIds, string $asOf, ?string $runId = null, bool $reservations = true): array
+    {
+        $available = array_fill_keys($employeeIds, 0);
+
+        if ($employeeIds === []) {
+            return $available;
+        }
+
+        $ownLines = $runId === null
+            ? []
+            : PayRunLine::query()->where('pay_run_id', $runId)->pluck('id')->all();
+
+        $rows = StoreCredit::query()
+            ->whereIn('employee_id', $employeeIds)
+            ->where(fn ($query) => $query
+                ->where('kind', StoreCreditKind::Payment->value)
+                ->orWhereDate('charged_on', '<=', $asOf))
+            ->when($ownLines !== [], fn ($query) => $query->where(fn ($inner) => $inner
+                ->whereNull('pay_run_line_id')
+                ->orWhereNotIn('pay_run_line_id', $ownLines)))
+            ->groupBy('employee_id', 'kind')
+            ->selectRaw('employee_id, kind, SUM(amount_cents) as total')
+            ->get();
+
+        foreach ($rows as $row) {
+            $kind = $row->kind instanceof StoreCreditKind
+                ? $row->kind
+                : StoreCreditKind::from((string) $row->kind);
+
+            $available[$row->employee_id] += $kind->sign() * (int) $row->total;
+        }
+
+        if ($reservations) {
+            $reserved = PayRunLine::query()
+                ->whereIn('employee_id', $employeeIds)
+                ->where('store_deduction_cents', '>', 0)
+                ->whereHas('payRun', fn ($run) => $run
+                    ->where('status', PayRun::DRAFT)
+                    ->when($runId !== null, fn ($query) => $query->whereKeyNot($runId)))
+                ->groupBy('employee_id')
+                ->selectRaw('employee_id, SUM(store_deduction_cents) as total')
+                ->pluck('total', 'employee_id');
+
+            foreach ($reserved as $employeeId => $total) {
+                $available[$employeeId] -= (int) $total;
+            }
+        }
+
+        return array_map(static fn (int $cents): int => max(0, $cents), $available);
     }
 
     /**

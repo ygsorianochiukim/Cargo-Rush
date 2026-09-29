@@ -34,6 +34,14 @@ enum Role: string
      * employee's screens and no wallet.
      */
     case Trucker = 'trucker';
+    /**
+     * Somebody a trucker employs to drive their trucks.
+     *
+     * Not `Driver`: that is Cargo Rush's own crew, on the payroll and the
+     * daily sheet. This person belongs to a trucker, runs only the trips that
+     * trucker hands them, and sees none of the trucker's money.
+     */
+    case TruckerDriver = 'trucker_driver';
 
     /** The display string. The client uppercases it — DESIGN.md section 7.2. */
     public function label(): string
@@ -45,6 +53,7 @@ enum Role: string
             self::Driver => 'Driver',
             self::Customer => 'Customer',
             self::Trucker => 'Trucker',
+            self::TruckerDriver => 'Trucker driver',
         };
     }
 
@@ -132,6 +141,17 @@ enum Role: string
             self::Trucker => [
                 'partner.view', 'partner.jobs', 'gps.write',
                 'delivery.view', 'delivery.write', 'incidents.write',
+                'notifications.view',
+            ],
+            /**
+             * The runs they were handed, and nothing else of the trucker's.
+             *
+             * `crew.trips` is the `crew/*` endpoints, scoped to their own
+             * `trucker_drivers` row. No `partner.*`: the board, the accept, the
+             * wallet, the trucks and the other drivers are the owner's.
+             */
+            self::TruckerDriver => [
+                'crew.trips', 'gps.write', 'delivery.view', 'delivery.write',
                 'notifications.view',
             ],
         };

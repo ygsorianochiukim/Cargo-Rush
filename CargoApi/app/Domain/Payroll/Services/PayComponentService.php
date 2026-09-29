@@ -159,7 +159,7 @@ class PayComponentService
      * catalogue screen, not for a payslip.
      *
      * @param  array{first: bool, only: bool, index: int, count: int}  $cutoff
-     * @return array<int, array{component: PayComponent, name: string, kind: string, taxable: bool, amount_cents: int}>
+     * @return array<int, array{component: PayComponent, name: string, kind: string, taxable: bool, amount_cents: int, monthly_cents: int}>
      */
     public function resolve(
         Employee $employee,
@@ -242,7 +242,7 @@ class PayComponentService
      *
      * @param  iterable<EmployeePayComponent>  $assignments
      * @param  array{first: bool, only: bool, index: int, count: int}  $cutoff
-     * @return array<int, array{component: PayComponent, name: string, kind: string, taxable: bool, amount_cents: int}>
+     * @return array<int, array{component: PayComponent, name: string, kind: string, taxable: bool, amount_cents: int, monthly_cents: int}>
      */
     private function fromAssignments(iterable $assignments, int $monthlyBasicCents, array $cutoff): array
     {
@@ -276,6 +276,10 @@ class PayComponentService
                 'kind' => $component->kind->value,
                 'taxable' => $component->isTaxable(),
                 'amount_cents' => $amount,
+                // What it is worth over a whole month, whatever this cutoff
+                // carries — the figure the tax exemption reads. See
+                // `StatutoryDeductions::isExempt()`.
+                'monthly_cents' => $monthly,
             ];
         }
 

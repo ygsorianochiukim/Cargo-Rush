@@ -36,6 +36,12 @@ class SupplierRequest extends ApiFormRequest
                     ->whereNull('deleted_at')
                     ->ignore($this->route('supplier')),
             ],
+            'category_id' => [
+                'nullable', 'string',
+                Rule::exists('supplier_categories', 'id')
+                    ->where('company_id', app(Tenant::class)->id())
+                    ->whereNull('deleted_at'),
+            ],
             'contact' => ['nullable', 'string', 'max:60'],
             'address' => ['nullable', 'string', 'max:200'],
             'supplies' => ['nullable', 'string', 'max:160'],

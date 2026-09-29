@@ -386,8 +386,10 @@ describe('one counterparty per run', function (): void {
             ->postJson("/api/v1/trips/{$trip->id}/complete", ['receiver_name' => 'Mrs Uy'])
             ->assertOk();
 
-        expect(LedgerEntry::query()->where('trip_id', $trip->getKey())->firstOrFail()->owner_share_cents)
-            ->toBe(0);
+        // No sheet row at all: a partner-hauled run is the partner's, so the
+        // fleet books only the commission — never the unit's income, and so
+        // never an owner share against it.
+        expect(LedgerEntry::query()->where('trip_id', $trip->getKey())->doesntExist())->toBeTrue();
     });
 });
 

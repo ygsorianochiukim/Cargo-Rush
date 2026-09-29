@@ -4,11 +4,14 @@ declare(strict_types=1);
 
 namespace App\Domain\Shared\Providers;
 
+use App\Domain\Accounting\Console\BackfillAutoPostingsCommand;
+use App\Domain\Accounting\Observers\AutoPostingObserver;
 use App\Domain\Billing\Console\QuoteUnpricedTripsCommand;
 use App\Domain\Billing\Console\ReconcileOverdueInvoicesCommand;
 use App\Domain\Billing\Console\RequoteInvoicesCommand;
 use App\Domain\Billing\Models\Invoice;
 use App\Domain\Billing\Models\Payment;
+use App\Domain\Billing\Models\PaymentAllocation;
 use App\Domain\Customer\Models\Customer;
 use App\Domain\Delivery\Models\DeliveryLog;
 use App\Domain\Dispatch\Models\DispatchRecord;
@@ -18,6 +21,7 @@ use App\Domain\Finance\Models\Expense;
 use App\Domain\Finance\Models\ExpenseCategory;
 use App\Domain\Finance\Models\LedgerEntry;
 use App\Domain\Finance\Models\Truck;
+use App\Domain\Fuel\Console\PostFuelFillsCommand;
 use App\Domain\Fuel\Models\FuelRecord;
 use App\Domain\Hr\Models\Applicant;
 use App\Domain\Hr\Models\Employee;
@@ -30,10 +34,12 @@ use App\Domain\Identity\Models\User;
 use App\Domain\Incident\Models\Incident;
 use App\Domain\Notification\Models\NotificationItem;
 use App\Domain\Payroll\Console\DemoPayrollCommand;
+use App\Domain\Payroll\Models\PayRun;
 use App\Domain\Payroll\Models\StoreCredit;
 use App\Domain\Pricing\Console\LoadSubsidyCardCommand;
 use App\Domain\Pricing\Models\PricingZone;
 use App\Domain\Pricing\Models\TruckCategory;
+use App\Domain\Supplier\Models\SupplierCategory;
 use App\Domain\Tenancy\Models\Company;
 use App\Domain\Tenancy\Support\Tenant;
 use App\Domain\Trip\Console\ReconcileOverdueTripsCommand;
@@ -41,7 +47,9 @@ use App\Domain\Trip\Console\ReleaseDueTripsCommand;
 use App\Domain\Trip\Console\RemeasureTripsCommand;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Trucker\Models\Trucker;
+use App\Domain\Trucker\Models\WalletEntry;
 use App\Domain\Vehicle\Console\ChargeTruckRentCommand;
+use App\Domain\Vehicle\Models\MaintenanceJob;
 use App\Domain\Vehicle\Models\Vehicle;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Factories\Factory;
@@ -83,6 +91,8 @@ class DomainServiceProvider extends ServiceProvider
         'truck' => Truck::class,
         'expense' => Expense::class,
         'category' => ExpenseCategory::class,
+        // Not `category` either — see `truckCategory` just below.
+        'supplierCategory' => SupplierCategory::class,
         /**
          * Not `category`, which is taken.
          *
@@ -162,10 +172,18 @@ class DomainServiceProvider extends ServiceProvider
                 // fee. Scheduled monthly, and safe to run by hand — the charge
                 // is keyed to the unit and the month.
                 ChargeTruckRentCommand::class,
+                // One-off: puts fills logged before /fuel became the only fuel
+                // source onto their sheet rows. Idempotent; try --dry-run first.
+                PostFuelFillsCommand::class,
                 // Demo data, run on purpose and never as part of a deploy.
                 DemoPayrollCommand::class,
+                // Posts every record's history to the journal. Idempotent;
+                // mind --from where the accountant has journalised by hand.
+                BackfillAutoPostingsCommand::class,
             ]);
         }
+
+        $this->autoPosting();
 
         foreach (self::BINDINGS as $parameter => $model) {
             Route::model($parameter, $model);
@@ -185,6 +203,33 @@ class DomainServiceProvider extends ServiceProvider
         Factory::guessFactoryNamesUsing(
             static fn (string $modelName): string => sprintf('Database\Factories\%sFactory', class_basename($modelName))
         );
+    }
+
+    /**
+     * The records the books follow.
+     *
+     * Every model that posts itself to the journal, and the few that change
+     * what another one posts — see `AutoPostingObserver` for which is which.
+     * Registered here rather than with `#[ObservedBy]` on each model so the
+     * list of what reaches the general ledger is one list, in one place.
+     */
+    private function autoPosting(): void
+    {
+        foreach ([
+            LedgerEntry::class,
+            Invoice::class,
+            Payment::class,
+            PaymentAllocation::class,
+            Expense::class,
+            ExpenseCategory::class,
+            FuelRecord::class,
+            WalletEntry::class,
+            PayRun::class,
+            MaintenanceJob::class,
+            Trip::class,
+        ] as $model) {
+            $model::observe(AutoPostingObserver::class);
+        }
     }
 
     /**

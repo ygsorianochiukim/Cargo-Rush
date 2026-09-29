@@ -48,6 +48,9 @@ final class JournalEntryData extends Data
         public readonly ?string $source = null,
         public readonly ?string $source_type = null,
         public readonly ?string $source_id = null,
+        /** Which posting of the source this is, and which version of it. See the migration. */
+        public readonly ?string $source_rule = null,
+        public readonly ?int $source_revision = null,
     ) {}
 
     protected static function hydrate(array $attributes): static
@@ -66,6 +69,8 @@ final class JournalEntryData extends Data
             source: $attributes['source'] ?? null,
             source_type: $attributes['source_type'] ?? null,
             source_id: $attributes['source_id'] ?? null,
+            source_rule: $attributes['source_rule'] ?? null,
+            source_revision: isset($attributes['source_revision']) ? (int) $attributes['source_revision'] : null,
         );
     }
 
@@ -80,6 +85,8 @@ final class JournalEntryData extends Data
             'source' => $this->source,
             'source_type' => $this->source_type,
             'source_id' => $this->source_id,
+            'source_rule' => $this->source_rule,
+            'source_revision' => $this->source_revision,
         ];
     }
 

@@ -39,11 +39,9 @@ use Illuminate\Support\Carbon;
  *
  * ## What has not changed
  *
- * The withholding table. `config/cargo.php` holds the BIR's **semi-monthly**
- * brackets — 24 periods a year — and a firm on three cutoffs has 36. Running
- * that table on each of them over-states the tax on every payslip. That is a
- * decision for the office rather than a bug to fix quietly, so the screens warn
- * and this file does not pretend otherwise.
+ * The BIR has no withholding table for 36 periods a year, so a three-cutoff run
+ * is taxed on the monthly table and divided back — see
+ * `StatutoryDeductions::withholding()` and `PayrollIntegrityTest`.
  */
 beforeEach(function (): void {
     $this->seed(PermissionSeeder::class);

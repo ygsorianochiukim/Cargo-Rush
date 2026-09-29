@@ -1,5 +1,5 @@
 <!--
-  The company itself, and what it charges, above the roles.
+  The company's yard, pay cutoffs and rates, above the roles.
 
   They sit here rather than on a settings page of their own: this is already the
   administrator's screen, and a page holding one card is a menu item somebody
@@ -12,15 +12,11 @@
 -->
 @if (canManageCompany()) {
   <!--
-    Who the company is, where it is, and when it pays.
+    Where the company is, and when it pays.
 
-    Two columns, and the **stacking is the layout**: the yard card holds a map
-    and is twice the height of anything else on this screen. Left to the grid,
-    it dragged the one-line company card out to match it — cards fill their
-    grid row rather than shrink, so a short card beside a tall one is a card
-    with a hole in it — and left the cutoff card a whole empty cell beside it.
-    Stacking the two short ones against the tall one costs nothing and both
-    columns come out roughly level.
+    Two columns: the cutoff card beside the yard card, which holds a map and
+    is the taller of the two. `items-start` keeps the short card its own
+    height rather than stretched to match.
 
     The yard card is what puts the firm on the carrier list customers pick from
     in the app, and for any company that registered before that list existed it
@@ -28,7 +24,6 @@
   -->
   <div class="mb-4 grid items-start gap-4 lg:grid-cols-2">
     <div class="flex flex-col gap-4">
-      <app-company-card />
       <app-payroll-cutoff-card />
     </div>
     <app-yard-card />
@@ -37,15 +32,21 @@
   <!--
     The rates, full width and under the rest.
 
-    Its own row rather than a third cell, because the tariff alone is four
-    number fields side by side and a card holding them at half the width wraps
-    into a column of stacked inputs that reads as a questionnaire.
+    Its own row rather than a third cell, because its tax and terms fields sit
+    side by side and a card holding them at half the width wraps into a column
+    of stacked inputs that reads as a questionnaire.
 
     It is the only screen in the system where what the firm charges can be
     changed. The commission on it used to be a field on each partner's own
     detail page; it is one standing rate now, and this is where it lives.
   -->
   <app-rates-card class="mb-4 block" />
+
+  <!-- Full width: the staff list needs the room for its columns and pager. -->
+  <app-benefits-card class="mb-4 block" />
+
+  <!-- The lists behind the dropdowns: supplier and expense categories. -->
+  <app-categories-card class="mb-4 block" />
 }
 
 <div class="mb-4 flex flex-wrap items-center justify-between gap-3">

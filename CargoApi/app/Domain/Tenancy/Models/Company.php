@@ -33,14 +33,16 @@ class Company extends Model
         'name', 'code', 'logo_path', 'contact_name', 'contact_email', 'contact_phone', 'address', 'status',
         'latitude', 'longitude',
         'tin', 'vat_registered', 'vat_rate_bp', 'withholding_rate_bp', 'prices_include_vat',
-        'payroll_deduct_on', 'payroll_cutoff_days', 'payroll_release_lag_days',
+        'payroll_deduct_on', 'payroll_benefits_enabled', 'payroll_cutoff_days', 'payroll_release_lag_days',
         // The standing cut of a partner trucker's run. A commercial term, and
         // the office's to change — see the migration that added it.
         'trucker_commission_bp',
-        // The firm's own fallback tariff and payment terms. Null on any of
-        // them means the install default; `RateBook` is what resolves that,
-        // and nothing outside it should be reading these columns.
-        'tariff_base_cents', 'tariff_per_km_cents', 'tariff_per_kg_cents', 'tariff_minimum_cents',
+        // The firm's payment terms. Null means the install default; `RateBook`
+        // is what resolves that, and nothing outside it should be reading it.
+        //
+        // The four `tariff_*` columns beside it are no longer written or read:
+        // they were the fallback for a run the zone card missed, and pricing
+        // is zone-only now. Kept in the table so a firm's old figures survive.
         'billing_terms_days',
     ];
 
@@ -71,6 +73,12 @@ class Company extends Model
              * See `DeductionSchedule`.
              */
             'payroll_deduct_on' => DeductionSchedule::class,
+
+            /**
+             * Whether payroll takes SSS, PhilHealth and Pag-IBIG at all. Off
+             * overrides every person's own enrolment; on leaves it to them.
+             */
+            'payroll_benefits_enabled' => 'boolean',
 
             /**
              * The days this firm's pay periods close on.

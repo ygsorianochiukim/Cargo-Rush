@@ -7,6 +7,8 @@ namespace App\Domain\Trip\Requests;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
 use App\Domain\Trip\DTO\TripData;
+use App\Domain\Trip\Requests\Concerns\GuardsTheTypedPrice;
+use Illuminate\Validation\Validator;
 
 /**
  * The desk confirming a delivery request.
@@ -27,6 +29,8 @@ use App\Domain\Trip\DTO\TripData;
  */
 class ConfirmTripRequest extends ApiFormRequest
 {
+    use GuardsTheTypedPrice;
+
     public function rules(): array
     {
         return [
@@ -48,10 +52,31 @@ class ConfirmTripRequest extends ApiFormRequest
             // re-quoted from these on the way through.
             'weight_kg' => ['sometimes', 'integer', 'min:0', 'max:60000'],
             'distance_total_m' => ['sometimes', 'integer', 'min:0'],
-            'price_cents' => ['sometimes', 'integer', 'min:0'],
+            // `pricing.manage` only — see `GuardsTheTypedPrice`.
+            'price_cents' => $this->priceRules(),
             'pickup_place' => ['nullable', 'string', 'max:255'],
             'dropoff_place' => ['nullable', 'string', 'max:255'],
         ];
+    }
+
+    /**
+     * Not a request a customer handed to a trucker.
+     *
+     * Confirming puts the fleet's own crew and unit on it; a run that already
+     * names a trucker would then carry both, and a fleet `vehicle_id` beside a
+     * trucker once booked the whole price as company income. Release the
+     * trucker first, and the request is the desk's to confirm.
+     */
+    public function after(): array
+    {
+        return [$this->mustBeAllowedToPrice(...), function (Validator $validator): void {
+            if ($this->route('trip')?->trucker_id !== null) {
+                $validator->errors()->add(
+                    'vehicle_id',
+                    'A trucker has been asked to haul this run in their own truck. Release the trucker before putting your own crew on it.',
+                );
+            }
+        }];
     }
 
     public function messages(): array
@@ -77,7 +102,7 @@ class ConfirmTripRequest extends ApiFormRequest
     public function toData(): TripData
     {
         return TripData::fromArray([
-            ...$this->validated(),
+            ...$this->withoutUnmovedPrice($this->validated()),
             'status' => StatusValue::Assigned->value,
         ]);
     }

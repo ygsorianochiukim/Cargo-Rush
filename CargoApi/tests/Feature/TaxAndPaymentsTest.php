@@ -16,7 +16,7 @@ use Database\Seeders\PermissionSeeder;
  *
  * These were the same number until now, and in Philippine freight they never
  * are. A ₱10,000 haul is billed at ₱11,200 with VAT; a customer who is a
- * withholding agent keeps back ₱224 and remits it to the BIR; ₱10,976 lands in
+ * withholding agent keeps back ₱200 — 2% of the net — for the BIR; ₱11,000 lands in
  * the bank. The system knew only the ₱10,000, so the document it printed was
  * not one a VAT-registered customer could accept and the figure it expected
  * never matched the payment.
@@ -129,18 +129,18 @@ describe('withholding tax', function (): void {
     /**
      * The detail most worth getting right.
      *
-     * The BIR computes withholding on the **gross**, VAT included. Applying 2%
-     * to the net instead understates the deduction on every invoice a business
-     * ever raises, and the error only shows up as a customer paying less than
-     * expected — which reads as a short payment rather than as arithmetic.
+     * Creditable withholding is a percentage of the income payment **exclusive
+     * of VAT** — the VAT is the government's, passing through us, not income
+     * of ours to withhold on. Taking 2% of the gross over-withholds on every
+     * invoice, and the customer's 2307 never agrees with our figure.
      */
-    it('is taken from the gross, not the net', function (): void {
+    it('is taken from the net, not the gross', function (): void {
         $body = ($this->raise)()->assertCreated()->json('data');
 
         expect($body['amount_cents'])->toBe(1_120_000)
-            // 2% of 1,120,000, not of 1,000,000.
-            ->and($body['withholding_cents'])->toBe(22_400)
-            ->and($body['due_cents'])->toBe(1_097_600);
+            // 2% of 1,000,000, not of 1,120,000.
+            ->and($body['withholding_cents'])->toBe(20_000)
+            ->and($body['due_cents'])->toBe(1_100_000);
     });
 
     /**
@@ -159,9 +159,9 @@ describe('withholding tax', function (): void {
             ->assertOk()
             ->assertJsonPath('data.status', 'paid')
             ->assertJsonPath('data.balance_cents', 0)
-            ->assertJsonPath('data.paid_cents', 1_097_600);
+            ->assertJsonPath('data.paid_cents', 1_100_000);
 
-        expect(Payment::firstOrFail()->amount_cents)->toBe(1_097_600);
+        expect(Payment::firstOrFail()->amount_cents)->toBe(1_100_000);
     });
 });
 

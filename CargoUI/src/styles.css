@@ -218,10 +218,23 @@ app-root {
     background: #fff !important;
   }
 
+  /* On screen the app is exactly one window tall and clips the rest; on paper
+     that cut every document off after its first page. */
+  html,
+  body,
+  body > app-root {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
   /* The canvas is a scrolling pane on screen; on paper it is the sheet, and a
      fixed height would cut the document off at one page. */
   #cr-main,
   #cr-main > div {
+    /* Block, not the flex column it is on screen: a browser ignores a page
+       break asked for inside a flex item, so a sheet meant to start on a new
+       page would run on under the one before it. */
+    display: block !important;
     overflow: visible !important;
     height: auto !important;
     padding: 0 !important;

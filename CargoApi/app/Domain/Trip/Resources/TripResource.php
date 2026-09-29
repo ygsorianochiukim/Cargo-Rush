@@ -38,10 +38,25 @@ class TripResource extends ApiResource
             'pieces' => $this->pieces,
             'handling' => $this->handling,
 
-            // Quoted from the tariff when the trip was booked, so the
-            // customer, the ledger and the invoice all read one figure.
+            // Quoted off the zone card when the trip was booked, so the
+            // customer, the ledger and the invoice all read one figure. Null
+            // when no zone line covers the run — never read that as ₱0.
             'price_cents' => $this->price_cents,
             'currency' => $this->currency,
+
+            /**
+             * Whether the run is waiting on the Pricing card, and why.
+             *
+             * `needs_zone` is the flag every client branches on — a badge on
+             * the board, a disabled Dispatch, "the office will confirm the
+             * price" on the customer's phone — so none of them has to infer it
+             * from a null and one of them print ₱0. `pricing_source` is `zone`,
+             * `manual` or `unzoned` (null on rows older than the column).
+             */
+            'needs_zone' => $this->price_cents === null,
+            'pricing_note' => $this->pricing_note,
+            'pricing_source' => $this->pricing_source,
+            'manually_priced' => $this->pricing_source === 'manual',
 
             'customer_id' => $this->customer_id,
             'customer' => $this->customer?->name,
@@ -72,10 +87,18 @@ class TripResource extends ApiResource
              */
             'hauled_by' => $this->hauledByPartner() ? 'trucker' : 'company',
             'trucker_id' => $this->trucker_id,
+            // The kind of truck the load asks for, if any — so a picker can
+            // grey out trucks of the wrong kind the way the API refuses them.
+            'truck_category_id' => $this->truck_category_id,
             'trucker_name' => $this->trucker?->name,
+            'trucker_business_name' => $this->trucker?->business_name,
             'trucker_phone' => $this->trucker?->phone,
             'trucker_vehicle_id' => $this->trucker_vehicle_id,
             'trucker_plate' => $this->truckerVehicle?->plate,
+            // Which of the trucker's own drivers has it. Null while the owner
+            // runs it themselves, and on every Cargo Rush run.
+            'trucker_driver_id' => $this->trucker_driver_id,
+            'trucker_driver_name' => $this->whenLoaded('truckerDriver', fn () => $this->truckerDriver?->name),
 
             /**
              * How the work reached whoever is hauling it, and what it cost.
@@ -125,6 +148,14 @@ class TripResource extends ApiResource
             'billed_at' => $this->iso($this->billed_at),
             // Whether the hand-off photograph arrived. Only where the log was
             // loaded with the trip, so a list that did not ask costs nothing.
+            // The dispatch checklist as last answered on the phone — null
+            // until somebody has. See `DispatchChecklistService`.
+            'dispatch_checklist' => $this->dispatch_checked_at === null ? null : [
+                'answers' => $this->dispatch_checklist,
+                'remarks' => $this->dispatch_remarks,
+                'checked_at' => $this->iso($this->dispatch_checked_at),
+                'checked_by' => $this->dispatch_checked_by,
+            ],
             'has_pod_photo' => $this->whenLoaded(
                 'deliveryLog',
                 fn (): bool => $this->deliveryLog?->pod_image_path !== null,

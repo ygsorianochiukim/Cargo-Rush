@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Trucker\Services;
 
+use App\Domain\Billing\Services\PricingService;
 use App\Domain\Notification\Services\NotificationService;
 use App\Domain\Shared\Enums\BookingSource;
 use App\Domain\Shared\Enums\StatusValue;
@@ -208,23 +209,49 @@ class TruckerService
                 "Only work still waiting to go out can be handed to a trucker. This run is {$locked->status->value}.",
             );
 
+            // Handing it over commits the firm to paying somebody outside it
+            // a share of the price — and there has to be a price to share.
+            PricingService::mustBePriced($locked);
+
             abort_if(
                 $locked->driver_id !== null,
                 422,
                 'That run already has one of your own drivers on it.',
             );
 
-            $unit = $this->unitFor($trucker, $vehicleId);
+            /**
+             * Which truck is the trucker's choice, not the desk's.
+             *
+             * The desk only needs to know one of their trucks *can* take it;
+             * the trucker picks which on My Trips before it leaves. A desk that
+             * does name one (`$vehicleId`) still gets it checked.
+             */
+            if ($vehicleId !== null) {
+                $unit = $this->unitFor($trucker, $vehicleId);
 
-            abort_unless(
-                $unit->canCarry($locked->weight_kg, $locked->truck_category_id),
-                422,
-                "{$unit->plate} cannot carry that load.",
-            );
+                abort_unless(
+                    $unit->canCarry($locked->weight_kg, $locked->truck_category_id),
+                    422,
+                    "{$unit->plate} cannot carry that load.",
+                );
+            } else {
+                $trucker->loadMissing('vehicles');
+
+                abort_if(
+                    $trucker->fittingVehicle($locked->weight_kg, $locked->truck_category_id) === null,
+                    422,
+                    'None of that trucker\'s trucks on the road can carry this load.',
+                );
+            }
 
             $locked->update([
                 'trucker_id' => $trucker->getKey(),
-                'trucker_vehicle_id' => $unit->getKey(),
+                'trucker_vehicle_id' => $vehicleId === null ? null : $unit->getKey(),
+                // Cleared, because the run is no longer on a fleet truck. A
+                // unit the desk had pencilled in, left beside a trucker, is
+                // what once booked the whole price as company income when the
+                // company keeps only the commission.
+                'vehicle_id' => null,
                 // The haulier brokered it, so the haulier bills it. Stated
                 // rather than left to the column default, because this is the
                 // line that decides which way the wallet moves and it should
@@ -236,7 +263,7 @@ class TruckerService
             $this->tell(
                 $trucker,
                 'A job has been assigned to you',
-                "{$locked->reference} · {$locked->origin} → {$locked->destination}",
+                "{$locked->reference} · {$locked->origin} → {$locked->destination} · {$locked->weight_kg} kg. Choose which truck takes it on My Trips.",
                 Tone::Info,
             );
 
@@ -294,7 +321,9 @@ class TruckerService
     public function saveVehicle(Trucker $trucker, array $attributes, ?string $vehicleId = null): TruckerVehicle
     {
         if ($vehicleId === null) {
-            return TruckerVehicle::create([...$attributes, 'trucker_id' => $trucker->getKey()]);
+            // Refreshed, because `status` is the column's default and a model
+            // fresh from `create()` does not have it — the resource reads it.
+            return TruckerVehicle::create([...$attributes, 'trucker_id' => $trucker->getKey()])->refresh();
         }
 
         $vehicle = $trucker->vehicles()->find($vehicleId);
@@ -307,11 +336,9 @@ class TruckerService
     }
 
     /**
-     * Which of a partner's trucks a run goes under.
+     * The truck the desk named for a run, checked to be this partner's.
      *
-     * Named by the desk when it cares, and the first available one otherwise —
-     * which is the whole of the choice for the many partners who own exactly
-     * one truck.
+     * Only when the desk names one; otherwise the trucker picks on My Trips.
      */
     private function unitFor(Trucker $trucker, ?string $vehicleId): TruckerVehicle
     {

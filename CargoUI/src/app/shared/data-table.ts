@@ -31,6 +31,15 @@ export interface Column<T = any> {
   status?: (row: T) => StatusValue;
   /** Second line under the main value. */
   sub?: (row: T) => string | null;
+  /**
+   * A warning pill printed *instead of* the value, where this returns text.
+   *
+   * For a cell whose ordinary figure does not exist yet — a trip no zone line
+   * has priced reads "Needs a zone" rather than an em dash or, worse, ₱0. The
+   * pill carries its text, so it is never colour alone; `sub` still prints
+   * under it, which is where the reason goes.
+   */
+  badge?: (row: T) => string | null;
 }
 
 /**
@@ -81,13 +90,15 @@ export interface Column<T = any> {
             <app-icon
               name="search"
               [size]="15"
-              class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-cr-ink-muted" />
+              class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-cr-ink-muted"
+            />
             <input
               type="search"
               [value]="term()"
               (input)="setTerm($event)"
               [attr.placeholder]="searchPlaceholder()"
-              class="h-9 w-full rounded-control border border-cr-line bg-cr-surface pr-3 pl-9 text-[13px] text-cr-ink placeholder:text-cr-ink-muted focus:border-cr-blue focus:outline-none" />
+              class="h-9 w-full rounded-control border border-cr-line bg-cr-surface pr-3 pl-9 text-[13px] text-cr-ink placeholder:text-cr-ink-muted focus:border-cr-blue focus:outline-none"
+            />
           </label>
 
           @if (term()) {
@@ -118,7 +129,8 @@ export interface Column<T = any> {
             <button
               type="button"
               class="mt-1 h-9 rounded-control border border-cr-line px-3 text-[13px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint"
-              (click)="clear()">
+              (click)="clear()"
+            >
               Clear search
             </button>
           </div>
@@ -136,7 +148,8 @@ export interface Column<T = any> {
                white-space inherits, which keeps it off every single cell. -->
           <table
             class="w-full border-collapse text-left whitespace-nowrap"
-            [style.min-width.px]="minWidth()">
+            [style.min-width.px]="minWidth()"
+          >
             <thead>
               <tr class="border-b border-cr-line">
                 @for (col of columns(); track col.label) {
@@ -152,16 +165,30 @@ export interface Column<T = any> {
             <tbody>
               @for (row of page(); track $index) {
                 <tr
-                  class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint">
+                  class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint"
+                >
                   @for (col of columns(); track col.label) {
                     <td
                       class="px-4 py-3 text-[13px]"
                       [class.text-right]="col.kind === 'num'"
                       [class.cr-num]="col.kind === 'num' || col.kind === 'strong'"
                       [class.font-semibold]="col.kind === 'strong'"
-                      [class.text-cr-ink-muted]="col.kind === 'muted'">
+                      [class.text-cr-ink-muted]="col.kind === 'muted'"
+                    >
                       @if (col.kind === 'status' && col.status) {
                         <app-status-pill [status]="col.status(row)" />
+                      } @else if (col.badge && col.badge(row)) {
+                        <span
+                          class="inline-flex items-center gap-1.5 rounded-full bg-cr-warning-bg px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] text-cr-warning uppercase"
+                        >
+                          <span class="h-1.5 w-1.5 rounded-full bg-cr-warning"></span>
+                          {{ col.badge(row) }}
+                        </span>
+                        @if (col.sub) {
+                          <span class="block text-[12px] text-cr-ink-muted">{{
+                            col.sub(row) ?? dash
+                          }}</span>
+                        }
                       } @else {
                         {{ col.value ? (col.value(row) ?? dash) : '' }}
                         @if (col.sub) {
@@ -180,7 +207,8 @@ export interface Column<T = any> {
                             type="button"
                             class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
                             [attr.aria-label]="'Delete ' + (rowLabel() ? rowLabel()!(row) : 'row')"
-                            (click)="remove.emit(row)">
+                            (click)="remove.emit(row)"
+                          >
                             <app-icon name="close" [size]="16" />
                           </button>
                         }
@@ -188,7 +216,8 @@ export interface Column<T = any> {
                           type="button"
                           class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
                           [attr.aria-label]="rowAction()"
-                          (click)="open.emit(row)">
+                          (click)="open.emit(row)"
+                        >
                           <app-icon name="chevron-right" [size]="16" />
                         </button>
                       </div>
@@ -211,15 +240,17 @@ export interface Column<T = any> {
         -->
         @if (paginated() && matched().length > 0) {
           <div
-            class="flex flex-wrap items-center justify-between gap-3 border-t border-cr-line px-4 py-3">
+            class="flex flex-wrap items-center justify-between gap-3 border-t border-cr-line px-4 py-3"
+          >
             <label class="flex items-center gap-2 text-[12px] text-cr-ink-muted">
               <span>Rows</span>
               <select
                 [value]="size()"
                 (change)="setSize($event)"
-                class="h-8 rounded-control border border-cr-line bg-cr-surface px-2 text-[13px] text-cr-ink focus:border-cr-blue focus:outline-none">
+                class="h-8 rounded-control border border-cr-line bg-cr-surface px-2 text-[13px] text-cr-ink focus:border-cr-blue focus:outline-none"
+              >
                 @for (option of sizes; track option) {
-                  <option [value]="option">{{ option }}</option>
+                  <option [value]="option" [selected]="option === size()">{{ option }}</option>
                 }
               </select>
             </label>
@@ -234,7 +265,8 @@ export interface Column<T = any> {
                 class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint disabled:opacity-40"
                 aria-label="Previous page"
                 [disabled]="pageIndex() === 0"
-                (click)="back()">
+                (click)="back()"
+              >
                 <app-icon name="chevron-left" [size]="16" />
               </button>
               <span class="cr-num px-1 text-[12px] text-cr-ink-muted">
@@ -245,7 +277,8 @@ export interface Column<T = any> {
                 class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint disabled:opacity-40"
                 aria-label="Next page"
                 [disabled]="pageIndex() + 1 >= pageCount()"
-                (click)="next()">
+                (click)="next()"
+              >
                 <app-icon name="chevron-right" [size]="16" />
               </button>
             </div>
@@ -392,7 +425,7 @@ export class DataTable {
   private haystack(row: any): string {
     return this.columns()
       .filter((col) => col.kind !== 'status')
-      .map((col) => `${col.value?.(row) ?? ''} ${col.sub?.(row) ?? ''}`)
+      .map((col) => `${col.badge?.(row) ?? col.value?.(row) ?? ''} ${col.sub?.(row) ?? ''}`)
       .join(' ')
       .toLowerCase();
   }

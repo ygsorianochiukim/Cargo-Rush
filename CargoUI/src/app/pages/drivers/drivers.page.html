@@ -29,7 +29,14 @@
                     class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-cr-tint text-[11px] font-semibold text-cr-blue">
                     {{ initials(d.name) }}
                   </span>
-                  <span class="text-[13px] font-semibold">{{ d.name }}</span>
+                  <span>
+                    <span class="block text-[13px] font-semibold">{{ d.name }}</span>
+                    <!-- Who they drive for. Always the fleet here: a trucker's
+                         drivers live on the trucker's record, never this list. -->
+                    <span class="block text-[11px] font-semibold text-cr-blue">
+                      {{ d.employer?.label ?? 'Cargo Rush' }}
+                    </span>
+                  </span>
                 </span>
               </td>
               <td class="px-4 py-3">

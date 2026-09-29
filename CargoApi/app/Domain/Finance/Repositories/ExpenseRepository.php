@@ -128,6 +128,7 @@ class ExpenseRepository extends Repository
     public function categories(bool $activeOnly = false): Collection
     {
         return ExpenseCategory::query()
+            ->withCount('expenses')
             ->when($activeOnly, static fn (Builder $query) => $query->where('status', 'active'))
             ->orderBy('position')
             ->orderBy('name')

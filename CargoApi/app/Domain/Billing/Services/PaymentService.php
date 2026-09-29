@@ -69,18 +69,37 @@ class PaymentService
      * settles for the gross less the withholding, because that is all that was
      * ever going to arrive.
      *
+     * **The balance is read under a lock.** Two presses of "mark settled" a
+     * moment apart used to both read the full balance and both record it, so
+     * the invoice was paid twice and the second payment sat as a credit nobody
+     * had sent. Locking the row first makes the second press wait, read a
+     * zero balance, and be refused.
+     *
      * @throws ValidationException
      */
     public function settle(Invoice $invoice, array $attributes = [], ?int $userId = null): Payment
     {
-        $balance = $invoice->balanceCents();
+        return DB::transaction(function () use ($invoice, $attributes, $userId): Payment {
+            $invoice = $this->lock($invoice);
+            $balance = $invoice->balanceCents();
 
-        if ($balance <= 0) {
-            throw ValidationException::withMessages([
-                'invoice' => ["{$invoice->number} is already settled."],
-            ]);
-        }
+            if ($balance <= 0) {
+                throw ValidationException::withMessages([
+                    'invoice' => ["{$invoice->number} is already settled."],
+                ]);
+            }
 
+            return $this->recordFor($invoice, $balance, $attributes, $userId);
+        });
+    }
+
+    /**
+     * The one payment that settles a locked invoice's balance.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    private function recordFor(Invoice $invoice, int $balance, array $attributes, ?int $userId): Payment
+    {
         return $this->record(
             [
                 'customer_id' => $invoice->customer_id,
@@ -114,13 +133,54 @@ class PaymentService
      * Applying the same payment to the same invoice twice **adds** rather than
      * inserting a second row. A double-click is one payment, not two.
      *
+     * **Nothing goes against a cancelled document.** It used to be accepted,
+     * and `refreshInvoice()` then derived `paid` or `pending` from the money —
+     * silently un-cancelling a document somebody had deliberately withdrawn.
+     *
+     * Both rows are read **under a lock**, inside a transaction, so two
+     * allocations racing each other cannot both see the same balance and both
+     * spend it.
+     *
      * @throws ValidationException
      */
     public function allocate(Payment $payment, Invoice $invoice, int $amountCents): PaymentAllocation
     {
+        return DB::transaction(fn (): PaymentAllocation => $this->allocateLocked(
+            $this->lock($payment),
+            $this->lock($invoice),
+            $amountCents,
+        ));
+    }
+
+    /**
+     * A fresh copy of the row, locked until the transaction ends.
+     *
+     * Fresh matters as much as locked: an invoice handed in from a list
+     * carries the allocation sum it was loaded with, and a balance worked out
+     * from that stale sum is exactly the race the lock is there to close.
+     *
+     * @template T of Invoice|Payment
+     *
+     * @param  T  $model
+     * @return T
+     */
+    private function lock(Invoice|Payment $model): Invoice|Payment
+    {
+        return $model->newQuery()->whereKey($model->getKey())->lockForUpdate()->firstOrFail();
+    }
+
+    /** @throws ValidationException */
+    private function allocateLocked(Payment $payment, Invoice $invoice, int $amountCents): PaymentAllocation
+    {
         if ($amountCents <= 0) {
             throw ValidationException::withMessages([
                 'allocations' => ['An allocation has to be for more than nothing.'],
+            ]);
+        }
+
+        if ($invoice->status === StatusValue::Cancelled) {
+            throw ValidationException::withMessages([
+                'allocations' => ["{$invoice->number} is cancelled, so nothing is owed on it."],
             ]);
         }
 
@@ -193,9 +253,21 @@ class PaymentService
      * somebody pressed a button — a cheque entered on Friday for money that
      * cleared on Tuesday is Tuesday's collection, and every figure dated from
      * `paid_at` would otherwise land in the wrong week.
+     *
+     * A **cancelled** document is left cancelled. That is the one status a
+     * person chooses rather than the money deciding, and removing a payment
+     * from one — which `delete()` below does for every invoice it touched —
+     * must not quietly reopen it. Reopening is `BillingService::update()`.
      */
     public function refreshInvoice(Invoice $invoice): Invoice
     {
+        if ($invoice->status === StatusValue::Cancelled) {
+            return $invoice;
+        }
+
+        // Dropped, so the balance below is summed afresh rather than read
+        // from whatever a list query loaded onto the model.
+        unset($invoice->allocations_sum_amount_cents);
         $invoice->load('allocations');
 
         $status = $invoice->statusFromPayments();

@@ -175,21 +175,22 @@ describe('quoting from a band', function (): void {
 
         // 1.2 km bills as 2, and 2 is outside a band that stops at 2.
         expect(($this->quote)(['distance_m' => 1_200])->json('data.km'))->toBe(2);
-        expect(($this->quote)(['distance_m' => 1_200])->json('data.source'))->toBe('tariff');
+        expect(($this->quote)(['distance_m' => 1_200])->json('data.source'))->toBe('unzoned');
         expect(($this->quote)(['distance_m' => 900])->json('data.source'))->toBe('zone');
     });
 
-    it('falls back to the configured tariff past the end of the table', function (): void {
+    it('leaves a run past the end of the table unpriced, and says why', function (): void {
         ($this->createBand)();
 
         $quote = ($this->quote)(['distance_km' => 700])->assertOk();
 
-        // Visibly off-card rather than a guess: the principal has published no
-        // rate for 700 km, and the trace says which figure answered instead.
-        expect($quote->json('data.source'))->toBe('tariff');
+        // No figure rather than a guess: the principal has published no rate
+        // for 700 km, and there is no fallback tariff to invent one any more.
+        expect($quote->json('data.source'))->toBe('unzoned');
+        expect($quote->json('data.needs_zone'))->toBeTrue();
         expect($quote->json('data.zone'))->toBeNull();
-        // The pre-existing formula, untouched: 150,000 + 700 * 3,500.
-        expect($quote->json('data.cents'))->toBe(2_600_000);
+        expect($quote->json('data.cents'))->toBeNull();
+        expect($quote->json('data.reason'))->toBe('No zone covers 700 km.');
     });
 
     it('names the band when the band is the thing without a rate on it', function (): void {
@@ -197,7 +198,8 @@ describe('quoting from a band', function (): void {
 
         $quote = ($this->quote)(['distance_km' => 20])->assertOk();
 
-        expect($quote->json('data.source'))->toBe('tariff');
+        expect($quote->json('data.source'))->toBe('unzoned');
+        expect($quote->json('data.cents'))->toBeNull();
         // Named even though it did not price the run, so the office can see the
         // band was found and the *line* was missing rather than hunt for a
         // banding problem that is not there.
@@ -211,7 +213,7 @@ describe('quoting from a band', function (): void {
             ->patchJson("/api/v1/pricing/zones/{$zone['id']}", ['status' => 'inactive'])
             ->assertOk();
 
-        expect(($this->quote)(['distance_km' => 20])->json('data.source'))->toBe('tariff');
+        expect(($this->quote)(['distance_km' => 20])->json('data.source'))->toBe('unzoned');
     });
 });
 

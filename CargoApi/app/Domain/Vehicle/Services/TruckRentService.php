@@ -93,20 +93,31 @@ class TruckRentService
         $period = $month->copy()->startOfMonth();
 
         /**
-         * The reference *is* the idempotency.
+         * One charge per unit per month — keyed on the **vehicle**, not the
+         * plate.
          *
-         * Derived from the unit and the month rather than from a counter, so
-         * two runs produce the same string and the second finds the first.
-         * It is also what somebody reads on the expense line — "RENT
-         * ABC-1234 2026-09" says what it is without opening anything.
+         * The reference used to be the idempotency: "RENT <plate> <month>",
+         * looked up by string. Two things broke it. A hired unit with no plate
+         * yet made "RENT  2026-09", so the second plateless unit found the
+         * first one's charge and was never billed; and correcting a plate
+         * mid-month made a new string, so the same month was charged twice.
+         * The unit's id changes for neither, and the charge is dated to the
+         * month's last day, so that pair is the key.
          */
-        $reference = sprintf('RENT %s %s', $vehicle->plate, $period->format('Y-m'));
+        $existing = Expense::query()
+            ->where('vehicle_id', $vehicle->getKey())
+            ->whereHas('category', static fn ($query) => $query->where('key', self::CATEGORY_KEY))
+            ->whereDate('date', $period->copy()->endOfMonth()->toDateString())
+            ->exists();
 
-        $existing = Expense::query()->where('reference', $reference)->first();
-
-        if ($existing !== null) {
+        if ($existing) {
             return null;
         }
+
+        // Still what somebody reads on the expense line — "RENT ABC-1234
+        // 2026-09" says what it is without opening anything — but no longer
+        // what finds it.
+        $reference = sprintf('RENT %s %s', $vehicle->plate ?? 'UNPLATED', $period->format('Y-m'));
 
         return DB::transaction(fn (): Expense => Expense::create([
             'category_id' => ($category ?? $this->category())->getKey(),

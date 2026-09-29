@@ -6,17 +6,16 @@ import { Company } from '../../models/identity/identity.model';
 import { CompanyService } from '../../services/identity/company.service';
 import { Card } from '../../shared/card';
 import { Field } from '../../shared/field';
-import { fmt } from '../../shared/format';
 
 /**
- * The rates the office sets — what a haul is charged, what an invoice carries,
- * and what a partner's run is split at.
+ * The rates the office sets — what an invoice carries and what a partner's run
+ * is split at.
  *
  * Every figure on this card used to be an environment variable. That meant one
- * tariff, one set of tax rates and one commission for every haulier on the
- * install, and correcting any of them was a deployment — so a firm that wanted
- * to move its per-kilometre rate on a Tuesday afternoon raised a support
- * ticket. They are columns on the company now, and this is the screen.
+ * set of tax rates and one commission for every haulier on the install, and
+ * correcting any of them was a deployment — so a firm that wanted to move its
+ * payment terms on a Tuesday afternoon raised a support ticket. They are
+ * columns on the company now, and this is the screen.
  *
  * ## Where the commission went
  *
@@ -36,9 +35,12 @@ import { fmt } from '../../shared/format';
  *
  * ## What it does not offer
  *
- * The rate card — a zone, a truck class and a diesel step — which is a table
- * with its own screen under Pricing. The tariff here is only what answers when
- * no line of that table covers a run.
+ * What a haul is charged. That is the zone card — a zone, a truck class and a
+ * diesel step — with its own screen under Pricing, and it is the only thing
+ * that prices a run. The fallback tariff (base, per km, per kg, minimum) that
+ * used to sit on this card is gone: a run no zone covers is now saved unpriced
+ * for the office rather than quoted a figure nobody published. The company's
+ * old tariff columns are still in the database, unread.
  *
  * And the payroll contributions. SSS, PhilHealth and Pag-IBIG are the
  * government's figures, the same for every firm on the platform, and a form
@@ -73,62 +75,6 @@ import { fmt } from '../../shared/format';
                   max="50"
                   formControlName="commission"
                   [class]="inputClass"
-                />
-              </app-field>
-            </div>
-          </fieldset>
-
-          <hr class="border-cr-line" />
-
-          <!--
-            The fallback tariff. Named as the fallback on the card itself,
-            because an office that reads this as "our prices" and finds its
-            quotes unchanged has been misled by the heading rather than by the
-            arithmetic — the rate card prices most runs.
-          -->
-          <fieldset [disabled]="busy()">
-            <legend class="text-[13px] font-semibold">Tariff</legend>
-            <p class="cr-meta mt-0.5">
-              What a run is quoted when no rate-card band covers it:
-              <span class="font-medium text-cr-ink">base + per km + per kg</span>, never below the
-              minimum.
-            </p>
-
-            <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <app-field label="BASE (₱)" [error]="errorFor('tariff_base_cents')">
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  formControlName="base"
-                  [class]="numberClass"
-                />
-              </app-field>
-              <app-field label="PER KM (₱)" [error]="errorFor('tariff_per_km_cents')">
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  formControlName="perKm"
-                  [class]="numberClass"
-                />
-              </app-field>
-              <app-field label="PER KG (₱)" [error]="errorFor('tariff_per_kg_cents')">
-                <input
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  formControlName="perKg"
-                  [class]="numberClass"
-                />
-              </app-field>
-              <app-field label="MINIMUM (₱)" [error]="errorFor('tariff_minimum_cents')">
-                <input
-                  type="number"
-                  min="0"
-                  step="1"
-                  formControlName="minimum"
-                  [class]="numberClass"
                 />
               </app-field>
             </div>
@@ -300,10 +246,6 @@ export class RatesCard {
    */
   protected readonly form = this.fb.nonNullable.group({
     commission: [12],
-    base: [0],
-    perKm: [0],
-    perKg: [0],
-    minimum: [0],
     terms: [30],
     vatRegistered: [true],
     vat: [12],
@@ -343,7 +285,7 @@ export class RatesCard {
    * The install's answer, in one line.
    *
    * Only the figures somebody is likely to be checking themselves against —
-   * the tariff formula, the cut and the terms. A full restatement of every
+   * the cut, the tax and the terms. A full restatement of every
    * setting would be the form again, in prose, under the form.
    */
   protected defaultSummary(): string {
@@ -355,10 +297,6 @@ export class RatesCard {
 
     return [
       `${this.percent(d.trucker_commission_bp)}% commission`,
-      `${fmt.money(d.tariff.base_cents)} + ${fmt.pesos(d.tariff.per_km_cents)}/km + ${fmt.pesos(
-        d.tariff.per_kg_cents,
-      )}/kg`,
-      `minimum ${fmt.money(d.tariff.minimum_cents)}`,
       `${this.percent(d.vat_rate_bp)}% VAT`,
       `${d.billing_terms_days} days to pay`,
     ].join(', ');
@@ -388,10 +326,6 @@ export class RatesCard {
 
     this.write({
       trucker_commission_bp: row.rate_defaults.trucker_commission_bp,
-      tariff_base_cents: null,
-      tariff_per_km_cents: null,
-      tariff_per_kg_cents: null,
-      tariff_minimum_cents: null,
       billing_terms_days: null,
       vat_registered: row.rate_defaults.vat_registered,
       vat_rate_bp: null,
@@ -425,10 +359,6 @@ export class RatesCard {
 
     return {
       trucker_commission_bp: this.bp(value.commission),
-      tariff_base_cents: this.cents(value.base),
-      tariff_per_km_cents: this.cents(value.perKm),
-      tariff_per_kg_cents: this.cents(value.perKg),
-      tariff_minimum_cents: this.cents(value.minimum),
       billing_terms_days: Math.round(value.terms),
       vat_registered: value.vatRegistered,
       vat_rate_bp: this.bp(value.vat),
@@ -447,10 +377,6 @@ export class RatesCard {
   private payloadFor(rates: Company['rates']): Record<string, unknown> {
     return {
       trucker_commission_bp: rates.trucker_commission_bp,
-      tariff_base_cents: rates.tariff.base_cents,
-      tariff_per_km_cents: rates.tariff.per_km_cents,
-      tariff_per_kg_cents: rates.tariff.per_kg_cents,
-      tariff_minimum_cents: rates.tariff.minimum_cents,
       billing_terms_days: rates.billing_terms_days,
       vat_registered: rates.vat_registered,
       vat_rate_bp: rates.vat_rate_bp,
@@ -482,10 +408,6 @@ export class RatesCard {
     this.form.setValue(
       {
         commission: this.percent(rates.trucker_commission_bp),
-        base: this.pesos(rates.tariff.base_cents),
-        perKm: this.pesos(rates.tariff.per_km_cents),
-        perKg: this.pesos(rates.tariff.per_kg_cents),
-        minimum: this.pesos(rates.tariff.minimum_cents),
         terms: rates.billing_terms_days,
         vatRegistered: rates.vat_registered,
         vat: this.percent(rates.vat_rate_bp),
@@ -526,15 +448,7 @@ export class RatesCard {
     return Math.round((Number(percent) || 0) * 100);
   }
 
-  private cents(pesos: number): number {
-    return Math.round((Number(pesos) || 0) * 100);
-  }
-
   private percent(bp: number): number {
     return bp / 100;
-  }
-
-  private pesos(cents: number): number {
-    return cents / 100;
   }
 }
