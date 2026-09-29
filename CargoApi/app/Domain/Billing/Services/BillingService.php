@@ -13,8 +13,13 @@ use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Tenancy\Support\RateBook;
 use App\Domain\Trip\Models\Trip;
+use Carbon\CarbonInterface;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class BillingService
 {
@@ -62,6 +67,15 @@ class BillingService
     {
         $attributes = $data->persistable();
 
+        // Nothing has been paid on a document that did not exist a moment
+        // ago, so an open one is pending or overdue by its due date alone —
+        // whichever of the two the form happened to send.
+        if (($attributes['status'] ?? null) !== StatusValue::Cancelled->value) {
+            $attributes['status'] = isset($attributes['due_at']) && Carbon::parse($attributes['due_at'])->lt(today())
+                ? StatusValue::Overdue->value
+                : StatusValue::Pending->value;
+        }
+
         return Invoice::create([
             ...$attributes,
             ...$this->taxFor($attributes)->columns(),
@@ -85,29 +99,79 @@ class BillingService
      * and an edit that changed nothing would raise the document by a seventh.
      * It did, on every save, until a form was given `taxable_base_cents` to
      * round-trip instead — see `Invoice::taxBaseCents()`.
+     *
+     * ## The status is the money's, except for cancelling
+     *
+     * `pending`, `partial`, `paid` and `overdue` follow from the allocations
+     * and the due date, so after any edit they are **re-derived** — an amount
+     * raised on a paid invoice reopens it as part-paid, a due date moved into
+     * the past makes it overdue. A form's `pending` or `overdue` is read only
+     * as "not cancelled": it reopens a cancelled document, and the payments
+     * then say which of the open statuses it is.
+     *
+     * Two edits are refused, because both leave money pointing at nothing:
+     * cancelling a document that still has payments against it, and lowering
+     * it below what has already been paid. The payment comes off first.
+     *
+     * @throws ValidationException
      */
     public function update(Invoice $invoice, InvoiceData $data): Invoice
     {
-        $attributes = $data->persistable();
+        return DB::transaction(function () use ($invoice, $data): Invoice {
+            $invoice = Invoice::query()->whereKey($invoice->getKey())->lockForUpdate()->firstOrFail();
+            $attributes = $data->persistable();
+            $paid = (int) $invoice->allocations()->sum('amount_cents');
 
-        $rechargeable = $data->wasGiven('amount_cents')
-            || $data->wasGiven('customer_id')
-            || $data->wasGiven('direction');
+            $cancelling = $data->wasGiven('status') && $data->status === StatusValue::Cancelled;
+            $staysCancelled = ! $data->wasGiven('status') && $invoice->status === StatusValue::Cancelled;
 
-        if ($rechargeable) {
-            $attributes = [
-                ...$attributes,
-                ...$this->taxFor([
+            if ($cancelling && $paid > 0) {
+                throw ValidationException::withMessages([
+                    'status' => [sprintf(
+                        '%s has %s paid against it. Remove the payment first, then cancel it.',
+                        $invoice->number,
+                        number_format($paid / 100, 2),
+                    )],
+                ]);
+            }
+
+            $rechargeable = $data->wasGiven('amount_cents')
+                || $data->wasGiven('customer_id')
+                || $data->wasGiven('direction');
+
+            if ($rechargeable) {
+                $tax = $this->taxFor([
                     'amount_cents' => $attributes['amount_cents'] ?? $invoice->taxBaseCents(),
                     'customer_id' => $attributes['customer_id'] ?? $invoice->customer_id,
                     'direction' => $attributes['direction'] ?? $invoice->direction->value,
-                ])->columns(),
-            ];
-        }
+                ]);
 
-        $invoice->update($attributes);
+                if ($tax->dueCents() < $paid) {
+                    throw ValidationException::withMessages([
+                        'amount_cents' => [sprintf(
+                            '%s already has %s paid against it, which is more than the new amount leaves due. '
+                            .'Remove or reduce the payment first.',
+                            $invoice->number,
+                            number_format($paid / 100, 2),
+                        )],
+                    ]);
+                }
 
-        return $invoice->refresh();
+                $attributes = [...$attributes, ...$tax->columns()];
+            }
+
+            // Only a cancellation is written as given. Anything else is a
+            // placeholder the payments overwrite a line below.
+            $attributes['status'] = $cancelling || $staysCancelled
+                ? StatusValue::Cancelled->value
+                : StatusValue::Pending->value;
+
+            $invoice->update($attributes);
+
+            return $attributes['status'] === StatusValue::Cancelled->value
+                ? $invoice->refresh()
+                : $this->payments->refreshInvoice($invoice->refresh());
+        });
     }
 
     /**
@@ -126,9 +190,34 @@ class BillingService
         );
     }
 
+    /**
+     * Withdraw a document — but not one that money has been put against.
+     *
+     * Deleting it would leave the allocations pointing at a row no list shows:
+     * the payment would read as applied, the customer's statement would carry
+     * a receipt against nothing, and the money would be neither owed nor
+     * collected anywhere. The payment comes off first.
+     *
+     * @throws ValidationException
+     */
     public function delete(Invoice $invoice): void
     {
-        $this->invoices->delete($invoice);
+        DB::transaction(function () use ($invoice): void {
+            $invoice = Invoice::query()->whereKey($invoice->getKey())->lockForUpdate()->firstOrFail();
+            $paid = (int) $invoice->allocations()->sum('amount_cents');
+
+            if ($paid > 0) {
+                throw ValidationException::withMessages([
+                    'invoice' => [sprintf(
+                        '%s has %s paid against it. Remove the payment first, then delete it.',
+                        $invoice->number,
+                        number_format($paid / 100, 2),
+                    )],
+                ]);
+            }
+
+            $this->invoices->delete($invoice);
+        });
     }
 
     /**
@@ -245,21 +334,31 @@ class BillingService
      *    Raising a second one for the same run is the failure this is here to
      *    prevent, and it is `trip_id` that makes it detectable at all.
      */
-    public function raiseForTrip(Trip $trip): ?Invoice
+    public function raiseForTrip(Trip $trip, ?CarbonInterface $at = null): ?Invoice
     {
+        // Unpriced is not "zero": it is a run nobody has agreed a figure for,
+        // and billing it — at nothing or at anything — is refused outright.
+        PricingService::mustBePriced($trip);
+
         if ($trip->customer_id === null || $trip->price_cents <= 0) {
             return null;
         }
 
-        $existing = Invoice::where('trip_id', $trip->id)
+        // `withTrashed`, because the unique index over (trip_id, direction)
+        // still holds a deleted document's row. A run whose invoice somebody
+        // deliberately deleted is not re-billed behind their back.
+        $existing = Invoice::withTrashed()
+            ->where('trip_id', $trip->id)
             ->where('direction', InvoiceDirection::Receivable->value)
             ->first();
 
         if ($existing !== null) {
-            return $existing;
+            return $existing->trashed() ? null : $existing;
         }
 
-        $issued = now();
+        // The day it was delivered — today for a run closed now, the real
+        // day for a past trip entered afterwards, so its terms run from then.
+        $issued = $at !== null ? Carbon::instance($at) : now();
 
         /**
          * The tax, worked out from the customer being billed.
@@ -271,16 +370,32 @@ class BillingService
          */
         $tax = $this->tax->on($trip->price_cents, $trip->customer, InvoiceDirection::Receivable);
 
-        return Invoice::create([
-            'customer_id' => $trip->customer_id,
-            'trip_id' => $trip->id,
-            'issued_at' => $issued->toDateString(),
-            'due_at' => $issued->copy()->addDays($this->rates->billingTermsDays())->toDateString(),
-            'currency' => $trip->currency,
-            'direction' => InvoiceDirection::Receivable->value,
-            'status' => StatusValue::Pending->value,
-            ...$tax->columns(),
-        ]);
+        /**
+         * The check above is a read, and two completions racing each other can
+         * both pass it. The unique index is what actually stops the second
+         * document; losing that race returns the winner's invoice rather than
+         * an error, which is what the read would have done a moment later.
+         *
+         * Savepointed, so the failed insert does not poison a transaction the
+         * caller has open around the completion.
+         */
+        try {
+            return DB::transaction(fn (): Invoice => Invoice::create([
+                'customer_id' => $trip->customer_id,
+                'trip_id' => $trip->id,
+                'issued_at' => $issued->toDateString(),
+                'due_at' => $issued->copy()->addDays($this->rates->billingTermsDays())->toDateString(),
+                'currency' => $trip->currency,
+                'direction' => InvoiceDirection::Receivable->value,
+                'status' => StatusValue::Pending->value,
+                ...$tax->columns(),
+            ]));
+        } catch (UniqueConstraintViolationException $e) {
+            // Not this index (the number's, say) — not ours to swallow.
+            return Invoice::where('trip_id', $trip->id)
+                ->where('direction', InvoiceDirection::Receivable->value)
+                ->first() ?? throw $e;
+        }
     }
 
     /**

@@ -169,3 +169,45 @@ describe('paging', () => {
     expect(t.pageCount()).toBe(1);
   });
 });
+
+describe('a badge in place of a value', () => {
+  interface Priced {
+    id: string;
+    price: number | null;
+    note: string | null;
+  }
+
+  // A trip no zone line has priced: a pill that says so, never ₱0 or a dash.
+  const priceColumns: Column<Priced>[] = [
+    {
+      label: 'Price',
+      value: (row) => (row.price === null ? null : `P${row.price}`),
+      badge: (row) => (row.price === null ? 'Needs a zone' : null),
+      sub: (row) => row.note,
+    },
+  ];
+
+  function render(list: Priced[]): HTMLElement {
+    const fixture = TestBed.createComponent(DataTable);
+
+    fixture.componentRef.setInput('columns', priceColumns);
+    fixture.componentRef.setInput('rows', list);
+    fixture.detectChanges();
+
+    return fixture.nativeElement as HTMLElement;
+  }
+
+  it('prints the badge and the reason under it where the value does not exist', () => {
+    const text = render([{ id: '1', price: null, note: 'No zone covers 712 km.' }]).textContent ?? '';
+
+    expect(text).toContain('Needs a zone');
+    expect(text).toContain('No zone covers 712 km.');
+  });
+
+  it('prints the value where there is one', () => {
+    const text = render([{ id: '1', price: 4753, note: null }]).textContent ?? '';
+
+    expect(text).toContain('P4753');
+    expect(text).not.toContain('Needs a zone');
+  });
+});

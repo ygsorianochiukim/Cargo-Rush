@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Vehicle\Models;
 
+use App\Domain\Billing\Models\Invoice;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Supplier\Models\Supplier;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
@@ -25,6 +26,9 @@ class MaintenanceJob extends Model
         // What it came to, when it was done and who did it. All three are
         // null while the job is only booked, which is most of its life.
         'cost_cents', 'completed_on', 'supplier_id', 'reference', 'note',
+        // The garage's bill for this work in Billing, so paying it is not
+        // counted a second time — see `FinanceService::supplierBillSettlements`.
+        'invoice_id',
         // Written by `MaintenanceService` and by nothing else: it is the
         // running total already pushed onto the daily sheet, and a payload
         // that could set it could make the sheet disagree with the job.
@@ -52,6 +56,12 @@ class MaintenanceJob extends Model
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);
+    }
+
+    /** The supplier bill this work was invoiced on, if one was raised. */
+    public function invoice(): BelongsTo
+    {
+        return $this->belongsTo(Invoice::class);
     }
 
     /**

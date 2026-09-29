@@ -14,10 +14,17 @@ import { InvoiceDirection } from './billing.model';
  * rather than a total.
  */
 
-/** One line: a document raised, or money that moved against one. */
+/**
+ * One line: a document raised, money that moved against one, or the tax the
+ * customer withheld from it.
+ *
+ * `withholding` is a credit dated with its invoice: the customer pays the due
+ * (gross less withholding) and remits the rest to the BIR on the fleet's
+ * behalf, so without this line the account would never close to zero.
+ */
 export interface StatementLine {
   date: string | null;
-  kind: 'invoice' | 'payment';
+  kind: 'invoice' | 'payment' | 'withholding';
   /** The invoice number, or the payment's reference. */
   reference: string;
   detail: string;

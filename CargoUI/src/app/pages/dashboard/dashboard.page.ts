@@ -49,22 +49,23 @@ export class DashboardPage {
   });
 
   /**
-   * How much of what has been billed has actually come in.
+   * How much of what was billed in the window has actually come in.
    *
    * Drawn as a share bar rather than printed as a third figure: the question
-   * the pair answers is "how are we doing at getting paid", and a proportion
-   * reads faster than two pesos amounts the reader has to divide.
+   * is "how are we doing at getting paid", and a proportion reads faster than
+   * two pesos amounts the reader has to divide.
    *
-   * Zero billed is not a zero collection rate — it is nothing to report — so
-   * it renders as an empty bar rather than as 0%.
+   * The API works it out (`collection.rate_pct`). It used to be divided here
+   * from the all-time outstanding and all-time collected totals, under a card
+   * that says "last 30 days" — so the bar described neither the window nor
+   * any one set of invoices. The server measures both halves on the same
+   * documents, over the window, net of withholding.
+   *
+   * Null is nothing billed — nothing to report, not a zero collection rate —
+   * so it renders as an empty bar and a dash.
    */
-  protected readonly collectedPct = computed(() => {
-    const money = this.receivables();
-    if (money === null) return 0;
-
-    const billed = money.pending_payment_cents + money.successful_payment_cents;
-
-    return billed === 0 ? 0 : Math.round((money.successful_payment_cents / billed) * 100);
+  protected readonly collectedPct = computed<number | null>(() => {
+    return this.receivables()?.collection?.rate_pct ?? null;
   });
 
   protected readonly fleetTotal = computed(() =>

@@ -33,12 +33,27 @@ class SupplierRepository extends Repository
     public function query(): Builder
     {
         return Supplier::query()
+            ->with('category')
             ->withSum([
                 'expenses as expense_spend_cents' => fn (Builder $q) => $q
                     ->where('status', StatusValue::Active->value),
             ], 'amount_cents')
-            ->withSum('maintenanceJobs as service_spend_cents', 'cost_cents')
-            ->withSum('bills as billed_cents', 'amount_cents')
+            /**
+             * Servicing that has actually cost something: jobs done and
+             * posted to the sheet. `cost_cents` alone summed quotes on jobs
+             * still booked, so a garage's total ran ahead of every figure
+             * Finance had for it. `posted_cents` is what the sheet carries.
+             */
+            ->withSum([
+                'maintenanceJobs as service_spend_cents' => fn (Builder $q) => $q
+                    ->whereNotNull('completed_on')
+                    ->where('posted_cents', '>', 0),
+            ], 'posted_cents')
+            // A cancelled bill charged the fleet nothing.
+            ->withSum([
+                'bills as billed_cents' => fn (Builder $q) => $q
+                    ->where('status', '!=', StatusValue::Cancelled->value),
+            ], 'amount_cents')
             ->withCount('expenses')
             ->orderBy('name');
     }

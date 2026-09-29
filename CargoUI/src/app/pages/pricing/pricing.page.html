@@ -1,10 +1,9 @@
 <!--
-  The distance card first, because it is the card a firm with no published
-  table works from: what a run costs by how far it goes, in lines that belong
-  to no band. The bands below are the rate table itself, and the card above is
-  also what prices a run past the last of them.
+  The old distance card, shown only while an install still has lines on it.
+  It no longer prices anything — the bands below are the whole rate card, and
+  a run none of them covers is saved unpriced for the office.
 -->
-<app-distance-card class="mb-4 block" />
+<app-distance-card />
 
 <app-list-toolbar
   [count]="zones()?.length ?? null"
@@ -85,8 +84,7 @@
       </dl>
 
       <p class="mt-3 text-[12px] text-cr-ink-muted">
-        A band with a diesel step of its own ignores the share and the cap — it adds its own pesos
-        per ₱1/L above {{ fmt.money(d.baseline_cents, d.currency) }}.
+        Bands with their own diesel step skip the share and cap.
       </p>
 
       @if (d.capped) {
@@ -102,7 +100,7 @@
   <app-card heading="What would this cost?" icon="tag">
     <form [formGroup]="previewForm" class="space-y-3">
       <div class="grid grid-cols-2 gap-3">
-        <app-field label="Distance (km)" hint="The band follows from this.">
+        <app-field label="Distance (km)">
           <input
             type="number"
             min="0"
@@ -119,7 +117,7 @@
           />
         </app-field>
       </div>
-      <app-field label="Class of truck" hint="Blank takes the band's fleet rate.">
+      <app-field label="Class of truck">
         <select formControlName="truck_category_id" [class]="inputClass">
           <option value="">Current fleet</option>
           @for (category of categories(); track category.id) {
@@ -138,23 +136,29 @@
 
     @if (quote(); as q) {
       <div class="mt-4 border-t border-cr-line pt-3">
+        @if (q.needs_zone || q.cents === null) {
+          <!-- No zone line covers this run. There is no fallback price any
+               more, so say so plainly and say what would fix it. -->
+          <p class="inline-flex items-center gap-1.5 rounded-full bg-cr-warning-bg px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] text-cr-warning uppercase">
+            <span class="h-1.5 w-1.5 rounded-full bg-cr-warning"></span>
+            Needs a zone
+          </p>
+          <p class="mt-2 text-[13px]">{{ q.reason }}</p>
+          <p class="cr-meta mt-1">
+            A booking like this is saved unpriced until a zone line covers it or somebody enters a price.
+          </p>
+        } @else {
         <p class="cr-num text-[24px] leading-none font-semibold">
           {{ fmt.money(q.cents, q.currency) }}
         </p>
         <p class="cr-meta mt-1">
-          @if (q.source === 'zone') {
-            Zone {{ q.zone?.code }} · {{ q.zone?.band }} · {{ q.bracket?.label }}
-          } @else if (q.source === 'card') {
-            Distance card · {{ q.bracket?.range }}
-          } @else {
-            Standard tariff — no band covers {{ fmt.km(q.km) }}
-          }
+          Zone {{ q.zone?.code }} · {{ q.zone?.band }} · {{ q.bracket?.label }}
         </p>
 
         <dl class="mt-3 space-y-1 text-[13px]">
           <div class="flex justify-between">
             <dt class="text-cr-ink-muted">Card price</dt>
-            <dd class="cr-num">{{ fmt.money(q.card_cents, q.currency) }}</dd>
+            <dd class="cr-num">{{ fmt.money(q.card_cents ?? q.cents, q.currency) }}</dd>
           </div>
           @if (q.fuel_adjustment_cents !== 0) {
             <div class="flex justify-between">
@@ -177,6 +181,7 @@
             <dd class="cr-num">{{ fmt.km(q.km) }}</dd>
           </div>
         </dl>
+        }
 
         <!--
           The bands that also cover this distance. A table holds A1 beside A2
@@ -226,7 +231,7 @@
           <app-icon name="map-pin" [size]="28" class="text-cr-ink-muted" />
           <h3 class="mt-2 text-[15px] font-semibold">No bands yet</h3>
           <p class="mt-1 text-[13px] text-cr-ink-muted">
-            Bookings are priced off the distance card, or the standard tariff.
+            Add a band to start pricing. Until one covers a run, bookings are saved unpriced.
           </p>
         </div>
       } @else {
@@ -518,7 +523,7 @@
           <p
             class="mt-3 rounded-control bg-cr-red-bg px-3 py-2 text-[13px] font-medium text-cr-red"
           >
-            No rates — runs in this band fall back to the distance card or the standard tariff.
+            No rates — runs in this band are saved unpriced until a line is added.
           </p>
         } @else {
           <p class="mt-3 text-[12px] text-cr-ink-muted">

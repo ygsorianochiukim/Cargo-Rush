@@ -10,6 +10,7 @@ import { fmt } from '@/constants/format';
 import { Brand, Hit, Radius, Spacing } from '@/constants/theme';
 import { truckerService } from '@/services/trucker/trucker.service';
 import { useApi } from '@/hooks/use-api';
+import { useRefreshOnFocus } from '@/hooks/use-refresh-on-focus';
 
 /**
  * The partner's home screen — the third of the three this app opens on.
@@ -36,6 +37,9 @@ export function TruckerHomePage() {
   const profile = useApi(truckerService.me);
   const wallet = useApi(() => truckerService.wallet());
   const current = useApi(truckerService.current);
+  // An approval, a truck added on More, or a run started meanwhile shows on
+  // return rather than after a reload.
+  useRefreshOnFocus(profile.reload, wallet.reload, current.reload);
 
   const [toggling, setToggling] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -77,7 +81,14 @@ export function TruckerHomePage() {
   };
 
   return (
-    <Screen title="Dashboard" brand>
+    <Screen
+      title="Dashboard"
+      brand
+      onRefresh={() => {
+        profile.reload();
+        wallet.reload();
+        current.reload();
+      }}>
       {notice ? (
         <Text style={styles.notice} accessibilityLiveRegion="polite">
           {notice}
@@ -101,7 +112,7 @@ export function TruckerHomePage() {
                 <Text style={styles.sub} numberOfLines={1}>
                   {me.vehicles?.[0]
                     ? `${me.vehicles[0].plate} · ${fmt.kg(me.vehicles[0].capacity_kg)}`
-                    : 'No truck on file yet'}
+                    : 'No truck yet — add one from More'}
                 </Text>
               </View>
               <StatusPill status={me.status} />
@@ -140,7 +151,7 @@ export function TruckerHomePage() {
                 />
                 <Text style={styles.waitingText}>
                   {me.status === 'pending'
-                    ? 'The fleet is reviewing your licence and truck. You will be notified when you are approved.'
+                    ? 'The fleet is reviewing your details. Once you are approved, add your trucks and drivers from More.'
                     : 'Your account is on hold. Give the office a ring — your wallet is untouched.'}
                 </Text>
               </View>

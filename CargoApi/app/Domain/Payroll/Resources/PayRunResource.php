@@ -47,6 +47,19 @@ class PayRunResource extends ApiResource
             'paid_at' => $this->iso($this->paid_at),
 
             /**
+             * What the agencies are owed off this run, and whether it has gone.
+             *
+             * `remitted_on` null means nobody has recorded it; Payables then
+             * presumes it owed until `remittance_due_on`.
+             */
+            'owed_to_agencies_cents' => $this->resource->owedToAgenciesCents(),
+            'remittance_due_on' => $this->resource->remittanceDueOn()->toDateString(),
+            'remitted_on' => $this->remitted_on?->toDateString(),
+            // REM-YYYY-####, assigned by the system when it was recorded.
+            'remittance_no' => $this->remittance_no,
+            'remittance_reference' => $this->remittance_reference,
+
+            /**
              * The entry this run posted, once it was paid.
              *
              * Null before that, and it is the link that says payroll reached
@@ -82,6 +95,13 @@ class PayRunResource extends ApiResource
             'deductions_cents' => $this->deductionsCents(),
             'net_cents' => $this->netCents(),
             'statutory' => $this->statutoryCents(),
+            /**
+             * What the firm pays the agencies on top of the run — per agency
+             * and in total. Not deducted from anybody's pay, so it is outside
+             * the gross, the deductions and the net above, and sent beside them
+             * rather than folded into `statutory`, which is what was withheld.
+             */
+            'employer_contributions' => $this->employerContributionsCents(),
             'currency' => 'PHP',
 
             /**
@@ -186,6 +206,14 @@ class PayRunResource extends ApiResource
                 'pagibig_enrolled' => (bool) $line->pagibig_enrolled,
 
                 'withholding_tax_cents' => $line->withholding_tax_cents,
+
+                // The firm's share on this person — on top of the payslip,
+                // never off it. See the run's `employer_contributions`.
+                'employer_sss_cents' => $line->employer_sss_cents,
+                'employer_ec_cents' => $line->employer_ec_cents,
+                'employer_philhealth_cents' => $line->employer_philhealth_cents,
+                'employer_pagibig_cents' => $line->employer_pagibig_cents,
+                'employer_contributions_cents' => $line->employerContributionsCents(),
                 'other_deductions_cents' => $line->other_deductions_cents,
                 /** What came off the store tab — the mini-mart *pautang*. */
                 'store_deduction_cents' => $line->store_deduction_cents,

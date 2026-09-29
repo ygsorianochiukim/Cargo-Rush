@@ -9,11 +9,15 @@ use App\Domain\Shared\Http\Controllers\ApiController;
 use App\Domain\Trip\Requests\DeliverTripRequest;
 use App\Domain\Trip\Resources\TripResource;
 use App\Domain\Trucker\Models\Trucker;
+use App\Domain\Trucker\Requests\TruckerDriverRequest;
+use App\Domain\Trucker\Requests\TruckerVehiclePhotosRequest;
 use App\Domain\Trucker\Requests\TruckerVehicleRequest;
 use App\Domain\Trucker\Resources\JobResource;
+use App\Domain\Trucker\Resources\TruckerDriverResource;
 use App\Domain\Trucker\Resources\TruckerResource;
 use App\Domain\Trucker\Resources\TruckerVehicleResource;
 use App\Domain\Trucker\Resources\WalletEntryResource;
+use App\Domain\Trucker\Services\CrewService;
 use App\Domain\Trucker\Services\JobBoardService;
 use App\Domain\Trucker\Services\TruckerService;
 use App\Domain\Trucker\Services\WalletService;
@@ -41,6 +45,7 @@ class PartnerController extends ApiController
         private readonly TruckerService $truckers,
         private readonly JobBoardService $board,
         private readonly WalletService $wallet,
+        private readonly CrewService $crew,
     ) {}
 
     /**
@@ -90,7 +95,7 @@ class PartnerController extends ApiController
                 // the wallet will work it out at delivery, from the same
                 // method, so the board cannot quote one figure and the
                 // statement another.
-                $trip->price_cents - $this->wallet->commissionOn((int) $trip->price_cents, $rate),
+                $this->wallet->partnerTakeOn($trip, $rate),
             ))),
             $jobs,
             [
@@ -100,6 +105,11 @@ class PartnerController extends ApiController
                 // first has to guess.
                 'can_take_work' => $trucker->canTakeWork(),
                 'status' => $trucker->status->value,
+                // The third reason, beside the standing and the switch: no
+                // truck on the road. Sign-up no longer takes one, so an
+                // approved partner starts here, and "you are offline" was the
+                // wrong thing to tell them.
+                'has_truck' => $trucker->activeVehicle() !== null,
             ],
         );
     }
@@ -246,13 +256,92 @@ class PartnerController extends ApiController
     /** Add a truck, or take one off the road while it is in the shop. */
     public function saveVehicle(TruckerVehicleRequest $request, ?string $vehicleId = null): JsonResponse
     {
+        $trucker = $this->me($request);
+
+        // Trucks go on the books once the office has approved the account —
+        // registration no longer asks for one, and this is where that waits.
+        abort_unless(
+            $trucker->isVetted(),
+            403,
+            'Your account is waiting for approval. You can add trucks once the office approves you.',
+        );
+
         $vehicle = $this->truckers->saveVehicle(
-            $this->me($request),
-            $request->validated(),
+            $trucker,
+            $request->details(),
             $vehicleId,
+            $request->photos(),
         );
 
         return $this->item(new TruckerVehicleResource($vehicle), [], $vehicleId === null ? 201 : 200);
+    }
+
+    /**
+     * New photographs for one of their trucks — usually the ones the office
+     * asked for when it turned the truck down. Sends it back to be checked.
+     */
+    public function vehiclePhotos(TruckerVehiclePhotosRequest $request, string $vehicleId): JsonResponse
+    {
+        $trucker = $this->me($request);
+
+        abort_unless(
+            $trucker->isVetted(),
+            403,
+            'Your account is waiting for approval. You can add trucks once the office approves you.',
+        );
+
+        return $this->item(new TruckerVehicleResource(
+            $this->truckers->resubmitPhotos($trucker, $vehicleId, $request->photos()),
+        ));
+    }
+
+    /** Their own drivers. Never Cargo Rush's — those are a different table. */
+    public function drivers(Request $request): JsonResponse
+    {
+        $drivers = $this->crew->drivers($this->me($request));
+
+        return $this->collection(TruckerDriverResource::collection($drivers), $drivers);
+    }
+
+    /** Add a driver with a login of their own, or correct / stand one down. */
+    public function saveDriver(TruckerDriverRequest $request, ?string $driverId = null): JsonResponse
+    {
+        $trucker = $this->me($request);
+
+        $driver = $driverId === null
+            ? $this->crew->add($trucker, $request->validated())
+            : $this->crew->update($trucker, $driverId, $request->validated());
+
+        return $this->item(new TruckerDriverResource($driver), [], $driverId === null ? 201 : 200);
+    }
+
+    /**
+     * Hand a run to one of their drivers, or take it back (`null`) — and,
+     * optionally, say which of their trucks it goes out on.
+     */
+    public function assignDriver(Request $request, string $tripId): JsonResponse
+    {
+        $validated = $request->validate([
+            'trucker_driver_id' => ['present', 'nullable', 'string', 'max:26'],
+            'trucker_vehicle_id' => ['sometimes', 'nullable', 'string', 'max:26'],
+        ]);
+
+        $trip = $this->crew->assign(
+            $this->me($request),
+            $tripId,
+            $validated['trucker_driver_id'],
+            $validated['trucker_vehicle_id'] ?? null,
+        );
+
+        return $this->item(new TripResource($trip));
+    }
+
+    /** Take a driver off the books: their runs come back, their login stops. */
+    public function removeDriver(Request $request, string $driverId): JsonResponse
+    {
+        $this->crew->remove($this->me($request), $driverId);
+
+        return $this->noContent();
     }
 
     /**

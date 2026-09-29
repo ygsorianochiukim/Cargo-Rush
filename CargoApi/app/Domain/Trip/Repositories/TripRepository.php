@@ -36,7 +36,10 @@ class TripRepository extends Repository
                 // crew is not on. Beside the driver rather than instead of it:
                 // a trip has one or the other, and the board prints whichever
                 // it has under a single "Handled by" column.
-                'trucker:id,name,phone', 'truckerVehicle:id,plate',
+                'trucker:id,name,business_name,phone', 'truckerVehicle:id,plate',
+                // And which of the trucker's own drivers is on it, when it is
+                // not the owner — so the board can say who is actually driving.
+                'truckerDriver:id,name',
                 // The pre-trip check rides along because every list that shows a
                 // run now says whether the unit was cleared before it rolled —
                 // the driver's queue, the office board and the customer's own

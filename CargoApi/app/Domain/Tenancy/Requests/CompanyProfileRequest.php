@@ -60,6 +60,14 @@ class CompanyProfileRequest extends ApiFormRequest
             'payroll_deduct_on' => ['sometimes', Rule::enum(DeductionSchedule::class)],
 
             /**
+             * Whether payroll takes SSS, PhilHealth and Pag-IBIG at all.
+             *
+             * The firm-wide switch; who is enrolled when it is on is each
+             * employee's own record.
+             */
+            'payroll_benefits_enabled' => ['sometimes', 'boolean'],
+
+            /**
              * The days this firm's pay periods close on.
              *
              * The other payroll policy, and the one that used to be an
@@ -93,10 +101,14 @@ class CompanyProfileRequest extends ApiFormRequest
             | having to know what that default was and retype it. `RateBook`
             | resolves the null; nothing here needs to.
             |
-            | The bounds are sanity rather than policy. A tariff of zero is a
-            | real answer — a firm that prices everything off its rate card and
-            | never wants the fallback to quote anything — so the floors are
-            | zero and only the ceilings are opinions.
+            | The bounds are sanity rather than policy: the floors are zero and
+            | only the ceilings are opinions.
+            |
+            | The four `tariff_*` fields are gone from this form. They were the
+            | fallback for a run the zone card did not cover, and pricing is
+            | zone-only now — such a run waits unpriced for the office. Sent
+            | anyway, they are not in the rules and are dropped; the columns
+            | keep whatever a firm last set.
             */
 
             /**
@@ -109,17 +121,6 @@ class CompanyProfileRequest extends ApiFormRequest
              * negotiation.
              */
             'trucker_commission_bp' => ['sometimes', 'integer', 'min:0', 'max:5000'],
-
-            /*
-             * The fallback tariff, in centavos. Ten million is ₱100,000 for a
-             * base or a minimum, which no single leg of a domestic haul
-             * reaches — and a figure that large is somebody who typed pesos
-             * into a centavos field twice over.
-             */
-            'tariff_base_cents' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:10000000'],
-            'tariff_per_km_cents' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:1000000'],
-            'tariff_per_kg_cents' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:1000000'],
-            'tariff_minimum_cents' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:10000000'],
 
             /** Payment terms. A year is the outside edge of a credit term. */
             'billing_terms_days' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:365'],
@@ -163,9 +164,8 @@ class CompanyProfileRequest extends ApiFormRequest
     {
         $attributes = $this->safe()->only([
             'contact_name', 'contact_email', 'contact_phone', 'address', 'latitude', 'longitude',
-            'payroll_deduct_on', 'payroll_cutoff_days', 'payroll_release_lag_days',
+            'payroll_deduct_on', 'payroll_benefits_enabled', 'payroll_cutoff_days', 'payroll_release_lag_days',
             'trucker_commission_bp',
-            'tariff_base_cents', 'tariff_per_km_cents', 'tariff_per_kg_cents', 'tariff_minimum_cents',
             'billing_terms_days',
             'vat_registered', 'vat_rate_bp', 'withholding_rate_bp', 'prices_include_vat',
         ]);
@@ -189,7 +189,6 @@ class CompanyProfileRequest extends ApiFormRequest
          */
         foreach ([
             'trucker_commission_bp',
-            'tariff_base_cents', 'tariff_per_km_cents', 'tariff_per_kg_cents', 'tariff_minimum_cents',
             'billing_terms_days', 'vat_rate_bp', 'withholding_rate_bp', 'payroll_release_lag_days',
         ] as $key) {
             if (array_key_exists($key, $attributes) && $attributes[$key] !== null) {
@@ -197,7 +196,7 @@ class CompanyProfileRequest extends ApiFormRequest
             }
         }
 
-        foreach (['vat_registered', 'prices_include_vat'] as $key) {
+        foreach (['vat_registered', 'prices_include_vat', 'payroll_benefits_enabled'] as $key) {
             if (array_key_exists($key, $attributes) && $attributes[$key] !== null) {
                 $attributes[$key] = filter_var($attributes[$key], FILTER_VALIDATE_BOOLEAN);
             }

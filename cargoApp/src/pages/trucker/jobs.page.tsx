@@ -47,6 +47,7 @@ export function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [canTakeWork, setCanTakeWork] = useState(false);
   const [standing, setStanding] = useState<string>('pending');
+  const [hasTruck, setHasTruck] = useState(true);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
 
@@ -84,6 +85,7 @@ export function JobsPage() {
       setJobs(board.jobs);
       setCanTakeWork(board.canTakeWork);
       setStanding(board.status);
+      setHasTruck(board.hasTruck);
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
@@ -141,7 +143,7 @@ export function JobsPage() {
       ) : error ? (
         <ErrorState message={error.message} onRetry={load} />
       ) : !canTakeWork ? (
-        <Standing status={standing} onRefresh={load} />
+        <Standing status={standing} hasTruck={hasTruck} onRefresh={load} />
       ) : jobs.length === 0 ? (
         <EmptyState
           title="No jobs for you yet"
@@ -168,7 +170,15 @@ export function JobsPage() {
  * Two states, and they need different words and different buttons: one is a
  * queue somebody else has to work, the other is a switch they can flip.
  */
-function Standing({ status, onRefresh }: { status: string; onRefresh: () => void }) {
+function Standing({
+  status,
+  hasTruck,
+  onRefresh,
+}: {
+  status: string;
+  hasTruck: boolean;
+  onRefresh: () => void;
+}) {
   if (status === 'pending') {
     return (
       <Card>
@@ -176,8 +186,9 @@ function Standing({ status, onRefresh }: { status: string; onRefresh: () => void
           <Icon name="clipboard" size={28} color={Brand.blue} />
           <Text style={styles.standingTitle}>We are checking your details</Text>
           <Text style={styles.standingBody}>
-            Somebody at the fleet is reviewing your licence and your truck. You will get a
-            notification the moment you are approved, and jobs will appear here.
+            Somebody at the fleet is reviewing your details. You will get a notification the
+            moment you are approved. Then add your trucks and drivers from More, and jobs will
+            appear here.
           </Text>
           <Pressable accessibilityRole="button" onPress={onRefresh} style={styles.standingBtn}>
             <Text style={styles.standingBtnText}>Check again</Text>
@@ -202,16 +213,36 @@ function Standing({ status, onRefresh }: { status: string; onRefresh: () => void
     );
   }
 
-  // Approved, but either switched off or between trucks. Both are theirs to
-  // fix, and the Dashboard is where the switch lives.
+  // Approved, with no truck on the road — which is where every new partner
+  // starts, since sign-up no longer takes one.
+  if (!hasTruck) {
+    return (
+      <Card>
+        <View style={styles.standing}>
+          <Icon name="fleet" size={28} color={Brand.blue} />
+          <Text style={styles.standingTitle}>Add a truck to take jobs</Text>
+          <Text style={styles.standingBody}>
+            You are approved. Add your trucks with their photos from the More tab — or put one
+            back on the road if it is marked as in the shop. Jobs appear here once Cargo Rush has
+            verified a truck.
+          </Text>
+          <Pressable accessibilityRole="button" onPress={onRefresh} style={styles.standingBtn}>
+            <Text style={styles.standingBtnText}>Refresh</Text>
+          </Pressable>
+        </View>
+      </Card>
+    );
+  }
+
+  // Approved and with a truck, but switched off. Theirs to fix, and the
+  // Dashboard is where the switch lives.
   return (
     <Card>
       <View style={styles.standing}>
         <Icon name="profile" size={28} color={Brand.inkMuted} />
         <Text style={styles.standingTitle}>You are offline</Text>
         <Text style={styles.standingBody}>
-          Go online from the Dashboard so customers near you can pick you. If your only truck
-          is marked as in the shop, put it back on the road there too.
+          Go online from the Dashboard so customers near you can pick you.
         </Text>
         <Pressable accessibilityRole="button" onPress={onRefresh} style={styles.standingBtn}>
           <Text style={styles.standingBtnText}>Refresh</Text>

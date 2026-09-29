@@ -59,8 +59,10 @@ export class ProfitabilityPage {
   /**
    * The part of the period's expenses that sits in no truck row.
    *
-   * Office overhead, and the supplier bills actually paid over the window.
-   * Both are real costs of the period and neither is any unit's, so the TOTAL
+   * Office overhead (which includes fuel fills for a vehicle no truck points
+   * at), the supplier bills actually paid over the window, and payroll paid
+   * beyond the crew pay already on the sheet. (What was handed to truckers is
+   * not here: it was theirs, not a cost.) All are real costs of the period and neither is any unit's, so the TOTAL
    * row is legitimately larger than its own columns add up to — and a reader
    * who cannot see why will assume the table is broken. The template says the
    * figure out loud when there is one.
@@ -69,7 +71,7 @@ export class ProfitabilityPage {
     () =>
       this.totals().overhead_cents +
       this.totals().supplier_bills_cents +
-      this.totals().trucker_payouts_cents,
+      this.totals().payroll_cents,
   );
 
   /**
@@ -84,9 +86,9 @@ export class ProfitabilityPage {
     const t = this.totals();
 
     return [
-      [t.overhead_cents, 'overhead'] as const,
+      [t.overhead_cents, 'overhead (incl. fuel fills on no truck)'] as const,
       [t.supplier_bills_cents, 'of supplier bills paid'] as const,
-      [t.trucker_payouts_cents, 'paid to truckers'] as const,
+      [t.payroll_cents, "of payroll beyond the sheet's crew pay"] as const,
     ]
       .filter(([cents]) => cents > 0)
       .map(([cents, what]) => `${fmt.pesos(cents)} ${what}`);
@@ -144,6 +146,9 @@ export class ProfitabilityPage {
         { label: 'Helper', value: fmt.pesos(r.helper_salary_cents) },
         { label: 'Maintenance', value: fmt.pesos(r.maintenance_cents) },
         { label: 'Allowance', value: fmt.pesos(r.allowance_cents) },
+        // The two that make the rows add up to the bar.
+        { label: 'Owner share', value: fmt.pesos(r.owner_share_cents) },
+        { label: 'Other expenses', value: fmt.pesos(r.other_expenses_cents) },
       ],
     })),
   );

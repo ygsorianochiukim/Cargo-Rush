@@ -37,7 +37,7 @@ export interface BarRow {
          tallest, so a chart with one or two units used to sit pinned to the
          top of a mostly empty box. With a full set of units the box is full
          and centring makes no difference. -->
-    <ul class="flex h-full flex-col justify-center gap-1">
+    <ul class="flex h-full flex-col gap-1" [class.justify-center]="align() === 'center'">
       @for (bar of bars(); track bar.key) {
         <li class="relative">
           <button
@@ -96,6 +96,11 @@ export interface BarRow {
 })
 export class BarRows {
   readonly bars = input.required<BarRow[]>();
+  /**
+   * `top` for a list beside a taller card, where a short list centred in the
+   * height reads as a chart floating in empty space.
+   */
+  readonly align = input<'center' | 'top'>('center');
 
   protected readonly active = signal<string | null>(null);
 

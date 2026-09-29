@@ -275,12 +275,21 @@ export function RequestPage() {
             <Text style={styles.doneCarrier}>with {filed.carrier}</Text>
           ) : null}
 
-          <View style={styles.quote}>
-            <Text style={styles.quoteLabel}>QUOTED</Text>
-            <Text style={styles.quoteValue}>
-              {fmt.money(filed.price_cents, filed.currency)}
-            </Text>
-          </View>
+          {/* No zone line covers this run, so there is no figure to show.
+              Never ₱0: the request is in, and the office prices it by hand. */}
+          {filed.needs_zone || filed.price_cents === null ? (
+            <View style={styles.quote}>
+              <Text style={styles.quoteLabel}>PRICE</Text>
+              <Text style={styles.doneNote}>The office will confirm the price.</Text>
+            </View>
+          ) : (
+            <View style={styles.quote}>
+              <Text style={styles.quoteLabel}>QUOTED</Text>
+              <Text style={styles.quoteValue}>
+                {fmt.money(filed.price_cents, filed.currency)}
+              </Text>
+            </View>
+          )}
 
           <Text style={styles.doneNote}>
             The office confirms the driver, the vehicle and the time. You will see it move to
@@ -311,7 +320,7 @@ export function RequestPage() {
     <Screen title="Request a pickup" subtitle="The office confirms the crew and the time">
       {/* Who first, then what. A load nobody has agreed to carry is not a
           request yet, and the price the next card quotes comes off the chosen
-          haulier's own tariff — so the choice has to be made before the rest of
+          haulier's own zone card — so the choice has to be made before the rest of
           the form means anything. */}
       {choosing ? (
         <Card heading="Which fleet?" icon="fleet" hint={carrier ? '1 chosen' : 'Pick one'}>

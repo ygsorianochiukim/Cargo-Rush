@@ -120,6 +120,18 @@ export interface Me {
    * call. Null for anybody who is not a trucker.
    */
   commission_bp: number | null;
+
+  /** The owner's trucking service name. Null for anybody who is not a trucker. */
+  trucker_business_name?: string | null;
+
+  /**
+   * Present only for a trucker's driver. `crew_employer` is who they drive
+   * for; `crew_may_drive` is whether their owner and the office both still
+   * have them on the road.
+   */
+  trucker_driver_id?: string | null;
+  crew_employer?: string | null;
+  crew_may_drive?: boolean | null;
 }
 
 /**
@@ -179,7 +191,12 @@ export type UserRole =
    * employee working the run they were given, and a trucker chooses which work
    * to take and is paid a share of what it billed.
    */
-  | 'trucker';
+  | 'trucker'
+  /**
+   * Somebody a trucker employs. Runs only the trips their trucker hands them,
+   * and sees none of the trucker's money, trucks or other drivers.
+   */
+  | 'trucker_driver';
 
 /** `GET /api/v1/navigation?client=mobile` — the tab bar. */
 export interface NavItem {

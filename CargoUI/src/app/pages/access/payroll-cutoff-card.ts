@@ -102,7 +102,7 @@ import { Icon } from '../../shared/icon';
             once — the second cutoff is not "disabled" in the monthly case,
             it does not exist, and a greyed-out control would suggest it did.
           -->
-          <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div class="mt-4 grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-3">
             @if (shape() !== 'once') {
               <label class="block">
                 <span class="cr-meta">First cutoff</span>
@@ -112,7 +112,9 @@ import { Icon } from '../../shared/icon';
                   (change)="setFirst($event)"
                 >
                   @for (day of firstDayChoices; track day) {
-                    <option [value]="day">{{ dayLabel(day) }}</option>
+                    <option [value]="day" [selected]="day === firstDay()">
+                      {{ dayLabel(day) }}
+                    </option>
                   }
                 </select>
               </label>
@@ -127,7 +129,9 @@ import { Icon } from '../../shared/icon';
                   (change)="setMiddle($event)"
                 >
                   @for (day of firstDayChoices; track day) {
-                    <option [value]="day">{{ dayLabel(day) }}</option>
+                    <option [value]="day" [selected]="day === middleDay()">
+                      {{ dayLabel(day) }}
+                    </option>
                   }
                 </select>
               </label>
@@ -141,7 +145,7 @@ import { Icon } from '../../shared/icon';
                 (change)="setLast($event)"
               >
                 @for (day of lastDayChoices; track day) {
-                  <option [value]="day">{{ dayLabel(day) }}</option>
+                  <option [value]="day" [selected]="day === lastDay()">{{ dayLabel(day) }}</option>
                 }
               </select>
             </label>
@@ -168,7 +172,7 @@ import { Icon } from '../../shared/icon';
             has chosen the pair, and the two days are where the office compiles
             the period's charges and gets the budget released.
           -->
-          <label class="mt-4 block max-w-[260px]">
+          <label class="mt-4 block max-w-[340px]">
             <span class="cr-meta">Released this many days after each cutoff</span>
             <input
               type="number"
@@ -176,7 +180,8 @@ import { Icon } from '../../shared/icon';
               max="14"
               class="mt-1 h-10 w-full rounded-control border border-cr-line bg-cr-surface px-3 text-[14px]"
               [value]="lag()"
-              (change)="setLag($event)" />
+              (change)="setLag($event)"
+            />
             <span class="cr-meta mt-1 block">
               Nought pays on the cutoff itself. Calendar days, not working days.
             </span>
@@ -184,22 +189,23 @@ import { Icon } from '../../shared/icon';
         </fieldset>
 
         <!--
-          The one thing three cutoffs does not fix.
+          What three cutoffs does to the tax.
 
-          The withholding brackets in the install config are the BIR's
-          semi-monthly ones — 24 periods a year. A firm on three cutoffs has 36,
-          and running that table on each of them over-states the tax on every
-          payslip. The contributions are split correctly; the tax is not, and
-          saying so here is cheaper than somebody finding out at year end.
+          The BIR publishes monthly and semi-monthly tables, not one for 36
+          periods a year. A three-run payroll is taxed by taking each run's pay
+          to a month, reading the monthly table and dividing back — close, and
+          the BIR's own method for an irregular frequency, but worth saying so
+          the office knows why a payslip's tax is what it is.
         -->
         @if (row.payroll_calendar.runs_per_month > 2) {
           <p
             class="mt-4 rounded-control bg-cr-warning-bg px-3 py-2 text-[12px] text-cr-ink"
-            role="status">
-            <span class="font-semibold">Withholding tax is not yet right for three runs.</span>
-            SSS, PhilHealth and Pag-IBIG are split correctly across the three, but the tax table
-            here is the BIR's semi-monthly one and will over-state the tax on each payslip. Correct
-            it on the payslip until this is settled.
+            role="status"
+          >
+            <span class="font-semibold">Withholding tax is worked out monthly for three runs.</span>
+            The BIR has no table for three payslips a month, so each run's pay is taken to a month,
+            taxed on the monthly table and divided by three. The year-end adjustment settles any
+            centavos.
           </p>
         }
 

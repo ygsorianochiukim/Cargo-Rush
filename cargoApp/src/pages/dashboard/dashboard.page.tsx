@@ -16,6 +16,7 @@ import { TONE_COLORS } from '@/constants/status';
 import { Brand, Hit, Radius, Spacing } from '@/constants/theme';
 import { fmt } from '@/constants/format';
 import { useApi } from '@/hooks/use-api';
+import { useRefreshOnFocus } from '@/hooks/use-refresh-on-focus';
 import { useMe } from '@/hooks/use-me';
 import { useCurrentTrip } from '@/hooks/use-current-trip';
 
@@ -30,6 +31,9 @@ export function DashboardPage() {
   const pending = useApi(tripService.pending);
   const upcoming = useApi(tripService.upcoming);
   const notifications = useApi(() => notificationService.list(5));
+  // Back from Inspect: a run that just passed its check says so here, and its
+  // Start button starts it rather than sending the driver back to the list.
+  useRefreshOnFocus(trip.reload, pending.reload, upcoming.reload, notifications.reload);
 
   // Seeded from the driver record, then owned locally so the switch answers
   // immediately rather than after a round trip.
@@ -111,6 +115,12 @@ export function DashboardPage() {
 
   return (
     <Screen
+      onRefresh={() => {
+        trip.reload();
+        pending.reload();
+        upcoming.reload();
+        notifications.reload();
+      }}
       title="Dashboard"
       brand
       right={

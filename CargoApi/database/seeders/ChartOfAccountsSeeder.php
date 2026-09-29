@@ -62,10 +62,39 @@ class ChartOfAccountsSeeder extends Seeder
         ['1020', 'Cash in bank', AccountType::Asset, 'Current assets'],
         // What customers owe. The other side of every invoice raised.
         ['1100', 'Accounts receivable', AccountType::Asset, 'Current assets'],
+        /**
+         * The clearing account between a run's income and its invoice.
+         *
+         * A delivered run is income the day it is delivered (the daily sheet,
+         * or a partner's wallet row); its invoice may follow days later. The
+         * income is posted against this account and the invoice clears it, so
+         * revenue is recognised once — by the run — and receivables are exactly
+         * what Billing says is owed. What is left here is work delivered and
+         * not yet invoiced. See `AutoPostingService`.
+         */
+        ['1140', 'Unbilled trip income', AccountType::Asset, 'Current assets'],
         ['1150', 'Advances to drivers', AccountType::Asset, 'Current assets'],
+        // A partner who billed the customer themselves owes the fleet its cut.
+        ['1160', 'Due from truckers', AccountType::Asset, 'Current assets'],
+        // A correction on a partner's wallet, waiting for the accountant to say
+        // what it was — an advance, a damage charge, a rounding.
+        ['1170', 'Trucker adjustments to classify', AccountType::Asset, 'Current assets'],
         ['1200', 'Prepaid expenses', AccountType::Asset, 'Current assets'],
         // VAT paid on purchases, claimable against output VAT.
         ['1250', 'Input VAT', AccountType::Asset, 'Current assets'],
+        // Tax a customer withheld from what they paid us (BIR 2307) —
+        // claimable against the fleet's own income tax.
+        ['1260', 'Creditable withholding tax', AccountType::Asset, 'Current assets'],
+        /**
+         * A supplier's bill, owed and not yet an expense.
+         *
+         * The period reports count a bill on the day it is paid, and a garage
+         * bill for a service job not at all — the job's cost is already on the
+         * sheet. The bill is owed from the day it is issued, so it is posted
+         * here against accounts payable and moves to an expense as it is paid
+         * (or is cleared by the job that carries the same cost).
+         */
+        ['1270', 'Supplier bills not yet expensed', AccountType::Asset, 'Current assets'],
         ['1300', 'Spare parts and supplies', AccountType::Asset, 'Current assets'],
         ['1500', 'Trucks and trailers', AccountType::Asset, 'Property and equipment'],
         /**
@@ -79,7 +108,11 @@ class ChartOfAccountsSeeder extends Seeder
 
         // ---- Liabilities. What it owes.
         ['2010', 'Accounts payable', AccountType::Liability, 'Current liabilities'],
+        // Partners' and truck owners' money the fleet holds: their wallets.
+        ['2020', 'Due to truckers', AccountType::Liability, 'Current liabilities'],
         ['2100', 'Accrued salaries and wages', AccountType::Liability, 'Current liabilities'],
+        // What the daily sheet says the crew earned, until a pay run pays it.
+        ['2110', 'Crew pay accrued from the daily sheet', AccountType::Liability, 'Current liabilities'],
         // VAT charged to customers and owed to the BIR.
         ['2150', 'Output VAT', AccountType::Liability, 'Current liabilities'],
         ['2160', 'Withholding tax payable', AccountType::Liability, 'Current liabilities'],
@@ -118,8 +151,12 @@ class ChartOfAccountsSeeder extends Seeder
         ['5080', 'Registration and permits', AccountType::Expense, 'Cost of services'],
         ['5090', 'Insurance', AccountType::Expense, 'Cost of services'],
         ['5100', 'Depreciation — trucks', AccountType::Expense, 'Cost of services'],
+        // A revenue-share truck's owner's cut of the runs it made.
+        ['5110', 'Truck owner share', AccountType::Expense, 'Cost of services'],
         ['5200', 'Office salaries', AccountType::Expense, 'Administrative expenses'],
         ['5210', 'Rent and utilities', AccountType::Expense, 'Administrative expenses'],
+        // A truck hired at a flat monthly fee. Cost of services: it hauls.
+        ['5215', 'Truck rent', AccountType::Expense, 'Cost of services'],
         ['5220', 'Professional fees', AccountType::Expense, 'Administrative expenses'],
         ['5230', 'Taxes and licences', AccountType::Expense, 'Administrative expenses'],
         ['5300', 'Interest expense', AccountType::Expense, 'Other expenses'],

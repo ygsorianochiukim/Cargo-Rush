@@ -4,15 +4,19 @@ declare(strict_types=1);
 
 namespace App\Domain\Trucker\Services;
 
+use App\Domain\Billing\Services\PricingService;
+use App\Domain\Identity\Models\User;
 use App\Domain\Notification\Services\NotificationService;
 use App\Domain\Shared\Enums\BookingSource;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\Tone;
+use App\Domain\Shared\Enums\TruckVerification;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Trucker\Models\Trucker;
 use App\Domain\Trucker\Models\TruckerVehicle;
 use App\Domain\Trucker\Repositories\TruckerRepository;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 
@@ -30,6 +34,7 @@ class TruckerService
     public function __construct(
         private readonly TruckerRepository $truckers,
         private readonly NotificationService $notifications,
+        private readonly TruckPhotoStore $photos,
     ) {}
 
     /**
@@ -208,23 +213,49 @@ class TruckerService
                 "Only work still waiting to go out can be handed to a trucker. This run is {$locked->status->value}.",
             );
 
+            // Handing it over commits the firm to paying somebody outside it
+            // a share of the price — and there has to be a price to share.
+            PricingService::mustBePriced($locked);
+
             abort_if(
                 $locked->driver_id !== null,
                 422,
                 'That run already has one of your own drivers on it.',
             );
 
-            $unit = $this->unitFor($trucker, $vehicleId);
+            /**
+             * Which truck is the trucker's choice, not the desk's.
+             *
+             * The desk only needs to know one of their trucks *can* take it;
+             * the trucker picks which on My Trips before it leaves. A desk that
+             * does name one (`$vehicleId`) still gets it checked.
+             */
+            if ($vehicleId !== null) {
+                $unit = $this->unitFor($trucker, $vehicleId);
 
-            abort_unless(
-                $unit->canCarry($locked->weight_kg, $locked->truck_category_id),
-                422,
-                "{$unit->plate} cannot carry that load.",
-            );
+                abort_unless(
+                    $unit->canCarry($locked->weight_kg, $locked->truck_category_id),
+                    422,
+                    "{$unit->plate} cannot carry that load.",
+                );
+            } else {
+                $trucker->loadMissing('vehicles');
+
+                abort_if(
+                    $trucker->fittingVehicle($locked->weight_kg, $locked->truck_category_id) === null,
+                    422,
+                    'None of that trucker\'s trucks on the road can carry this load.',
+                );
+            }
 
             $locked->update([
                 'trucker_id' => $trucker->getKey(),
-                'trucker_vehicle_id' => $unit->getKey(),
+                'trucker_vehicle_id' => $vehicleId === null ? null : $unit->getKey(),
+                // Cleared, because the run is no longer on a fleet truck. A
+                // unit the desk had pencilled in, left beside a trucker, is
+                // what once booked the whole price as company income when the
+                // company keeps only the commission.
+                'vehicle_id' => null,
                 // The haulier brokered it, so the haulier bills it. Stated
                 // rather than left to the column default, because this is the
                 // line that decides which way the wallet moves and it should
@@ -236,7 +267,7 @@ class TruckerService
             $this->tell(
                 $trucker,
                 'A job has been assigned to you',
-                "{$locked->reference} · {$locked->origin} → {$locked->destination}",
+                "{$locked->reference} · {$locked->origin} → {$locked->destination} · {$locked->weight_kg} kg. Choose which truck takes it on My Trips.",
                 Tone::Info,
             );
 
@@ -289,29 +320,161 @@ class TruckerService
      * anybody's — the same write either way, because a plate is a plate. Who is
      * allowed to call it is the route's business, not this method's.
      *
+     * A truck the trucker adds waits for the office to check its photographs;
+     * one the office adds (`$office` given) is checked by the act of adding
+     * it. A trucker changing the plate on their own truck sends it back to be
+     * checked, because the plate photograph no longer says what the row does.
+     *
      * @param  array<string, mixed>  $attributes
+     * @param  array<string, UploadedFile>  $photos  by slot — see `TruckPhotoStore::SLOTS`
      */
-    public function saveVehicle(Trucker $trucker, array $attributes, ?string $vehicleId = null): TruckerVehicle
-    {
+    public function saveVehicle(
+        Trucker $trucker,
+        array $attributes,
+        ?string $vehicleId = null,
+        array $photos = [],
+        ?User $office = null,
+    ): TruckerVehicle {
         if ($vehicleId === null) {
-            return TruckerVehicle::create([...$attributes, 'trucker_id' => $trucker->getKey()]);
+            $paths = collect($photos)
+                ->mapWithKeys(fn (UploadedFile $file, string $slot): array => [
+                    TruckPhotoStore::column($slot) => $this->photos->store($file, $trucker->getKey()),
+                ])
+                ->all();
+
+            // Refreshed, because `status` is the column's default and a model
+            // fresh from `create()` does not have it — the resource reads it.
+            return TruckerVehicle::create([
+                ...$attributes,
+                ...$paths,
+                'trucker_id' => $trucker->getKey(),
+                ...($office === null
+                    ? ['verification' => TruckVerification::Pending->value]
+                    : $this->verifiedBy($office)),
+            ])->refresh();
         }
 
-        $vehicle = $trucker->vehicles()->find($vehicleId);
+        $vehicle = $this->vehicleOf($trucker, $vehicleId);
 
-        abort_if($vehicle === null, 404, 'That truck is not on this account.');
+        $recheck = $office === null
+            && isset($attributes['plate'])
+            && strcasecmp((string) $attributes['plate'], $vehicle->plate) !== 0;
 
-        $vehicle->update($attributes);
+        $vehicle->update([
+            ...$attributes,
+            ...($recheck ? $this->backForChecking() : []),
+        ]);
 
         return $vehicle->refresh();
     }
 
     /**
-     * Which of a partner's trucks a run goes under.
+     * Re-send some of a truck's photographs, and put it back in the queue.
      *
-     * Named by the desk when it cares, and the first available one otherwise —
-     * which is the whole of the choice for the many partners who own exactly
-     * one truck.
+     * Whatever it was before — a checked truck with a new photograph of the
+     * front is a truck nobody has checked in that state.
+     *
+     * @param  array<string, UploadedFile>  $photos
+     */
+    public function resubmitPhotos(Trucker $trucker, string $vehicleId, array $photos): TruckerVehicle
+    {
+        $vehicle = $this->vehicleOf($trucker, $vehicleId);
+
+        $paths = collect($photos)
+            ->mapWithKeys(fn (UploadedFile $file, string $slot): array => [
+                TruckPhotoStore::column($slot) => $this->photos->replace(
+                    $vehicle->getAttribute(TruckPhotoStore::column($slot)),
+                    $file,
+                    $trucker->getKey(),
+                ),
+            ])
+            ->all();
+
+        $vehicle->update([...$paths, ...$this->backForChecking()]);
+
+        return $vehicle->refresh();
+    }
+
+    /**
+     * The office has checked the truck against its photographs.
+     *
+     * From here it can be put under a load — provided the trucker has it on
+     * the road, which is theirs to say.
+     */
+    public function verifyVehicle(Trucker $trucker, string $vehicleId, User $office): TruckerVehicle
+    {
+        $vehicle = $this->vehicleOf($trucker, $vehicleId);
+
+        abort_if($vehicle->isVerified(), 422, "{$vehicle->plate} is already verified.");
+
+        $vehicle->update($this->verifiedBy($office));
+
+        $this->tell(
+            $trucker,
+            "{$vehicle->plate} is verified",
+            'Cargo Rush has checked your truck. It can take jobs now.',
+            Tone::Success,
+        );
+
+        return $vehicle->refresh();
+    }
+
+    /** Turn a truck down, with a reason the trucker can act on. */
+    public function rejectVehicle(Trucker $trucker, string $vehicleId, string $reason): TruckerVehicle
+    {
+        $vehicle = $this->vehicleOf($trucker, $vehicleId);
+
+        $vehicle->update([
+            ...$this->backForChecking(),
+            'verification' => TruckVerification::Rejected->value,
+            'rejection_reason' => $reason,
+        ]);
+
+        $this->tell(
+            $trucker,
+            "{$vehicle->plate} was not verified",
+            "{$reason} Send new photos from My trucks.",
+            Tone::Danger,
+        );
+
+        return $vehicle->refresh();
+    }
+
+    private function vehicleOf(Trucker $trucker, string $vehicleId): TruckerVehicle
+    {
+        $vehicle = $trucker->vehicles()->find($vehicleId);
+
+        abort_if($vehicle === null, 404, 'That truck is not on this account.');
+
+        return $vehicle;
+    }
+
+    /** @return array<string, mixed> */
+    private function verifiedBy(User $office): array
+    {
+        return [
+            'verification' => TruckVerification::Verified->value,
+            'verified_at' => now(),
+            'verified_by' => $office->getKey(),
+            'rejection_reason' => null,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function backForChecking(): array
+    {
+        return [
+            'verification' => TruckVerification::Pending->value,
+            'verified_at' => null,
+            'verified_by' => null,
+            'rejection_reason' => null,
+        ];
+    }
+
+    /**
+     * The truck the desk named for a run, checked to be this partner's.
+     *
+     * Only when the desk names one; otherwise the trucker picks on My Trips.
      */
     private function unitFor(Trucker $trucker, ?string $vehicleId): TruckerVehicle
     {

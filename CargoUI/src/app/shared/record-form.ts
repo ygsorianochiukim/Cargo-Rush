@@ -64,7 +64,10 @@ export class RecordForm {
 
     if (spec === null) return '';
 
-    return record ? spec.title(record) : `Add a ${spec.noun} to the system`;
+    // "an employee", "an invoice" — the article follows the noun's first sound.
+    const article = /^[aeiou]/i.test(spec.noun) ? 'an' : 'a';
+
+    return record ? spec.title(record) : `Add ${article} ${spec.noun} to the system`;
   });
 
   /**
@@ -89,6 +92,33 @@ export class RecordForm {
     const values = this.values();
 
     return spec.fields.filter((field) => field.showWhen?.(values) ?? true);
+  });
+
+  /**
+   * The half-width fields that would sit alone on their row.
+   *
+   * The form is two columns, and a half-width field followed by a wide one —
+   * or left over at the end — used to leave an empty half beside it: Email
+   * alone under a pair, a lone select half the width of everything around it.
+   * Such a field takes the whole row instead. Worked out on what is visible,
+   * so a field that appears or disappears re-flows the rest.
+   */
+  protected readonly fillsRow = computed(() => {
+    const lone = new Set<string>();
+    let open: string | null = null;
+
+    for (const field of this.visibleFields()) {
+      if (field.wide) {
+        if (open !== null) lone.add(open);
+        open = null;
+      } else {
+        open = open === null ? field.key : null;
+      }
+    }
+
+    if (open !== null) lone.add(open);
+
+    return lone;
   });
 
   /**

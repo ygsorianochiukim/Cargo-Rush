@@ -59,10 +59,10 @@ const STEPS = [1, 0.78, 0.6, 0.45, 0.33, 0.24, 0.17, 0.12];
             fill="none"
             [attr.stroke]="a.negative ? '#A11807' : '#15589C'"
             [attr.stroke-opacity]="dimmed(a) ? 0.25 : a.negative ? 1 : a.opacity"
-            [attr.stroke-width]="active() === a.key ? 24 : 18"
+            stroke-width="18"
             [attr.stroke-dasharray]="a.length + ' ' + (circumference - a.length)"
             [attr.stroke-dashoffset]="-a.offset"
-            class="transition-all duration-150" />
+            class="transition-[stroke-opacity] duration-150" />
         }
       </svg>
 

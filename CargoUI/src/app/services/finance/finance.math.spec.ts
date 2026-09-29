@@ -65,8 +65,8 @@ describe('the two workbook formulas', () => {
 });
 
 describe('period helpers', () => {
-  it('builds the workbook default 10-day window', () => {
-    expect(tenDayRange('2026-04-05')).toEqual({ from: '2026-04-05', to: '2026-04-15' });
+  it('builds the workbook default 10-day window, both ends included', () => {
+    expect(tenDayRange('2026-04-05')).toEqual({ from: '2026-04-05', to: '2026-04-14' });
   });
 
   it('uses the workbook Table11 quarter boundaries', () => {
@@ -99,6 +99,7 @@ describe('local aggregation', () => {
     total_expenses_cents: totalExpenses(e),
     net_income_cents: netIncome(e),
     currency: 'PHP',
+    owner_share_cents: 0,
     // Rows entered by hand carry neither a trip nor a single customer, which
     // is the ordinary case for the transcribed workbook these figures come
     // from.
@@ -134,10 +135,12 @@ describe('hasActivity', () => {
     truck: { id: 'tr6', label: 'Truck 6', plate: 'CDF5211' },
     trip_income_cents: income,
     fuel_cents: 0,
+    fuel_log_cents: 0,
     driver_salary_cents: 0,
     helper_salary_cents: 0,
     maintenance_cents: 0,
     allowance_cents: 0,
+    owner_share_cents: 0,
     other_expenses_cents: 0,
     total_expenses_cents: expenses,
     net_income_cents: income - expenses,

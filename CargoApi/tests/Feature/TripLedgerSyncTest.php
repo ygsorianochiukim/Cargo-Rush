@@ -30,6 +30,10 @@ use Database\Seeders\NavigationSeeder;
  * what the fuel cost.
  */
 beforeEach(function (): void {
+    // Pricing is zone-only, and an unpriced run cannot go out or be billed.
+    // One card at the old tariff's figures, so every run here is priced.
+    zoneCard();
+
     $this->seed(NavigationSeeder::class);
     $this->seed(FleetSeeder::class);
 
@@ -244,21 +248,20 @@ it('shows the trip reference on the row the office reads', function (): void {
         ->assertJsonPath('data.0.trip_reference', $reference);
 });
 
-it('keeps the day when its trip is deleted', function (): void {
+it('keeps the day by refusing to delete its delivered trip', function (): void {
     // A day of income and expenses must not disappear because somebody removed
     // the trip it was opened by — Profitability and the Quarterly Summary are
-    // built from these rows.
+    // built from these rows. A billed trip cannot be deleted at all now: its
+    // income, wallet credit and invoice would be left describing a run that
+    // no longer exists.
     $id = ($this->deliver)();
 
     LedgerEntry::firstOrFail()->update(['trip_income_cents' => 900_00]);
 
-    $this->actingAs($this->admin)->deleteJson("/api/v1/trips/{$id}")->assertSuccessful();
+    $this->actingAs($this->admin)->deleteJson("/api/v1/trips/{$id}")->assertStatus(422);
 
     $row = LedgerEntry::firstOrFail();
 
-    // `trip_id` survives because a trip is soft-deleted: the row is still
-    // there to be restored, so the link is not dangling and the migration's
-    // `nullOnDelete` never fires. What matters is that the money is intact.
     expect($row->trip_income_cents)->toBe(900_00)
         ->and($row->route)->toBe('Manila → Batangas')
         ->and($row->trip_id)->toBe($id);

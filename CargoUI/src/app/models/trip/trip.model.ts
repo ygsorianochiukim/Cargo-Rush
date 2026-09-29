@@ -64,18 +64,29 @@ export interface Trip extends Timestamped {
   mapped: boolean;
   cargo: string;
   weight_kg: number;
+  /** The kind of truck the load asks for. Null when any will do. */
+  truck_category_id?: string | null;
   pieces: number;
   handling: string | null;
 
   /**
-   * What the haul is charged, in centavos.
+   * What the haul is charged, in centavos — or null when it is not priced yet.
    *
-   * Quoted from the tariff when the trip is booked, so it is on the record
-   * before anybody delivers anything — which is what lets a customer be told
-   * a price at the moment they ask for the pickup.
+   * Quoted off the zone card when the trip is booked, so it is on the record
+   * before anybody delivers anything. Null means no zone line covers the run
+   * and nobody has typed a price: never print it as ₱0 — `needs_zone` and
+   * `pricing_note` say what to show instead.
    */
-  price_cents: number;
+  price_cents: number | null;
   currency: string;
+  /** No zone line covers this run, so it has no price and cannot go out. */
+  needs_zone: boolean;
+  /** Why it needs a zone — "No zone covers 712 km for a 10-wheeler." */
+  pricing_note: string | null;
+  /** `zone`, `manual` or `unzoned`; null on rows older than the column. */
+  pricing_source: 'zone' | 'manual' | 'unzoned' | null;
+  /** Typed by somebody who manages the Pricing card, and never re-quoted. */
+  manually_priced: boolean;
 
   customer_id: string | null;
   customer: string | null;
@@ -104,9 +115,17 @@ export interface Trip extends Timestamped {
 
   trucker_id: string | null;
   trucker_name: string | null;
+  /** The trucking service, when the trucker gave one at sign-up. */
+  trucker_business_name?: string | null;
   trucker_phone: string | null;
   trucker_vehicle_id: string | null;
   trucker_plate: string | null;
+  /**
+   * Which of the trucker's own drivers is on it. Null while the owner drives
+   * it themselves, and on every Cargo Rush run — never a Cargo Rush driver.
+   */
+  trucker_driver_id?: string | null;
+  trucker_driver_name?: string | null;
 
   /**
    * How the work reached whoever is hauling it — the audit column.
@@ -179,11 +198,16 @@ export interface TripPayload {
   dropoff_place?: string | null;
   scheduled_at: string;
   eta?: string | null;
+  /** A past trip entered as Delivered: when it was delivered (default: scheduled). */
+  delivered_at?: string | null;
+  /** A past trip entered as Delivered: who took the load. */
+  receiver_name?: string | null;
   /**
-   * Almost never sent: the API quotes the haul from the tariff. It is here for
-   * the one case deriving cannot cover — a rate somebody negotiated.
+   * Almost never sent: the API quotes the haul off the zone card. It is here
+   * for a rate somebody negotiated, or a run no zone line covers — and only for
+   * an account with `pricing.manage`. Null hands the run back to the card.
    */
-  price_cents?: number;
+  price_cents?: number | null;
 }
 
 /**
@@ -201,6 +225,6 @@ export interface TripConfirmPayload {
   eta?: string | null;
   /** Correcting what the customer estimated re-quotes the haul. */
   weight_kg?: number;
-  /** A rate the desk negotiated. Sending it stops the tariff overruling them. */
-  price_cents?: number;
+  /** A negotiated rate (`pricing.manage` only). Sending it stops the card overruling it. */
+  price_cents?: number | null;
 }

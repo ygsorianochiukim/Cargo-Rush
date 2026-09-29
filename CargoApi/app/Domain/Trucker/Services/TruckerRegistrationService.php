@@ -13,7 +13,6 @@ use App\Domain\Tenancy\Models\Company;
 use App\Domain\Tenancy\Support\Tenant;
 use App\Domain\Trucker\DTO\TruckerRegistrationData;
 use App\Domain\Trucker\Models\Trucker;
-use App\Domain\Trucker\Models\TruckerVehicle;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -70,7 +69,7 @@ class TruckerRegistrationService
          * from the first statement.
          *
          * This is a public route, so no middleware has scoped anything — and
-         * `Trucker`, `TruckerVehicle` and the login all carry `company_id`,
+         * `Trucker` and the login both carry `company_id`,
          * which the model layer stamps from whatever is in force. Left unset,
          * `BelongsToCompany` would refuse the write outright, which is the
          * correct failure and not one to arrange deliberately.
@@ -95,10 +94,8 @@ class TruckerRegistrationService
                 // standing could vet itself.
             ]);
 
-            TruckerVehicle::create([
-                ...$data->vehicleAttributes(),
-                'trucker_id' => $trucker->getKey(),
-            ]);
+            // No truck. Trucks and drivers are added from the app once the
+            // office has approved the account.
 
             return ['user' => $user, 'trucker' => $trucker->refresh()];
         }));
@@ -134,8 +131,13 @@ class TruckerRegistrationService
      * up again is a conversation to have with the office, not a second row that
      * silently loses the first one's wallet.
      */
-    private function mustBeNewHere(string $licenceNo): void
+    private function mustBeNewHere(?string $licenceNo): void
     {
+        // The licence is optional now; two owners who gave none do not clash.
+        if ($licenceNo === null) {
+            return;
+        }
+
         $exists = Trucker::withTrashed()->where('licence_no', $licenceNo)->exists();
 
         abort_if(
@@ -225,7 +227,8 @@ class TruckerRegistrationService
                 roles: [Role::Administrator, Role::Dispatcher],
                 icon: 'fleet',
                 title: 'New trucker registered',
-                detail: $trucker->name.' is waiting to be approved',
+                detail: ($trucker->business_name ? "{$trucker->business_name} ({$trucker->name})" : $trucker->name)
+                    .' is waiting to be approved',
                 tone: Tone::Warning,
             );
         });

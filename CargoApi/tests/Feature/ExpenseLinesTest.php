@@ -103,14 +103,16 @@ it('adds up to the Summary total, with every source in it', function (): void {
     ($this->day)('2026-07-15', ['fuel_cents' => 620_000, 'driver_salary_cents' => 150_000]);
     ($this->spend)('2026-08-02', 1_200_000);
     ($this->paidBill)(640_000, '2026-08-20');
+    // A partner paid their share: theirs, passing through — not an expense,
+    // so neither in the total nor among the rows.
     ($this->payout)(380_000, '2026-09-05');
 
     $report = ($this->lines)();
 
     expect($report['total_cents'])->toBe(($this->quarterTotal)())
-        ->and($report['total_cents'])->toBe(620_000 + 150_000 + 1_200_000 + 640_000 + 380_000)
+        ->and($report['total_cents'])->toBe(620_000 + 150_000 + 1_200_000 + 640_000)
         ->and(array_column($report['lines'], 'source'))
-        ->toBe(['trucker_payout', 'supplier_bill', 'expense', 'sheet', 'sheet']);
+        ->toBe(['supplier_bill', 'expense', 'sheet', 'sheet']);
 });
 
 it('splits a sheet day into one row per cost column, and skips the empty ones', function (): void {

@@ -67,7 +67,11 @@ class RemeasureTripsCommand extends Command
         $moved = 0;
 
         foreach ($trips as $trip) {
-            $wasQuoted = $trip->price_cents === $pricing->quote($trip);
+            // Re-quoted only if the card priced it (or nothing has yet). A
+            // hand-typed figure is marked `manual`; an older row without the
+            // mark is judged the old way, by whether it still equals a quote.
+            $wasQuoted = ! $trip->isManuallyPriced()
+                && ($trip->price_cents === null || $trip->price_cents === $pricing->quote($trip));
             $before = (int) round($trip->distance_total_m / 1000);
 
             $measured = $roads->between(
@@ -85,10 +89,12 @@ class RemeasureTripsCommand extends Command
             $quote = $wasQuoted ? $pricing->breakdown($trip) : null;
             $after = (int) round($measured['metres'] / 1000);
 
-            $price = $quote === null
-                ? '  price kept (negotiated)'
-                : '  ₱'.number_format($trip->price_cents / 100, 2).' → ₱'.number_format($quote->cents / 100, 2)
-                    .($quote->zoneCode === null ? '' : " (zone {$quote->zoneCode})");
+            $price = match (true) {
+                $quote === null => '  price kept (negotiated)',
+                ! $quote->priced() => "  now needs a zone — {$quote->reason}",
+                default => '  '.$this->peso($trip->price_cents).' → '.$this->peso($quote->cents)
+                    .($quote->zoneCode === null ? '' : " (zone {$quote->zoneCode})"),
+            };
 
             $this->line("  {$trip->reference}  {$before} km → {$after} km ({$measured['source']}){$price}");
 
@@ -109,5 +115,11 @@ class RemeasureTripsCommand extends Command
 
         $this->info(($dryRun ? 'Would re-measure ' : 'Re-measured ')
             ."{$trips->count()} trip(s); {$moved} price(s) ".($dryRun ? 'would change.' : 'changed.'));
+    }
+
+    /** "₱4,753.00", or "unpriced" for a run no zone line covers. */
+    private function peso(?int $cents): string
+    {
+        return $cents === null ? 'unpriced' : '₱'.number_format($cents / 100, 2);
     }
 }

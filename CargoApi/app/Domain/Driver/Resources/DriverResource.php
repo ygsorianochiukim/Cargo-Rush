@@ -6,6 +6,7 @@ namespace App\Domain\Driver\Resources;
 
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Shared\Http\Resources\ApiResource;
+use App\Domain\Tenancy\Support\Tenant;
 use Illuminate\Http\Request;
 
 /**
@@ -27,6 +28,17 @@ class DriverResource extends ApiResource
             'trips_completed' => $this->trips_completed,
             'on_time_rate' => $this->on_time_rate,
             'user_id' => $this->user_id,
+
+            /**
+             * Who they drive for. Always the fleet: a trucker's drivers are
+             * `trucker_drivers` rows and never reach this resource. Carried so
+             * a screen listing both kinds labels each without guessing — see
+             * `TruckerDriverResource`, which sends `kind: trucker`.
+             */
+            'employer' => [
+                'kind' => 'fleet',
+                'label' => app(Tenant::class)->company()?->name ?? 'Cargo Rush',
+            ],
 
             ...$this->stamps(),
         ];

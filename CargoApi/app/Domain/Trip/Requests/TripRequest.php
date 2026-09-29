@@ -8,10 +8,15 @@ use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
 use App\Domain\Tenancy\Support\Tenant;
 use App\Domain\Trip\DTO\TripData;
+use App\Domain\Trip\Requests\Concerns\GuardsTheTypedPrice;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class TripRequest extends ApiFormRequest
 {
+    use GuardsTheTypedPrice;
+
     /**
      * The statuses the office owns.
      *
@@ -24,6 +29,9 @@ class TripRequest extends ApiFormRequest
      * proof, and credit the driver. A form that could set either would
      * produce a trip that says `delivered` with no proof behind it.
      *
+     * The one exception is `delivered` for a trip that already happened, and
+     * it is not the column being set — see the entry below.
+     *
      * `overdue` is absent for a different reason: it is derived from the ETA
      * against the clock by `cargo:trips-overdue`, so typing it in would only
      * be overwritten.
@@ -33,6 +41,16 @@ class TripRequest extends ApiFormRequest
         StatusValue::Assigned->value,
         StatusValue::Pending->value,
         StatusValue::Cancelled->value,
+        /**
+         * For a trip that already happened, entered afterwards.
+         *
+         * Not a column the form sets: the controller runs the trip through
+         * the real delivery, dated to `delivered_at` — the log, the day's
+         * sheet, the wallet and the invoice — so an old trip is on the books
+         * exactly as if a driver had closed it that day. Only for a trip
+         * whose date has passed; a future one is delivered by driving it.
+         */
+        StatusValue::Delivered->value,
     ];
 
     public function rules(): array
@@ -54,13 +72,13 @@ class TripRequest extends ApiFormRequest
             'weight_kg' => [$required, 'integer', 'min:0', 'max:60000'],
             'pieces' => ['sometimes', 'integer', 'min:1', 'max:9999'],
             'handling' => ['nullable', 'string', 'max:255'],
-            // The tariff quotes the price (`PricingService`), so this is not
-            // a field the booking form normally sends. It is here for the one
-            // case deriving cannot cover: a rate the office negotiated. Zero
-            // is meaningful and is kept — that is how the company's own
-            // freight is booked, and it is why the service asks whether the
-            // key was sent rather than whether it is empty.
-            'price_cents' => ['sometimes', 'integer', 'min:0'],
+            // The zone card quotes the price (`PricingService`), so this is
+            // not a field the booking form normally sends. It is here for the
+            // one case the card cannot cover: a rate the office negotiated, or
+            // a run no zone line reaches. Zero is meaningful and is kept —
+            // that is how the company's own freight is booked. Null hands the
+            // run back to the card. `pricing.manage` only; see the trait.
+            'price_cents' => $this->priceRules(),
             'driver_id' => ['nullable', 'string', 'exists:drivers,id'],
             /**
              * Who rides along — any number up to a truck's worth, or none.
@@ -117,6 +135,9 @@ class TripRequest extends ApiFormRequest
                     ->whereNull('deleted_at'),
             ],
             'status' => ['sometimes', Rule::in(self::OFFICE_SETTABLE)],
+            // A past trip only. `delivered_at` defaults to the scheduled time.
+            'delivered_at' => ['nullable', 'date', 'before_or_equal:now'],
+            'receiver_name' => ['nullable', 'string', 'max:120'],
             'pickup_place' => ['nullable', 'string', 'max:255'],
             'dropoff_place' => ['nullable', 'string', 'max:255'],
             'scheduled_at' => [$required, 'date'],
@@ -124,6 +145,65 @@ class TripRequest extends ApiFormRequest
             'eta' => ['nullable', 'date', 'after_or_equal:scheduled_at'],
             'distance_total_m' => ['sometimes', 'integer', 'min:0'],
         ];
+    }
+
+    /**
+     * Delivered is for the past only, and a delivery cannot come before the
+     * trip. Checked against the scheduled time being sent, or the trip's own
+     * when an edit leaves it out.
+     */
+    public function after(): array
+    {
+        return [$this->mustBeAllowedToPrice(...), $this->oneHaulierOnly(...), function (Validator $validator): void {
+            if ($this->input('status') !== StatusValue::Delivered->value) {
+                return;
+            }
+
+            $scheduled = $this->input('scheduled_at') ?? $this->route('trip')?->scheduled_at;
+
+            if ($scheduled === null) {
+                return;
+            }
+
+            $scheduled = Carbon::parse($scheduled);
+
+            if ($scheduled->isFuture()) {
+                $validator->errors()->add('status', 'Only a trip that already happened can be entered as delivered.');
+
+                return;
+            }
+
+            if ($this->filled('delivered_at') && Carbon::parse($this->input('delivered_at'))->lt($scheduled)) {
+                $validator->errors()->add('delivered_at', 'It cannot have been delivered before it was scheduled.');
+            }
+        }];
+    }
+
+    /**
+     * A fleet unit or a trucker, never both.
+     *
+     * A trucker hauls in their own truck, and the company keeps only its
+     * commission on the run. A fleet `vehicle_id` beside them is what once
+     * booked the whole price as company income, so it is refused here —
+     * against a `trucker_id` sent with it, or one already on the trip being
+     * edited. Taking the trucker off (Release) comes first. A form re-sending
+     * the unit an older row already carries is let through, so its notes can
+     * still be saved.
+     */
+    private function oneHaulierOnly(Validator $validator): void
+    {
+        $trip = $this->route('trip');
+
+        if (! $this->filled('vehicle_id') || $this->input('vehicle_id') === $trip?->vehicle_id) {
+            return;
+        }
+
+        if ($this->filled('trucker_id') || $trip?->trucker_id !== null) {
+            $validator->errors()->add(
+                'vehicle_id',
+                'A trucker is hauling this run in their own truck, so it cannot go out on a fleet unit as well. Release the trucker first.',
+            );
+        }
     }
 
     public function messages(): array
@@ -142,6 +222,17 @@ class TripRequest extends ApiFormRequest
 
     public function toData(): TripData
     {
-        return TripData::fromArray($this->validated());
+        return TripData::fromArray($this->payload());
+    }
+
+    /**
+     * What was validated, less a re-sent price that did not move — so a form
+     * re-sending the card's own figure does not mark the run as hand-priced.
+     *
+     * @return array<string, mixed>
+     */
+    public function payload(): array
+    {
+        return $this->withoutUnmovedPrice($this->validated());
     }
 }

@@ -13,6 +13,9 @@ import { FinanceService } from '../../services/finance/finance.service';
 import { Card } from '../../shared/card';
 import { ChartTooltip, TooltipRow } from '../../shared/chart-tooltip';
 import { fmt } from '../../shared/format';
+import { Icon } from '../../shared/icon';
+import { MarginRing } from '../../shared/margin-ring';
+import { SplitBar, SplitPart } from '../../shared/split-bar';
 import { ExpenseLinesDialog } from './expense-lines.dialog';
 import { ReceivableLinesDialog } from './receivable-lines.dialog';
 
@@ -26,7 +29,7 @@ import { ReceivableLinesDialog } from './receivable-lines.dialog';
 @Component({
   selector: 'app-summary',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Card, ChartTooltip, ExpenseLinesDialog, ReceivableLinesDialog],
+  imports: [Card, ChartTooltip, ExpenseLinesDialog, Icon, MarginRing, ReceivableLinesDialog, SplitBar],
   templateUrl: './summary.page.html',
 })
 export class SummaryPage {
@@ -75,8 +78,11 @@ export class SummaryPage {
   /**
    * The part of the period's expenses that sits in no truck row.
    *
-   * Office overhead, and the supplier bills actually paid over the window.
-   * Both are real costs of the period and neither is any unit's, so the TOTAL
+   * Office overhead (fuel fills on a vehicle no truck points at included), the
+   * supplier bills actually paid over the window, and payroll beyond the crew
+   * pay the sheet already holds. (What was handed to truckers is not here: it
+   * was theirs, not a cost.) All are real costs of the period and none is any
+   * unit's, so the TOTAL
    * row is legitimately larger than its own columns add up to — and a reader
    * who cannot see why will assume the table is broken. The template says the
    * figure out loud when there is one.
@@ -85,7 +91,7 @@ export class SummaryPage {
     () =>
       this.totals().overhead_cents +
       this.totals().supplier_bills_cents +
-      this.totals().trucker_payouts_cents,
+      this.totals().payroll_cents,
   );
 
   /**
@@ -100,13 +106,67 @@ export class SummaryPage {
     const t = this.totals();
 
     return [
-      [t.overhead_cents, 'overhead'] as const,
+      [t.overhead_cents, 'overhead (incl. fuel fills on no truck)'] as const,
       [t.supplier_bills_cents, 'of supplier bills paid'] as const,
-      [t.trucker_payouts_cents, 'paid to truckers'] as const,
+      [t.payroll_cents, "of payroll beyond the sheet's crew pay"] as const,
     ]
       .filter(([cents]) => cents > 0)
       .map(([cents, what]) => `${fmt.pesos(cents)} ${what}`);
   });
+  /** Total income, by where it came from — the split bar on the income card. */
+  protected readonly incomeParts = computed<SplitPart[]>(() => {
+    const t = this.totals();
+
+    return [
+      { key: 'own', label: 'Own trucks', cents: t.trip_income_cents, value: fmt.pesos(t.trip_income_cents) },
+      {
+        key: 'commission',
+        label: 'Trucker commission',
+        cents: t.trucker_commission_cents,
+        value: fmt.pesos(t.trucker_commission_cents),
+      },
+      {
+        key: 'other',
+        label: 'Other income (invoices raised by hand)',
+        cents: t.other_income_cents,
+        value: fmt.pesos(t.other_income_cents),
+      },
+    ];
+  });
+
+  /**
+   * Total expenses, by where they were spent. The trucks' share is what the
+   * truck rows carry (the sheet, their expense lines, their fuel logs); the
+   * other two are the period's, and no truck's.
+   */
+  protected readonly expenseParts = computed<SplitPart[]>(() => {
+    const t = this.totals();
+    const trucks =
+      t.total_expenses_cents - t.overhead_cents - t.supplier_bills_cents - t.payroll_cents;
+
+    return [
+      { key: 'trucks', label: 'Trucks', cents: trucks, value: fmt.pesos(trucks) },
+      {
+        key: 'overhead',
+        label: 'Overhead (incl. fuel fills on no truck)',
+        cents: t.overhead_cents,
+        value: fmt.pesos(t.overhead_cents),
+      },
+      {
+        key: 'bills',
+        label: 'Supplier bills',
+        cents: t.supplier_bills_cents,
+        value: fmt.pesos(t.supplier_bills_cents),
+      },
+      {
+        key: 'payroll',
+        label: 'Payroll',
+        cents: t.payroll_cents,
+        value: fmt.pesos(t.payroll_cents),
+      },
+    ];
+  });
+
   protected readonly best = computed(() => this.rollup()?.best_performer ?? null);
 
   /** Charts show only units that actually traded in the period. */
@@ -137,6 +197,9 @@ export class SummaryPage {
     return [
       { label: 'Trip income', value: fmt.pesos(row.trip_income_cents) },
       { label: 'Total expenses', value: fmt.pesos(row.total_expenses_cents) },
+      ...(row.owner_share_cents > 0
+        ? [{ label: '· of it owner share', value: fmt.pesos(row.owner_share_cents) }]
+        : []),
       {
         label: 'Net income',
         value: fmt.pesos(row.net_income_cents),

@@ -29,6 +29,16 @@ class InspectionRepository extends Repository
             ->orderByDesc('id');
     }
 
+    /**
+     * The fleet's inspection log is the fleet's: a trucker's driver checking
+     * the trucker's truck is theirs, and is left out of every list. It still
+     * clears its own run — `latestForTrip()` does not come through here.
+     */
+    protected function applyFilters(Builder $query, array $filters): Builder
+    {
+        return parent::applyFilters($query, $filters)->whereNull('trucker_driver_id');
+    }
+
     public function latestForTrip(string $tripId): ?Inspection
     {
         return $this->query()->where('trip_id', $tripId)->first();

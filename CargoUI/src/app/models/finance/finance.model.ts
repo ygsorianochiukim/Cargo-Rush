@@ -37,7 +37,12 @@ export interface LedgerEntry extends Timestamped {
   helper_salary_cents: number;
   maintenance_cents: number;
   allowance_cents: number;
-  /** Both derived by the API from the five expense columns above. */
+  /**
+   * What a hired truck's owner took out of the day's runs. Posted by a
+   * delivery on a revenue-share unit, never typed; zero on the fleet's own.
+   */
+  owner_share_cents: number;
+  /** Both derived by the API from the expense columns above, owner share included. */
   total_expenses_cents: number;
   net_income_cents: number;
   currency: string;
@@ -119,13 +124,25 @@ export interface LedgerEntryPayload {
 export interface TruckPnl {
   truck: Pick<Truck, 'id' | 'label' | 'plate'>;
   trip_income_cents: number;
+  /**
+   * The unit's whole fuel: the sheet's column, which holds every fill posted
+   * from Fuel monitoring, plus any fill no row carries yet.
+   */
   fuel_cents: number;
+  /** How much of that came from Fuel monitoring. Already inside `fuel_cents`. */
+  fuel_log_cents: number;
   driver_salary_cents: number;
   helper_salary_cents: number;
   maintenance_cents: number;
   allowance_cents: number;
-  /** Categorised expense lines, which sit beside the five columns above. */
+  /** A hired truck's owner's cut — a cost of running somebody else's unit. */
+  owner_share_cents: number;
+  /** Categorised expense lines, which sit beside the sheet's columns. */
   other_expenses_cents: number;
+  /**
+   * fuel + driver + helper + maintenance + allowance + owner share + other
+   * expenses. The row's columns add up to this exactly.
+   */
   total_expenses_cents: number;
   net_income_cents: number;
   /** Share of the period's total net income. Negative for a loss-maker. */
@@ -136,15 +153,28 @@ export interface TruckPnl {
 export interface PeriodTotals {
   trip_income_cents: number;
   fuel_cents: number;
+  /**
+   * Fills logged in Fuel monitoring against a truck. Inside `fuel_cents`; a
+   * fill on a vehicle no truck points at is in `overhead_cents` instead.
+   */
+  fuel_log_cents: number;
   driver_salary_cents: number;
   helper_salary_cents: number;
   maintenance_cents: number;
   allowance_cents: number;
+  owner_share_cents: number;
   other_expenses_cents: number;
   /**
+   * Pay runs paid in the period, beyond the crew pay the sheet's salary
+   * columns already hold — so no peso of a driver's pay is counted twice.
+   * Inside `total_expenses_cents` and in no truck row.
+   */
+  payroll_cents: number;
+  /**
    * Counted spend belonging to the period but to no truck — office rent, an
-   * annual permit. It is inside `total_expenses_cents` and inside no truck
-   * row, which is why the truck rows do not add up to the total on their own.
+   * annual permit, and fuel fills for a vehicle no truck points at. It is
+   * inside `total_expenses_cents` and inside no truck row, which is why the
+   * truck rows do not add up to the total on their own.
    */
   overhead_cents: number;
   /**
@@ -159,18 +189,43 @@ export interface PeriodTotals {
   supplier_bills_cents: number;
 
   /**
-   * Money handed to partner truckers and landed over the period.
+   * Partners' shares handed over and landed over the period.
    *
-   * Counted on the day it left the bank, like the supplier bills. Without it,
-   * paying a partner made the business look better — their wallet balance fell,
-   * so `payables_cents` fell, so `actual_income_cents` rose, and nothing
-   * recorded that the money had gone.
-   *
-   * The owner of a truck the fleet hired on a revenue share is excluded: that
-   * share is already a cost on the daily sheet the day the run was delivered,
-   * and counting the payout too would charge the fleet twice for one haul.
+   * **Not an expense.** On a ₱5,000 partner run the fleet keeps its ₱600 and
+   * the ₱4,400 was the partner's, passing through — so the fleet's income is
+   * only its commission (`trucker_commission_cents`), and handing the rest on
+   * costs it nothing. Shown so the money that moved is visible.
    */
   trucker_payouts_cents: number;
+
+  /**
+   * The fleet's commission on partners' runs delivered in the period — its
+   * whole income from them. Inside `total_income_cents` and in no truck row.
+   */
+  trucker_commission_cents: number;
+  /**
+   * Receivable invoices raised by hand — no trip behind them — at their net.
+   * Inside `total_income_cents` and in no truck row.
+   */
+  other_income_cents: number;
+  /** Company trucks' takings, the commission above and the other income. */
+  total_income_cents: number;
+  /**
+   * VAT charged to customers on the period's invoices. The government's, not
+   * income — shown beside it, never inside it.
+   */
+  vat_collected_cents: number;
+  /**
+   * Of `payables_cents`, partners' shares the fleet is holding for them. Owed,
+   * but never the fleet's, so `actual_income_cents` does not take it off.
+   */
+  held_for_partners_cents: number;
+  /**
+   * Of `payables_cents`, what the expenses already carry — a hired truck
+   * owner's cut, payroll withholdings, a serviced truck's unpaid garage bill.
+   * Owed, but charged once already, so not taken off again.
+   */
+  payables_already_costed_cents: number;
   total_expenses_cents: number;
   net_income_cents: number;
 
@@ -187,7 +242,8 @@ export interface PeriodTotals {
   payables_cents: number;
 
   /**
-   * `net_income_cents - payables_cents` — what is left once what is owed is
+   * `net_income_cents - (payables_cents - held_for_partners_cents -
+   * payables_already_costed_cents)` — what is left once what is owed is
    * settled, and the figure to look at before deciding anything can be drawn
    * out. The API does the subtraction so no screen can do it differently.
    */
@@ -195,8 +251,9 @@ export interface PeriodTotals {
 
   /**
    * What customers — and partners whose wallet is in the red — still owed the
-   * fleet at the close. Already inside the trip income, so it moves no other
-   * figure: it says how much of the income has not turned into money yet.
+   * fleet at the close. It moves no other figure. The fleet's part of it is
+   * already income; a partner's share inside a brokered invoice and the VAT
+   * never were the fleet's, so collecting them adds nothing to income.
    */
   receivables_cents: number;
 
@@ -230,7 +287,13 @@ export interface PeriodRollup {
 }
 
 /** Where a row behind Total expenses came from — and so which screen opens it. */
-export type ExpenseLineSource = 'sheet' | 'expense' | 'supplier_bill' | 'trucker_payout';
+export type ExpenseLineSource =
+  | 'sheet'
+  | 'expense'
+  | 'fuel_log'
+  | 'supplier_bill'
+  | 'payroll'
+  | 'trucker_payout';
 
 /** One transaction inside a period's Total expenses. */
 export interface ExpenseLine {

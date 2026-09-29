@@ -19,8 +19,10 @@ import { StatusValue } from '@/constants/status';
 export interface Trucker {
   id: string;
   name: string;
+  /** The trucking service. Null on partners from before sign-up asked. */
+  business_name: string | null;
   phone: string;
-  licence_no: string;
+  licence_no: string | null;
   licence_expiry: string | null;
 
   /**
@@ -64,6 +66,7 @@ export interface Trucker {
   trips_completed: number;
 
   vehicles?: TruckerVehicle[];
+  drivers?: TruckerDriver[];
 }
 
 /**
@@ -81,8 +84,33 @@ export interface TruckerVehicle {
   capacity_kg: number;
   truck_category_id: string | null;
   truck_category?: string | null;
+  /** The trucker's own switch: on the road, or in the shop. */
   status: StatusValue;
+
+  /**
+   * Cargo Rush's check, from the photographs. A truck takes jobs only when it
+   * is `available` and `verified` — and a `rejected` one says why.
+   */
+  verification: TruckVerification;
+  verified_at: string | null;
+  rejection_reason: string | null;
+  /** Photo URLs by slot. Null where none was sent (the engine is optional). */
+  photos: Record<TruckPhotoSlot, string | null>;
 }
+
+export type TruckVerification = 'pending' | 'verified' | 'rejected';
+
+export type TruckPhotoSlot = 'front' | 'left' | 'right' | 'back' | 'plate' | 'engine';
+
+/** In the order the app asks for them: round the truck, the plate, the engine. */
+export const TRUCK_PHOTO_SLOTS: { slot: TruckPhotoSlot; label: string; required: boolean }[] = [
+  { slot: 'front', label: 'Front', required: true },
+  { slot: 'left', label: 'Left side', required: true },
+  { slot: 'right', label: 'Right side', required: true },
+  { slot: 'back', label: 'Back', required: true },
+  { slot: 'plate', label: 'Plate number', required: true },
+  { slot: 'engine', label: 'Engine', required: false },
+];
 
 /**
  * A load on the board — `GET /api/v1/partner/jobs`.
@@ -302,14 +330,41 @@ export interface TruckerRegistration {
    */
   company_id?: string;
 
-  licence_no: string;
-  licence_expiry?: string;
+  /** The trucking service's name — what the office and customers see. */
+  business_name: string;
 
-  plate: string;
-  model: string;
-  capacity_kg: number;
-  truck_category_id?: string;
+  /** Optional: the owner may never drive. Each driver they add has their own. */
+  licence_no?: string;
+  licence_expiry?: string;
 
   /** Always sent from here: the handset wants a bearer token, not a cookie. */
   device_name: string;
+}
+
+/**
+ * Somebody a trucker employs to drive their trucks — `GET /partner/drivers`.
+ *
+ * Never one of Cargo Rush's own drivers. `employer` says who they drive for,
+ * and every screen that lists them prints it.
+ */
+export interface TruckerDriver {
+  id: string;
+  trucker_id: string;
+  name: string;
+  phone: string | null;
+  licence_no: string;
+  licence_expiry: string | null;
+  status: StatusValue;
+  email?: string | null;
+  employer: { kind: 'trucker' | 'fleet'; label: string };
+}
+
+/** What the owner sends to add a driver. The login is set once, here. */
+export interface TruckerDriverInput {
+  name: string;
+  phone?: string;
+  licence_no: string;
+  licence_expiry?: string;
+  email: string;
+  password: string;
 }

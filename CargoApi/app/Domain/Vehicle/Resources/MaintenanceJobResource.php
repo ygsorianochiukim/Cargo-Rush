@@ -37,6 +37,9 @@ class MaintenanceJobResource extends ApiResource
             'completed_on' => $this->completed_on?->toDateString(),
             'supplier_id' => $this->supplier_id,
             'supplier_name' => $this->whenLoaded('supplier', fn () => $this->supplier?->name),
+            // The garage's bill in Billing, when one is linked — its payment
+            // is then this job's cost, not a second one.
+            'invoice_id' => $this->invoice_id,
             'reference' => $this->reference,
             'note' => $this->note,
 

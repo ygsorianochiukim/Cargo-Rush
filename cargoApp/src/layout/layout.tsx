@@ -85,6 +85,22 @@ const TRUCKER_TABS: TabDef[] = [
   { name: 'more', key: 'more', href: '/more', label: 'More', icon: 'profile' },
 ];
 
+/**
+ * A trucker's driver: the working screens a Cargo Rush driver has.
+ *
+ * Their runs (with Start and Mark delivered), the map, and the pre-trip
+ * checklist — the same Tracking and Inspect screens, reading `crew/*` rather
+ * than the fleet's driver endpoints. Not the board, the wallet or the trucks:
+ * those are the owner's. The home tab *is* their trip list; see
+ * `app/index.tsx`.
+ */
+const CREW_TABS: TabDef[] = [
+  { name: 'index', key: 'crew-trips', href: '/', label: 'My Trips', icon: 'route' },
+  { name: 'tracking', key: 'tracking', href: '/tracking', label: 'Tracking', icon: 'map-pin' },
+  { name: 'inspect', key: 'inspect', href: '/inspect', label: 'Inspect', icon: 'clipboard' },
+  { name: 'more', key: 'more', href: '/more', label: 'More', icon: 'profile' },
+];
+
 export function AppLayout() {
   const insets = useSafeAreaInsets();
   const { me } = useSession();
@@ -99,7 +115,9 @@ export function AppLayout() {
       ? CUSTOMER_TABS
       : me?.role === 'trucker'
         ? TRUCKER_TABS
-        : DRIVER_TABS;
+        : me?.role === 'trucker_driver'
+          ? CREW_TABS
+          : DRIVER_TABS;
 
   const [tabs, setTabs] = useState<TabDef[]>(local);
 

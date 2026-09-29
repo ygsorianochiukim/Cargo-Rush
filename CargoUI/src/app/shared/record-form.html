@@ -29,7 +29,7 @@
           [required]="!!field.required"
           [hint]="hintFor(field)"
           [error]="serverError(field.key) ?? errorFor(field.key)"
-          [class.sm:col-span-2]="field.wide"
+          [class.sm:col-span-2]="field.wide || fillsRow().has(field.key)"
         >
           @switch (field.kind) {
             @case ('select') {

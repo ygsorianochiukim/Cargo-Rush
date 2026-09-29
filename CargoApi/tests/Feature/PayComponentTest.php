@@ -298,12 +298,16 @@ describe('when an assignment applies', function (): void {
 describe('what the tax does', function (): void {
     it('leaves a de minimis allowance out of the tax base', function (): void {
         $employee = ($this->hire)();
-        $plain = ($this->open)()->assertCreated()->json('data.lines.0');
+        $plainRun = ($this->open)()->assertCreated()->json('data');
+        $plain = $plainRun['lines'][0];
 
         $rice = ($this->component)(['schedule' => 'each_run'])->assertCreated()->json('data');
         ($this->assign)($employee['id'], $rice['id'])->assertCreated();
 
-        $withAllowance = ($this->open)()->assertCreated()->json('data.lines.0');
+        // Worked out again rather than opened twice — one run per period.
+        $withAllowance = $this->actingAs($this->admin)
+            ->postJson("/api/v1/payroll/{$plainRun['id']}/rebuild")
+            ->assertOk()->json('data.lines.0');
 
         // Non-taxable by default, which is the honest default: rice, uniform
         // and medical allowances are de minimis benefits up to the BIR's
@@ -314,14 +318,18 @@ describe('what the tax does', function (): void {
 
     it('taxes a taxable one, and still leaves the contributions alone', function (): void {
         $employee = ($this->hire)();
-        $plain = ($this->open)()->assertCreated()->json('data.lines.0');
+        $plainRun = ($this->open)()->assertCreated()->json('data');
+        $plain = $plainRun['lines'][0];
 
         $taxable = ($this->component)([
             'name' => 'Taxable allowance', 'schedule' => 'each_run', 'taxable' => true,
         ])->assertCreated()->json('data');
         ($this->assign)($employee['id'], $taxable['id'])->assertCreated();
 
-        $withAllowance = ($this->open)()->assertCreated()->json('data.lines.0');
+        // Worked out again rather than opened twice — one run per period.
+        $withAllowance = $this->actingAs($this->admin)
+            ->postJson("/api/v1/payroll/{$plainRun['id']}/rebuild")
+            ->assertOk()->json('data.lines.0');
 
         expect($withAllowance['withholding_tax_cents'])->toBeGreaterThan($plain['withholding_tax_cents'])
             // SSS, PhilHealth and Pag-IBIG come off the monthly *basic*, which

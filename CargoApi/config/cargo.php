@@ -7,14 +7,14 @@ declare(strict_types=1);
  *
  * Almost everything here is a column on the company as well, edited by an
  * administrator under Access Control → Rates and resolved by `RateBook`: the
- * tariff, the payment terms, the tax rates and the partner commission. A null
+ * payment terms, the tax rates and the partner commission. A null
  * column falls through to the figure here, which is what every company has
  * until somebody opens that card — so these values still decide what a fresh
  * install charges, and stop deciding the moment a firm disagrees.
  *
  * That matters because two hauliers share an install. A single
- * `TARIFF_PER_KM_CENTS` cannot describe a firm quoting ₱35 and a firm quoting
- * ₱45, and correcting either used to mean a deployment.
+ * `BILLING_TERMS_DAYS` cannot describe a firm giving thirty days and a firm
+ * giving fifteen, and correcting either used to mean a deployment.
  *
  * What is deliberately *only* here: the payroll contributions, which are the
  * government's and identical for every firm on the platform, and the currency.
@@ -33,28 +33,19 @@ return [
 
     /*
     |----------------------------------------------------------------------
-    | Tariff — what a delivery is charged
+    | Currency — what every quote is in
     |----------------------------------------------------------------------
     |
-    | price = base + (per_km * km) + (per_kg * kg), floored at `minimum`.
-    |
-    | Distance comes off the trip, which fills it in from the two map pins
-    | (straight-line, so it is a floor) or takes the road distance a
-    | dispatcher entered. A trip nobody has pinned has no distance, and the
-    | quote is then base plus weight alone — honest, and still not zero.
-    |
-    | `RateBook` is the only thing that reads these, and `PricingService` the
-    | only thing that reads it. A firm that has set its own four figures on the
-    | settings card never reaches this block.
+    | One install, one currency. This used to sit inside a `tariff` block
+    | beside a fallback formula — base + per_km * km + per_kg * kg — that
+    | priced any run the rate card did not cover. That fallback is gone:
+    | pricing is zone-only, and a run no zone line covers is left unpriced
+    | for the office rather than charged a figure nobody published. See
+    | `PricingService`. `TARIFF_CURRENCY` is still read so an existing
+    | `.env` keeps working.
     |
     */
-    'tariff' => [
-        'base_cents' => (int) env('TARIFF_BASE_CENTS', 150_000),
-        'per_km_cents' => (int) env('TARIFF_PER_KM_CENTS', 3_500),
-        'per_kg_cents' => (int) env('TARIFF_PER_KG_CENTS', 200),
-        'minimum_cents' => (int) env('TARIFF_MINIMUM_CENTS', 150_000),
-        'currency' => env('TARIFF_CURRENCY', 'PHP'),
-    ],
+    'currency' => env('CARGO_CURRENCY', env('TARIFF_CURRENCY', 'PHP')),
 
     /*
     |----------------------------------------------------------------------
@@ -165,7 +156,7 @@ return [
     | What a Philippine freight invoice actually carries, and the reason an
     | invoice total was never the number anybody paid:
     |
-    |     net                    the haul, priced from the tariff
+    |     net                    the haul, priced off the zone card
     |   + VAT      (12%)         charged to the customer, remitted by us
     |   = gross                  what the invoice says
     |   - withholding (2%)       kept back by the customer, remitted by them
@@ -189,14 +180,14 @@ return [
          * Expanded withholding tax on payments to contractors.
          *
          * 200 = 2%, which is the rate for hauling and freight services. It is
-         * withheld from the **gross** — VAT included — because that is how the
-         * BIR computes it, and getting that wrong understates the deduction on
-         * every invoice.
+         * withheld from the **net** — VAT excluded — because the income payment
+         * the BIR withholds on is the fee, not the output VAT the fleet only
+         * collects for the government. See `TaxService::atRates()`.
          */
         'withholding_rate_bp' => (int) env('TAX_WITHHOLDING_RATE_BP', 200),
 
         /**
-         * Are the tariff and the rate card quoted VAT-inclusive?
+         * Is the rate card quoted VAT-inclusive?
          *
          * False out of the box: a quote is the net haul and VAT is added on
          * top, which is how a rate card is normally written. Set it true where
@@ -310,9 +301,36 @@ return [
          * editable on the line either way.
          */
         'sss' => [
-            'employee_rate_bp' => (int) env('PAYROLL_SSS_RATE_BP', 450),
-            /** The monthly salary credit ceiling the rate applies up to. */
+            /**
+             * The 2025 schedule: 15% of the monthly salary credit, 5% from the
+             * employee and 10% from the employer.
+             *
+             * It was 4.5% here, which is the 2023–24 figure — every payslip
+             * since January 2025 under-deducted by half a percent of the basic
+             * and the firm under-remitted by the same.
+             */
+            'employee_rate_bp' => (int) env('PAYROLL_SSS_RATE_BP', 500),
+            /**
+             * The employer's share, for the remittance the firm owes on top of
+             * what it withheld. Not taken from a payslip.
+             */
+            'employer_rate_bp' => (int) env('PAYROLL_SSS_EMPLOYER_RATE_BP', 1000),
+            /**
+             * The monthly salary credit range the rate applies across: ₱5,000
+             * to ₱35,000 in 2025, so the employee's share runs ₱250 to ₱1,750.
+             * A person with no basic at all is charged nothing rather than the
+             * floor — see `StatutoryDeductions::sss()`.
+             */
+            'floor_cents' => (int) env('PAYROLL_SSS_FLOOR_CENTS', 500000),
             'ceiling_cents' => (int) env('PAYROLL_SSS_CEILING_CENTS', 3500000),
+            /**
+             * Employees' Compensation — the employer's alone, remitted with SSS
+             * and a flat amount on the salary credit rather than a rate: ₱10 a
+             * month below a ₱15,000 credit, ₱30 from it up.
+             */
+            'ec_low_cents' => (int) env('PAYROLL_SSS_EC_LOW_CENTS', 1000),
+            'ec_high_cents' => (int) env('PAYROLL_SSS_EC_HIGH_CENTS', 3000),
+            'ec_threshold_cents' => (int) env('PAYROLL_SSS_EC_THRESHOLD_CENTS', 1500000),
         ],
 
         /**
@@ -322,6 +340,8 @@ return [
          */
         'philhealth' => [
             'employee_rate_bp' => (int) env('PAYROLL_PHILHEALTH_RATE_BP', 250),
+            // The other half, on the same floor and ceiling.
+            'employer_rate_bp' => (int) env('PAYROLL_PHILHEALTH_EMPLOYER_RATE_BP', 250),
             'floor_cents' => (int) env('PAYROLL_PHILHEALTH_FLOOR_CENTS', 1000000),
             'ceiling_cents' => (int) env('PAYROLL_PHILHEALTH_CEILING_CENTS', 10000000),
         ],
@@ -333,10 +353,18 @@ return [
         'pagibig' => [
             'employee_rate_bp' => (int) env('PAYROLL_PAGIBIG_RATE_BP', 200),
             'cap_cents' => (int) env('PAYROLL_PAGIBIG_CAP_CENTS', 20000),
+            /**
+             * The employer's 2%, on the same ₱10,000 fund salary cap — so ₱200
+             * a month at most, like the employee's. Its own setting because the
+             * two sides have not always moved together.
+             */
+            'employer_rate_bp' => (int) env('PAYROLL_PAGIBIG_EMPLOYER_RATE_BP', 200),
+            'employer_cap_cents' => (int) env('PAYROLL_PAGIBIG_EMPLOYER_CAP_CENTS', 20000),
         ],
 
         /**
-         * Withholding tax, as the BIR's **semi-monthly** graduated table.
+         * Withholding tax, as the BIR's graduated tables — one per pay
+         * frequency.
          *
          * `over` is the taxable pay for the period above which the bracket
          * applies, `base` is the fixed tax at that point, and `rate_bp` is what
@@ -344,7 +372,18 @@ return [
          * contributions, which is the order the BIR computes it in — deducting
          * tax before the contributions would overstate it on every payslip.
          *
-         * These are the 2023-onward TRAIN figures. Check them.
+         * The 2023-onward TRAIN tables (RR 11-2018, Annex E). There used to be
+         * one table here, labelled semi-monthly, whose upper brackets were the
+         * **2018–22** figures — 32% at ₱104,167 and nothing at 25% past
+         * ₱54,167 — so every payslip over about ₱33,000 a fortnight was
+         * withheld on the wrong schedule. And a firm paying monthly ran that
+         * semi-monthly table on a whole month's pay, which taxed a ₱50,000
+         * salary as if it were ₱50,000 a fortnight.
+         *
+         * Which table applies is the run's, not the person's: see
+         * `StatutoryDeductions::withholding()`. Weekly and daily are not here
+         * because the calendar cannot produce those periods — a cutoff is a
+         * day of the month.
          */
         'withholding' => [
             /**
@@ -369,13 +408,22 @@ return [
             'exempt_monthly_at_or_below_cents' => (int) env('PAYROLL_TAX_EXEMPT_MONTHLY_CENTS', 2083333),
 
             'brackets' => [
-                ['over' => 0, 'base' => 0, 'rate_bp' => 0],
-                ['over' => 1041700, 'base' => 0, 'rate_bp' => 1500],
-                ['over' => 1666700, 'base' => 93750, 'rate_bp' => 2000],
-                ['over' => 3333300, 'base' => 427160, 'rate_bp' => 2500],
-                ['over' => 5416700, 'base' => 947920, 'rate_bp' => 3000],
-                ['over' => 10416700, 'base' => 2447920, 'rate_bp' => 3200],
-                ['over' => 34166700, 'base' => 10047920, 'rate_bp' => 3500],
+                'semi_monthly' => [
+                    ['over' => 0, 'base' => 0, 'rate_bp' => 0],
+                    ['over' => 1041700, 'base' => 0, 'rate_bp' => 1500],
+                    ['over' => 1666700, 'base' => 93750, 'rate_bp' => 2000],
+                    ['over' => 3333300, 'base' => 427070, 'rate_bp' => 2500],
+                    ['over' => 8333300, 'base' => 1677070, 'rate_bp' => 3000],
+                    ['over' => 33333300, 'base' => 9177070, 'rate_bp' => 3500],
+                ],
+                'monthly' => [
+                    ['over' => 0, 'base' => 0, 'rate_bp' => 0],
+                    ['over' => 2083300, 'base' => 0, 'rate_bp' => 1500],
+                    ['over' => 3333300, 'base' => 187500, 'rate_bp' => 2000],
+                    ['over' => 6666700, 'base' => 854180, 'rate_bp' => 2500],
+                    ['over' => 16666700, 'base' => 3354180, 'rate_bp' => 3000],
+                    ['over' => 66666700, 'base' => 18354180, 'rate_bp' => 3500],
+                ],
             ],
         ],
 
@@ -389,7 +437,31 @@ return [
          * posted, because a half-posted payroll is worse than an unposted one.
          */
         'accounts' => [
+            /**
+             * Office staff — administrative expense.
+             */
             'salaries_expense' => env('PAYROLL_ACCOUNT_SALARIES', '5200'),
+            /**
+             * Drivers and helpers — the trip crew — are a **cost of services**.
+             *
+             * Every run used to debit the whole gross to 5200 "Office
+             * salaries", which moved the fleet's single largest direct cost
+             * below the gross-profit line: the income statement then said the
+             * hauling earned more than it did and the office cost more. A line
+             * is crew when the person has a `drivers` record, frozen onto the
+             * line at build. Driver and helper are one record here — the same
+             * person rides either seat — so both post to the one account.
+             */
+            'crew_wages_expense' => env('PAYROLL_ACCOUNT_CREW_WAGES', '5020'),
+            /**
+             * The employer's SSS, EC, PhilHealth and Pag-IBIG — a cost of
+             * employing the person, so it follows their wage: a driver's to
+             * cost of services, the office's to administrative expense. The
+             * wage accounts by default; an install that wants the share on an
+             * account of its own points these at it.
+             */
+            'crew_employer_contributions_expense' => env('PAYROLL_ACCOUNT_CREW_EMPLOYER_CONTRIBUTIONS', '5020'),
+            'employer_contributions_expense' => env('PAYROLL_ACCOUNT_EMPLOYER_CONTRIBUTIONS', '5200'),
             'accrued_wages' => env('PAYROLL_ACCOUNT_ACCRUED', '2100'),
             'statutory_payable' => env('PAYROLL_ACCOUNT_STATUTORY', '2200'),
             'withholding_payable' => env('PAYROLL_ACCOUNT_WITHHOLDING', '2160'),
@@ -417,6 +489,57 @@ return [
          * against the wrong half of the expenses is worse than no margin.
          */
         'cost_of_services_group' => env('ACCOUNTING_COST_GROUP', 'Cost of services'),
+
+        /**
+         * Every operational record posts itself to the journal.
+         *
+         * Deliveries, invoices, payments, the daily sheet, expense lines, fuel,
+         * supplier bills and partners' wallets — so the income statement and
+         * the balance sheet say what the Finance screens say, without anybody
+         * re-keying a month of trips. See `AutoPostingService` for which record
+         * posts what, and why each is dated the way it is.
+         *
+         * `from` is the first day auto-posting owns. An install whose
+         * accountant has been journalising by hand sets it to the day after
+         * the last period they closed, so the two do not both claim the same
+         * months. Null means from the beginning.
+         */
+        'auto_post' => [
+            'enabled' => (bool) env('ACCOUNTING_AUTO_POST', true),
+            'from' => env('ACCOUNTING_AUTO_POST_FROM'),
+
+            /**
+             * Where each figure lands, by code from the seeded chart. An
+             * install that renumbered its chart sets these; a record whose
+             * account is missing is skipped with a warning in the log rather
+             * than failing whatever saved it.
+             */
+            'accounts' => [
+                'cash' => env('AUTO_POST_ACCOUNT_CASH', '1020'),
+                'receivable' => env('AUTO_POST_ACCOUNT_RECEIVABLE', '1100'),
+                'unbilled_income' => env('AUTO_POST_ACCOUNT_UNBILLED', '1140'),
+                'due_from_truckers' => env('AUTO_POST_ACCOUNT_DUE_FROM_TRUCKERS', '1160'),
+                'trucker_adjustments' => env('AUTO_POST_ACCOUNT_TRUCKER_ADJUSTMENTS', '1170'),
+                'supplier_advances' => env('AUTO_POST_ACCOUNT_SUPPLIER_ADVANCES', '1200'),
+                'creditable_withholding' => env('AUTO_POST_ACCOUNT_CWT', '1260'),
+                'bills_not_expensed' => env('AUTO_POST_ACCOUNT_BILLS_CLEARING', '1270'),
+                'payable' => env('AUTO_POST_ACCOUNT_PAYABLE', '2010'),
+                'due_to_truckers' => env('AUTO_POST_ACCOUNT_DUE_TO_TRUCKERS', '2020'),
+                'crew_pay_accrued' => env('AUTO_POST_ACCOUNT_CREW_PAY', '2110'),
+                'output_vat' => env('AUTO_POST_ACCOUNT_OUTPUT_VAT', '2150'),
+                'customer_advances' => env('AUTO_POST_ACCOUNT_CUSTOMER_ADVANCES', '2250'),
+                'freight_revenue' => env('AUTO_POST_ACCOUNT_FREIGHT', '4010'),
+                'other_income' => env('AUTO_POST_ACCOUNT_OTHER_INCOME', '4090'),
+                'fuel' => env('AUTO_POST_ACCOUNT_FUEL', '5010'),
+                'driver_salary' => env('AUTO_POST_ACCOUNT_DRIVER_SALARY', '5020'),
+                'helper_salary' => env('AUTO_POST_ACCOUNT_HELPER_SALARY', '5030'),
+                'allowance' => env('AUTO_POST_ACCOUNT_ALLOWANCE', '5040'),
+                'maintenance' => env('AUTO_POST_ACCOUNT_MAINTENANCE', '5050'),
+                'owner_share' => env('AUTO_POST_ACCOUNT_OWNER_SHARE', '5110'),
+                // A bill from a supplier with nothing more specific known.
+                'supplier_bill_expense' => env('AUTO_POST_ACCOUNT_SUPPLIER_BILLS', '5900'),
+            ],
+        ],
     ],
 
     'inspection' => [
@@ -559,6 +682,23 @@ return [
         'directory' => env('POD_DIRECTORY', 'pod'),
         /** Kilobytes. A phone photo is ~2–4 MB; this leaves room without inviting video. */
         'max_kb' => (int) env('POD_MAX_KB', 8192),
+    ],
+
+    /*
+    |----------------------------------------------------------------------
+    | A trucker's truck, photographed for the office to check
+    |----------------------------------------------------------------------
+    |
+    | Front, both sides, back and plate on every truck; the engine bay when the
+    | trucker has one. Same disk as proof of delivery by default.
+    |
+    */
+
+    'trucks' => [
+        'disk' => env('TRUCK_PHOTO_DISK', env('POD_DISK', 'public')),
+        'directory' => env('TRUCK_PHOTO_DIRECTORY', 'trucks'),
+        /** Kilobytes, per photograph. */
+        'max_kb' => (int) env('TRUCK_PHOTO_MAX_KB', 8192),
     ],
 
     /*

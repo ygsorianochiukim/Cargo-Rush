@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Trucker\Services;
 
+use App\Domain\Billing\Services\TaxService;
 use App\Domain\Notification\Services\NotificationService;
 use App\Domain\Shared\Enums\BookingSource;
 use App\Domain\Shared\Enums\StatusValue;
@@ -51,10 +52,17 @@ use Illuminate\Support\Facades\DB;
  *
  * These rows are not journal entries and this is not a second set of books.
  * They are the running account between a haulier and one contractor, in the
- * form that contractor can read on a phone. What the haulier's own ledger makes
- * of them — revenue on the commission, a payable for the balance — is the
- * accountant's posting to make from the statement, and doing it automatically
- * would put entries in the general journal that nobody at the desk chose.
+ * form that contractor can read on a phone.
+ *
+ * What the haulier's own ledger makes of them — the commission as revenue, the
+ * balance as 2020 Due to truckers, a partner's unremitted cut as 1160 — is
+ * posted **automatically** once a row has landed (`WalletEntryRule`, through
+ * `AutoPostingService`). That used to be left to the accountant, on the view
+ * that nobody at the desk had chosen those entries; the office has since
+ * decided the statements must match the Finance screens without re-keying, and
+ * a posting derived from the row by one fixed rule is a choice made once rather
+ * than never. Nothing here changed for it: the wallet writes its rows, and the
+ * books follow them.
  */
 class WalletService
 {
@@ -68,7 +76,41 @@ class WalletService
      */
     public const DEFAULT_METHOD = 'bank_transfer';
 
-    public function __construct(private readonly NotificationService $notifications) {}
+    public function __construct(
+        private readonly NotificationService $notifications,
+        private readonly TaxService $tax,
+    ) {}
+
+    /**
+     * What a run's split is worked out on: its price **net of VAT**.
+     *
+     * Where the company quotes all-in (`prices_include_vat`), a ₱11,200 price
+     * holds ₱1,200 of output VAT that is the BIR's. Taking 12% of the ₱11,200
+     * charged the partner commission on the government's money, and paying
+     * them the rest handed them VAT the fleet still has to remit. The split is
+     * of the ₱10,000 that was the haul — the same breakdown the invoice
+     * freezes and the daily sheet books as income. Quoted exclusive, the net
+     * is the price and nothing moves.
+     */
+    private function splitBase(Trip $trip): int
+    {
+        return $this->tax->on((int) $trip->price_cents, $trip->customer)->net_cents;
+    }
+
+    /**
+     * What a partner would take home from a run, before they take it.
+     *
+     * The job board's quote. It goes through `splitBase` and `commissionOn`
+     * exactly as `settleTrip` does, so a VAT-inclusive price is split on its
+     * net here too — quoting on the gross would promise a partner more than
+     * delivery then credits them.
+     */
+    public function partnerTakeOn(Trip $trip, int $rateBp): int
+    {
+        $base = $this->splitBase($trip);
+
+        return $base - $this->commissionOn($base, $rateBp);
+    }
 
     /**
      * Post the money for a delivered run.
@@ -92,12 +134,13 @@ class WalletService
             return null;
         }
 
-        $gross = (int) $trip->price_cents;
-
-        if ($gross <= 0) {
+        if ((int) $trip->price_cents <= 0) {
             return null;
         }
 
+        // Net of VAT — see `splitBase()`. Frozen onto the row as its gross,
+        // because it is the figure the rate was applied to.
+        $gross = $this->splitBase($trip);
         $rateBp = $trucker->commissionRateBp();
         $commission = $this->commissionOn($gross, $rateBp);
         $source = $trip->booking_source ?? BookingSource::CargoRush;
@@ -164,12 +207,13 @@ class WalletService
             return null;
         }
 
-        $gross = (int) $trip->price_cents;
-
-        if ($gross <= 0) {
+        if ((int) $trip->price_cents <= 0) {
             return null;
         }
 
+        // Net of VAT, like a partner's run and like the sheet's income for
+        // it, so the owner's share and the fleet's cut add up to that income.
+        $gross = $this->splitBase($trip);
         $rateBp = $vehicle->shareRateBp();
         $owner = $vehicle->ownerPartner;
 
@@ -225,8 +269,10 @@ class WalletService
      * you paid me for CR-24823?" there was no way to answer. Now the question
      * is a column.
      *
-     * Passing no ids means every outstanding run, which is the ordinary case
-     * and the one button the office presses. Naming a subset is the part
+     * Passing no ids means the whole account — every unsettled run, commission
+     * and adjustment, paid at their net, which is the landed balance not
+     * already on its way — and is the ordinary case and the one button the
+     * office presses. Naming a subset of runs is the part
      * payment: two runs now, the third on Friday, and both states are recorded
      * rather than inferred from a total.
      *
@@ -236,7 +282,7 @@ class WalletService
      * it — which keeps the balance and the paid state of the work from ever
      * disagreeing.
      *
-     * @param  string[]  $entryIds  Outstanding earnings to clear. Empty means all of them.
+     * @param  string[]  $entryIds  Outstanding earnings to clear. Empty means the whole account.
      */
     public function payOut(
         Trucker $trucker,
@@ -384,33 +430,84 @@ class WalletService
              * same second — one from the roster, one from a statement they left
              * open. Without the lock both read the same outstanding rows and
              * both write a payout for them, and the partner is paid twice.
+             *
+             * ## A payout of everything settles the **account**, not one kind
+             *
+             * It used to clear only the unsettled earnings and pay their sum.
+             * A partner owed ₱8,800 on one run and charged ₱1,200 on a direct
+             * one has a balance of ₱7,600, and was sent ₱8,800: the commission
+             * stayed unsettled, the balance went to −₱1,200 when the transfer
+             * landed, and the fleet had handed over money it was owed. So "pay
+             * all" now takes every unsettled row that makes up the balance —
+             * earnings, commissions and adjustments — pays their net, and
+             * clears all of them. The amount sent is the landed balance not
+             * already on its way, to the centavo.
+             *
+             * A remittance keeps to commission runs. Collecting ₱1,200 in cash
+             * from a partner the fleet also owes ₱8,800 is an ordinary thing to
+             * do and settles those runs only; the payout afterwards nets
+             * whatever is left.
              */
+            $netting = $entryIds === [] && $with === WalletEntryKind::Payout;
+
             $outstanding = WalletEntry::query()
                 ->where('trucker_id', $trucker->getKey())
-                ->where('kind', $settling->value)
+                ->landed()
                 ->whereNull('settled_by')
-                ->when($entryIds !== [], static fn ($query) => $query->whereIn('id', $entryIds))
+                ->when(
+                    $netting,
+                    static fn ($query) => $query->whereIn('kind', [
+                        WalletEntryKind::Earning->value,
+                        WalletEntryKind::Commission->value,
+                        WalletEntryKind::Adjustment->value,
+                    ]),
+                    static fn ($query) => $query
+                        ->where('kind', $settling->value)
+                        ->when($entryIds !== [], static fn ($q) => $q->whereIn('id', $entryIds)),
+                )
                 ->lockForUpdate()
                 ->get();
 
-            abort_if($outstanding->isEmpty(), 422, $entryIds === []
-                ? $nothingOwed
-                : 'Those runs have already been settled, or are not this trucker\'s.');
+            if ($netting) {
+                $net = (int) $outstanding->sum('amount_cents');
 
-            /**
-             * Every id asked for has to have been found.
-             *
-             * Silently settling four of the five runs somebody ticked, and
-             * reporting the smaller total as success, is the kind of partial
-             * write nobody notices until the money is short.
-             */
-            abort_if(
-                $entryIds !== [] && $outstanding->count() !== count(array_unique($entryIds)),
-                422,
-                'Some of those runs have already been settled. Reload and try again.',
-            );
+                abort_if($outstanding->isEmpty() || $net <= 0, 422, $nothingOwed);
 
-            $total = (int) $outstanding->sum(static fn (WalletEntry $entry): int => abs($entry->amount_cents));
+                $total = $net;
+            } else {
+                abort_if($outstanding->isEmpty(), 422, $entryIds === []
+                    ? $nothingOwed
+                    : 'Those runs have already been settled, or are not this trucker\'s.');
+
+                /**
+                 * Every id asked for has to have been found.
+                 *
+                 * Silently settling four of the five runs somebody ticked, and
+                 * reporting the smaller total as success, is the kind of
+                 * partial write nobody notices until the money is short.
+                 */
+                abort_if(
+                    $entryIds !== [] && $outstanding->count() !== count(array_unique($entryIds)),
+                    422,
+                    'Some of those runs have already been settled. Reload and try again.',
+                );
+
+                $total = (int) $outstanding->sum(static fn (WalletEntry $entry): int => abs($entry->amount_cents));
+
+                /**
+                 * A part payout still cannot send more than is owed.
+                 *
+                 * Naming runs worth ₱8,800 on an account whose commission and
+                 * adjustments bring it to ₱7,600 would overpay by ₱1,200. The
+                 * ceiling is the balance, less payouts already on their way.
+                 */
+                abort_if(
+                    $with === WalletEntryKind::Payout
+                        && $total > $this->balance($trucker) - $this->inFlightDirected($trucker, $with),
+                    422,
+                    'That is more than the account stands at once commissions, adjustments and payments already on the way are taken off. Pay everything instead, or pick fewer runs.',
+                );
+            }
 
             $settlement = $this->post(
                 trucker: $trucker,
@@ -501,6 +598,66 @@ class WalletService
      * A partner hauling in their own truck has no sheet and no such row, which
      * is why their payout is the only record that the money moved at all.
      */
+    /**
+     * What the fleet earned from partners' runs delivered in the window — its
+     * commission, and only that.
+     *
+     * The fleet's income on a partner's run is its cut, not the run's price:
+     * on a ₱5,000 run it keeps ₱600 and the other ₱4,400 is the partner's,
+     * passing through. Both ways a run can go count — the desk brokered it
+     * (the fleet collects and keeps its cut) or a customer picked the partner
+     * (the partner collects and owes the cut) — dated the day it was
+     * delivered, like a company truck's takings on the daily sheet.
+     *
+     * Only partners' runs: a run on a truck the fleet hired on a share is the
+     * fleet's own, and its whole price is already on the daily sheet.
+     *
+     * @return Collection<int, WalletEntry> one row per run, `trip` loaded
+     */
+    public function commissionsEarnedBetween(CarbonInterface $from, CarbonInterface $to): Collection
+    {
+        return WalletEntry::query()
+            ->with('trip:id,trucker_id,commission_cents,reference')
+            ->whereIn('kind', [WalletEntryKind::Earning->value, WalletEntryKind::Commission->value])
+            ->whereNotNull('trip_id')
+            ->whereHas('trip', static fn ($trip) => $trip->whereNotNull('trucker_id'))
+            ->whereDate('occurred_on', '>=', $from->toDateString())
+            ->whereDate('occurred_on', '<=', $to->toDateString())
+            ->get();
+    }
+
+    /** The same, as one figure. */
+    public function commissionEarnedBetween(CarbonInterface $from, CarbonInterface $to): int
+    {
+        return (int) $this->commissionsEarnedBetween($from, $to)
+            ->sum(static fn (WalletEntry $entry): int => (int) ($entry->trip?->commission_cents ?? 0));
+    }
+
+    /**
+     * Partners' money the fleet is holding for them as of a date.
+     *
+     * Positive wallet balances of owner-operators — their share of runs the
+     * fleet billed, not yet handed over. It is owed, but it was never the
+     * fleet's: counting only the commission as income means this must not be
+     * taken off the fleet's income a second time. Truck owners hired on a
+     * share are left out; their cut is a cost on the daily sheet, a real
+     * expense of the fleet's own run.
+     */
+    public function heldForPartnersAsOf(CarbonInterface $asOf): int
+    {
+        $owners = $this->ownersCostedOnDelivery();
+
+        return (int) WalletEntry::query()
+            ->landed()
+            ->whereDate('occurred_on', '<=', $asOf->toDateString())
+            ->when($owners !== [], static fn ($query) => $query->whereNotIn('trucker_id', $owners))
+            ->selectRaw('trucker_id, sum(amount_cents) as balance')
+            ->groupBy('trucker_id')
+            ->pluck('balance')
+            ->filter(static fn ($balance): bool => (int) $balance > 0)
+            ->sum();
+    }
+
     public function paidOutBetween(CarbonInterface $from, CarbonInterface $to): int
     {
         // A payout is stored negative, because it is money leaving. The reports
@@ -560,6 +717,55 @@ class WalletService
     public function balance(Trucker $trucker): int
     {
         return WalletEntry::balanceFor($trucker->getKey());
+    }
+
+    /**
+     * What is already on its way in one direction, as a magnitude.
+     *
+     * A run cleared by a payout that has not landed is **settled** — it is off
+     * the settle form, so nobody pays it twice — and **still in the balance**,
+     * because the money has not arrived and a bounced transfer paid nobody.
+     * Those are both true, and they are kept apart rather than one being
+     * folded into the other: the balance is what is owed, and this is how
+     * much of it is already in the air. What the office can still send is the
+     * difference, which is exactly what "pay all" sends and what the Payables
+     * page shows beside the balance as in flight.
+     */
+    private function inFlightDirected(Trucker $trucker, WalletEntryKind $with): int
+    {
+        return abs((int) WalletEntry::query()
+            ->where('trucker_id', $trucker->getKey())
+            ->where('kind', $with->value)
+            ->inFlight()
+            ->sum('amount_cents'));
+    }
+
+    /**
+     * What revenue-share truck owners were owed at a date — positive wallet
+     * balances, counting what had landed by then.
+     *
+     * The complement of `heldForPartnersAsOf()`, and the reason it is needed:
+     * this money is owed **and** already an expense, as `owner_share_cents` on
+     * the day the run was delivered. `PayablesService::alreadyCostedAsOf()`
+     * reads it so `actual_income` does not take the same share off twice.
+     */
+    public function heldForCostedOwnersAsOf(CarbonInterface $asOf): int
+    {
+        $owners = $this->ownersCostedOnDelivery();
+
+        if ($owners === []) {
+            return 0;
+        }
+
+        return (int) WalletEntry::query()
+            ->landed()
+            ->whereDate('occurred_on', '<=', $asOf->toDateString())
+            ->whereIn('trucker_id', $owners)
+            ->selectRaw('trucker_id, sum(amount_cents) as balance')
+            ->groupBy('trucker_id')
+            ->pluck('balance')
+            ->filter(static fn ($balance): bool => (int) $balance > 0)
+            ->sum();
     }
 
     /**
@@ -657,14 +863,15 @@ class WalletService
                 + (int) ($rows[WalletEntryKind::Commission->value]->entries ?? 0),
 
             /**
-             * What is still unpaid, run by run — the figures the settle form
-             * is driven by.
+             * What is still unpaid, run by run — the rows the settle form
+             * lists.
              *
-             * Not the same as the balance, and the difference is worth naming:
-             * the balance includes adjustments, which are corrections to the
-             * account rather than runs anybody can be paid for. A partner with
-             * ₱26,400 of unpaid runs and a −₱5,000 adjustment has a balance of
-             * ₱21,400 and ₱26,400 of payable work, and both figures are true.
+             * Not the same as the balance: the balance nets commissions and
+             * adjustments against the runs. A partner with ₱26,400 of unpaid
+             * runs and a −₱5,000 adjustment has ₱26,400 of unpaid work and a
+             * balance of ₱21,400 — and "pay all" sends the ₱21,400, clearing
+             * the runs and the adjustment together. `payable_cents` below is
+             * that figure.
              */
             'unpaid_earnings_cents' => (int) ($unsettled[WalletEntryKind::Earning->value]->total ?? 0),
             'unpaid_earnings_count' => (int) ($unsettled[WalletEntryKind::Earning->value]->entries ?? 0),
@@ -684,6 +891,10 @@ class WalletService
              * cleared, which is the thing this whole status exists to stop.
              */
             'in_flight_cents' => WalletEntry::inFlightFor($trucker->getKey()),
+
+            // What "pay all" would send now: the balance, less payouts
+            // already on their way. Zero when the partner owes the fleet.
+            'payable_cents' => max(0, $balance - $this->inFlightDirected($trucker, WalletEntryKind::Payout)),
         ];
     }
 

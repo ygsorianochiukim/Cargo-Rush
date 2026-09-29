@@ -170,20 +170,83 @@ class InvoiceRepository extends Repository
     }
 
     /**
+     * VAT charged to customers on invoices raised in the window.
+     *
+     * Never income: it is the government's, collected on its behalf. Carried
+     * beside the income so a reader sees what of the money coming in is not
+     * the fleet's to keep. Cancelled invoices charged nobody anything.
+     */
+    public function vatRaisedBetween(CarbonInterface $from, CarbonInterface $to): int
+    {
+        return (int) Invoice::query()
+            ->where('direction', InvoiceDirection::Receivable->value)
+            ->where('status', '!=', StatusValue::Cancelled->value)
+            ->whereDate('issued_at', '>=', $from->toDateString())
+            ->whereDate('issued_at', '<=', $to->toDateString())
+            ->sum('vat_cents');
+    }
+
+    /**
      * The part of what is outstanding that is already late, in centavos.
      *
      * A subset of `outstanding`, not a fourth bucket — which is why the
      * dashboard carries it alongside rather than deducting it. Chasing money
      * is a different job from expecting it.
+     *
+     * Read from the **due date**, not the stored `overdue` status. The status
+     * is only as fresh as the last run of the overdue sweep, so a day the
+     * scheduler missed showed nothing late at all; and a part-paid document
+     * keeps `partial` however late it is. Late means unsettled and due before
+     * today — the same line `BillingService::aging()` draws.
      */
     public function overdueTotal(InvoiceDirection $direction): int
     {
-        return Invoice::query()
-            ->withSum('allocations', 'amount_cents')
-            ->where('direction', $direction->value)
-            ->where('status', StatusValue::Overdue->value)
-            ->get()
+        return $this->outstandingInvoices($direction)
+            ->filter(static fn (Invoice $invoice): bool => $invoice->due_at !== null
+                && $invoice->due_at->lt(today()))
             ->sum(static fn (Invoice $invoice): int => $invoice->balanceCents());
+    }
+
+    /**
+     * How much of what was billed in a window has been collected — both
+     * halves on the same footing.
+     *
+     * The dashboard's collection rate used to divide everything ever collected
+     * by that plus everything outstanding: two all-time figures under a card
+     * that said "last 30 days". Here both come from the **same documents** —
+     * receivables raised in the window, cancelled ones aside — and both are
+     * measured **net of withholding**, because the part a customer keeps back
+     * for the BIR was never going to arrive and must not count as uncollected.
+     *
+     * Collected is what was paid against those documents within the window,
+     * capped at each one's due so an overpayment cannot lift the rate past
+     * the money that was actually owed.
+     *
+     * @return array{billed_cents: int, collected_cents: int}
+     */
+    public function collectionBetween(CarbonInterface $from, CarbonInterface $to): array
+    {
+        $invoices = Invoice::query()
+            ->where('direction', InvoiceDirection::Receivable->value)
+            ->where('status', '!=', StatusValue::Cancelled->value)
+            ->whereDate('issued_at', '>=', $from->toDateString())
+            ->whereDate('issued_at', '<=', $to->toDateString())
+            ->withSum(
+                ['allocations as collected_in_window' => static fn (Builder $query) => $query
+                    ->whereHas('payment', static fn (Builder $payment) => $payment
+                        ->whereDate('paid_on', '>=', $from->toDateString())
+                        ->whereDate('paid_on', '<=', $to->toDateString()))],
+                'amount_cents',
+            )
+            ->get();
+
+        return [
+            'billed_cents' => (int) $invoices->sum(static fn (Invoice $invoice): int => $invoice->dueCents()),
+            'collected_cents' => (int) $invoices->sum(static fn (Invoice $invoice): int => min(
+                $invoice->dueCents(),
+                (int) ($invoice->collected_in_window ?? 0),
+            )),
+        ];
     }
 
     /** How many documents sit in each status, for the dashboard counts. */

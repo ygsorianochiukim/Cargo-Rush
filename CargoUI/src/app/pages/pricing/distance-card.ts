@@ -7,55 +7,35 @@ import { Card } from '../../shared/card';
 import { Icon } from '../../shared/icon';
 
 /**
- * The firm's plain distance card — "450 km is ₱5,000".
+ * The old plain distance card — "450 km is ₱5,000" — kept only to be tidied up.
  *
- * These lines belong to no band and carry their own kilometres. They apply
- * wherever nothing more specific does, which is two situations rather than one:
+ * These lines belong to no band and carry their own kilometres. They used to
+ * price any run no band covered, and they no longer price anything: pricing is
+ * zone-only, and a run the bands miss is saved unpriced for the office to add a
+ * zone line or type a price. The API refuses a new line here, so this shows
+ * only when an install still has some — to see them, correct them, or remove
+ * them — and says plainly that they are not in use.
  *
- *   A firm with **no published table** prices entirely from here, and never
- *   opens the band editor below.
- *
- *   A firm **working from a table** prices from here past its last band. A
- *   subsidy table stopping at 600 km leaves a 700 km run with no band at all,
- *   and a "600 km and beyond" line is what keeps that run off the configured
- *   tariff — which would answer at an unrelated number, quietly, and that is
- *   the worst way to be wrong about money.
- *
- * ## The second column is the kind of truck
- *
- * A freezer run costs more than a dry one over the same distance, and that has
- * nothing to do with the distance. A line can name a truck category, and one
- * that names none prices every kind — which is what every line on a card drawn
- * before categories existed is, so nothing changed underneath anybody.
- *
- * ## Why the whole card saves at once
- *
- * Because that is how it is read and edited: somebody adds a line, corrects a
- * rate on another, deletes a third, and presses save once. The API reconciles
- * by id, so a line that has priced real trips keeps its identity rather than
- * being dropped and recreated — a bracket's id is on every trip it ever priced.
+ * The whole card still saves at once, reconciled by id: a line left out is
+ * deleted.
  */
 @Component({
   selector: 'app-distance-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Card, Icon],
   template: `
-    <app-card
-      heading="Distance card"
-      icon="tag"
-      hint="What a run costs by how far it goes. No place needed."
-    >
-      @if (rows(); as lines) {
-        @if (lines.length === 0) {
-          <div class="rounded-control border border-dashed border-cr-line px-4 py-6 text-center">
-            <app-icon name="tag" [size]="28" class="text-cr-ink-muted" />
-            <p class="mt-2 text-[14px] font-semibold">No distance card yet</p>
-            <p class="cr-meta mx-auto mt-1 max-w-md">
-              Add a line or two — "within 100 km", "100–500 km" — and every booking is priced from
-              them, wherever it is going. Runs no line covers fall back to the system tariff.
-            </p>
-          </div>
-        } @else {
+    @if (rows(); as lines) {
+      @if (lines.length > 0) {
+        <app-card
+          heading="Old distance card"
+          icon="tag"
+          hint="No longer prices trips"
+          class="mb-4 block"
+        >
+          <p class="mb-3 rounded-control bg-cr-warning-bg px-3 py-2 text-[12px] text-cr-warning">
+            Trips are priced from the zones below only. These lines are kept so you can see them;
+            add the same rates to a zone, then remove them here.
+          </p>
           <div class="overflow-x-auto">
             <table class="w-full border-collapse text-left text-[13px] whitespace-nowrap">
               <thead>
@@ -109,7 +89,12 @@ import { Icon } from '../../shared/icon';
                       >
                         <option value="">Any truck</option>
                         @for (category of categories(); track category.id) {
-                          <option [value]="category.id">{{ category.name }}</option>
+                          <option
+                            [value]="category.id"
+                            [selected]="category.id === line.truck_category_id"
+                          >
+                            {{ category.name }}
+                          </option>
                         }
                       </select>
                     </td>
@@ -158,41 +143,28 @@ import { Icon } from '../../shared/icon';
               </tbody>
             </table>
           </div>
-        }
 
-        @if (failure(); as message) {
-          <p role="alert" class="mt-3 text-[12px] font-medium text-cr-red">{{ message }}</p>
-        }
+          @if (failure(); as message) {
+            <p role="alert" class="mt-3 text-[12px] font-medium text-cr-red">{{ message }}</p>
+          }
 
-        @if (saved()) {
-          <p role="status" class="mt-3 text-[12px] font-medium text-cr-green">Card saved.</p>
-        }
+          @if (saved()) {
+            <p role="status" class="mt-3 text-[12px] font-medium text-cr-green">Card saved.</p>
+          }
 
-        <div class="mt-4 flex items-center gap-2">
-          <button
-            type="button"
-            class="flex h-9 items-center gap-1.5 rounded-control border border-cr-line px-3 text-[13px] font-semibold transition-colors hover:bg-cr-tint"
-            (click)="addLine()"
-          >
-            <app-icon name="plus" [size]="14" />
-            Add line
-          </button>
-
-          <button
-            type="button"
-            class="h-9 rounded-control bg-cr-blue px-4 text-[13px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
-            [disabled]="busy()"
-            (click)="save()"
-          >
-            {{ busy() ? 'Saving…' : 'Save card' }}
-          </button>
-
-          <p class="cr-meta ml-auto">A run no line covers falls back to the system tariff.</p>
-        </div>
-      } @else {
-        <div class="cr-skeleton h-24 w-full"></div>
+          <div class="mt-4 flex items-center gap-2">
+            <button
+              type="button"
+              class="h-9 rounded-control bg-cr-blue px-4 text-[13px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
+              [disabled]="busy()"
+              (click)="save()"
+            >
+              {{ busy() ? 'Saving…' : 'Save card' }}
+            </button>
+          </div>
+        </app-card>
       }
-    </app-card>
+    }
   `,
 })
 export class DistanceCard {
@@ -218,31 +190,6 @@ export class DistanceCard {
 
   constructor() {
     this.load();
-  }
-
-  protected addLine(): void {
-    const lines = this.rows() ?? [];
-    const last = lines[lines.length - 1];
-
-    this.rows.set([
-      ...lines,
-      {
-        id: null,
-        label: '',
-        // Starts where the last one ended, which is what somebody extending a
-        // card almost always means — and it keeps the card contiguous, which
-        // the API insists on.
-        min_km: last?.max_km ?? 0,
-        max_km: null,
-        truck_category_id: null,
-        base: 0,
-        perKm: 0,
-        perKg: 0,
-        minimum: 0,
-      },
-    ]);
-
-    this.saved.set(false);
   }
 
   protected removeLine(index: number): void {

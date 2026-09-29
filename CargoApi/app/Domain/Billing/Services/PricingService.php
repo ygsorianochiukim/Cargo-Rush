@@ -6,6 +6,7 @@ namespace App\Domain\Billing\Services;
 
 use App\Domain\Pricing\DTO\QuoteBreakdown;
 use App\Domain\Pricing\Models\PricingZone;
+use App\Domain\Pricing\Models\TruckCategory;
 use App\Domain\Pricing\Services\BracketResolver;
 use App\Domain\Pricing\Services\FuelIndex;
 use App\Domain\Pricing\Services\ZoneResolver;
@@ -40,29 +41,32 @@ use App\Domain\Trip\Models\Trip;
  * printed table says in its ₱85 column. Getting that to agree to the peso is
  * the entire point of the exercise.
  *
- * ## The destination no longer prices anything
+ * ## The zone card, and nothing else
  *
- * It used to: a booking's destination was matched as a substring against per-
- * town aliases, and that chose the card. It is gone, and the reason is in the
- * table rather than in a preference — A1 and A2 are both 1–40 km at different
- * money, so no destination string can tell them apart, and a matcher would
- * have answered A1 for every A2 run without anything in the data admitting it.
+ * There used to be two fallbacks under the card: the firm's plain distance
+ * card (lines with no zone), and below that a flat config tariff — base plus
+ * per-km plus per-kg. Both are gone, on the office's decision. A run the card
+ * does not cover — 712 km against a table that stops at 600, a class of truck
+ * the zone has no line for, an install with no zones yet — used to come out
+ * with a figure the principal never published and the customer never agreed
+ * to, and it looked exactly like a real price.
  *
- * With the fallbacks that keep the whole thing safe. A distance past the end of
- * the table falls to the firm's plain distance card if it has one, and to
- * `config/cargo.php` if it does not —
+ * Now it comes out **unpriced**: a null figure with a reason the desk can act
+ * on ("No zone covers 712 km for a 10-wheeler"). The run can still be booked
+ * — a customer's request is accepted and waits — but it cannot be confirmed,
+ * dispatched, handed to a trucker, delivered or billed until somebody adds the
+ * zone line or types a price (`pricing.manage`). `cargo:trips-quote` prices
+ * the waiting ones once the card covers them.
  *
- *     price = base + (per_km * km) + (per_kg * kg)   floored at `minimum`
- *
- * so a 700 km run against a card that stops at 600 produces a defensible
- * figure the trace marks as `tariff`, rather than a zero.
- *
- * This is the only place either arithmetic exists. The ledger and the invoice
+ * This is the only place the arithmetic exists. The ledger and the invoice
  * both read the price off the trip, so the sheet, the document and what the
  * customer was quoted cannot disagree.
  */
 class PricingService
 {
+    /** What every refused transition says about an unpriced run. */
+    public const UNPRICED = 'This run has no price yet — add a zone line on the Pricing card or enter a price.';
+
     public function __construct(
         private readonly ZoneResolver $zones,
         private readonly BracketResolver $brackets,
@@ -70,8 +74,8 @@ class PricingService
         private readonly RateBook $rates,
     ) {}
 
-    /** The quote for a trip, in centavos. */
-    public function quote(Trip $trip): int
+    /** The quote for a trip, in centavos — null where no zone line covers it. */
+    public function quote(Trip $trip): ?int
     {
         return $this->breakdown($trip)->cents;
     }
@@ -79,46 +83,15 @@ class PricingService
     /** The same figure with its reasoning attached, for storing or showing. */
     public function breakdown(Trip $trip): QuoteBreakdown
     {
-        $distanceM = (int) $trip->distance_total_m;
-
         return $this->breakdownFor(
-            distanceM: $distanceM,
+            distanceM: (int) $trip->distance_total_m,
             weightKg: (int) $trip->weight_kg,
             // What the booking asked for, not what the yard assigned. A trip is
             // quoted before it has a vehicle, and a customer who asked for a
             // brand-new unit is owed that line whatever rolls out.
             truckCategoryId: $trip->truck_category_id,
-            zoneId: $this->bandStillOn($trip->pricing_zone_id, $this->kilometres($distanceM)),
+            zoneId: $trip->pricing_zone_id,
         );
-    }
-
-    /**
-     * The trip's band, if the trip is still in it.
-     *
-     * `trips.pricing_zone_id` does double duty: it is where the desk records a
-     * choice between two bands over the same kilometres, and it is where the
-     * trace of what actually priced the trip is written. One column for both
-     * on purpose — the band somebody picked and the band that priced the run
-     * are one fact, and two columns would be two answers to "which band is
-     * this?" with nothing to say which the invoice used.
-     *
-     * The cost of that is staleness, and this is where it is paid. A trip
-     * booked without a distance is quoted in the lowest band and the trace
-     * records it; a dispatcher then pins the route at 200 km, and honouring
-     * the stored band would re-quote a 200 km haul at the 1–40 km rate for
-     * ever. So a stored band applies only while the distance is still inside
-     * it, and a run that has moved out of its band is re-banded from the
-     * distance.
-     *
-     * A desk that meant A2 and then corrected the distance out of A2's range
-     * has to pick again. That is the honest outcome: the choice it made was
-     * between two bands that no longer apply.
-     */
-    private function bandStillOn(?string $zoneId, int $km): ?string
-    {
-        $zone = $this->zones->byId($zoneId);
-
-        return $zone !== null && $zone->covers($km) ? $zone->id : null;
     }
 
     /**
@@ -133,6 +106,10 @@ class PricingService
      * alone. On a subsidy card that is the honest answer rather than a small
      * one: the shortest band is a real published rate, and the office correcting
      * the distance re-quotes it.
+     *
+     * `$zoneId` is the desk's pick between two bands over one distance, and it
+     * is honoured only while that band still covers the run — see
+     * `ZoneResolver::resolve()`.
      */
     public function breakdownFor(
         int $distanceM,
@@ -143,13 +120,16 @@ class PricingService
         $km = $this->kilometres($distanceM);
         $weightKg = max(0, $weightKg);
 
-        /**
-         * The band, from the distance — or the one the desk picked.
-         *
-         * Null where no band covers the run, which is a card that stops short
-         * rather than an error. The zoneless distance card gets the next go.
-         */
         $zone = $this->zones->resolve($zoneId, $km);
+
+        if ($zone === null) {
+            return QuoteBreakdown::unzoned(
+                km: $km,
+                weightKg: $weightKg,
+                currency: $this->currency(),
+                reason: $this->noZoneReason($km, $truckCategoryId),
+            );
+        }
 
         $bracket = $this->brackets->pick(
             $this->brackets->candidatesFor($zone),
@@ -157,18 +137,21 @@ class PricingService
             $truckCategoryId,
         );
 
-        // No line covers this run — a table that ends at 600 km asked about
-        // 700, or no card at all. Falling back to the tariff is the honest
-        // answer: it is a real price, it is not the card's, and the trace
-        // columns say so.
+        // The band was found; the line was the thing missing. Named on the
+        // quote so the office can see which band to add a line to.
         if ($bracket === null) {
-            return $this->fromTariff($km, $weightKg, $zone);
+            return QuoteBreakdown::unzoned(
+                km: $km,
+                weightKg: $weightKg,
+                currency: $this->currency(),
+                reason: $this->noLineReason($zone, $truckCategoryId),
+                zoneId: $zone->id,
+                zoneName: $zone->name,
+                zoneCode: $zone->code,
+                zoneBand: $zone->band(),
+                zoneAlternatives: $this->alternatives($km, $zone),
+            );
         }
-
-        // The zone that actually priced it, which is not necessarily the one
-        // the distance landed in: a run priced off the plain distance card was
-        // not priced by band A1, and the trace must not claim it was.
-        $zone = $bracket->zone_id === null ? null : ($bracket->zone ?? $zone);
 
         $card = $bracket->priceFor($km, $weightKg);
         $fuel = $this->fuel->surchargeFor($bracket, $card, $zone);
@@ -180,11 +163,11 @@ class PricingService
             weightKg: $weightKg,
             fuelAdjustmentBp: $fuel['bp'],
             currency: $this->currency(),
-            source: $zone === null ? 'card' : 'zone',
-            zoneId: $zone?->id,
-            zoneName: $zone?->name,
-            zoneCode: $zone?->code,
-            zoneBand: $zone?->band(),
+            source: 'zone',
+            zoneId: $zone->id,
+            zoneName: $zone->name,
+            zoneCode: $zone->code,
+            zoneBand: $zone->band(),
             bracketId: $bracket->id,
             bracketLabel: $bracket->label,
             bracketRange: $bracket->range(),
@@ -199,44 +182,50 @@ class PricingService
     }
 
     /**
-     * The firm's own tariff, unchanged from before the rate card existed.
+     * Refuse to move an unpriced run on.
      *
-     * The four figures come off the company where it has set them and off
-     * `config/cargo.php` where it has not — `RateBook` resolves that, and it
-     * used to be a bare `config()` call here, which is why a settings screen
-     * could not move it.
+     * Called by every transition that commits the firm to the work or to the
+     * money — confirming, dispatching, handing to a trucker, delivering,
+     * billing. Booking is not one of them: a customer's request is accepted
+     * unpriced and waits for the office, because refusing it would lose the
+     * work rather than price it.
      *
-     * The fuel adjustment is deliberately *not* applied here. The config rates
-     * are a fallback nobody drew at a particular pump price, so there is no
-     * baseline to be stale against — scaling them would be arithmetic on a
-     * number that means nothing.
+     * Static because it reads only the trip, and the services that need it
+     * (the trucker board, the desk's assign) have no other reason to hold a
+     * pricing service.
      */
-    private function fromTariff(int $km, int $weightKg, ?PricingZone $zone): QuoteBreakdown
+    public static function mustBePriced(Trip $trip): void
     {
-        $tariff = $this->rates->tariff();
+        abort_if($trip->price_cents === null, 422, self::UNPRICED);
+    }
 
-        $price = $tariff['base_cents']
-            + $km * $tariff['per_km_cents']
-            + $weightKg * $tariff['per_kg_cents'];
+    /** "No zone covers 712 km for a Brand New Truck." */
+    private function noZoneReason(int $km, ?string $truckCategoryId): string
+    {
+        if (! PricingZone::query()->active()->exists()) {
+            return 'There are no zones on the Pricing card yet, so nothing prices this run.';
+        }
 
-        $price = max($price, $tariff['minimum_cents']);
+        return "No zone covers {$km} km".$this->forClass($truckCategoryId).'.';
+    }
 
-        return new QuoteBreakdown(
-            cents: $price,
-            cardCents: $price,
-            km: $km,
-            weightKg: $weightKg,
-            fuelAdjustmentBp: 0,
-            currency: $this->currency(),
-            source: 'tariff',
-            // Named even though it did not price this run, so the office can
-            // see the band was found and the *line* was the thing missing.
-            zoneId: $zone?->id,
-            zoneName: $zone?->name,
-            zoneCode: $zone?->code,
-            zoneBand: $zone?->band(),
-            zoneAlternatives: $this->alternatives($km, $zone),
-        );
+    /** "Zone B (41 – 80 km) has no line for a Brand New Truck." */
+    private function noLineReason(PricingZone $zone, ?string $truckCategoryId): string
+    {
+        $line = $truckCategoryId === null
+            ? ' has no rate line'
+            : ' has no line'.$this->forClass($truckCategoryId);
+
+        return "Zone {$zone->code} ({$zone->band()}){$line}.";
+    }
+
+    private function forClass(?string $truckCategoryId): string
+    {
+        $name = $truckCategoryId === null
+            ? null
+            : TruckCategory::query()->whereKey($truckCategoryId)->value('name');
+
+        return $name === null ? '' : " for a {$name}";
     }
 
     /**
@@ -275,12 +264,6 @@ class PricingService
         return (int) ceil(max(0, $distanceM) / 1000);
     }
 
-    /** The same calculation as a bare figure. Kept for callers with no place. */
-    public function quoteFor(int $distanceM, int $weightKg): int
-    {
-        return $this->breakdownFor($distanceM, $weightKg)->cents;
-    }
-
     /** The currency every quote is in. One install, one currency. */
     public function currency(): string
     {
@@ -296,12 +279,15 @@ class PricingService
      * with a figure on it, and moving the trip's price afterwards would leave
      * the two disagreeing with nothing to say which is right.
      *
-     * Also no when somebody has entered a price by hand. A negotiated rate is
-     * a decision, and re-deriving it on the next save would silently overrule
-     * whoever made it.
+     * Also no once somebody has priced it by hand — on this save or any
+     * earlier one. A negotiated rate is a decision, and re-deriving it on the
+     * next save would silently overrule whoever made it. `pricing_source`
+     * remembers it; sending the price as null hands the run back to the card.
      */
     public function shouldQuote(Trip $trip, bool $priceWasGiven): bool
     {
-        return ! $priceWasGiven && ! $trip->isBilled();
+        return ! $priceWasGiven
+            && ! $trip->isBilled()
+            && $trip->pricing_source !== 'manual';
     }
 }

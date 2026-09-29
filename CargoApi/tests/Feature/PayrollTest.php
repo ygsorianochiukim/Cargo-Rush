@@ -119,14 +119,14 @@ describe('what comes off a payslip', function (): void {
 
         // Half a month of PHP 30,000.
         expect($line['basic_cents'])->toBe(1_500_000)
-            // 4.5% of the monthly basic, halved onto this run.
-            ->and($line['sss_cents'])->toBe(67_500)
+            // 5% of the monthly basic (the 2025 SSS rate), halved onto this run.
+            ->and($line['sss_cents'])->toBe(75_000)
             // 2.5%, halved.
             ->and($line['philhealth_cents'])->toBe(37_500)
             // The PHP 200 cap, halved — which is what most payslips show.
             ->and($line['pagibig_cents'])->toBe(10_000)
             // 15% of the taxable pay above PHP 10,417 for the period.
-            ->and($line['withholding_tax_cents'])->toBe(51_495);
+            ->and($line['withholding_tax_cents'])->toBe(50_370);
     });
 
     it('taxes the pay left after the contributions, not the gross', function (): void {
@@ -150,8 +150,8 @@ describe('what comes off a payslip', function (): void {
         $line = $run['lines'][0];
 
         expect($line['gross_cents'])->toBe(1_500_000)
-            ->and($line['deductions_cents'])->toBe(166_495)
-            ->and($line['net_cents'])->toBe(1_333_505)
+            ->and($line['deductions_cents'])->toBe(172_870)
+            ->and($line['net_cents'])->toBe(1_327_130)
             // And the run is the sum of its payslips, nothing else.
             ->and($run['gross_cents'])->toBe($line['gross_cents'])
             ->and($run['net_cents'])->toBe($line['net_cents']);
@@ -276,11 +276,11 @@ describe('which cutoff the contributions come off', function (): void {
 
         expect($first['deduct_on'])->toBe('split')
             ->and($first['carries_contributions'])->toBeTrue()
-            ->and($first['lines'][0]['sss_cents'])->toBe(67_500)
+            ->and($first['lines'][0]['sss_cents'])->toBe(75_000)
             ->and($first['lines'][0]['philhealth_cents'])->toBe(37_500)
             ->and($first['lines'][0]['pagibig_cents'])->toBe(10_000);
 
-        expect(($this->secondCutoff)()['lines'][0]['sss_cents'])->toBe(67_500);
+        expect(($this->secondCutoff)()['lines'][0]['sss_cents'])->toBe(75_000);
     });
 
     it('takes the whole month on the first cutoff when the firm says so', function (): void {
@@ -291,7 +291,7 @@ describe('which cutoff the contributions come off', function (): void {
 
         // The whole month of contributions on the first payslip…
         expect($first['carries_contributions'])->toBeTrue()
-            ->and($first['lines'][0]['sss_cents'])->toBe(135_000)
+            ->and($first['lines'][0]['sss_cents'])->toBe(150_000)
             ->and($first['lines'][0]['philhealth_cents'])->toBe(75_000)
             ->and($first['lines'][0]['pagibig_cents'])->toBe(20_000);
 
@@ -306,17 +306,19 @@ describe('which cutoff the contributions come off', function (): void {
         ($this->setSchedule)('second');
 
         expect(($this->firstCutoff)()['lines'][0]['sss_cents'])->toBe(0)
-            ->and(($this->secondCutoff)()['lines'][0]['sss_cents'])->toBe(135_000);
+            ->and(($this->secondCutoff)()['lines'][0]['sss_cents'])->toBe(150_000);
     });
 
     it('remits the same month whichever cutoff carries it', function (): void {
-        $monthly = 230_000;
+        $monthly = 245_000;
 
         foreach (['split', 'first', 'second'] as $schedule) {
             ($this->setSchedule)($schedule);
 
-            $first = ($this->firstCutoff)()['statutory'];
-            $second = ($this->secondCutoff)()['statutory'];
+            $firstRun = ($this->firstCutoff)();
+            $secondRun = ($this->secondCutoff)();
+            $first = $firstRun['statutory'];
+            $second = $secondRun['statutory'];
 
             $taken = $first['sss'] + $first['philhealth'] + $first['pagibig']
                 + $second['sss'] + $second['philhealth'] + $second['pagibig'];
@@ -324,6 +326,11 @@ describe('which cutoff the contributions come off', function (): void {
             // The agencies get their month either way. The setting decides
             // which payslip is lighter, not what is owed.
             expect($taken)->toBe($monthly);
+
+            // One run per period, so the drafts go before the next schedule
+            // opens the same two again.
+            $this->actingAs($this->admin)->deleteJson("/api/v1/payroll/{$firstRun['id']}")->assertNoContent();
+            $this->actingAs($this->admin)->deleteJson("/api/v1/payroll/{$secondRun['id']}")->assertNoContent();
         }
     });
 
@@ -333,7 +340,7 @@ describe('which cutoff the contributions come off', function (): void {
         // Taxable pay is the gross less the contributions actually taken on
         // *this* cutoff, so the loaded payslip is taxed less and the empty one
         // more.
-        expect(($this->firstCutoff)()['lines'][0]['withholding_tax_cents'])->toBe(34_245)
+        expect(($this->firstCutoff)()['lines'][0]['withholding_tax_cents'])->toBe(31_995)
             ->and(($this->secondCutoff)()['lines'][0]['withholding_tax_cents'])->toBe(68_745);
     });
 
@@ -390,7 +397,7 @@ describe('what triggers withholding tax', function (): void {
         $lines = collect(($this->open)()->assertCreated()->json('data.lines'))->keyBy('name');
 
         expect($lines['Elena Bautista']['withholding_tax_cents'])->toBe(0)
-            ->and($lines['Rosa Zamora']['withholding_tax_cents'])->toBe(16_620);
+            ->and($lines['Rosa Zamora']['withholding_tax_cents'])->toBe(15_683);
     });
 
     /**
@@ -403,19 +410,26 @@ describe('what triggers withholding tax', function (): void {
 
         ($this->hire)(['amount_cents' => 2_000_000]);
 
-        $exempt = ($this->open)(['period_start' => '2026-09-01', 'period_end' => '2026-09-30'])
-            ->assertCreated()->json('data.lines.0');
+        $exemptRun = ($this->open)(['period_start' => '2026-09-01', 'period_end' => '2026-09-30'])
+            ->assertCreated()->json('data');
+        $exempt = $exemptRun['lines'][0];
 
         expect($exempt['withholding_tax_cents'])->toBe(0);
 
-        // Turn the exemption off and the table alone charges this salary a
-        // tax it does not owe — which is the failure the rule exists to stop.
+        // One run per period — the first draft goes before the second opens.
+        $this->actingAs($this->admin)->deleteJson("/api/v1/payroll/{$exemptRun['id']}")->assertNoContent();
+
+        // Turn the exemption off and the answer is still nothing — because a
+        // monthly payroll now reads the BIR's *monthly* table, whose zero
+        // bracket runs to ₱20,833. This used to assert a tax here: the only
+        // table was the semi-monthly one, which read a month's pay as a
+        // fortnight's.
         config(['cargo.payroll.withholding.exempt_monthly_at_or_below_cents' => 0]);
 
         $taxed = ($this->open)(['period_start' => '2026-09-01', 'period_end' => '2026-09-30'])
             ->assertCreated()->json('data.lines.0');
 
-        expect($taxed['withholding_tax_cents'])->toBeGreaterThan(0);
+        expect($taxed['withholding_tax_cents'])->toBe(0);
     });
 
     it('answers the exemption question on its own', function (): void {
@@ -440,11 +454,11 @@ describe('correcting a payslip', function (): void {
             ])->assertOk()->json('data.lines.0');
 
         expect($updated['gross_cents'])->toBe(1_700_000)
-            ->and($updated['deductions_cents'])->toBe(216_495)
-            ->and($updated['net_cents'])->toBe(1_483_505)
+            ->and($updated['deductions_cents'])->toBe(222_870)
+            ->and($updated['net_cents'])->toBe(1_477_130)
             // Deliberately unmoved: an allowance is a one-off, and the table
             // would tax it as if it were the person's regular pay.
-            ->and($updated['withholding_tax_cents'])->toBe(51_495);
+            ->and($updated['withholding_tax_cents'])->toBe(50_370);
     });
 
     it('will not take a payslip that is not on this run', function (): void {
@@ -560,16 +574,18 @@ describe('paying puts it in the books', function (): void {
         expect($entry['status'])->toBe(JournalEntry::POSTED)
             ->and($entry['category'])->toBe('payroll');
 
-        $byCode = collect($entry['lines'])->keyBy('account_code');
+        $lines = collect($entry['lines']);
+        $byCode = $lines->keyBy('account_code');
 
-        // The whole cost of employing people, on one debit.
-        expect($byCode['5200']['debit_cents'])->toBe(1_500_000)
-            // What each agency is now owed, kept apart because each is remitted
-            // on its own form.
-            ->and($byCode['2200']['credit_cents'])->toBe(115_000)
-            ->and($byCode['2160']['credit_cents'])->toBe(51_495)
+        // The wages, and the firm's own ₱1,990 of contributions on top of
+        // them — both a cost of employing the office.
+        expect($lines->where('account_code', '5200')->pluck('debit_cents')->all())->toBe([1_500_000, 199_000])
+            // What each agency is now owed: the ₱1,225 withheld and the
+            // employer's ₱1,990, on two lines.
+            ->and($lines->where('account_code', '2200')->pluck('credit_cents')->all())->toBe([122_500, 199_000])
+            ->and($byCode['2160']['credit_cents'])->toBe(50_370)
             // And what the staff were actually handed.
-            ->and($byCode['1020']['credit_cents'])->toBe(1_333_505);
+            ->and($byCode['1020']['credit_cents'])->toBe(1_327_130);
     });
 
     it('leaves the trial balance balanced', function (): void {
@@ -583,7 +599,8 @@ describe('paying puts it in the books', function (): void {
             ->and($trial['difference_cents'])->toBe(0)
             // And it is balanced because there is something on it, not because
             // the books are empty.
-            ->and($trial['debit_total_cents'])->toBe(1_500_000);
+            // The wages and the employer's contributions on top.
+            ->and($trial['debit_total_cents'])->toBe(1_500_000 + 199_000);
     });
 
     it('sends a cash advance against wages payable rather than out of cash', function (): void {
@@ -612,7 +629,7 @@ describe('paying puts it in the books', function (): void {
 
         expect($lines['2100']['credit_cents'])->toBe(40_000)
             // Cash goes down by the net only — the advance never left.
-            ->and($lines['1020']['credit_cents'])->toBe(1_293_505);
+            ->and($lines['1020']['credit_cents'])->toBe(1_287_130);
     });
 
     it('cannot be paid twice', function (): void {

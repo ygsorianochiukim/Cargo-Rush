@@ -41,7 +41,8 @@ const WIDTHS: Record<ModalSize, number> = { sm: 420, md: 560, lg: 820 };
         <div
           class="absolute inset-0 bg-cr-shell/50 motion-safe:animate-[cr-fade_.15s_ease-out]"
           (click)="dismiss()"
-          aria-hidden="true"></div>
+          aria-hidden="true"
+        ></div>
 
         <div
           #panel
@@ -50,12 +51,14 @@ const WIDTHS: Record<ModalSize, number> = { sm: 420, md: 560, lg: 820 };
           [attr.aria-labelledby]="titleId"
           [attr.aria-describedby]="subtitle() ? subtitleId : null"
           class="relative flex max-h-full w-full flex-col overflow-hidden rounded-panel bg-cr-surface shadow-panel motion-safe:animate-[cr-rise_.18s_ease-out]"
-          [style.max-width.px]="width()">
+          [style.max-width.px]="width()"
+        >
           <header class="flex flex-none items-start gap-3 border-b border-cr-line px-5 py-4">
             @if (icon()) {
               <span
                 class="flex h-9 w-9 flex-none items-center justify-center rounded-control"
-                [class]="danger() ? 'bg-cr-red-bg text-cr-red' : 'bg-cr-tint text-cr-blue'">
+                [class]="danger() ? 'bg-cr-red-bg text-cr-red' : 'bg-cr-tint text-cr-blue'"
+              >
                 <app-icon [name]="icon()!" [size]="18" />
               </span>
             }
@@ -71,7 +74,8 @@ const WIDTHS: Record<ModalSize, number> = { sm: 420, md: 560, lg: 820 };
               type="button"
               class="-mr-1 flex h-8 w-8 flex-none items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-ink"
               (click)="dismiss()"
-              aria-label="Close dialog">
+              aria-label="Close dialog"
+            >
               <app-icon name="close" [size]="18" />
             </button>
           </header>
@@ -80,8 +84,10 @@ const WIDTHS: Record<ModalSize, number> = { sm: 420, md: 560, lg: 820 };
             <ng-content />
           </div>
 
+          <!-- Hidden when a dialog puts nothing in it, rather than an empty band. -->
           <footer
-            class="flex flex-none items-center justify-end gap-2 border-t border-cr-line bg-cr-tint/40 px-5 py-3">
+            class="flex flex-none items-center justify-end gap-2 border-t border-cr-line bg-cr-tint/40 px-5 py-3 [&:not(:has(*))]:hidden"
+          >
             <ng-content select="[modal-footer]" />
           </footer>
         </div>

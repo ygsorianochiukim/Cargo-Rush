@@ -12,6 +12,8 @@ use Database\Seeders\Demo\FleetSeeder;
 use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * An owner-operator signing themselves up, and the waiting room they land in.
@@ -39,17 +41,15 @@ beforeEach(function (): void {
         'password_confirmation' => 'ten-wheeler-2026',
         // No fleet. A trucker registers with the platform's own, wherever in
         // the country they are — see `TruckerRegistrationService::carrier()`.
+        'business_name' => 'Aquino Trucking Services',
         'licence_no' => 'N01-23-456789',
-        'plate' => 'ABC-1234',
-        'model' => 'Isuzu Forward',
-        'capacity_kg' => 12_000,
         'device_name' => 'pixel-8',
         ...$overrides,
     ]);
 });
 
 describe('signing up', function (): void {
-    it('opens a login, a partner record and a truck in one act', function (): void {
+    it('opens a login and a partner record, and no truck', function (): void {
         $response = ($this->signUp)()->assertCreated();
 
         $user = User::where('email', 'boyet@example.ph')->firstOrFail();
@@ -63,11 +63,11 @@ describe('signing up', function (): void {
 
         expect($trucker)->not->toBeNull()
             ->and($trucker->phone)->toBe('0917 555 0444')
+            ->and($trucker->business_name)->toBe('Aquino Trucking Services')
             ->and($trucker->licence_no)->toBe('N01-23-456789');
 
-        // The truck is not a second step. A partner with no unit would sit on
-        // the board accepting work with nothing to haul it in.
-        expect(TruckerVehicle::query()->where('trucker_id', $trucker->getKey())->count())->toBe(1);
+        // Trucks come after approval, from the app — not at sign-up.
+        expect(TruckerVehicle::query()->where('trucker_id', $trucker->getKey())->count())->toBe(0);
 
         // Answers signed in, in the shape a login does, so the app carries on
         // through one code path rather than two.
@@ -98,7 +98,7 @@ describe('signing up', function (): void {
     it('refuses a second account on the same address', function (): void {
         ($this->signUp)()->assertCreated();
 
-        ($this->signUp)(['licence_no' => 'N02-99-999999', 'plate' => 'XYZ-9999'])
+        ($this->signUp)(['licence_no' => 'N02-99-999999'])
             ->assertStatus(422)
             ->assertJsonValidationErrors('email');
     });
@@ -109,7 +109,7 @@ describe('signing up', function (): void {
         // A licence is one person, and one person is one partner per haulier.
         // The unique index guarantees it; this asserts somebody registering for
         // the second time is told why rather than handed a 500.
-        ($this->signUp)(['email' => 'boyet2@example.ph', 'plate' => 'XYZ-9999'])
+        ($this->signUp)(['email' => 'boyet2@example.ph'])
             ->assertStatus(422);
 
         expect(Trucker::query()->where('licence_no', 'N01-23-456789')->count())->toBe(1);
@@ -165,14 +165,18 @@ describe('signing up', function (): void {
         ($this->signUp)()->assertStatus(422);
     });
 
-    it('asks for the licence and the truck, because the fleet relies on both', function (): void {
-        ($this->signUp)([
-            'licence_no' => '',
-            'plate' => '',
-            'capacity_kg' => null,
-        ])
+    it('asks for the name of the trucking service', function (): void {
+        ($this->signUp)(['business_name' => ''])
             ->assertStatus(422)
-            ->assertJsonValidationErrors(['licence_no', 'plate', 'capacity_kg']);
+            ->assertJsonValidationErrors('business_name');
+    });
+
+    it('takes an owner with no licence, and two of them do not clash', function (): void {
+        // The owner may never drive; each of their drivers carries a licence.
+        ($this->signUp)(['licence_no' => ''])->assertCreated();
+        ($this->signUp)(['licence_no' => null, 'email' => 'second@example.ph'])->assertCreated();
+
+        expect(Trucker::query()->whereNull('licence_no')->count())->toBe(2);
     });
 
     it('refuses a licence that has already expired', function (): void {
@@ -255,6 +259,25 @@ describe('the desk deciding', function (): void {
         // Approved but not yet online — the two flags are separate, and the
         // office's decision does not flip the partner's own switch.
         expect($this->trucker->refresh()->canTakeWork())->toBeFalse();
+
+        // Approved, they can now put a truck on the books — which sign-up no
+        // longer asks for — and with it and the switch on, take work.
+        Storage::fake(config('cargo.trucks.disk'));
+
+        $truckId = $this->actingAs($this->truckerUser)
+            ->post('/api/v1/partner/vehicles', [
+                'plate' => 'ABC-1234', 'model' => 'Isuzu Forward', 'capacity_kg' => 12_000,
+                ...collect(['front', 'left', 'right', 'back', 'plate'])
+                    ->mapWithKeys(fn (string $slot): array => ["photo_{$slot}" => UploadedFile::fake()->image("{$slot}.jpg")])
+                    ->all(),
+            ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->json('data.id');
+
+        // And once Cargo Rush has checked the truck from its photographs.
+        $this->actingAs($this->admin)
+            ->postJson("/api/v1/truckers/{$this->trucker->id}/vehicles/{$truckId}/verify")
+            ->assertOk();
 
         $this->actingAs($this->truckerUser)
             ->postJson('/api/v1/partner/availability', ['is_online' => true])

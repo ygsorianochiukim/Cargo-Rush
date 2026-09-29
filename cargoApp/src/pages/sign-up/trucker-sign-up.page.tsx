@@ -19,12 +19,12 @@ import { useSession } from '@/services/identity/session';
 import { apiBaseUrl, ApiRequestError } from '@/services/shared/api.service';
 
 /**
- * Sign up as a trucker — somebody with their own truck, looking for loads.
+ * Sign up as a trucker — a trucking service, looking for loads.
  *
- * The third way into this app and the one that asks for the most, which is
- * proportionate rather than unfriendly: a bad customer sign-up wastes an
- * afternoon, and a bad trucker sign-up is a stranger driving away with
- * somebody's cargo.
+ * Who they are, the name of their trucking service, and a login. Nothing about
+ * trucks or drivers: those are added from the More tab once the fleet has
+ * approved the account, because a registration nobody has vetted has no
+ * business putting units or people on the books.
  *
  * ## Why it does not ask which fleet
  *
@@ -57,10 +57,8 @@ export function TruckerSignUpPage({ onBack }: { onBack: () => void }) {
   const [secret, setSecret] = useState('');
   const [confirmation, setConfirmation] = useState('');
 
+  const [business, setBusiness] = useState('');
   const [licence, setLicence] = useState('');
-  const [plate, setPlate] = useState('');
-  const [model, setModel] = useState('');
-  const [capacity, setCapacity] = useState('');
 
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -77,14 +75,8 @@ export function TruckerSignUpPage({ onBack }: { onBack: () => void }) {
       return;
     }
 
-    if (!licence.trim()) {
-      setFailure('Your licence number is what the fleet checks before approving you.');
-
-      return;
-    }
-
-    if (!plate.trim() || !model.trim() || !Number(capacity)) {
-      setFailure('Add your truck — the plate, the model and what it can carry.');
+    if (!business.trim()) {
+      setFailure('Enter the name of your trucking service.');
 
       return;
     }
@@ -115,10 +107,10 @@ export function TruckerSignUpPage({ onBack }: { onBack: () => void }) {
         // No fleet. A trucker registers with Cargo Rush wherever in the country
         // they are, and the API resolves it — see the API's registration
         // service for why this is not a choice the form should offer.
-        licence_no: licence.trim(),
-        plate: plate.trim().toUpperCase(),
-        model: model.trim(),
-        capacity_kg: Number(capacity),
+        business_name: business.trim(),
+        // Optional: the owner may never drive. Each driver they add later
+        // carries a licence of their own.
+        licence_no: licence.trim() || undefined,
       });
       // No `setBusy(false)` on success: the app replaces this screen, and
       // re-enabling a button on an unmounting form is a warning for nothing.
@@ -149,10 +141,10 @@ export function TruckerSignUpPage({ onBack }: { onBack: () => void }) {
         </Pressable>
 
         <View style={styles.card}>
-          <Text style={styles.heading}>Register your truck</Text>
+          <Text style={styles.heading}>Register your trucking service</Text>
           <Text style={styles.sub}>
-            Take loads from a fleet near you, or find your own through the app. You keep what
-            you earn less the fleet&apos;s share, and your wallet shows every peso of it.
+            Take loads from the fleet, or find your own through the app. Once you are approved,
+            add your trucks and your drivers from the app.
           </Text>
 
           {failure ? (
@@ -182,46 +174,25 @@ export function TruckerSignUpPage({ onBack }: { onBack: () => void }) {
           />
 
           <Field
-            label="LICENCE NUMBER"
+            label="LICENCE NUMBER (OPTIONAL)"
             value={licence}
             onChange={setLicence}
             placeholder="N01-23-456789"
             autoCapitalize="characters"
-            hint="What the fleet checks before approving you."
+            hint="Only if you drive yourself. Your drivers add their own later."
             error={fieldErrors['licence_no']?.[0]}
           />
 
-          <Text style={styles.section}>YOUR TRUCK</Text>
-          <Text style={styles.sectionHint}>
-            What it can carry decides which jobs you are offered, so get the weight right. You
-            can add more trucks later.
-          </Text>
+          <Text style={styles.section}>YOUR TRUCKING SERVICE</Text>
 
           <Field
-            label="PLATE"
-            value={plate}
-            onChange={setPlate}
-            placeholder="ABC-1234"
-            autoCapitalize="characters"
-            error={fieldErrors['plate']?.[0]}
-          />
-
-          <Field
-            label="MAKE AND MODEL"
-            value={model}
-            onChange={setModel}
-            placeholder="e.g. Isuzu Forward"
-            error={fieldErrors['model']?.[0]}
-          />
-
-          <Field
-            label="CAPACITY (KG)"
-            value={capacity}
-            onChange={setCapacity}
-            placeholder="12000"
-            keyboard="number-pad"
-            hint="The working load, in kilograms."
-            error={fieldErrors['capacity_kg']?.[0]}
+            label="BUSINESS NAME"
+            value={business}
+            onChange={setBusiness}
+            placeholder="e.g. Aquino Trucking Services"
+            autoCapitalize="words"
+            hint="What the fleet and your customers will see. Your drivers are listed under it."
+            error={fieldErrors['business_name']?.[0]}
           />
 
           <Text style={styles.section}>YOUR LOGIN</Text>
@@ -280,8 +251,8 @@ export function TruckerSignUpPage({ onBack }: { onBack: () => void }) {
             nothing on it, is how an app gets deleted.
           */}
           <Text style={styles.footnote}>
-            The fleet checks your licence and your truck before you can take work. You will get
-            a notification as soon as you are approved — usually the same day.
+            The fleet checks your details before you can take work. You will get a notification
+            as soon as you are approved — usually the same day. Then add your trucks and drivers.
           </Text>
         </View>
       </ScrollView>
@@ -353,7 +324,7 @@ function messageFor(error: unknown): string {
     }
 
     if (error.status === 404) {
-      return 'That fleet could not be found. Pick another one from the list.';
+      return 'Registration is not open on this server yet. Contact the office.';
     }
 
     if (error.status === 429) {

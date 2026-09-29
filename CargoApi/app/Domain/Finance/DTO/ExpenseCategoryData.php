@@ -25,6 +25,8 @@ final class ExpenseCategoryData extends Data
         public readonly ?string $icon = null,
         public readonly ?int $position = null,
         public readonly ?StatusValue $status = null,
+        /** Where its lines post in the chart, by code. See `ExpenseCategory::accountCode()`. */
+        public readonly ?string $account_code = null,
     ) {}
 
     protected static function hydrate(array $attributes): static
@@ -36,6 +38,7 @@ final class ExpenseCategoryData extends Data
             icon: $attributes['icon'] ?? null,
             position: isset($attributes['position']) ? (int) $attributes['position'] : null,
             status: isset($attributes['status']) ? StatusValue::from($attributes['status']) : null,
+            account_code: isset($attributes['account_code']) ? trim((string) $attributes['account_code']) : null,
         );
     }
 
@@ -48,6 +51,7 @@ final class ExpenseCategoryData extends Data
             'icon' => $this->icon,
             'position' => $this->position,
             'status' => $this->status?->value,
+            'account_code' => $this->account_code,
         ];
     }
 }

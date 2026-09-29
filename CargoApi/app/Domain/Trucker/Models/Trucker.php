@@ -47,7 +47,7 @@ class Trucker extends Model
     use BelongsToCompany, HasFactory, HasUlids, SoftDeletes;
 
     protected $fillable = [
-        'user_id', 'name', 'phone', 'licence_no', 'licence_expiry',
+        'user_id', 'name', 'business_name', 'phone', 'licence_no', 'licence_expiry',
         'status', 'is_online',
         'latitude', 'longitude', 'located_at', 'trips_completed',
     ];
@@ -80,6 +80,12 @@ class Trucker extends Model
     public function trips(): HasMany
     {
         return $this->hasMany(Trip::class);
+    }
+
+    /** The people they employ to drive their trucks. Never Cargo Rush's drivers. */
+    public function drivers(): HasMany
+    {
+        return $this->hasMany(TruckerDriver::class);
     }
 
     public function walletEntries(): HasMany
@@ -122,10 +128,23 @@ class Trucker extends Model
      * choice, and a screen asking a man with one truck which truck he means
      * would be a screen nobody thanks you for.
      */
+    /**
+     * The first of their trucks on the road that can carry this load, or null.
+     *
+     * What "can this trucker take it" means now that a trucker runs several
+     * trucks: not whether the *first* one fits, but whether *any* does. Which
+     * one actually goes is the trucker's choice, on My Trips.
+     */
+    public function fittingVehicle(?int $weightKg, ?string $categoryId): ?TruckerVehicle
+    {
+        return $this->vehicles
+            ->first(static fn (TruckerVehicle $vehicle): bool => $vehicle->canCarry($weightKg, $categoryId));
+    }
+
     public function activeVehicle(): ?TruckerVehicle
     {
         return $this->vehicles
-            ->first(static fn (TruckerVehicle $vehicle): bool => $vehicle->status === StatusValue::Available);
+            ->first(static fn (TruckerVehicle $vehicle): bool => $vehicle->isOnTheRoad());
     }
 
     /**

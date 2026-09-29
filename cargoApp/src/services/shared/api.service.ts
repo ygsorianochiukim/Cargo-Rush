@@ -107,11 +107,13 @@ export const api = {
    * `FormData` body, including the multipart boundary — setting it by hand
    * omits the boundary and the server cannot parse a single field.
    */
-  async postForm<T>(path: string, body: FormData): Promise<T> {
+  async postForm<T>(path: string, body: FormData | Promise<FormData>): Promise<T> {
+    // A promise when a photograph had to be read into a Blob first (web).
+    const form = await body;
     const response = await fetch(url(path), {
       method: 'POST',
       headers: headers(),
-      body,
+      body: form,
     });
 
     return (await unwrap<T>(response)).data;
@@ -125,6 +127,13 @@ export const api = {
     });
 
     return (await unwrap<T>(response)).data;
+  },
+
+  /** DELETE. The API answers 204, which `unwrap` treats as an empty envelope. */
+  async delete(path: string): Promise<void> {
+    const response = await fetch(url(path), { method: 'DELETE', headers: headers() });
+
+    await unwrap<unknown>(response);
   },
 };
 

@@ -109,6 +109,23 @@ describe('what a partner is shown', function (): void {
             ->assertJsonPath('data.0.your_take_cents', 880_000);
     });
 
+    it('quotes their take on the net when prices include VAT', function (): void {
+        // ₱10,000 all-in is ₱8,928.57 of haul and ₱1,071.43 of VAT. The wallet
+        // splits the haul, so the board must too — 88% of the net, not of the
+        // gross, or the quote promises ₱942.86 delivery never credits.
+        $this->company->update(['prices_include_vat' => true]);
+
+        [$user, $trucker] = ($this->partner)('Boyet');
+        ($this->offer)($trucker);
+
+        $net = 892_857;
+
+        $this->actingAs($user)
+            ->getJson('/api/v1/partner/jobs')
+            ->assertOk()
+            ->assertJsonPath('data.0.your_take_cents', $net - intdiv($net * 1200, 10_000));
+    });
+
     it('never shows work nobody has offered them', function (): void {
         // The rule this screen is built on. A request the office has not placed
         // is the office's to place: a customer who asked Cargo Rush to carry
@@ -273,7 +290,9 @@ describe('taking a job', function (): void {
         $trip->refresh();
 
         expect($trip->trucker_id)->toBe($trucker->getKey())
-            ->and($trip->trucker_vehicle_id)->not->toBeNull()
+            // No truck yet: which of theirs takes it is the trucker's pick,
+            // made before it starts (a single fitting truck is filled in then).
+            ->and($trip->trucker_vehicle_id)->toBeNull()
             // Straight to `assigned`: accepting supplies the four things the
             // desk's confirmation exists to supply.
             ->and($trip->status)->toBe(StatusValue::Assigned)
@@ -546,7 +565,8 @@ describe('the desk handing work out', function (): void {
         expect($board[$handed->id]['hauled_by'])->toBe('trucker')
             ->and($board[$handed->id]['booking_source'])->toBe('cargo_rush')
             ->and($board[$handed->id]['trucker_name'])->toBe('Boyet')
-            ->and($board[$handed->id]['trucker_plate'])->not->toBeNull();
+            // The desk hands it to the trucker, not to one of their trucks.
+            ->and($board[$handed->id]['trucker_plate'])->toBeNull();
 
         // A contractor who found it themselves: theirs to invoice.
         expect($board[$taken->id]['hauled_by'])->toBe('trucker')

@@ -23,6 +23,9 @@ class ExpenseCategoryResource extends ApiResource
             'icon' => $this->icon,
             'position' => $this->position,
             'status' => $this->status->value,
+            // Where its lines post in the books: the code set on it, or the
+            // default for its kind.
+            'account_code' => $this->resource->accountCode(),
             // Present only where the caller asked for it, so the plain list
             // does not run a count per row.
             'expense_count' => $this->whenCounted('expenses'),

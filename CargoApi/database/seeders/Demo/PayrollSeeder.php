@@ -18,6 +18,7 @@ use App\Domain\Shared\Enums\PayBasis;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Vehicle\Models\Vehicle;
 use Database\Seeders\Concerns\AdoptsTrashedRows;
+use Database\Seeders\Concerns\NeedsAZoneCard;
 use Database\Seeders\Concerns\SeedsIntoACompany;
 use Database\Seeders\Concerns\UpsertsByDay;
 use Illuminate\Database\Seeder;
@@ -68,7 +69,7 @@ use Illuminate\Database\Seeder;
  */
 class PayrollSeeder extends Seeder
 {
-    use AdoptsTrashedRows, SeedsIntoACompany, UpsertsByDay;
+    use AdoptsTrashedRows, NeedsAZoneCard, SeedsIntoACompany, UpsertsByDay;
 
     public function __construct(private readonly PricingService $pricing) {}
 
@@ -78,6 +79,7 @@ class PayrollSeeder extends Seeder
             $this->positions();
             $this->staff();
             $this->truckSheet();
+            $this->ensureZoneCard();
             $this->trips();
 
             $this->report();

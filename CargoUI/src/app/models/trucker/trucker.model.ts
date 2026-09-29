@@ -1,3 +1,4 @@
+import { DriverEmployer } from '../driver/driver.model';
 import { StatusValue } from '../shared/status.model';
 
 /**
@@ -18,8 +19,11 @@ import { StatusValue } from '../shared/status.model';
 export interface Trucker {
   id: string;
   name: string;
+  /** The trucking service. Null on partners from before sign-up asked for it. */
+  business_name: string | null;
   phone: string;
-  licence_no: string;
+  /** Optional: the owner may never drive. Each of their drivers has one. */
+  licence_no: string | null;
   licence_expiry: string | null;
 
   /** `pending` until vetted, `active` once approved, `inactive` on hold. */
@@ -47,9 +51,28 @@ export interface Trucker {
   user_id: number | null;
 
   vehicles?: TruckerVehicle[];
+  drivers?: TruckerDriver[];
 
   created_at: string;
   updated_at: string;
+}
+
+/**
+ * Somebody a trucker employs to drive their trucks, with their own app login.
+ *
+ * Never one of Cargo Rush's drivers and never in Drivers Management — the
+ * trucker adds them, and `employer` says whose they are.
+ */
+export interface TruckerDriver {
+  id: string;
+  trucker_id: string;
+  name: string;
+  phone: string | null;
+  licence_no: string;
+  licence_expiry: string | null;
+  status: StatusValue;
+  email?: string | null;
+  employer: DriverEmployer;
 }
 
 /**
@@ -67,8 +90,33 @@ export interface TruckerVehicle {
   capacity_kg: number;
   truck_category_id: string | null;
   truck_category?: string | null;
+  /** The trucker's own switch: on the road, or in the shop. */
   status: StatusValue;
+
+  /**
+   * This desk's check, from the photographs. A truck takes work only when it
+   * is `available` and `verified`.
+   */
+  verification: TruckVerification;
+  verified_at: string | null;
+  rejection_reason: string | null;
+  /** Photo URLs by slot. Null where none was sent — the engine is optional. */
+  photos: Record<TruckPhotoSlot, string | null>;
+  created_at?: string;
 }
+
+export type TruckVerification = 'pending' | 'verified' | 'rejected';
+
+export type TruckPhotoSlot = 'front' | 'left' | 'right' | 'back' | 'plate' | 'engine';
+
+export const TRUCK_PHOTO_SLOTS: { slot: TruckPhotoSlot; label: string }[] = [
+  { slot: 'front', label: 'Front' },
+  { slot: 'left', label: 'Left side' },
+  { slot: 'right', label: 'Right side' },
+  { slot: 'back', label: 'Back' },
+  { slot: 'plate', label: 'Plate number' },
+  { slot: 'engine', label: 'Engine' },
+];
 
 export type WalletEntryKind = 'earning' | 'commission' | 'payout' | 'remittance' | 'adjustment';
 export type WalletSource = 'cargo_rush' | 'direct';

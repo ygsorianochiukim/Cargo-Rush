@@ -237,8 +237,11 @@ describe('where the bands meet', function (): void {
         $quote = ($this->quote)(['distance_km' => 601])->assertOk();
 
         // The document stops at 600. A figure invented beyond it would be the
-        // system's, not the principal's, and the trace has to admit which.
-        expect($quote->json('data.source'))->toBe('tariff');
+        // system's, not the principal's — so there is none, and the quote says
+        // the run needs a zone.
+        expect($quote->json('data.source'))->toBe('unzoned');
+        expect($quote->json('data.needs_zone'))->toBeTrue();
+        expect($quote->json('data.cents'))->toBeNull();
         expect($quote->json('data.zone'))->toBeNull();
     });
 });

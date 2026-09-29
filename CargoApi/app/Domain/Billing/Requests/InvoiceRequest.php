@@ -46,6 +46,11 @@ class InvoiceRequest extends ApiFormRequest
              * Settling is `POST billing/{invoice}/settle`, or a payment
              * recorded against the document — both of which leave the money
              * behind them.
+             *
+             * `pending` and `overdue` are accepted but read only as "open":
+             * `BillingService::update()` re-derives which open status it is
+             * from the payments and the due date, and refuses `cancelled` on
+             * a document that still has money against it.
              */
             'status' => [
                 'sometimes',

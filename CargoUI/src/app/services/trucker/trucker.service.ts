@@ -92,6 +92,16 @@ export class TruckerService {
     return this.api.get<TruckerVehicle[]>(`truckers/${id}/vehicles`);
   }
 
+  /** Checked against its photographs — it may take work now. */
+  verifyVehicle(truckerId: string, vehicleId: string): Observable<TruckerVehicle> {
+    return this.api.post<TruckerVehicle>(`truckers/${truckerId}/vehicles/${vehicleId}/verify`, {});
+  }
+
+  /** Turned down, with a reason the trucker reads on their phone. */
+  rejectVehicle(truckerId: string, vehicleId: string, reason: string): Observable<TruckerVehicle> {
+    return this.api.post<TruckerVehicle>(`truckers/${truckerId}/vehicles/${vehicleId}/reject`, { reason });
+  }
+
   /**
    * Hand a run to a partner.
    *

@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Domain\Trucker\Repositories;
 
 use App\Domain\Shared\Enums\StatusValue;
+use App\Domain\Shared\Enums\TruckVerification;
 use App\Domain\Shared\Repositories\Repository;
 use App\Domain\Trucker\Models\Trucker;
+use App\Domain\Trucker\Models\TruckerVehicle;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -23,7 +25,7 @@ class TruckerRepository extends Repository
         // detail screen shows the list, and `canTakeWork()` reads the
         // collection. Eager here rather than at four call sites, one of which
         // would forget and quietly issue a query per partner.
-        return Trucker::query()->with('vehicles')->orderBy('name');
+        return Trucker::query()->with(['vehicles', 'drivers'])->orderBy('name');
     }
 
     protected function searchable(): array
@@ -47,10 +49,16 @@ class TruckerRepository extends Repository
         return $this->query()->where('status', StatusValue::Pending->value)->get();
     }
 
-    /** How many are waiting. The badge itself. */
+    /**
+     * How many are waiting on the desk. The badge itself.
+     *
+     * Registrations, and trucks sent in for checking — both are somebody with
+     * an app that will not let them work until this office says yes.
+     */
     public function pendingCount(): int
     {
-        return Trucker::query()->where('status', StatusValue::Pending->value)->count();
+        return Trucker::query()->where('status', StatusValue::Pending->value)->count()
+            + TruckerVehicle::query()->where('verification', TruckVerification::Pending->value)->count();
     }
 
     /**

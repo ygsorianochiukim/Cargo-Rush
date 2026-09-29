@@ -220,7 +220,8 @@ class DashboardService
      *
      * `overdue_cents` is carried separately rather than deducted, because it is
      * a subset of what is pending and not a fourth bucket — it is the part of
-     * it that needs chasing.
+     * it that needs chasing. It is read from the due date, so it does not wait
+     * on the overdue sweep having run.
      *
      * @return array<string, mixed>
      */
@@ -244,15 +245,44 @@ class DashboardService
             Carbon::instance($to),
         )['totals'];
 
+        $collection = $this->invoices->collectionBetween($from, $to);
+
         return [
+            /**
+             * Customer invoices awaiting payment — and only those.
+             *
+             * Not the Finance Summary's receivables, which also count the
+             * commission partner truckers owe the fleet on runs they billed
+             * themselves. The two figures differ on purpose, so the card says
+             * "Invoices awaiting payment" rather than "Receivables".
+             */
             'pending_payment_cents' => $this->invoices->outstanding(InvoiceDirection::Receivable),
             'successful_payment_cents' => $this->invoices->collected(InvoiceDirection::Receivable),
             'overdue_cents' => $this->invoices->overdueTotal(InvoiceDirection::Receivable),
-            'income_cents' => (int) $ledger['trip_income_cents'],
+            // Company trucks' takings plus the commission on partners' runs.
+            'income_cents' => (int) $ledger['total_income_cents'],
             'expenses_cents' => (int) $ledger['total_expenses_cents'],
             'net_income_cents' => (int) $ledger['net_income_cents'],
+            // Part-paid documents are still awaiting payment; leaving them
+            // out made the count disagree with the amount above it.
             'pending_count' => ($counts[StatusValue::Pending->value] ?? 0)
+                + ($counts[StatusValue::Partial->value] ?? 0)
                 + ($counts[StatusValue::Overdue->value] ?? 0),
+            /**
+             * The share of the window's billing that has come in.
+             *
+             * Worked out here, from `collectionBetween()`, rather than by the
+             * client dividing the two all-time figures above — see there for
+             * why both halves have to be the same documents, over the same
+             * days, net of withholding. Null when nothing was billed in the
+             * window: that is nothing to report, not a 0% collection rate.
+             */
+            'collection' => [
+                ...$collection,
+                'rate_pct' => $collection['billed_cents'] === 0
+                    ? null
+                    : (int) round($collection['collected_cents'] * 100 / $collection['billed_cents']),
+            ],
             'paid_count' => $counts[StatusValue::Paid->value] ?? 0,
             'window_days' => $days,
             'currency' => 'PHP',

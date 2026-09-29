@@ -231,6 +231,12 @@ class PayrollController extends ApiController
             'philhealth_cents' => ['sometimes', 'integer', 'min:0'],
             'pagibig_cents' => ['sometimes', 'integer', 'min:0'],
             'withholding_tax_cents' => ['sometimes', 'integer', 'min:0'],
+            // The firm's share — correctable like the employee's, and never
+            // part of the net.
+            'employer_sss_cents' => ['sometimes', 'integer', 'min:0'],
+            'employer_ec_cents' => ['sometimes', 'integer', 'min:0'],
+            'employer_philhealth_cents' => ['sometimes', 'integer', 'min:0'],
+            'employer_pagibig_cents' => ['sometimes', 'integer', 'min:0'],
             'other_deductions_cents' => ['sometimes', 'integer', 'min:0'],
             'deduction_note' => ['nullable', 'string', 'max:255'],
         ]);
@@ -297,6 +303,38 @@ class PayrollController extends ApiController
         return $this->item(new PayRunResource(
             $this->payroll->markPaid($run, $this->user($request)),
         ));
+    }
+
+    /**
+     * The number the next remittance will be given, for the dialog to show.
+     *
+     * A preview: the number is only taken when the remittance is saved, so two
+     * people with the dialog open see the same one and the second is simply
+     * given the next.
+     */
+    public function remittanceNumber(Request $request): JsonResponse
+    {
+        $on = $request->date('on') ?? now();
+
+        return $this->payload(['remittance_no' => PayRun::nextRemittanceNo((int) $on->format('Y'))]);
+    }
+
+    /** What was withheld on a paid run has been sent to SSS, PhilHealth, Pag-IBIG and the BIR. */
+    public function remit(Request $request, PayRun $run): JsonResponse
+    {
+        $data = $request->validate([
+            'remitted_on' => ['required', 'date', 'before_or_equal:today'],
+            'reference' => ['nullable', 'string', 'max:120'],
+        ], [
+            'remitted_on.before_or_equal' => 'A remittance cannot be dated in the future.',
+        ]);
+
+        return $this->item(new PayRunResource($this->payroll->remit(
+            $run,
+            Carbon::parse($data['remitted_on'])->toDateString(),
+            isset($data['reference']) ? trim((string) $data['reference']) ?: null : null,
+            $this->user($request),
+        )));
     }
 
     /** Delete a draft. An approved run has been shown to people. */

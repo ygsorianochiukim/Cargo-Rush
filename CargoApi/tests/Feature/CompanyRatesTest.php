@@ -14,8 +14,8 @@ use Database\Seeders\RoleSeeder;
 /**
  * The rates an administrator may move, and what moves with them.
  *
- * Until now these were environment variables: the tariff, the payment terms,
- * the tax rates and the partner commission were one set of figures for every
+ * Until now these were environment variables: the payment terms, the tax
+ * rates and the partner commission were one set of figures for every
  * haulier on the install, and correcting one meant a deployment. They are
  * columns on the company now, null meaning "the install default", and the
  * whole of the interesting behaviour is in that null — a firm that has never
@@ -24,9 +24,14 @@ use Database\Seeders\RoleSeeder;
  *
  * So these tests are in two halves. The first is that nothing changed for
  * somebody who changes nothing. The second is that each setting reaches the
- * arithmetic it is supposed to reach — a tariff that does not move a quote is
+ * arithmetic it is supposed to reach — a rate that does not move a figure is
  * a number on a form and nothing else, and that is the failure worth pinning,
  * because it looks exactly like success on screen.
+ *
+ * The fallback tariff (base, per-km, per-kg, minimum) used to be on this card
+ * too. It is retired: pricing is zone-only, and a run no zone covers is left
+ * unpriced. The last describe pins that the card no longer takes it and that
+ * nothing prices off it.
  *
  * What a *settled* document does when a rate moves is pinned elsewhere and
  * deliberately not repeated here: an invoice freezes its tax rates
@@ -50,11 +55,10 @@ beforeEach(function (): void {
         ->patchJson('/api/v1/company', $rates);
 
     /**
-     * What the fallback tariff would charge for a run.
+     * What a run would be quoted.
      *
-     * The install has no rate card in these tests, so every quote falls
-     * through to the tariff — which is the figure this screen edits, and the
-     * only one of them that can be read back without raising a document.
+     * The install has no zone card in these tests, so every quote is the
+     * unpriced answer — which is the point of the retired-tariff tests below.
      */
     $this->quote = fn (int $km, int $weightKg = 0) => $this->actingAs($this->admin)
         ->postJson('/api/v1/pricing/quote', ['distance_km' => $km, 'weight_kg' => $weightKg]);
@@ -67,7 +71,6 @@ describe('a firm that has set nothing', function (): void {
         // In force: a complete set of concrete figures, whatever the columns
         // hold. A settings screen never has to decide what a null means.
         expect($body['rates']['trucker_commission_bp'])->toBe(1200)
-            ->and($body['rates']['tariff']['per_km_cents'])->toBe(3_500)
             ->and($body['rates']['billing_terms_days'])->toBe(30)
             ->and($body['rates']['vat_rate_bp'])->toBe(1200)
             ->and($body['rates']['withholding_rate_bp'])->toBe(200)
@@ -75,13 +78,13 @@ describe('a firm that has set nothing', function (): void {
 
         // And the same figures again as the install's answer, so the card can
         // show what the firm would be departing from.
-        expect($body['rate_defaults']['tariff'])->toBe($body['rates']['tariff']);
+        expect($body['rate_defaults']['billing_terms_days'])->toBe($body['rates']['billing_terms_days']);
 
-        // Nothing chosen. This is the field that tells "₱35 because we chose
-        // ₱35" from "₱35 because nobody has chosen anything" — identical in a
-        // number field, different the day the install default moves.
-        expect($body['rate_overrides']['tariff_per_km_cents'])->toBeNull()
-            ->and($body['rate_overrides']['billing_terms_days'])->toBeNull();
+        // Nothing chosen. This is the field that tells "30 days because we
+        // chose 30" from "30 because nobody has chosen anything" — identical
+        // in a number field, different the day the install default moves.
+        expect($body['rate_overrides']['billing_terms_days'])->toBeNull()
+            ->and($body['rate_overrides']['withholding_rate_bp'])->toBeNull();
     });
 
     it('starts every partner on twelve per cent', function (): void {
@@ -93,54 +96,33 @@ describe('a firm that has set nothing', function (): void {
     });
 });
 
-describe('the tariff', function (): void {
-    it('moves what an off-card run is quoted', function (): void {
-        // The install tariff: ₱1,500 + ₱35/km. A 100 km run is ₱5,000.
-        expect(($this->quote)(100)->assertOk()->json('data.cents'))->toBe(500_000);
+describe('the retired tariff', function (): void {
+    it('is no longer on the card, and nothing is priced off it', function (): void {
+        $body = $this->actingAs($this->admin)->getJson('/api/v1/company')->assertOk()->json('data');
 
-        ($this->setRates)([
-            'tariff_base_cents' => 200_000,
-            'tariff_per_km_cents' => 4_500,
-        ])->assertOk();
+        expect($body['rates'])->not->toHaveKey('tariff')
+            ->and($body['rate_defaults'])->not->toHaveKey('tariff')
+            ->and($body['rate_overrides'])->not->toHaveKey('tariff_per_km_cents');
 
-        // ₱2,000 + ₱45 × 100 = ₱6,500.
-        expect(($this->quote)(100)->assertOk()->json('data.cents'))->toBe(650_000);
+        // No zone covers a 100 km run here, so it is unpriced — not the old
+        // ₱1,500 + ₱35/km, and not ₱0.
+        ($this->quote)(100)->assertOk()
+            ->assertJsonPath('data.cents', null)
+            ->assertJsonPath('data.needs_zone', true)
+            ->assertJsonPath('data.source', 'unzoned');
     });
 
-    it('floors a short run at the minimum the firm set', function (): void {
-        ($this->setRates)([
-            'tariff_base_cents' => 0,
-            'tariff_per_km_cents' => 1_000,
-            'tariff_minimum_cents' => 250_000,
-        ])->assertOk();
+    it('ignores tariff figures sent to it, and keeps what a firm had set in the column', function (): void {
+        // A firm's old figures stay where they were — the columns are kept,
+        // unread, rather than dropped by a destructive migration.
+        $this->company->forceFill(['tariff_per_km_cents' => 4_500])->save();
 
-        // ₱10 a kilometre over 5 km is ₱50, and the firm does not turn a wheel
-        // for less than ₱2,500.
-        expect(($this->quote)(5)->assertOk()->json('data.cents'))->toBe(250_000);
-    });
+        ($this->setRates)(['tariff_per_km_cents' => 9_900, 'tariff_base_cents' => 1])->assertOk();
 
-    it('takes each figure on its own, so correcting one leaves the rest alone', function (): void {
-        ($this->setRates)(['tariff_per_km_cents' => 4_500])->assertOk();
+        expect($this->company->refresh()->tariff_per_km_cents)->toBe(4_500)
+            ->and($this->company->tariff_base_cents)->toBeNull();
 
-        $rates = $this->actingAs($this->admin)->getJson('/api/v1/company')->json('data.rates.tariff');
-
-        expect($rates['per_km_cents'])->toBe(4_500)
-            // Untouched, and still the install's rather than zero — the bug a
-            // PUT-shaped settings form produces on its first save.
-            ->and($rates['base_cents'])->toBe(150_000)
-            ->and($rates['per_kg_cents'])->toBe(200);
-    });
-
-    it('goes back to the install default when the figure is cleared', function (): void {
-        ($this->setRates)(['tariff_per_km_cents' => 4_500])->assertOk();
-        ($this->setRates)(['tariff_per_km_cents' => null])->assertOk();
-
-        $body = $this->actingAs($this->admin)->getJson('/api/v1/company')->json('data');
-
-        expect($body['rates']['tariff']['per_km_cents'])->toBe(3_500)
-            ->and($body['rate_overrides']['tariff_per_km_cents'])->toBeNull();
-
-        expect(($this->quote)(100)->assertOk()->json('data.cents'))->toBe(500_000);
+        ($this->quote)(100)->assertOk()->assertJsonPath('data.needs_zone', true);
     });
 });
 
@@ -188,9 +170,9 @@ describe('tax', function (): void {
 
         $body = ($this->raise)()->assertCreated()->json('data');
 
-        // 5% of the gross, VAT included — ₱11,200 × 5%.
+        // 5% of the tax base, VAT excluded — ₱10,000 × 5%.
         expect($body['withholding_rate_bp'])->toBe(500)
-            ->and($body['withholding_cents'])->toBe(56_000);
+            ->and($body['withholding_cents'])->toBe(50_000);
     });
 
     it('lets the customer own rate beat the firm standing one', function (): void {
@@ -239,13 +221,12 @@ describe('what it refuses', function (): void {
     });
 
     it('refuses a negative rate anywhere', function (): void {
-        ($this->setRates)(['tariff_per_km_cents' => -100])->assertStatus(422);
         ($this->setRates)(['vat_rate_bp' => -1])->assertStatus(422);
         ($this->setRates)(['billing_terms_days' => -1])->assertStatus(422);
     });
 
     it('will not let the commission be cleared, because there is nothing under it', function (): void {
-        // Unlike the tariff, which falls back to the install. The column is not
+        // Unlike the payment terms, which fall back to the install. The column is not
         // nullable and 12% is its default, so a null here is a mistake rather
         // than "use the default".
         ($this->setRates)(['trucker_commission_bp' => null])->assertStatus(422);

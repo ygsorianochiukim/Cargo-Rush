@@ -5,22 +5,23 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Trip } from '@/models/trip/trip.model';
 import { inspectionService } from '@/services/inspection/inspection.service';
 import { tripService } from '@/services/trip/trip.service';
+import { crewService } from '@/services/trucker/crew.service';
 import { Screen } from '@/components/screen';
 import { Icon } from '@/components/ui/icon';
 import {
   Card,
-  ErrorState,
   PrimaryButton,
   SkeletonRows,
   StatusPill,
 } from '@/components/ui/primitives';
-import { Brand, Hit, Radius, Spacing } from '@/constants/theme';
+import { Brand, Radius, Spacing } from '@/constants/theme';
 import { fmt } from '@/constants/format';
 import { useApi } from '@/hooks/use-api';
 import { useMe } from '@/hooks/use-me';
 import { useCurrentTrip } from '@/hooks/use-current-trip';
-
-type Verdict = 'pass' | 'fail' | null;
+import { useRefreshOnFocus } from '@/hooks/use-refresh-on-focus';
+import { DispatchChecklistCard, DispatchSheetHeader } from './dispatch-checklist-card';
+import { PreTripChecklist, Verdict } from './pre-trip-checklist';
 
 /**
  * Inspect hub — DESIGN.md section 5.2. Carries two modules:
@@ -51,11 +52,29 @@ type Verdict = 'pass' | 'fail' | null;
  * Opened from the tab bar with no trip in the route, it is the same screen
  * doing the same thing against whatever run they are on — which is how a check
  * mid-route, or one on an idle unit, gets recorded.
+ *
+ * ## A trucker's driver uses the same screen
+ *
+ * Same seven items, same verdict, same "a pass starts the run and opens the
+ * map". What differs is whose truck it is: theirs is the trucker's, so the
+ * check goes to `crew/*` against the run itself rather than a fleet unit, and
+ * the fleet's maintenance card is not shown. They check a run before it
+ * leaves — so with none named, the next run handed to them is the one checked.
  */
 export function InspectPage() {
   const me = useMe();
+  const crew = me.data?.role === 'trucker_driver';
   const trip = useCurrentTrip();
-  const checklist = useApi(inspectionService.checklist);
+  const checklist = useApi(
+    () => (crew ? crewService.checklist() : inspectionService.checklist()),
+    [crew],
+  );
+
+  /** A trucker's driver's unstarted runs — what their check is for. */
+  const crewQueue = useApi(
+    () => (crew ? crewService.trips() : Promise.resolve([] as Trip[])),
+    [crew],
+  );
 
   /**
    * The run being checked, when the Dashboard named one.
@@ -65,7 +84,11 @@ export function InspectPage() {
    * handset's own state.
    */
   const params = useLocalSearchParams<{ trip?: string }>();
-  const queuedId = typeof params.trip === 'string' && params.trip !== '' ? params.trip : null;
+  const namedId = typeof params.trip === 'string' && params.trip !== '' ? params.trip : null;
+  const nextCrewRun = (crewQueue.data ?? []).find(
+    (t) => (t.status === 'assigned' || t.status === 'overdue') && !t.inspection?.passed,
+  );
+  const queuedId = namedId ?? (crew ? (nextCrewRun?.id ?? null) : null);
 
   const [queued, setQueued] = useState<Trip | null>(null);
 
@@ -77,6 +100,13 @@ export function InspectPage() {
     }
 
     let cancelled = false;
+
+    // A trucker's driver has no `trips/{id}`; their run is already in the queue.
+    if (crew) {
+      setQueued((crewQueue.data ?? []).find((t) => t.id === queuedId) ?? null);
+
+      return;
+    }
 
     tripService
       .find(queuedId)
@@ -92,7 +122,7 @@ export function InspectPage() {
     return () => {
       cancelled = true;
     };
-  }, [queuedId]);
+  }, [queuedId, crew, crewQueue.data]);
 
   /** Which run this check belongs to: the one named, else the one they are on. */
   const tripId = queuedId ?? trip.data?.id ?? null;
@@ -105,10 +135,38 @@ export function InspectPage() {
    * them — and the one they hold the keys to otherwise.
    */
   const checkingVehicle = queued?.vehicle_id ?? trip.data?.vehicle_id ?? me.data?.vehicle_id ?? null;
-  const checkingPlate = queued?.vehicle_plate ?? trip.data?.vehicle_plate ?? me.data?.vehicle_plate ?? null;
+  const checkingPlate =
+    queued?.vehicle_plate ??
+    queued?.trucker_plate ??
+    trip.data?.vehicle_plate ??
+    me.data?.vehicle_plate ??
+    null;
 
-  // Maintenance is booked against a unit, so this waits for one to be known.
-  const vehicleId = me.data?.vehicle_id ?? null;
+  /**
+   * The top of the printed dispatch sheet, from whichever run is being
+   * checked — the one named, else the one they are on.
+   */
+  const current = queuedId === null ? trip.data : null;
+  const helperNames = queued ? queued.helpers.map((h) => h.name) : (current?.helper_names ?? []);
+  const origin = queued?.origin ?? current?.origin ?? null;
+  const destination = queued?.destination ?? current?.destination ?? null;
+  const scheduledAt = queued?.scheduled_at ?? current?.scheduled_at ?? null;
+  const sheet: DispatchSheetHeader = {
+    company: me.data?.company_name ?? null,
+    logoUrl: me.data?.company_logo_url ?? null,
+    reference: tripReference,
+    date: scheduledAt ? fmt.date(scheduledAt) : null,
+    driver: queued?.driver_name ?? queued?.trucker_driver_name ?? me.data?.name ?? null,
+    plate: checkingPlate,
+    helper1: helperNames[0] ?? null,
+    helper2: helperNames[1] ?? null,
+    client: queued?.customer ?? current?.customer ?? null,
+    route: origin && destination ? `${origin} → ${destination}` : (origin ?? destination),
+  };
+
+  // Maintenance is booked against a fleet unit, so this waits for one to be
+  // known — and never exists for a trucker's driver, whose truck is not ours.
+  const vehicleId = crew ? null : (me.data?.vehicle_id ?? null);
   const jobs = useApi(
     () => (vehicleId ? inspectionService.maintenance(vehicleId) : Promise.resolve([])),
     [vehicleId],
@@ -120,6 +178,25 @@ export function InspectPage() {
   const [verdicts, setVerdicts] = useState<Record<string, Verdict>>({});
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+
+  /**
+   * Coming back to the tab reads everything again — the run they are on,
+   * the runs handed to them, the maintenance list — so a run handed over, or
+   * a check done, since they last looked shows without reloading the app.
+   */
+  const refresh = () => {
+    trip.reload();
+    crewQueue.reload();
+    jobs.reload();
+  };
+  useRefreshOnFocus(trip.reload, crewQueue.reload, jobs.reload);
+
+  // A different run is a different check: clear the last one's answers
+  // rather than carrying seven ticks over to a truck nobody has looked at.
+  useEffect(() => {
+    setVerdicts({});
+    setResult(null);
+  }, [queuedId]);
 
   const items = checklist.data ?? [];
   const checked = useMemo(
@@ -144,8 +221,11 @@ export function InspectPage() {
    * a unit on a failed brake check however this screen feels about it — and it
    * is that answer which gets reported back here.
    */
+  /** A trucker's driver checks a run; a Cargo Rush driver checks a unit. */
+  const canSubmit = crew ? queuedId !== null : checkingVehicle !== null;
+
   const submit = () => {
-    if (!checkingVehicle || submitting || leaving) return;
+    if (!canSubmit || submitting || leaving) return;
 
     setSubmitting(true);
     setResult(null);
@@ -156,19 +236,26 @@ export function InspectPage() {
         .map((item) => [item.key, verdicts[item.key] === 'pass']),
     );
 
-    inspectionService
-      .submit({
+    const recorded = crew
+      ? crewService
+          .inspect(queuedId as string, results)
+          .then((r) => ({ good_to_go: r.good_to_go, failures: r.failures }))
+      : inspectionService.submit({
         // The run this check clears. A check with no trip on it is a check of
         // the unit rather than of a departure, and clears nothing — which is
         // the right answer for one taken from the tab bar with no run going.
         trip_id: tripId,
-        vehicle_id: checkingVehicle,
+        vehicle_id: checkingVehicle as string,
         driver_id: me.data?.driver_id ?? null,
         results,
-      })
+      });
+
+    recorded
       .then((inspection) => {
         if (!inspection.good_to_go) {
           setResult(`Recorded — held on ${inspection.failures.join(', ')}.`);
+          // So the run's standing on My Trips and here says "held" now.
+          crewQueue.reload();
 
           return;
         }
@@ -184,8 +271,7 @@ export function InspectPage() {
         setLeaving(true);
         setResult('Cleared — starting the run…');
 
-        tripService
-          .start(queuedId)
+        (crew ? crewService.start(queuedId) : tripService.start(queuedId))
           .then(() => {
             /**
              * Straight to the map.
@@ -216,6 +302,7 @@ export function InspectPage() {
 
   return (
     <Screen
+      onRefresh={refresh}
       title="Inspect"
       subtitle={
         tripReference
@@ -267,55 +354,16 @@ export function InspectPage() {
         </View>
       </View>
 
-      {/* On-boarding trips inspection */}
-      <Card
-        heading="Pre-trip inspection"
-        icon="clipboard"
-        hint={`${checked}/${items.length}`}
-        padded={false}>
-        {checklist.loading ? (
-          <View style={{ padding: Spacing.three }}>
-            <SkeletonRows count={5} />
-          </View>
-        ) : checklist.error ? (
-          <ErrorState message={checklist.error.message} onRetry={checklist.reload} />
-        ) : (
-          items.map((item, i) => {
-            const v = verdicts[item.key] ?? null;
-            return (
-              <View
-                key={item.key}
-                style={[styles.checkRow, i < items.length - 1 && styles.divider]}>
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                  <Text style={styles.checkLabel}>{item.label}</Text>
-                  <Text style={styles.checkHint} numberOfLines={1}>
-                    {item.hint}
-                  </Text>
-                </View>
-
-                <View style={styles.toggle}>
-                  <Pressable
-                    onPress={() => set(item.key, 'pass')}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: v === 'pass' }}
-                    accessibilityLabel={`${item.label} pass`}
-                    style={[styles.toggleBtn, v === 'pass' && { backgroundColor: Brand.success }]}>
-                    <Icon name="check" size={16} color={v === 'pass' ? Brand.surface : Brand.inkMuted} />
-                  </Pressable>
-                  <Pressable
-                    onPress={() => set(item.key, 'fail')}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: v === 'fail' }}
-                    accessibilityLabel={`${item.label} fail`}
-                    style={[styles.toggleBtn, v === 'fail' && { backgroundColor: Brand.red }]}>
-                    <Icon name="close" size={16} color={v === 'fail' ? Brand.surface : Brand.inkMuted} />
-                  </Pressable>
-                </View>
-              </View>
-            );
-          })
-        )}
-      </Card>
+      {/* The before-trip check itself. */}
+      <PreTripChecklist
+        items={items}
+        verdicts={verdicts}
+        onSet={set}
+        loading={checklist.loading}
+        error={checklist.error}
+        onRetry={checklist.reload}
+        subtitle={[sheet.reference, sheet.plate, sheet.date].filter(Boolean).join(' · ') || null}
+      />
 
       <View style={styles.actions}>
         <Pressable
@@ -340,7 +388,7 @@ export function InspectPage() {
                 : 'Submit inspection'
           }
           icon="check"
-          disabled={submitting || leaving || !complete || !checkingVehicle}
+          disabled={submitting || leaving || !complete || !canSubmit}
           onPress={submit}
           style={{ flex: 1 }}
         />
@@ -352,7 +400,29 @@ export function InspectPage() {
         </Text>
       ) : null}
 
-      {/* Unit maintenance and inspection */}
+      {crew && queuedId === null && !crewQueue.loading ? (
+        <Text style={styles.result}>
+          Nothing to check — every run handed to you has been checked, or none are waiting.
+        </Text>
+      ) : null}
+
+      {/* The firm's dispatch form, for the run being checked. It prints on
+          the office's dispatch sheet with these answers ticked. */}
+      {(crew ? queuedId : tripId) !== null ? (
+        <DispatchChecklistCard
+          tripId={(crew ? queuedId : tripId) as string}
+          crew={crew}
+          answered={queued?.dispatch_checklist}
+          header={sheet}
+          onSaved={(saved) => {
+            if (queued !== null && saved.id === queued.id) setQueued(saved);
+            crewQueue.reload();
+          }}
+        />
+      ) : null}
+
+      {/* Unit maintenance and inspection — the fleet's units only. */}
+      {crew ? null : (
       <Card heading="Assigned maintenance" icon="fleet" padded={false}>
         {jobs.loading ? (
           <View style={{ padding: Spacing.three }}>
@@ -375,6 +445,7 @@ export function InspectPage() {
           ))
         )}
       </Card>
+      )}
     </Screen>
   );
 }
@@ -414,28 +485,6 @@ const styles = StyleSheet.create({
   verdictSub: { marginTop: 2, fontSize: 12, color: Brand.inkMuted },
 
   divider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Brand.line },
-
-  checkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    minHeight: Hit.rowTwoLine,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two + 2,
-  },
-  checkLabel: { fontSize: 14, fontWeight: '600', color: Brand.ink },
-  checkHint: { fontSize: 12, color: Brand.inkMuted },
-
-  toggle: { flexDirection: 'row', gap: Spacing.two },
-  toggleBtn: {
-    width: 44,
-    height: 36,
-    borderRadius: Radius.control,
-    borderWidth: 1,
-    borderColor: Brand.line,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
   actions: { flexDirection: 'row', gap: Spacing.three, alignItems: 'stretch' },
   photoBtn: {

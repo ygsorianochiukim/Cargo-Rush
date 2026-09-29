@@ -6,6 +6,8 @@ namespace App\Domain\Payroll\Services;
 
 use App\Domain\Finance\Models\LedgerEntry;
 use App\Domain\Hr\Models\Employee;
+use App\Domain\Payroll\Models\PayRun;
+use App\Domain\Payroll\Models\PayRunLineTrip;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Trip\Models\Trip;
 use Illuminate\Database\Eloquent\Collection;
@@ -74,12 +76,12 @@ class TripPayService
     /**
      * One person's days, trips and sheet earnings over a period.
      *
-     * @return array{earned_cents: int, days: int, trips: int}
+     * @return array{earned_cents: int, days: int, trips: int, trip_ids: list<string>}
      */
     public function forEmployee(Employee $employee, Carbon $periodStart, Carbon $periodEnd): array
     {
         return $this->forEmployees(collect([$employee]), $periodStart, $periodEnd)[$employee->getKey()]
-            ?? ['earned_cents' => 0, 'days' => 0, 'trips' => 0];
+            ?? ['earned_cents' => 0, 'days' => 0, 'trips' => 0, 'trip_ids' => []];
     }
 
     /**
@@ -97,7 +99,7 @@ class TripPayService
      * implementation detail of where the work is recorded.
      *
      * @param  Collection<int, Employee>|SupportCollection<int, Employee>  $employees
-     * @return array<string, array{earned_cents: int, days: int, trips: int}>
+     * @return array<string, array{earned_cents: int, days: int, trips: int, trip_ids: list<string>}>
      */
     public function forEmployees($employees, Carbon $periodStart, Carbon $periodEnd): array
     {
@@ -115,7 +117,7 @@ class TripPayService
         $totals = [];
 
         foreach ($employees as $employee) {
-            $totals[$employee->getKey()] = ['earned_cents' => 0, 'days' => [], 'trips' => 0];
+            $totals[$employee->getKey()] = ['earned_cents' => 0, 'days' => [], 'trips' => 0, 'trip_ids' => []];
         }
 
         if ($byDriver === []) {
@@ -133,7 +135,7 @@ class TripPayService
     /**
      * Days and sheet earnings, off the daily truck sheet.
      *
-     * @param  array<string, array{earned_cents: int, days: array<string, bool>, trips: int}>  $totals
+     * @param  array<string, array{earned_cents: int, days: array<string, bool>, trips: int, trip_ids: list<string>}>  $totals
      * @param  array<string, string>  $byDriver
      * @param  string[]  $driverIds
      */
@@ -185,7 +187,25 @@ class TripPayService
      * Only `delivered` trips count. A haul still in transit is not yet work
      * done, and paying for it would mean clawing it back when it is cancelled.
      *
-     * @param  array<string, array{earned_cents: int, days: array<string, bool>, trips: int}>  $totals
+     * ## Late trips, and never twice
+     *
+     * A trip entered after its period's run was approved used to be lost: this
+     * only looked between the run's own two dates, and nobody builds an
+     * approved period again. So each run also reaches **back** for any haul
+     * this person delivered before the period that no approved or paid payslip
+     * has counted yet, and pays it now.
+     *
+     * Which makes the other half of the rule necessary: a haul already on an
+     * approved or paid payslip for this person is skipped wherever it falls,
+     * in the window or before it. The payslip rows in `pay_run_line_trips` are
+     * how both halves know — see the migration that adds them.
+     *
+     * The look-back stops at the earliest settled run that wrote its trips
+     * down. The runs before that counted theirs without recording which, and
+     * treating that silence as "unpaid" would pay a fleet's whole history a
+     * second time. A firm with no such run yet looks back at nothing.
+     *
+     * @param  array<string, array{earned_cents: int, days: array<string, bool>, trips: int, trip_ids: list<string>}>  $totals
      * @param  array<string, string>  $byDriver
      * @param  string[]  $driverIds
      */
@@ -194,7 +214,58 @@ class TripPayService
         $from = $periodStart->copy()->startOfDay();
         $to = $periodEnd->copy()->endOfDay();
 
-        $trips = Trip::query()
+        $trips = $this->deliveredBetween($driverIds, $from, $to);
+
+        $floor = PayRun::query()
+            ->where('links_trips', true)
+            ->whereIn('status', [PayRun::APPROVED, PayRun::PAID])
+            ->min('period_start');
+
+        if ($floor !== null) {
+            $floor = Carbon::parse($floor)->startOfDay();
+
+            if ($floor->lt($from)) {
+                $trips = $trips->merge(
+                    $this->deliveredBetween($driverIds, $floor, $from->copy()->subSecond()),
+                )->unique('id');
+            }
+        }
+
+        // Every (person, trip) pair already on a frozen payslip, read once.
+        $paid = [];
+
+        PayRunLineTrip::query()
+            ->settled()
+            ->whereIn('employee_id', array_values(array_unique($byDriver)))
+            ->whereIn('trip_id', $trips->modelKeys())
+            ->get(['employee_id', 'trip_id'])
+            ->each(function (PayRunLineTrip $link) use (&$paid): void {
+                $paid[$link->employee_id][$link->trip_id] = true;
+            });
+
+        foreach ($trips as $trip) {
+            foreach (array_unique([$trip->driver_id, ...$trip->helperIds()]) as $driverId) {
+                $employeeId = $driverId === null ? null : ($byDriver[$driverId] ?? null);
+
+                if ($employeeId === null || isset($paid[$employeeId][$trip->getKey()])) {
+                    continue;
+                }
+
+                $totals[$employeeId]['trips']++;
+                $totals[$employeeId]['trip_ids'][] = $trip->getKey();
+            }
+        }
+    }
+
+    /**
+     * Delivered hauls crewed by any of these drivers, by the day they ran.
+     *
+     * @param  string[]  $driverIds
+     * @return Collection<int, Trip>
+     */
+    private function deliveredBetween(array $driverIds, Carbon $from, Carbon $to): Collection
+    {
+        return Trip::query()
             ->where('status', StatusValue::Delivered->value)
             ->where(function ($query) use ($driverIds): void {
                 $query->whereIn('driver_id', $driverIds)
@@ -215,25 +286,13 @@ class TripPayService
             })
             ->with('helpers:drivers.id')
             ->get(['id', 'driver_id']);
-
-        foreach ($trips as $trip) {
-            foreach ([$trip->driver_id, ...$trip->helperIds()] as $driverId) {
-                $employeeId = $driverId === null ? null : ($byDriver[$driverId] ?? null);
-
-                if ($employeeId === null) {
-                    continue;
-                }
-
-                $totals[$employeeId]['trips']++;
-            }
-        }
     }
 
     /**
      * Turn the day sets into counts.
      *
-     * @param  array<string, array{earned_cents: int, days: array<string, bool>, trips: int}>  $totals
-     * @return array<string, array{earned_cents: int, days: int, trips: int}>
+     * @param  array<string, array{earned_cents: int, days: array<string, bool>, trips: int, trip_ids: list<string>}>  $totals
+     * @return array<string, array{earned_cents: int, days: int, trips: int, trip_ids: list<string>}>
      */
     private function countDays(array $totals): array
     {
@@ -242,6 +301,9 @@ class TripPayService
                 'earned_cents' => $row['earned_cents'],
                 'days' => count($row['days']),
                 'trips' => $row['trips'],
+                // Which hauls those were, so the payslip can say so and the next
+                // run can tell what has been paid. See `PayRunLineTrip`.
+                'trip_ids' => $row['trip_ids'],
             ],
             $totals,
         );

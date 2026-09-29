@@ -8,6 +8,7 @@ use App\Domain\Billing\Models\Invoice;
 use App\Domain\Billing\Services\TaxService;
 use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Enums\StatusValue;
+use App\Domain\Shared\Enums\VatTreatment;
 use App\Domain\Tenancy\Console\Concerns\RunsPerCompany;
 use Illuminate\Console\Command;
 
@@ -15,7 +16,7 @@ use Illuminate\Console\Command;
  * Repair invoices that two now-fixed bugs left with the wrong figures.
  *
  * A one-off, and written as a command rather than run as SQL because it has to
- * think: the correct figures come from the tariff and the customer's own tax
+ * think: the correct figures come from the trip's price and the customer's own tax
  * treatment, which is arithmetic that already exists in `TaxService` and should
  * not be reimplemented in an UPDATE statement.
  *
@@ -43,7 +44,11 @@ use Illuminate\Console\Command;
  *
  * It never touches a document with a **payment** against it. Money has moved
  * against that number, a customer has a copy, and quietly restating it is how a
- * reconciliation stops adding up. Those are listed too.
+ * reconciliation stops adding up. Those are listed too. Nor a **cancelled**
+ * one, which nobody is being asked to pay.
+ *
+ * And it does not re-rate. The VAT and withholding rates frozen on each
+ * document are the ones it is re-quoted at; only the base is corrected.
  *
  *     php artisan cargo:invoices-requote --dry-run   # what it would change
  *     php artisan cargo:invoices-requote             # change it
@@ -77,6 +82,12 @@ class RequoteInvoicesCommand extends Command
                 ->get();
 
             foreach ($invoices as $invoice) {
+                // Withdrawn. Its figures are nobody's to collect, and
+                // re-deriving its status would reopen it.
+                if ($invoice->status === StatusValue::Cancelled) {
+                    continue;
+                }
+
                 $paid = $invoice->paidCents();
 
                 // A status that claims money nobody received. Cleared first and
@@ -104,7 +115,9 @@ class RequoteInvoicesCommand extends Command
 
                 $trip = $invoice->trip;
 
-                if ($trip === null || $trip->price_cents <= 0) {
+                // Null is an unpriced run and zero a deliberate one; neither is a
+                // figure to re-quote an invoice from.
+                if ($trip === null || $trip->price_cents === null || $trip->price_cents <= 0) {
                     $skipped[] = sprintf('%s (raised by hand — check it yourself)', $invoice->number);
 
                     continue;
@@ -116,9 +129,23 @@ class RequoteInvoicesCommand extends Command
                     continue;
                 }
 
-                // The figures this document *should* carry, from the price the
-                // customer was quoted and the tax treatment on their record.
-                $correct = $tax->on($trip->price_cents, $invoice->customer, InvoiceDirection::Receivable);
+                /**
+                 * The figures this document *should* carry: the price the
+                 * customer was quoted, at the rates **frozen on the invoice**.
+                 *
+                 * Not `$tax->on()`, which reads today's rates and the
+                 * customer's record as it stands now. The bug being repaired
+                 * is VAT charged twice, not VAT at the wrong rate — a document
+                 * raised at 12% before a circular moved it, or before the
+                 * customer became a withholding agent, must come out of this
+                 * at 12% and with whatever withholding it said on the day.
+                 */
+                $correct = $tax->atRates(
+                    $trip->price_cents,
+                    (int) $invoice->vat_rate_bp,
+                    (int) $invoice->withholding_rate_bp,
+                    $invoice->vat_treatment ?? VatTreatment::Vatable,
+                );
                 $columns = $correct->columns();
 
                 if ((int) $columns['amount_cents'] === (int) $invoice->amount_cents

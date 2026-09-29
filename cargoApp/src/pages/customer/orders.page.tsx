@@ -184,7 +184,11 @@ export function OrdersPage() {
                 />
                 <Meta
                   label={trip.billed_at ? 'Invoiced' : 'Quoted'}
-                  value={fmt.money(trip.price_cents, trip.currency)}
+                  value={
+                    trip.price_cents === null
+                      ? 'Office to confirm'
+                      : fmt.money(trip.price_cents, trip.currency)
+                  }
                 />
               </View>
 

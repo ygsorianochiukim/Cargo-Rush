@@ -213,7 +213,10 @@ export function CustomerHomePage() {
                   {trip.origin} → {trip.destination}
                 </Text>
                 <Text style={styles.rowSub}>
-                  {fmt.dateTime(trip.scheduled_at)} · {fmt.money(trip.price_cents, trip.currency)}
+                  {fmt.dateTime(trip.scheduled_at)} ·{' '}
+                  {trip.price_cents === null
+                    ? 'Price to be confirmed'
+                    : fmt.money(trip.price_cents, trip.currency)}
                 </Text>
               </View>
               <StatusPill status={trip.status} />

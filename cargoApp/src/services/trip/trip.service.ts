@@ -1,6 +1,12 @@
 import { ProofOfDelivery } from '@/models/delivery/delivery.model';
 import { proofForm } from '../delivery/delivery.service';
-import { CargoDetail, CurrentTrip, Trip } from '@/models/trip/trip.model';
+import {
+  CargoDetail,
+  CurrentTrip,
+  DispatchAnswer,
+  DispatchChecklistSection,
+  Trip,
+} from '@/models/trip/trip.model';
 
 import { api } from '../shared/api.service';
 
@@ -72,5 +78,19 @@ export const tripService = {
    */
   deliver(proof: ProofOfDelivery): Promise<Trip> {
     return api.postForm<Trip>('trips/current/deliver', proofForm(proof));
+  },
+
+  /** The dispatch checklist's lines — from the API, so the keys never drift. */
+  dispatchChecklist(): Promise<DispatchChecklistSection[]> {
+    return api.get<DispatchChecklistSection[]>('trips/dispatch-checklist');
+  },
+
+  /** Answer it for one of their runs. Answering again replaces the last answers. */
+  answerDispatchChecklist(
+    tripId: string,
+    answers: Record<string, DispatchAnswer>,
+    remarks: string | null,
+  ): Promise<Trip> {
+    return api.post<Trip>(`trips/${tripId}/dispatch-checklist`, { answers, remarks });
   },
 };

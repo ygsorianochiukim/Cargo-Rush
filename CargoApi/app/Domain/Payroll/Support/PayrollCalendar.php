@@ -38,12 +38,11 @@ use Illuminate\Support\Carbon;
  *
  * ## One or two, and not more
  *
- * The statutory arithmetic downstream is semi-monthly. `DeductionSchedule`
- * splits a monthly contribution across at most two payslips, and the
- * withholding table in `config/cargo.php` is the BIR's **semi-monthly** one. A
- * weekly payroll is not a longer list here - it is a different tax table - so a
- * third cutoff is dropped rather than accepted and quietly taxed on a table
- * built for a fortnight.
+ * The withholding tables in `config/cargo.php` are the BIR's monthly and
+ * semi-monthly ones, and a run reads whichever matches its calendar. A weekly
+ * payroll is not a longer list here - it is a different tax table - so cutoffs
+ * past `MAX_CUTOFFS` are dropped rather than accepted and quietly taxed on a
+ * table built for a longer period.
  */
 final class PayrollCalendar
 {
@@ -54,11 +53,10 @@ final class PayrollCalendar
      * to halve a month — see `MonthlyShare`, which is what replaced the halving
      * and made a third run safe to pay.
      *
-     * The **withholding table has not caught up**. `config/cargo.php` holds the
-     * BIR's semi-monthly brackets, which describe 24 periods a year; a firm on
-     * three cutoffs has 36, and running that table on each of them over-states
-     * the tax on every payslip. The screens say so where somebody can act on
-     * it. Raising this to four would need the same conversation again.
+     * The BIR publishes no table for 36 periods a year, so a three-cutoff run
+     * is taxed by taking its pay to a month, reading the monthly table and
+     * dividing back — see `StatutoryDeductions::withholding()`. Raising this
+     * to four (a weekly payroll) would want the BIR's weekly table instead.
      */
     public const MAX_CUTOFFS = 3;
 

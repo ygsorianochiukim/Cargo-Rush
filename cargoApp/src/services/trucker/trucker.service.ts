@@ -1,9 +1,18 @@
-import { ProofOfDelivery } from '@/models/delivery/delivery.model';
+import { ProofOfDelivery, ProofPhoto } from '@/models/delivery/delivery.model';
 import { Trip } from '@/models/trip/trip.model';
-import { Job, Trucker, TruckerVehicle, Wallet } from '@/models/trucker/trucker.model';
+import {
+  Job,
+  Trucker,
+  TruckerDriver,
+  TruckerDriverInput,
+  TruckerVehicle,
+  TruckPhotoSlot,
+  Wallet,
+} from '@/models/trucker/trucker.model';
 
 import { proofForm } from '../delivery/delivery.service';
 import { api } from '../shared/api.service';
+import { appendPhoto } from '../shared/form-file';
 
 /**
  * A partner trucker's own screens.
@@ -47,6 +56,8 @@ export const truckerService = {
     canTakeWork: boolean;
     status: string;
     commissionBp: number;
+    /** False for an approved partner with no truck on the road yet. */
+    hasTruck: boolean;
   }> {
     const response = await api.envelope<Job[]>(
       'partner/jobs',
@@ -58,6 +69,7 @@ export const truckerService = {
       canTakeWork: Boolean(response.meta?.['can_take_work']),
       status: String(response.meta?.['status'] ?? 'pending'),
       commissionBp: Number(response.meta?.['commission_bp'] ?? 0),
+      hasTruck: response.meta?.['has_truck'] !== false,
     };
   },
 
@@ -163,6 +175,45 @@ export const truckerService = {
     return api.get<TruckerVehicle[]>('partner/vehicles');
   },
 
+  /** Their own drivers. Refused (403) until the office has approved them. */
+  drivers(): Promise<TruckerDriver[]> {
+    return api.get<TruckerDriver[]>('partner/drivers');
+  },
+
+  /** Add a driver with a login of their own. */
+  addDriver(driver: TruckerDriverInput): Promise<TruckerDriver> {
+    return api.post<TruckerDriver>('partner/drivers', driver);
+  },
+
+  /** Stand a driver down, or back on. */
+  setDriverStatus(driverId: string, status: 'active' | 'inactive'): Promise<TruckerDriver> {
+    return api.patch<TruckerDriver>(`partner/drivers/${driverId}`, { status });
+  },
+
+  /**
+   * Hand a run to one of their drivers, or take it back with `null` — and,
+   * when `vehicleId` is given, send it out on that truck instead.
+   */
+  assignDriver(tripId: string, driverId: string | null, vehicleId?: string | null): Promise<Trip> {
+    return api.post<Trip>(`partner/trips/${tripId}/driver`, {
+      trucker_driver_id: driverId,
+      ...(vehicleId ? { trucker_vehicle_id: vehicleId } : {}),
+    });
+  },
+
+  /** Correct a driver's name, phone or licence. */
+  updateDriver(
+    driverId: string,
+    changes: { name?: string; phone?: string | null; licence_no?: string },
+  ): Promise<TruckerDriver> {
+    return api.patch<TruckerDriver>(`partner/drivers/${driverId}`, changes);
+  },
+
+  /** Take a driver off the books. Their runs come back; their login stops. */
+  removeDriver(driverId: string): Promise<unknown> {
+    return api.delete(`partner/drivers/${driverId}`);
+  },
+
   /** Add a truck, or take one off the road while it is in the shop. */
   saveVehicle(
     vehicle: Partial<TruckerVehicle> & { plate?: string },
@@ -172,4 +223,38 @@ export const truckerService = {
       ? api.patch<TruckerVehicle>(`partner/vehicles/${vehicleId}`, vehicle)
       : api.post<TruckerVehicle>('partner/vehicles', vehicle);
   },
+
+  /**
+   * A new truck, with its photographs — multipart, like the proof of delivery.
+   *
+   * Front, both sides, back and plate are required; the engine is optional.
+   * The truck lands waiting for Cargo Rush to verify it.
+   */
+  async addVehicle(
+    vehicle: { plate: string; model: string; capacity_kg: number },
+    photos: Partial<Record<TruckPhotoSlot, ProofPhoto>>,
+  ): Promise<TruckerVehicle> {
+    const body = await photoForm(photos);
+
+    body.append('plate', vehicle.plate);
+    body.append('model', vehicle.model);
+    body.append('capacity_kg', String(vehicle.capacity_kg));
+
+    return api.postForm<TruckerVehicle>('partner/vehicles', body);
+  },
+
+  /** New photos for a truck — usually after Cargo Rush turned it down. */
+  resendPhotos(vehicleId: string, photos: Partial<Record<TruckPhotoSlot, ProofPhoto>>): Promise<TruckerVehicle> {
+    return api.postForm<TruckerVehicle>(`partner/vehicles/${vehicleId}/photos`, photoForm(photos));
+  },
 };
+
+async function photoForm(photos: Partial<Record<TruckPhotoSlot, ProofPhoto>>): Promise<FormData> {
+  const body = new FormData();
+
+  for (const [slot, photo] of Object.entries(photos)) {
+    if (photo) await appendPhoto(body, `photo_${slot}`, photo);
+  }
+
+  return body;
+}

@@ -29,7 +29,9 @@
       >
         <option value="">Every kind</option>
         @for (option of categories(); track option.value) {
-          <option [value]="option.value">{{ option.label }}</option>
+          <option [value]="option.value" [selected]="option.value === (filters().category ?? '')">
+            {{ option.label }}
+          </option>
         }
       </select>
     </app-field>
@@ -42,7 +44,9 @@
       >
         <option value="">Every account</option>
         @for (account of accounts(); track account.id) {
-          <option [value]="account.id">{{ account.label }}</option>
+          <option [value]="account.id" [selected]="account.id === (filters().account_id ?? '')">
+            {{ account.label }}
+          </option>
         }
       </select>
     </app-field>
@@ -116,7 +120,17 @@
           @for (entry of entries; track entry.id) {
             <div class="flex flex-wrap items-center gap-3 py-2.5">
               <div class="min-w-0 flex-1">
-                <p class="cr-num text-[13px] font-semibold">{{ entry.reference }}</p>
+                <p class="cr-num text-[13px] font-semibold">
+                  {{ entry.reference }}
+                  @if (entry.source !== 'manual') {
+                    <span
+                      class="ml-1.5 rounded-full bg-cr-tint px-2 py-0.5 align-middle text-[11px] font-semibold text-cr-blue"
+                      title="Posted by the record itself. Correct the record and this entry follows."
+                    >
+                      Auto · {{ entry.source_label ?? entry.source }}
+                    </span>
+                  }
+                </p>
                 <p class="truncate text-[12px] text-cr-ink-muted">
                   {{ entry.memo }}
                   @if (entry.status === 'void' && entry.void_reason) {

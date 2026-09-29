@@ -44,7 +44,8 @@ import { ErrorState } from '../../shared/states';
       singular="supplier"
       plural="suppliers"
       actionLabel="New supplier"
-      (add)="list.create()" />
+      (add)="list.create()"
+    />
 
     <app-card [padded]="false">
       @if (list.error(); as message) {
@@ -62,7 +63,8 @@ import { ErrorState } from '../../shared/states';
           emptyTitle="No suppliers yet"
           emptyBody="Add the garages, chandlers and canteens the fleet buys from. An expense, a service or a bill can then name one."
           (open)="list.edit($any($event))"
-          (remove)="list.remove($any($event))" />
+          (remove)="list.remove($any($event))"
+        />
       }
     </app-card>
   `,
@@ -79,6 +81,7 @@ export class SuppliersPage {
 
   protected readonly columns: Column<Supplier>[] = [
     { label: 'Supplier', kind: 'strong', value: (s) => s.name, sub: (s) => s.supplies },
+    { label: 'Category', value: (s) => s.category_name },
     { label: 'Contact', value: (s) => s.contact },
     {
       label: 'Expenses',

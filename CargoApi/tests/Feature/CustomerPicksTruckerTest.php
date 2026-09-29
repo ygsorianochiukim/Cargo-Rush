@@ -36,6 +36,10 @@ use Database\Seeders\RoleSeeder;
  * standing arrangement being exercised, and it needs no acceptance.
  */
 beforeEach(function (): void {
+    // Pricing is zone-only, and an unpriced run cannot go out or be billed.
+    // One card at the old tariff's figures, so every run here is priced.
+    zoneCard();
+
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
     $this->seed(RoleSeeder::class);

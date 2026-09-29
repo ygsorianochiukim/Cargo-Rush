@@ -44,7 +44,9 @@
       >
         <option value="">Choose an account…</option>
         @for (account of pickable(); track account.id) {
-          <option [value]="account.id">{{ account.label }}</option>
+          <option [value]="account.id" [selected]="account.id === accountId()">
+            {{ account.label }}
+          </option>
         }
       </select>
     </app-field>

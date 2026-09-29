@@ -35,7 +35,7 @@ use Illuminate\Support\Collection;
  *
  * It owns no table. It composes the trip and invoice repositories and delegates
  * writing to `TripService`, so a request booked here goes through exactly the
- * same path — reference, delivery log, tariff quote, notification — as one the
+ * same path — reference, delivery log, zone-card quote, notification — as one the
  * office enters.
  *
  * ## Two kinds of customer, and one of them may choose
@@ -200,7 +200,8 @@ class PortalService
     }
 
     /**
-     * File a request. Lands as `pending`, priced, with that carrier's desk told.
+     * File a request. Lands as `pending` — priced off the zone card, or unpriced
+     * with the reason where no zone line covers it — with that carrier's desk told.
      *
      * The customer and the requesting account are the caller's, never the
      * payload's — see `DeliveryRequestRequest`, which stamps both from the
@@ -210,7 +211,7 @@ class PortalService
      *
      * Everything happens inside the carrier's tenancy, which is what makes the
      * request theirs rather than a row filed in the wrong company: the
-     * reference comes from their series, the price from their tariff, and the
+     * reference comes from their series, the price from their zone card, and the
      * notification goes to their dispatchers. The relations are loaded in there
      * too — read afterwards they would resolve under the caller's own company
      * and come back empty.
@@ -281,7 +282,9 @@ class PortalService
             "{$trucker->name}'s truck cannot carry that load.",
         );
 
-        $trip->update(['trucker_id' => $trucker->getKey()]);
+        // No fleet unit on a partner's run: a stray `vehicle_id` is what once
+        // booked the whole price as company income. See `TripService::putOnTheBooks`.
+        $trip->update(['trucker_id' => $trucker->getKey(), 'vehicle_id' => null]);
 
         $this->notifications->push(
             icon: 'shipments',

@@ -1,5 +1,5 @@
-import { ReactNode } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ReactNode, useState } from 'react';
+import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Wordmark } from './ui/wordmark';
@@ -15,6 +15,7 @@ export function Screen({
   subtitle,
   brand = false,
   right,
+  onRefresh,
   children,
 }: {
   title: string;
@@ -22,9 +23,23 @@ export function Screen({
   /** Home screen shows the lockup instead of a text title. */
   brand?: boolean;
   right?: ReactNode;
+  /**
+   * Pull down to refresh. The screen's own fetches decide what that means;
+   * the spinner shows for a moment so the pull visibly did something.
+   */
+  onRefresh?: () => void;
   children: ReactNode;
 }) {
   const insets = useSafeAreaInsets();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const pull = () => {
+    if (!onRefresh) return;
+
+    setRefreshing(true);
+    onRefresh();
+    setTimeout(() => setRefreshing(false), 700);
+  };
 
   return (
     <View style={styles.root}>
@@ -54,7 +69,12 @@ export function Screen({
           styles.content,
           { paddingBottom: TabBarHeight + insets.bottom + Spacing.four },
         ]}
-        showsVerticalScrollIndicator={false}>
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          onRefresh ? (
+            <RefreshControl refreshing={refreshing} onRefresh={pull} tintColor={Brand.blue} colors={[Brand.blue]} />
+          ) : undefined
+        }>
         {children}
       </ScrollView>
     </View>

@@ -85,12 +85,15 @@
          to be unable to tell them apart at all. -->
     <app-card heading="Receivables" icon="billing" [hint]="receivablesHint()">
       @if (receivables(); as money) {
-        <p class="cr-meta">Pending payment</p>
+        <!-- Customer invoices only. Finance's receivables also count what
+             partner truckers owe on runs they billed themselves, so this is
+             named for what it is rather than "Receivables". -->
+        <p class="cr-meta">Invoices awaiting payment</p>
         <p class="cr-num mt-1 text-[28px] leading-none font-semibold">
           {{ fmt.money(money.pending_payment_cents, money.currency) }}
         </p>
         <p class="mt-1 text-[12px] text-cr-ink-muted">
-          {{ money.pending_count }} invoice{{ money.pending_count === 1 ? '' : 's' }} outstanding
+          {{ money.pending_count }} invoice{{ money.pending_count === 1 ? '' : 's' }} unpaid
           @if (money.overdue_cents > 0) {
             <span class="font-semibold text-cr-red">
               · {{ fmt.money(money.overdue_cents, money.currency) }} overdue
@@ -98,25 +101,40 @@
           }
         </p>
 
-        <!-- Share of billed money that has arrived. Labelled as well as
-             coloured, so the bar is never the only cue. -->
+        <!-- Share of the window's billing that has arrived. Labelled as well
+             as coloured, so the bar is never the only cue. -->
         <div
           class="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-cr-line"
           role="img"
-          [attr.aria-label]="collectedPct() + ' percent of billed money collected'">
+          [attr.aria-label]="
+            collectedPct() === null
+              ? 'Nothing billed in the last ' + money.window_days + ' days'
+              : collectedPct() + ' percent of billing in the last ' + money.window_days + ' days collected'
+          ">
           <span
             class="block h-full rounded-full bg-cr-success transition-[width] duration-200"
-            [style.width.%]="collectedPct()"></span>
+            [style.width.%]="collectedPct() ?? 0"></span>
         </div>
 
         <dl class="mt-3 flex flex-col gap-2">
           <div class="flex items-baseline gap-2">
-            <dt class="min-w-0 flex-1 truncate text-[13px]">Successful payments</dt>
+            <dt class="min-w-0 flex-1 truncate text-[13px]">
+              Collected
+              <span class="block text-[11px] text-cr-ink-muted">
+                Of invoices raised in the last {{ money.window_days }} days
+              </span>
+            </dt>
+            <dd class="cr-num text-[13px] font-semibold text-cr-success">
+              {{ collectedPct() === null ? '—' : collectedPct() + '%' }}
+            </dd>
+          </div>
+          <div class="flex items-baseline gap-2 border-t border-cr-line/70 pt-2">
+            <dt class="min-w-0 flex-1 truncate text-[13px]">
+              Successful payments
+              <span class="block text-[11px] text-cr-ink-muted">All time</span>
+            </dt>
             <dd class="cr-num text-[13px] font-semibold text-cr-success">
               {{ fmt.money(money.successful_payment_cents, money.currency) }}
-            </dd>
-            <dd class="cr-num w-10 text-right text-[12px] text-cr-ink-muted">
-              {{ collectedPct() }}%
             </dd>
           </div>
           <div class="flex items-baseline gap-2 border-t border-cr-line/70 pt-2">

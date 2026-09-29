@@ -11,7 +11,7 @@ import {
 } from '@angular/core';
 
 import { Trip } from '../../models/trip/trip.model';
-import { Trucker } from '../../models/trucker/trucker.model';
+import { Trucker, TruckerVehicle } from '../../models/trucker/trucker.model';
 import { TruckerService } from '../../services/trucker/trucker.service';
 import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
@@ -41,9 +41,15 @@ import { EmptyState, SkeletonRows } from '../../shared/states';
  *
  * `truckers/available` rather than the whole roster: vetted, online, and
  * holding a truck that is not in the shop. Capacity is checked here as well so
- * a load too heavy for somebody's unit is visibly ruled out rather than
+ * a load too heavy for somebody's trucks is visibly ruled out rather than
  * refused by the API after the press — the same rule the job board applies, in
  * the place where a person is choosing.
+ *
+ * ## The desk picks the trucker, not the truck
+ *
+ * A trucker is offered when **any** of their trucks on the road can carry the
+ * load, and greyed out only when none can. Which truck goes is the trucker's
+ * call, made on their phone before the run starts; this dialog never names one.
  */
 @Component({
   selector: 'app-assign-trucker',
@@ -71,6 +77,16 @@ import { EmptyState, SkeletonRows } from '../../shared/states';
         wallet will post at delivery.
       -->
       @if (trip(); as t) {
+        @if (t.price_cents === null) {
+          <!-- Nothing to share out: no zone line covers the run, and the API
+               refuses to hand an unpriced run to anybody. -->
+          <p class="mb-4 rounded-control bg-cr-warning-bg px-4 py-3 text-[13px] text-cr-warning" role="alert">
+            This run has no price yet — add a zone line on the Pricing card or enter a price.
+            @if (t.pricing_note) {
+              <span class="mt-1 block text-[12px]">{{ t.pricing_note }}</span>
+            }
+          </p>
+        } @else {
         <div class="mb-4 rounded-control bg-cr-tint px-4 py-3">
           <p class="text-[13px] font-semibold">The fleet bills this one</p>
           <p class="mt-1 text-[12px] text-cr-ink-muted">
@@ -84,12 +100,13 @@ import { EmptyState, SkeletonRows } from '../../shared/states';
                 {{ fmt.money(t.price_cents - commissionOn(t.price_cents, p.commission_bp)) }}
               </span>
               <span class="text-cr-ink-muted">
-                to {{ p.name }} · {{ rate(p.commission_bp) }} fee
+                to {{ p.business_name ?? p.name }} · {{ rate(p.commission_bp) }} fee
                 ({{ fmt.money(commissionOn(t.price_cents, p.commission_bp)) }}) to the fleet
               </span>
             </p>
           }
         </div>
+        }
       }
 
       @if (loading()) {
@@ -100,6 +117,10 @@ import { EmptyState, SkeletonRows } from '../../shared/states';
           title="Nobody available"
           body="A trucker has to be approved, online, and holding a truck that is not in the shop. Approve or check them on the Truckers page." />
       } @else {
+        <p class="mb-2 text-[12px] text-cr-ink-muted">
+          The trucker chooses which of their trucks takes it. Greyed out: none of their trucks
+          can carry {{ trip()?.weight_kg?.toLocaleString() }} kg.
+        </p>
         <ul class="flex flex-col gap-2">
           @for (t of available(); track t.id) {
             <li>
@@ -116,16 +137,14 @@ import { EmptyState, SkeletonRows } from '../../shared/states';
                 (click)="picked.set(t)">
                 <span
                   class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-cr-tint text-[11px] font-semibold text-cr-blue">
-                  {{ initials(t.name) }}
+                  {{ initials(t.business_name ?? t.name) }}
                 </span>
                 <span class="min-w-0 flex-1">
-                  <span class="block text-[13px] font-semibold">{{ t.name }}</span>
-                  <span class="cr-num block text-[12px] text-cr-ink-muted">
-                    {{ unitOf(t) }}
-                    @if (!canCarry(t)) {
-                      · too small for this load
-                    }
-                  </span>
+                  <span class="block text-[13px] font-semibold">{{ t.business_name ?? t.name }}</span>
+                  @if (t.business_name) {
+                    <span class="block text-[12px] text-cr-ink-muted">{{ t.name }}</span>
+                  }
+                  <span class="cr-num block text-[12px] text-cr-ink-muted">{{ fitOf(t) }}</span>
                 </span>
                 @if (picked()?.id === t.id) {
                   <app-icon name="check" [size]="16" class="text-cr-blue" />
@@ -228,27 +247,45 @@ export class AssignTruckerDialog {
     });
   }
 
-  /** The unit a run would go under — the first that is not in the shop. */
-  protected unitOf(trucker: Trucker): string {
-    const unit = (trucker.vehicles ?? []).find((v) => v.status === 'available');
+  /**
+   * Which of this trucker's trucks could take the load.
+   *
+   * On the road, big enough, and of the kind the load asks for when it asks —
+   * the same rule `TruckerVehicle::canCarry` applies on the API.
+   */
+  private fitting(trucker: Trucker): TruckerVehicle[] {
+    const trip = this.trip();
 
-    return unit ? `${unit.plate} · ${unit.capacity_kg.toLocaleString()} kg` : 'No truck available';
+    if (trip === null) return [];
+
+    return (trucker.vehicles ?? []).filter(
+      (v) =>
+        v.status === 'available' &&
+        v.capacity_kg >= trip.weight_kg &&
+        (!trip.truck_category_id || !v.truck_category_id || v.truck_category_id === trip.truck_category_id),
+    );
   }
 
-  /**
-   * Could this partner's truck take the load?
-   *
-   * The same rule the job board and the API apply, checked here so a load that
-   * is too heavy is visibly greyed out in the list rather than refused after
-   * the press.
-   */
+  /** Can any of their trucks take it? Greyed out only when none can. */
   protected canCarry(trucker: Trucker): boolean {
-    const trip = this.trip();
-    const unit = (trucker.vehicles ?? []).find((v) => v.status === 'available');
+    return this.fitting(trucker).length > 0;
+  }
 
-    if (trip === null || unit === undefined) return false;
+  /** "2 of 3 trucks can carry 1,800 kg", or why none can. */
+  protected fitOf(trucker: Trucker): string {
+    const onRoad = (trucker.vehicles ?? []).filter((v) => v.status === 'available');
+    const fits = this.fitting(trucker).length;
+    const kg = (this.trip()?.weight_kg ?? 0).toLocaleString();
 
-    return unit.capacity_kg >= trip.weight_kg;
+    if (onRoad.length === 0) return 'No truck on the road';
+
+    if (fits === 0) {
+      const biggest = Math.max(...onRoad.map((v) => v.capacity_kg)).toLocaleString();
+
+      return `No truck can carry ${kg} kg · biggest is ${biggest} kg`;
+    }
+
+    return `${fits} of ${onRoad.length} ${onRoad.length === 1 ? 'truck' : 'trucks'} can carry ${kg} kg`;
   }
 
   protected commissionOn(cents: number, bp: number): number {

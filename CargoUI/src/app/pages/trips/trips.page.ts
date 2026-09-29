@@ -55,10 +55,24 @@ import { ConfirmRequestDialog } from './confirm-request.dialog';
               </span>
 
               <!-- The quote the customer was already shown. Printed here so the
-                   desk confirms against the same figure the customer has. -->
-              <span class="cr-num text-[13px] font-semibold">
-                {{ fmt.money(request.price_cents, request.currency) }}
-              </span>
+                   desk confirms against the same figure the customer has — or,
+                   where no zone line covers the run, why there is no figure. -->
+              @if (request.price_cents === null) {
+                <span class="flex max-w-[260px] flex-col items-end gap-0.5 text-right">
+                  <span
+                    class="inline-flex items-center gap-1.5 rounded-full bg-cr-warning-bg px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] text-cr-warning uppercase">
+                    <span class="h-1.5 w-1.5 rounded-full bg-cr-warning"></span>
+                    Needs a zone
+                  </span>
+                  @if (request.pricing_note) {
+                    <span class="text-[12px] text-cr-ink-muted">{{ request.pricing_note }}</span>
+                  }
+                </span>
+              } @else {
+                <span class="cr-num text-[13px] font-semibold">
+                  {{ fmt.money(request.price_cents, request.currency) }}
+                </span>
+              }
 
               <!--
                 Two ways to deal with a request, side by side.
@@ -76,11 +90,13 @@ import { ConfirmRequestDialog } from './confirm-request.dialog';
               <button
                 type="button"
                 class="h-9 rounded-control bg-cr-blue px-3 text-[13px] font-semibold text-cr-surface
-                       transition-colors hover:bg-cr-blue-hover focus:outline-none
+                       transition-colors hover:bg-cr-blue-hover focus:outline-none disabled:cursor-not-allowed disabled:opacity-50
                        focus-visible:ring-2 focus-visible:ring-cr-blue focus-visible:ring-offset-2"
                 [attr.aria-label]="
                   'Confirm ' + request.reference + ', ' + request.origin + ' to ' + request.destination
                 "
+                [disabled]="request.price_cents === null"
+                [attr.title]="request.price_cents === null ? unpricedHint : null"
                 (click)="confirm(request)">
                 Confirm
               </button>
@@ -88,9 +104,11 @@ import { ConfirmRequestDialog } from './confirm-request.dialog';
               <button
                 type="button"
                 class="h-9 rounded-control border border-cr-line px-3 text-[13px] font-semibold
-                       text-cr-ink transition-colors hover:bg-cr-tint focus:outline-none
+                       text-cr-ink transition-colors hover:bg-cr-tint focus:outline-none disabled:cursor-not-allowed disabled:opacity-50
                        focus-visible:ring-2 focus-visible:ring-cr-blue focus-visible:ring-offset-2"
                 [attr.aria-label]="'Give ' + request.reference + ' to a trucker'"
+                [disabled]="request.price_cents === null"
+                [attr.title]="request.price_cents === null ? unpricedHint : null"
                 (click)="assignTrucker(request)">
                 Give to a trucker
               </button>
@@ -276,6 +294,18 @@ export class TripsPage {
   }
 
   protected async remove(trip: Trip): Promise<void> {
+    // The API refuses it, and says why; saying so here saves the round trip
+    // and a delete that seemed to do nothing.
+    if (trip.billed_at) {
+      await this.confirmDelete.ask({
+        title: `${trip.reference} cannot be deleted`,
+        body: `It has been delivered and billed, so its income, its invoice and any trucker settlement are already on the books.`,
+        confirmLabel: 'OK',
+        icon: 'billing',
+      });
+      return;
+    }
+
     const ok = await this.confirmDelete.ask({
       title: `Delete ${trip.reference}?`,
       body: `This removes the trip and its dispatch record. Delivery logs already filed against it are kept.`,
@@ -295,6 +325,15 @@ export class TripsPage {
   }
 
   protected readonly fmt = fmt;
+
+  /**
+   * Why Confirm and Give to a trucker are greyed out on an unpriced request.
+   *
+   * The API refuses both with the same words; saying so on the button saves
+   * the desk a refusal it could not have acted on from this screen.
+   */
+  protected readonly unpricedHint =
+    'This run has no price yet — add a zone line on the Pricing card or enter a price.';
 
   protected readonly tripLabel = (t: Trip) => t.reference;
 
@@ -343,20 +382,38 @@ export class TripsPage {
      */
     {
       label: 'Driver',
-      value: (t) => t.driver_name ?? t.trucker_name,
+      // A trucker's own driver when they handed it to one, the trucker
+      // otherwise — and the sub-line says whose driver that is.
+      value: (t) => t.driver_name ?? t.trucker_driver_name ?? t.trucker_name,
       sub: (t) =>
-        t.hauled_by === 'trucker' ? (t.trucker_phone ?? 'Partner') : (t.helpers.length > 0 ? t.helpers.map((h) => h.name).join(', ') : 'No helper'),
+        t.hauled_by === 'trucker'
+          ? t.trucker_driver_name
+            ? `Driver for ${t.trucker_business_name ?? t.trucker_name ?? 'a trucker'}`
+            : (t.trucker_phone ?? 'Partner')
+          : t.helpers.length > 0
+            ? t.helpers.map((h) => h.name).join(', ')
+            : 'No helper',
     },
     { label: 'Vehicle', kind: 'muted', value: (t) => t.vehicle_plate ?? t.trucker_plate },
     { label: 'Weight', kind: 'num', value: (t) => fmt.kg(t.weight_kg) },
-    // What the haul is charged, quoted from the tariff at booking. `Billed`
+    // What the haul is charged, quoted off the zone card at booking. `Billed`
     // under it says whether the delivery has already put it on the books, so
     // the two are read together rather than as one ambiguous figure.
     {
       label: 'Price',
       kind: 'num',
-      value: (t) => fmt.money(t.price_cents, t.currency),
-      sub: (t) => (t.billed_at ? 'Billed' : null),
+      value: (t) => (t.price_cents === null ? null : fmt.money(t.price_cents, t.currency)),
+      // No zone line covers the run: a pill rather than ₱0 or a dash, and the
+      // reason under it so the desk knows which band to add a line to.
+      badge: (t) => (t.price_cents === null ? 'Needs a zone' : null),
+      sub: (t) =>
+        t.price_cents === null
+          ? t.pricing_note
+          : t.billed_at
+            ? 'Billed'
+            : t.manually_priced
+              ? 'Manual price'
+              : null,
     },
     { label: 'Scheduled', kind: 'num', value: (t) => fmt.dateTime(t.scheduled_at) },
     { label: 'ETA', kind: 'num', value: (t) => fmt.dateTime(t.eta) },

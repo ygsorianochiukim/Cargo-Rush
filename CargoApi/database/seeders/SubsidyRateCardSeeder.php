@@ -45,8 +45,7 @@ use Illuminate\Database\Seeder;
  * A1's band starts at **0**, not 1. The table starts at 1 because a haul of no
  * distance is not a haul, but a trip booked over the phone against a town name
  * carries no distance at all until somebody pins it — and the shortest
- * published band is a better answer for it than falling through to the config
- * tariff at an unrelated figure.
+ * published band is a better answer for it than no price at all.
  *
  * The **money** is three lines under each band. The `Current Price` column has
  * no truck category on it, because it is the rate for the fleet as it stands
@@ -62,11 +61,10 @@ use Illuminate\Database\Seeder;
  *
  * ## What the card does not say
  *
- * The table stops at 600 km, and so does this. A longer run finds no band,
- * falls to the firm's plain distance card if it has one and to the config
- * tariff if it does not, and the quote's `source` says `tariff` — visibly
- * off-card, which is the right answer for a distance the principal has not
- * published a rate for.
+ * The table stops at 600 km, and so does this. A longer run finds no band and
+ * is saved **unpriced** — the quote's `source` says `unzoned` and its reason
+ * names the distance — which is the right answer for a distance the principal
+ * has not published a rate for. The office adds a zone or types a price.
  *
  * A1 and A2 share a band, as do E1 and E2. Nothing in the document says what
  * separates them, and nothing here guesses: both are active, the desk picks

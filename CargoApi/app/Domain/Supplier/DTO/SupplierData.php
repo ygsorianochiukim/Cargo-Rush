@@ -11,6 +11,7 @@ final class SupplierData extends Data
 {
     public function __construct(
         public readonly ?string $name = null,
+        public readonly ?string $category_id = null,
         public readonly ?string $contact = null,
         public readonly ?string $address = null,
         /**
@@ -32,6 +33,7 @@ final class SupplierData extends Data
     {
         return new self(
             name: $attributes['name'] ?? null,
+            category_id: $attributes['category_id'] ?? null,
             contact: $attributes['contact'] ?? null,
             address: $attributes['address'] ?? null,
             supplies: $attributes['supplies'] ?? null,
@@ -44,6 +46,7 @@ final class SupplierData extends Data
     {
         return [
             'name' => $this->name,
+            'category_id' => $this->category_id,
             'contact' => $this->contact,
             'address' => $this->address,
             'supplies' => $this->supplies,

@@ -22,10 +22,17 @@ namespace App\Domain\Pricing\DTO;
 final readonly class QuoteBreakdown
 {
     public function __construct(
-        /** What to charge, centavos, after diesel. */
-        public int $cents,
+        /**
+         * What to charge, centavos, after diesel — or null when no zone line
+         * covers the run.
+         *
+         * Null and not zero, because zero is a price (the company's own
+         * freight) and "nobody has priced this" is not. A caller that needs a
+         * number asks `priced()` first; nothing may turn a null into ₱0.
+         */
+        public ?int $cents,
         /** The card figure before diesel — the table's `Current Price`. */
-        public int $cardCents,
+        public ?int $cardCents,
         public int $km,
         public int $weightKg,
         /**
@@ -38,11 +45,14 @@ final readonly class QuoteBreakdown
         public int $fuelAdjustmentBp,
         public string $currency,
         /**
-         * Which card priced it.
+         * What priced it.
          *
-         *   `zone`    — a band of the rate table
-         *   `card`    — the firm's plain distance card, with no band in it
-         *   `tariff`  — nothing covered the run, so the configured fallback
+         *   `zone`     — a line of a zone that covers the run
+         *   `unzoned`  — no zone line covers it, so it is not priced yet
+         *
+         * There used to be two more — the zoneless distance card and a flat
+         * config tariff — and both are gone on purpose: a trip is charged what
+         * the zone card says, or waits for somebody to say otherwise.
          */
         public string $source,
         public ?string $zoneId = null,
@@ -79,12 +89,56 @@ final readonly class QuoteBreakdown
          * @var array<int, array{id: string, code: string, name: string, band: string}>
          */
         public array $zoneAlternatives = [],
+        /**
+         * Why there is no price, in words the desk can act on — "No zone covers
+         * 712 km for a 10-wheeler". Null on a priced quote.
+         */
+        public ?string $reason = null,
     ) {}
+
+    /**
+     * An unpriced quote: no zone line covers the run.
+     *
+     * @param  array<int, array{id: string, code: string, name: string, band: string}>  $zoneAlternatives
+     */
+    public static function unzoned(
+        int $km,
+        int $weightKg,
+        string $currency,
+        string $reason,
+        ?string $zoneId = null,
+        ?string $zoneName = null,
+        ?string $zoneCode = null,
+        ?string $zoneBand = null,
+        array $zoneAlternatives = [],
+    ): self {
+        return new self(
+            cents: null,
+            cardCents: null,
+            km: $km,
+            weightKg: $weightKg,
+            fuelAdjustmentBp: 0,
+            currency: $currency,
+            source: 'unzoned',
+            zoneId: $zoneId,
+            zoneName: $zoneName,
+            zoneCode: $zoneCode,
+            zoneBand: $zoneBand,
+            zoneAlternatives: $zoneAlternatives,
+            reason: $reason,
+        );
+    }
+
+    /** Did a zone line price this run? */
+    public function priced(): bool
+    {
+        return $this->cents !== null;
+    }
 
     /** What diesel added, in centavos. Signed — the percentage rule can discount. */
     public function fuelAdjustmentCents(): int
     {
-        return $this->cents - $this->cardCents;
+        return $this->priced() ? $this->cents - (int) $this->cardCents : 0;
     }
 
     /** The columns a trip stores so its figure stays explainable. */
@@ -95,6 +149,8 @@ final readonly class QuoteBreakdown
             'pricing_bracket_id' => $this->bracketId,
             'fuel_adjustment_bp' => $this->fuelAdjustmentBp,
             'fuel_surcharge_cents' => $this->fuelSurchargeCents,
+            'pricing_source' => $this->source,
+            'pricing_note' => $this->reason,
         ];
     }
 
@@ -112,6 +168,10 @@ final readonly class QuoteBreakdown
             'weight_kg' => $this->weightKg,
             'currency' => $this->currency,
             'source' => $this->source,
+            // The flag a client branches on, so none of them has to infer
+            // "unpriced" from a null — and one of them turn it into ₱0.
+            'needs_zone' => ! $this->priced(),
+            'reason' => $this->reason,
             'zone' => $this->zoneId === null ? null : [
                 'id' => $this->zoneId,
                 'code' => $this->zoneCode,

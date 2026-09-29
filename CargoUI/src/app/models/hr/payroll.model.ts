@@ -30,6 +30,21 @@ export interface PayRunStatutory {
 }
 
 /**
+ * What the company pays the agencies on top of a run — the employer's share.
+ *
+ * Not deducted from anybody's pay, so it is outside the gross, the deductions
+ * and the net. EC (Employees' Compensation) is the employer's alone and is
+ * remitted with SSS.
+ */
+export interface PayRunEmployerContributions {
+  sss: number;
+  ec: number;
+  philhealth: number;
+  pagibig: number;
+  total: number;
+}
+
+/**
  * One person's payslip.
  *
  * The name and the position are copied onto the line rather than read through
@@ -105,6 +120,13 @@ export interface PayRunLine {
   pagibig_enrolled: boolean;
 
   withholding_tax_cents: number;
+
+  /** The company's share on this person — on top of the payslip, never off it. */
+  employer_sss_cents: number;
+  employer_ec_cents: number;
+  employer_philhealth_cents: number;
+  employer_pagibig_cents: number;
+  employer_contributions_cents: number;
   other_deductions_cents: number;
   /** What came off the store tab — the mini-mart *pautang*. */
   store_deduction_cents: number;
@@ -220,6 +242,19 @@ export interface PayRun extends Timestamped {
   paid_at: string | null;
 
   /**
+   * What the agencies are owed off this run, and whether it has gone.
+   * `remitted_on` null means nobody has recorded it, and Payables presumes it
+   * owed until `remittance_due_on`.
+   */
+  owed_to_agencies_cents: number;
+  remittance_due_on: string;
+  remitted_on: string | null;
+  /** REM-YYYY-####, assigned by the system when the remittance was recorded. */
+  remittance_no: string | null;
+  /** The agency's own reference (a PRN, an eFPS confirmation), when the office had one. */
+  remittance_reference: string | null;
+
+  /**
    * The entry this run posted, once it was paid.
    *
    * Null before that, and it is the link that says payroll reached the books
@@ -251,6 +286,7 @@ export interface PayRun extends Timestamped {
   deductions_cents: number;
   net_cents: number;
   statutory: PayRunStatutory;
+  employer_contributions: PayRunEmployerContributions;
   currency: string;
 
   /**

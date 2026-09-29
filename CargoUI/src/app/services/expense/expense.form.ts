@@ -61,9 +61,9 @@ export function expenseSpec(): RecordSpec<Expense> {
   // Active only, for the reason the categories are: an inactive supplier is one
   // the office has stopped buying from, and offering them would quietly put new
   // spend back against a shop nobody uses.
-  suppliers.list({ active: 1 } as never).subscribe((res) => {
+  suppliers.options().subscribe((rows) => {
     shops.length = 0;
-    shops.push(...res.data.map((s) => ({ value: s.id, label: s.name })));
+    shops.push(...rows);
   });
 
   return {

@@ -24,8 +24,11 @@ use Illuminate\Support\Facades\DB;
  * when work happened would quietly hide exactly the month the office most needs
  * to see it in.
  *
- * So it is charged per truck per month, on the first of the month, for the
- * month that just ended.
+ * So it is charged per truck per month, for the whole month, from the month's
+ * first day — due on its last. It sits in Payables all month, and one still
+ * unpaid after the month ends is overdue. (It used to be charged on the 1st
+ * for the month just ended, which left the month being worked with no rent
+ * showing anywhere.)
  *
  * ## Why an expense rather than a table of its own
  *
@@ -79,6 +82,67 @@ class TruckRentService
     }
 
     /**
+     * Put every flat-rented truck's rent on the books for the month `$today`
+     * is in, and catch up the month before if it was missed.
+     *
+     * The whole month's rent is owed from its first day and due on its last,
+     * so it shows in Payables for the full month — payable any time in it —
+     * and a month still unpaid once it has ended reads as overdue. The catch-up
+     * is what makes a missed run harmless: whichever day this next runs, last
+     * month is there too. Never a month before the truck was on the books.
+     *
+     * Safe to run every day: a month already charged is skipped.
+     *
+     * @return int how many charges were raised
+     */
+    public function chargeDue(CarbonInterface $today): int
+    {
+        $category = $this->category();
+        $raised = 0;
+
+        $hired = Vehicle::query()
+            ->where('arrangement', VehicleArrangement::Rented->value)
+            ->whereNotNull('rent_cents')
+            ->where('rent_cents', '>', 0)
+            ->get();
+
+        foreach ($hired as $vehicle) {
+            $raised += $this->chargeDueFor($vehicle, $today, $category);
+        }
+
+        return $raised;
+    }
+
+    /**
+     * One truck's rent, this month and a missed last month.
+     *
+     * Also called the moment a truck is put on the books as rented, so its
+     * rent is in Payables from that day rather than from the next run.
+     */
+    public function chargeDueFor(Vehicle $vehicle, CarbonInterface $today, ?ExpenseCategory $category = null): int
+    {
+        if (! $vehicle->chargesRent()) {
+            return 0;
+        }
+
+        $current = $today->copy()->startOfMonth();
+        $since = ($vehicle->created_at ?? $today)->copy()->startOfMonth();
+        $raised = 0;
+
+        foreach ([$current->copy()->subMonth(), $current] as $month) {
+            if ($month->lt($since)) {
+                continue;
+            }
+
+            if ($this->charge($vehicle, $month, $category) !== null) {
+                $raised++;
+            }
+        }
+
+        return $raised;
+    }
+
+    /**
      * One truck, one month.
      *
      * Returns null when the month is already billed, which is what makes the
@@ -93,20 +157,31 @@ class TruckRentService
         $period = $month->copy()->startOfMonth();
 
         /**
-         * The reference *is* the idempotency.
+         * One charge per unit per month — keyed on the **vehicle**, not the
+         * plate.
          *
-         * Derived from the unit and the month rather than from a counter, so
-         * two runs produce the same string and the second finds the first.
-         * It is also what somebody reads on the expense line — "RENT
-         * ABC-1234 2026-09" says what it is without opening anything.
+         * The reference used to be the idempotency: "RENT <plate> <month>",
+         * looked up by string. Two things broke it. A hired unit with no plate
+         * yet made "RENT  2026-09", so the second plateless unit found the
+         * first one's charge and was never billed; and correcting a plate
+         * mid-month made a new string, so the same month was charged twice.
+         * The unit's id changes for neither, and the charge is dated to the
+         * month's last day, so that pair is the key.
          */
-        $reference = sprintf('RENT %s %s', $vehicle->plate, $period->format('Y-m'));
+        $existing = Expense::query()
+            ->where('vehicle_id', $vehicle->getKey())
+            ->whereHas('category', static fn ($query) => $query->where('key', self::CATEGORY_KEY))
+            ->whereDate('date', $period->copy()->endOfMonth()->toDateString())
+            ->exists();
 
-        $existing = Expense::query()->where('reference', $reference)->first();
-
-        if ($existing !== null) {
+        if ($existing) {
             return null;
         }
+
+        // Still what somebody reads on the expense line — "RENT ABC-1234
+        // 2026-09" says what it is without opening anything — but no longer
+        // what finds it.
+        $reference = sprintf('RENT %s %s', $vehicle->plate ?? 'UNPLATED', $period->format('Y-m'));
 
         return DB::transaction(fn (): Expense => Expense::create([
             'category_id' => ($category ?? $this->category())->getKey(),

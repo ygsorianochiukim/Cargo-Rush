@@ -75,6 +75,10 @@ class DeliveryController extends ApiController
             Role::Driver->value => $trip !== null && $trip->isCrewedBy($user->driver?->getKey()),
             Role::Trucker->value => $trip !== null && $trip->trucker_id !== null
                 && $trip->trucker_id === $user->trucker?->getKey(),
+            // Only the run their trucker handed them — never the owner's other
+            // runs, and never one of Cargo Rush's.
+            Role::TruckerDriver->value => $trip !== null && $trip->trucker_driver_id !== null
+                && $trip->trucker_driver_id === $user->truckerDriver?->getKey(),
             default => true,
         };
 

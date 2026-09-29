@@ -59,20 +59,39 @@ export interface Trip {
   destination: string;
   cargo: string;
   weight_kg: number;
+  /** The kind of truck the load asks for. Null when any will do. */
+  truck_category_id?: string | null;
   pieces: number;
   handling: string | null;
 
   /**
-   * What the haul is charged, in centavos.
+   * What the haul is charged, in centavos — or null while it is not priced.
    *
-   * Quoted from the tariff when the trip is booked, so a customer is told the
-   * price at the moment they ask rather than when the invoice turns up.
+   * Quoted off the haulier's zone card when the trip is booked, so a customer
+   * is told the price at the moment they ask rather than when the invoice turns
+   * up. Where no zone line covers the run it is null and `needs_zone` is true:
+   * the office prices it by hand, and the screen says so rather than ₱0.
    */
-  price_cents: number;
+  price_cents: number | null;
   currency: string;
+  /** No zone line covers the run yet, so the office will confirm the price. */
+  needs_zone?: boolean;
+  /** Why, in the office's words. Not shown to a customer; the desk acts on it. */
+  pricing_note?: string | null;
 
   customer_id: string | null;
   customer: string | null;
+
+  /**
+   * Which of a trucker's own drivers has the run. Null while the owner runs it
+   * themselves, and on every Cargo Rush run. Only on the trucker's endpoints.
+   */
+  trucker_driver_id?: string | null;
+  /** Which of the trucker's trucks it goes out on. Only on the trucker's endpoints. */
+  trucker_vehicle_id?: string | null;
+  trucker_driver_name?: string | null;
+  /** The trucker's own truck on the run. Only on the trucker's endpoints. */
+  trucker_plate?: string | null;
 
   /**
    * The haulier carrying it.
@@ -104,6 +123,9 @@ export interface Trip {
    * anyway and "run the check" is an instruction where a 422 is a complaint.
    */
   inspection: TripInspection;
+
+  /** The dispatch checklist as last answered — null until somebody has. */
+  dispatch_checklist?: DispatchChecklistAnswers | null;
 
   status: StatusValue;
   pickup_place: string | null;
@@ -201,4 +223,23 @@ export interface CurrentTrip {
   destination_lng: number | null;
   distance_total_m: number;
   mapped: boolean;
+}
+
+/**
+ * The Safety, LTO and Warehouse Compliance Checklist — the firm's dispatch
+ * form, answered on the phone and printed on the dispatch sheet with the
+ * boxes ticked. Separate from the pre-trip inspection that gates Start.
+ */
+export type DispatchAnswer = 'yes' | 'no' | 'na';
+
+export interface DispatchChecklistSection {
+  section: string;
+  items: { key: string; label: string }[];
+}
+
+export interface DispatchChecklistAnswers {
+  answers: Record<string, DispatchAnswer>;
+  remarks: string | null;
+  checked_at: string;
+  checked_by: string | null;
 }

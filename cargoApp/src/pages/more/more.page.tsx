@@ -4,6 +4,8 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { DeliveryLog } from '@/models/delivery/delivery.model';
 import { deliveryService } from '@/services/delivery/delivery.service';
 import { useSession } from '@/services/identity/session';
+import { MyDriversCard } from '@/components/my-drivers-card';
+import { MyTrucksCard } from '@/components/my-trucks-card';
 import { ProofOfDeliverySheet } from '@/components/proof-of-delivery-sheet';
 import { Screen } from '@/components/screen';
 import { Icon } from '@/components/ui/icon';
@@ -32,7 +34,13 @@ export function MorePage() {
   const { signOut } = useSession();
   const me = useMe();
 
-  const driving = me.data?.role !== 'customer';
+  const role = me.data?.role;
+  const driving = role !== 'customer';
+  /**
+   * A trucker and their drivers have no `drivers` row — their finished runs
+   * are on My Trips — so the fleet's delivery log card is not theirs.
+   */
+  const fleetDriver = driving && role !== 'trucker' && role !== 'trucker_driver';
 
   const [signOutOpen, setSignOutOpen] = useState(false);
   /** A delivered run whose photo is being sent late. */
@@ -75,7 +83,26 @@ export function MorePage() {
               </View>
             </View>
 
-            {driving ? (
+            {role === 'trucker_driver' || role === 'trucker' ? (
+              // Who they drive for, or the business they run — the line that
+              // keeps a trucker's people apart from Cargo Rush's own.
+              <View style={styles.licence}>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={styles.metaLabel}>
+                    {role === 'trucker' ? 'TRUCKING SERVICE' : 'DRIVES FOR'}
+                  </Text>
+                  <Text style={styles.metaValue} numberOfLines={1}>
+                    {(role === 'trucker' ? me.data?.trucker_business_name : me.data?.crew_employer) ?? '—'}
+                  </Text>
+                </View>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={styles.metaLabel}>EMAIL</Text>
+                  <Text style={styles.metaValue} numberOfLines={1}>
+                    {me.data?.email}
+                  </Text>
+                </View>
+              </View>
+            ) : driving ? (
               <View style={styles.licence}>
                 <View style={{ flex: 1, gap: 2 }}>
                   <Text style={styles.metaLabel}>LICENCE NO.</Text>
@@ -104,10 +131,21 @@ export function MorePage() {
         )}
       </Card>
 
+      {/* A partner's own trucks and drivers. Adding either waits for approval. */}
+      {role === 'trucker' ? (
+        <>
+          <MyTrucksCard approved={me.data?.trucker_status === 'active'} />
+          <MyDriversCard
+            approved={me.data?.trucker_status === 'active'}
+            business={me.data?.trucker_business_name ?? me.data?.name ?? ''}
+          />
+        </>
+      ) : null}
+
       {/* Delivery logs — trip history and proof of delivery. The driver's own,
           so a customer gets no card at all rather than an empty one that reads
           as "you have no deliveries" when they may well have several. */}
-      {driving ? (
+      {fleetDriver ? (
       <Card
         heading="Delivery logs"
         icon="clipboard"

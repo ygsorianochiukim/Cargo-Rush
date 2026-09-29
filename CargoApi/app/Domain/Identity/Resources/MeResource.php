@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Identity\Resources;
 
 use App\Domain\Identity\Models\User;
+use App\Domain\Shared\Enums\Role;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use App\Domain\Tenancy\Services\LogoStore;
 use Illuminate\Http\Request;
@@ -24,6 +25,11 @@ class MeResource extends ApiResource
         // with no truck free cannot take work, and reporting otherwise here
         // would have the app open on a board it is about to be refused from.
         $trucker = $this->trucker?->loadMissing('vehicles');
+        // Only a `trucker_driver` login has one; asking for anybody else would
+        // be a query per sign-in for a row that cannot exist.
+        $crew = $this->role === Role::TruckerDriver->value
+            ? $this->truckerDriver?->loadMissing('trucker')
+            : null;
 
         return [
             'id' => $this->id,
@@ -137,6 +143,18 @@ class MeResource extends ApiResource
             // What their runs split at, so the app can state the rate on the
             // job board without a second call.
             'commission_bp' => $trucker?->commissionRateBp(),
+            // The trucking service's own name, for the owner's profile.
+            'trucker_business_name' => $trucker?->business_name,
+
+            /**
+             * Present only for a trucker's driver — the fourth handset
+             * identity. `crew_employer` is who they drive for, printed on
+             * their profile; `crew_may_drive` is whether both their owner and
+             * the office still have them on the road.
+             */
+            'trucker_driver_id' => $crew?->id,
+            'crew_employer' => $crew?->employerName(),
+            'crew_may_drive' => $crew === null ? null : $crew->mayDrive(),
         ];
     }
 }

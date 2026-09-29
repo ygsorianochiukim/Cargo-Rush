@@ -110,7 +110,7 @@ export class PaymentDialog {
         }
 
         <app-field
-          label="Amount received (₱)"
+          [label]="paying() ? 'Amount paid (₱)' : 'Amount received (₱)'"
           required
           [hint]="balanceHint()"
           [error]="errorFor('amount')"
@@ -118,7 +118,11 @@ export class PaymentDialog {
           <input type="number" step="0.01" min="0" formControlName="amount" [class]="inputClass" />
         </app-field>
 
-        <app-field label="Date received" required [error]="errorFor('paid_on')">
+        <app-field
+          [label]="paying() ? 'Date paid' : 'Date received'"
+          required
+          [error]="errorFor('paid_on')"
+        >
           <input type="date" formControlName="paid_on" [class]="inputClass" />
         </app-field>
 
@@ -134,7 +138,11 @@ export class PaymentDialog {
 
         <app-field
           label="Reference"
-          hint="The deposit slip or cheque number — what a bank statement can be matched against."
+          [hint]="
+            paying()
+              ? 'The cheque number or transfer reference — what a bank statement can be matched against.'
+              : 'The deposit slip or cheque number — what a bank statement can be matched against.'
+          "
           [error]="errorFor('reference')"
         >
           <input
@@ -215,6 +223,9 @@ export class PaymentForm {
 
     return this.dialog.choices().find((choice) => choice.id === id) ?? null;
   });
+
+  /** Money going out on a supplier bill, rather than coming in on an invoice. */
+  protected readonly paying = computed(() => this.dialog.invoice()?.direction === 'payable');
 
   protected readonly subtitle = computed(() => {
     const invoice = this.dialog.invoice();

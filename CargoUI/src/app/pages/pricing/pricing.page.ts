@@ -543,8 +543,8 @@ export class PricingPage {
     const ok = await this.confirm.ask({
       title: `Delete ${zone.code} — ${zone.name}?`,
       body:
-        `Runs of ${zone.band} fall back to the distance card, or to the standard tariff if ` +
-        'nothing covers them. Trips already priced keep their figure.',
+        `New runs of ${zone.band} will be saved unpriced unless another band covers them. ` +
+        'Trips already priced keep their figure.',
       confirmLabel: 'Delete band',
       danger: true,
     });

@@ -220,6 +220,16 @@ class RoleSeeder extends Seeder
                     'notifications.view',
                 ],
             ],
+            [
+                'key' => SystemRole::TruckerDriver->value,
+                'name' => 'Trucker driver',
+                'description' => 'Drives for a trucker, and runs only the trips that trucker hands them.',
+                'system' => true,
+                'permissions' => [
+                    'crew.trips', 'gps.write', 'delivery.view', 'delivery.write',
+                    'notifications.view',
+                ],
+            ],
         ];
     }
 }

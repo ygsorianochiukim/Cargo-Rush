@@ -13,9 +13,9 @@ use Illuminate\Console\Command;
 /**
  * `cargo:truck-rent` — bill the month's rent on every flat-hired truck.
  *
- * Scheduled for the first of the month and billing the month that just ended,
- * because a rent is a cost of a period rather than of a moment: charging it in
- * advance would put a cost in a month the truck has not yet worked.
+ * Run every day. It puts the current month's whole rent on the books — due on
+ * the month's last day, so it shows in Payables all month — and catches up the
+ * month before if that was missed. `--month` bills one named month instead.
  *
  * Runs across **every company on the install**, like the other nightly sweeps.
  * Rent is not one firm's business to trigger, and a scheduler that had to be
@@ -29,7 +29,7 @@ use Illuminate\Console\Command;
 class ChargeTruckRentCommand extends Command
 {
     protected $signature = 'cargo:truck-rent
-        {--month= : The month to bill, as YYYY-MM. Defaults to the one just ended.}';
+        {--month= : Bill only this month, as YYYY-MM. Defaults to this month, plus last month if it was missed.}';
 
     protected $description = 'Raise the monthly rent expense for every truck hired at a flat fee.';
 
@@ -37,7 +37,7 @@ class ChargeTruckRentCommand extends Command
     {
         $month = $this->option('month') !== null
             ? Carbon::createFromFormat('Y-m', (string) $this->option('month'))->startOfMonth()
-            : now()->subMonth()->startOfMonth();
+            : null;
 
         $companies = Company::query()->orderBy('created_at')->get();
 
@@ -52,12 +52,15 @@ class ChargeTruckRentCommand extends Command
         foreach ($companies as $company) {
             // Each company's rent inside its own tenancy, so the expense, the
             // category and the sheet it lands on are all that firm's.
-            $total += $tenant->use($company, fn (): int => $rent->chargeMonth($month));
+            $total += $tenant->use(
+                $company,
+                fn (): int => $month === null ? $rent->chargeDue(now()) : $rent->chargeMonth($month),
+            );
         }
 
         $this->info(sprintf(
             '%s: raised %d rent %s.',
-            $month->format('F Y'),
+            $month?->format('F Y') ?? now()->format('F Y'),
             $total,
             $total === 1 ? 'charge' : 'charges',
         ));

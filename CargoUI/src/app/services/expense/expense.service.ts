@@ -20,6 +20,10 @@ export class ExpenseService {
     return this.api.envelope<Expense[]>('expenses', query);
   }
 
+  find(id: string): Observable<Expense> {
+    return this.api.get<Expense>(`expenses/${id}`);
+  }
+
   create(payload: ExpensePayload): Observable<Expense> {
     return this.api.post<Expense>('expenses', payload);
   }

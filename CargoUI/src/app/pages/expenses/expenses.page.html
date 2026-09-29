@@ -42,9 +42,8 @@
       <p class="cr-num text-[28px] leading-none font-semibold">
         {{ fmt.money(r.total_cents, r.currency) }}
       </p>
-      <p class="cr-meta mt-1">
-        {{ r.entry_count }} {{ r.entry_count === 1 ? 'entry' : 'entries' }} ·
-        {{ fmt.date(r.range.from) }} – {{ fmt.date(r.range.to) }}
+      <p class="mt-1 text-[12px] text-cr-ink-muted">
+        {{ r.entry_count }} {{ r.entry_count === 1 ? 'entry' : 'entries' }}
       </p>
 
       <dl class="mt-4 space-y-1.5 text-[13px]">
@@ -53,14 +52,15 @@
           <dd class="cr-num">{{ fmt.money(r.attributed_cents, r.currency) }}</dd>
         </div>
         <div class="flex justify-between">
-          <dt class="text-cr-ink-muted">Fleet overhead</dt>
+          <dt
+            class="text-cr-ink-muted"
+            title="Expense lines filed against no truck. The overhead on Profitability and the Quarterly Summary also counts fuel fills for a vehicle no truck points at, so it can be higher than this.">
+            Fleet overhead (expense lines)
+          </dt>
           <dd class="cr-num">{{ fmt.money(r.overhead_cents, r.currency) }}</dd>
         </div>
       </dl>
 
-      <p class="mt-3 text-[12px] text-cr-ink-muted">
-        Overhead is {{ overheadShare() }}% of the {{ isThisMonth() ? 'month' : 'range' }}, charged to no unit.
-      </p>
     } @else {
       <div class="cr-skeleton h-7 w-32"></div>
     }
@@ -75,7 +75,7 @@
           <p class="max-w-sm text-[13px] text-cr-ink-muted">Food, tolls, repairs, permits.</p>
         </div>
       } @else {
-        <app-bar-rows [bars]="spendBars()" />
+        <app-bar-rows [bars]="spendBars()" align="top" />
       }
     } @else {
       <div class="flex flex-col gap-2">

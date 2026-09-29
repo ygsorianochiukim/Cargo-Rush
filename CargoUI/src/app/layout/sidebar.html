@@ -1,84 +1,18 @@
 <nav class="flex h-full flex-col rounded-panel bg-cr-surface shadow-panel" aria-label="Main">
   <!--
-    1. Brand, then whose system this is.
+    1. Brand.
 
-    The wordmark is the product; the line under it is the company signed in.
-    Both are needed now that one deployment serves many hauliers — a screen
-    that says only "Cargo Rush" cannot answer "whose fleet am I looking at",
-    which is the first thing anybody with access to two of them asks.
-
-    Collapsed, the name is a tooltip on the mark rather than truncated text in
-    a 48px rail, where it would read as three letters and a fade.
+    The product's wordmark alone. There is one company, so a line naming it
+    under the wordmark answered a question nobody signed in has to ask.
   -->
   <div class="flex flex-col px-4 py-4" [class.items-center]="collapsed()">
     @if (collapsed()) {
-      <!--
-        Collapsed, the company's mark replaces the product's.
-
-        The rail is 48px and holds one image. Of the two, the one worth keeping
-        is the one that differs between tabs: whoever is looking at this knows
-        they are in Cargo Rush, and what they cannot tell at a glance is which
-        company. The title carries the name, since there is no room to print it.
-      -->
-      @if (companyLogo(); as logo) {
-        <img
-          [src]="logo"
-          alt=""
-          [attr.title]="company()"
-          width="28"
-          height="28"
-          class="h-7 w-7 rounded-control object-contain"
-        />
-      } @else {
-        <app-wordmark variant="mark" [size]="20" [attr.title]="company()" />
-      }
+      <app-wordmark variant="mark" [size]="20" />
     } @else {
       <!-- 240px panel less its 16px padding either side. The lockup sizes
            itself to that rather than being given a number that has to be
            re-checked whenever the sidebar width changes. -->
       <app-wordmark [maxWidth]="208" />
-
-      <!--
-        Whose system this is, under the product's own name.
-
-        The mark is drawn at 32px from a 64px file, which is what keeps it crisp
-        on a retina screen. `object-contain` rather than `cover`: a logo is not
-        a photograph, and cropping one to fill a box cuts the top off somebody's
-        wordmark. The square it sits in is already the shape the server cropped
-        it to.
-      -->
-      @if (company(); as name) {
-        <div class="mt-2.5 flex min-w-0 items-center gap-2">
-          @if (companyLogo(); as logo) {
-            <img
-              [src]="logo"
-              alt=""
-              width="32"
-              height="32"
-              class="h-8 w-8 flex-none rounded-control object-contain"
-            />
-          } @else {
-            <!-- No logo is ordinary — most companies add one later. Initials,
-                 the same fallback the user chip makes for a missing avatar. -->
-            <span
-              class="flex h-8 w-8 flex-none items-center justify-center rounded-control bg-cr-tint text-[11px] font-semibold text-cr-blue"
-            >
-              {{ companyInitials() }}
-            </span>
-          }
-          <p
-            class="min-w-0 truncate text-[12px] font-semibold text-cr-ink-muted"
-            [attr.title]="name"
-          >
-            {{ name }}
-          </p>
-        </div>
-      } @else {
-        <div class="mt-2.5 flex items-center gap-2" role="status" aria-label="Loading company">
-          <div class="cr-skeleton h-8 w-8 flex-none rounded-control"></div>
-          <div class="cr-skeleton h-2.5 w-24"></div>
-        </div>
-      }
     }
   </div>
   <div class="mx-4 border-b border-cr-line"></div>
