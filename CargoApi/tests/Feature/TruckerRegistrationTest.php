@@ -12,6 +12,8 @@ use Database\Seeders\Demo\FleetSeeder;
 use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 
 /**
  * An owner-operator signing themselves up, and the waiting room they land in.
@@ -260,9 +262,22 @@ describe('the desk deciding', function (): void {
 
         // Approved, they can now put a truck on the books — which sign-up no
         // longer asks for — and with it and the switch on, take work.
-        $this->actingAs($this->truckerUser)
-            ->postJson('/api/v1/partner/vehicles', ['plate' => 'ABC-1234', 'model' => 'Isuzu Forward', 'capacity_kg' => 12_000])
-            ->assertCreated();
+        Storage::fake(config('cargo.trucks.disk'));
+
+        $truckId = $this->actingAs($this->truckerUser)
+            ->post('/api/v1/partner/vehicles', [
+                'plate' => 'ABC-1234', 'model' => 'Isuzu Forward', 'capacity_kg' => 12_000,
+                ...collect(['front', 'left', 'right', 'back', 'plate'])
+                    ->mapWithKeys(fn (string $slot): array => ["photo_{$slot}" => UploadedFile::fake()->image("{$slot}.jpg")])
+                    ->all(),
+            ], ['Accept' => 'application/json'])
+            ->assertCreated()
+            ->json('data.id');
+
+        // And once Cargo Rush has checked the truck from its photographs.
+        $this->actingAs($this->admin)
+            ->postJson("/api/v1/truckers/{$this->trucker->id}/vehicles/{$truckId}/verify")
+            ->assertOk();
 
         $this->actingAs($this->truckerUser)
             ->postJson('/api/v1/partner/availability', ['is_online' => true])

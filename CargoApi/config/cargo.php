@@ -686,6 +686,23 @@ return [
 
     /*
     |----------------------------------------------------------------------
+    | A trucker's truck, photographed for the office to check
+    |----------------------------------------------------------------------
+    |
+    | Front, both sides, back and plate on every truck; the engine bay when the
+    | trucker has one. Same disk as proof of delivery by default.
+    |
+    */
+
+    'trucks' => [
+        'disk' => env('TRUCK_PHOTO_DISK', env('POD_DISK', 'public')),
+        'directory' => env('TRUCK_PHOTO_DIRECTORY', 'trucks'),
+        /** Kilobytes, per photograph. */
+        'max_kb' => (int) env('TRUCK_PHOTO_MAX_KB', 8192),
+    ],
+
+    /*
+    |----------------------------------------------------------------------
     | The company's logo
     |----------------------------------------------------------------------
     |

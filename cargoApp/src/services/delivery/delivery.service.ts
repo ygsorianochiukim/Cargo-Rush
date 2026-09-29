@@ -1,6 +1,7 @@
 import { DeliveryLog, ProofOfDelivery } from '@/models/delivery/delivery.model';
 
 import { api } from '../shared/api.service';
+import { appendPhoto } from '../shared/form-file';
 
 /**
  * Turn the proof into a multipart body.
@@ -9,16 +10,12 @@ import { api } from '../shared/api.service';
  * late attachment — because a photograph appended under a different field name
  * by one of them is a photograph the API quietly ignores.
  */
-export function proofForm(proof: ProofOfDelivery): FormData {
+export async function proofForm(proof: ProofOfDelivery): Promise<FormData> {
   const body = new FormData();
 
   body.append('receiver_name', proof.receiver_name);
 
-  if (proof.photo) {
-    // React Native's FormData takes this shape rather than a `File`; the
-    // bridge reads the local URI when it writes the request body.
-    body.append('photo', proof.photo as unknown as Blob);
-  }
+  if (proof.photo) await appendPhoto(body, 'photo', proof.photo);
 
   return body;
 }

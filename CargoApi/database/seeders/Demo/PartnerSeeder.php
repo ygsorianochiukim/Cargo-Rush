@@ -10,6 +10,7 @@ use App\Domain\Identity\Models\User;
 use App\Domain\Pricing\Models\TruckCategory;
 use App\Domain\Shared\Enums\Role;
 use App\Domain\Shared\Enums\StatusValue;
+use App\Domain\Shared\Enums\TruckVerification;
 use App\Domain\Shared\Enums\WalletEntryKind;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Trip\Services\TripService;
@@ -206,6 +207,10 @@ class PartnerSeeder extends Seeder
                 // reads as "not stated" rather than as a refusal.
                 'truck_category_id' => $categories[$category] ?? null,
                 'status' => $status,
+                // Checked by the office already, so the demo job board has
+                // trucks that can take work.
+                'verification' => TruckVerification::Verified->value,
+                'verified_at' => now(),
             ]);
         }
     }

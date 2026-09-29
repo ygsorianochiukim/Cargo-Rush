@@ -24,8 +24,11 @@ use Illuminate\Support\Facades\DB;
  * when work happened would quietly hide exactly the month the office most needs
  * to see it in.
  *
- * So it is charged per truck per month, on the first of the month, for the
- * month that just ended.
+ * So it is charged per truck per month, for the whole month, from the month's
+ * first day — due on its last. It sits in Payables all month, and one still
+ * unpaid after the month ends is overdue. (It used to be charged on the 1st
+ * for the month just ended, which left the month being worked with no rent
+ * showing anywhere.)
  *
  * ## Why an expense rather than a table of its own
  *
@@ -70,6 +73,67 @@ class TruckRentService
             ->get();
 
         foreach ($hired as $vehicle) {
+            if ($this->charge($vehicle, $month, $category) !== null) {
+                $raised++;
+            }
+        }
+
+        return $raised;
+    }
+
+    /**
+     * Put every flat-rented truck's rent on the books for the month `$today`
+     * is in, and catch up the month before if it was missed.
+     *
+     * The whole month's rent is owed from its first day and due on its last,
+     * so it shows in Payables for the full month — payable any time in it —
+     * and a month still unpaid once it has ended reads as overdue. The catch-up
+     * is what makes a missed run harmless: whichever day this next runs, last
+     * month is there too. Never a month before the truck was on the books.
+     *
+     * Safe to run every day: a month already charged is skipped.
+     *
+     * @return int how many charges were raised
+     */
+    public function chargeDue(CarbonInterface $today): int
+    {
+        $category = $this->category();
+        $raised = 0;
+
+        $hired = Vehicle::query()
+            ->where('arrangement', VehicleArrangement::Rented->value)
+            ->whereNotNull('rent_cents')
+            ->where('rent_cents', '>', 0)
+            ->get();
+
+        foreach ($hired as $vehicle) {
+            $raised += $this->chargeDueFor($vehicle, $today, $category);
+        }
+
+        return $raised;
+    }
+
+    /**
+     * One truck's rent, this month and a missed last month.
+     *
+     * Also called the moment a truck is put on the books as rented, so its
+     * rent is in Payables from that day rather than from the next run.
+     */
+    public function chargeDueFor(Vehicle $vehicle, CarbonInterface $today, ?ExpenseCategory $category = null): int
+    {
+        if (! $vehicle->chargesRent()) {
+            return 0;
+        }
+
+        $current = $today->copy()->startOfMonth();
+        $since = ($vehicle->created_at ?? $today)->copy()->startOfMonth();
+        $raised = 0;
+
+        foreach ([$current->copy()->subMonth(), $current] as $month) {
+            if ($month->lt($since)) {
+                continue;
+            }
+
             if ($this->charge($vehicle, $month, $category) !== null) {
                 $raised++;
             }

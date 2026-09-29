@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace App\Domain\Vehicle\Services;
 
 use App\Domain\Notification\Services\NotificationService;
+use App\Domain\Shared\DTO\Data;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\Tone;
 use App\Domain\Shared\Repositories\Repository;
 use App\Domain\Shared\Services\CrudService;
 use App\Domain\Vehicle\Models\Vehicle;
 use App\Domain\Vehicle\Repositories\VehicleRepository;
+use Illuminate\Database\Eloquent\Model;
 
 class VehicleService extends CrudService
 {
@@ -20,11 +22,39 @@ class VehicleService extends CrudService
     public function __construct(
         private readonly VehicleRepository $vehicles,
         private readonly NotificationService $notifications,
+        private readonly TruckRentService $rent,
     ) {}
 
     protected function repository(): Repository
     {
         return $this->vehicles;
+    }
+
+    /**
+     * A truck added at a flat rent owes this month's rent from today, so it
+     * goes on the books now rather than on the next nightly run.
+     */
+    public function create(Data $data): Model
+    {
+        $vehicle = parent::create($data);
+
+        if ($vehicle instanceof Vehicle) {
+            $this->rent->chargeDueFor($vehicle, now());
+        }
+
+        return $vehicle;
+    }
+
+    /** The same when an existing truck is switched to a flat rent. */
+    public function update(Model $model, Data $data): Model
+    {
+        $vehicle = parent::update($model, $data);
+
+        if ($vehicle instanceof Vehicle) {
+            $this->rent->chargeDueFor($vehicle, now());
+        }
+
+        return $vehicle;
     }
 
     /** Taking a unit off the road frees whoever was driving it. */

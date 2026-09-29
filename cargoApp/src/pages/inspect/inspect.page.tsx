@@ -10,20 +10,18 @@ import { Screen } from '@/components/screen';
 import { Icon } from '@/components/ui/icon';
 import {
   Card,
-  ErrorState,
   PrimaryButton,
   SkeletonRows,
   StatusPill,
 } from '@/components/ui/primitives';
-import { Brand, Hit, Radius, Spacing } from '@/constants/theme';
+import { Brand, Radius, Spacing } from '@/constants/theme';
 import { fmt } from '@/constants/format';
 import { useApi } from '@/hooks/use-api';
 import { useMe } from '@/hooks/use-me';
 import { useCurrentTrip } from '@/hooks/use-current-trip';
 import { useRefreshOnFocus } from '@/hooks/use-refresh-on-focus';
-import { DispatchChecklistCard } from './dispatch-checklist-card';
-
-type Verdict = 'pass' | 'fail' | null;
+import { DispatchChecklistCard, DispatchSheetHeader } from './dispatch-checklist-card';
+import { PreTripChecklist, Verdict } from './pre-trip-checklist';
 
 /**
  * Inspect hub — DESIGN.md section 5.2. Carries two modules:
@@ -143,6 +141,28 @@ export function InspectPage() {
     trip.data?.vehicle_plate ??
     me.data?.vehicle_plate ??
     null;
+
+  /**
+   * The top of the printed dispatch sheet, from whichever run is being
+   * checked — the one named, else the one they are on.
+   */
+  const current = queuedId === null ? trip.data : null;
+  const helperNames = queued ? queued.helpers.map((h) => h.name) : (current?.helper_names ?? []);
+  const origin = queued?.origin ?? current?.origin ?? null;
+  const destination = queued?.destination ?? current?.destination ?? null;
+  const scheduledAt = queued?.scheduled_at ?? current?.scheduled_at ?? null;
+  const sheet: DispatchSheetHeader = {
+    company: me.data?.company_name ?? null,
+    logoUrl: me.data?.company_logo_url ?? null,
+    reference: tripReference,
+    date: scheduledAt ? fmt.date(scheduledAt) : null,
+    driver: queued?.driver_name ?? queued?.trucker_driver_name ?? me.data?.name ?? null,
+    plate: checkingPlate,
+    helper1: helperNames[0] ?? null,
+    helper2: helperNames[1] ?? null,
+    client: queued?.customer ?? current?.customer ?? null,
+    route: origin && destination ? `${origin} → ${destination}` : (origin ?? destination),
+  };
 
   // Maintenance is booked against a fleet unit, so this waits for one to be
   // known — and never exists for a trucker's driver, whose truck is not ours.
@@ -334,55 +354,16 @@ export function InspectPage() {
         </View>
       </View>
 
-      {/* On-boarding trips inspection */}
-      <Card
-        heading="Pre-trip inspection"
-        icon="clipboard"
-        hint={`${checked}/${items.length}`}
-        padded={false}>
-        {checklist.loading ? (
-          <View style={{ padding: Spacing.three }}>
-            <SkeletonRows count={5} />
-          </View>
-        ) : checklist.error ? (
-          <ErrorState message={checklist.error.message} onRetry={checklist.reload} />
-        ) : (
-          items.map((item, i) => {
-            const v = verdicts[item.key] ?? null;
-            return (
-              <View
-                key={item.key}
-                style={[styles.checkRow, i < items.length - 1 && styles.divider]}>
-                <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                  <Text style={styles.checkLabel}>{item.label}</Text>
-                  <Text style={styles.checkHint} numberOfLines={1}>
-                    {item.hint}
-                  </Text>
-                </View>
-
-                <View style={styles.toggle}>
-                  <Pressable
-                    onPress={() => set(item.key, 'pass')}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: v === 'pass' }}
-                    accessibilityLabel={`${item.label} pass`}
-                    style={[styles.toggleBtn, v === 'pass' && { backgroundColor: Brand.success }]}>
-                    <Icon name="check" size={16} color={v === 'pass' ? Brand.surface : Brand.inkMuted} />
-                  </Pressable>
-                  <Pressable
-                    onPress={() => set(item.key, 'fail')}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: v === 'fail' }}
-                    accessibilityLabel={`${item.label} fail`}
-                    style={[styles.toggleBtn, v === 'fail' && { backgroundColor: Brand.red }]}>
-                    <Icon name="close" size={16} color={v === 'fail' ? Brand.surface : Brand.inkMuted} />
-                  </Pressable>
-                </View>
-              </View>
-            );
-          })
-        )}
-      </Card>
+      {/* The before-trip check itself. */}
+      <PreTripChecklist
+        items={items}
+        verdicts={verdicts}
+        onSet={set}
+        loading={checklist.loading}
+        error={checklist.error}
+        onRetry={checklist.reload}
+        subtitle={[sheet.reference, sheet.plate, sheet.date].filter(Boolean).join(' · ') || null}
+      />
 
       <View style={styles.actions}>
         <Pressable
@@ -432,6 +413,7 @@ export function InspectPage() {
           tripId={(crew ? queuedId : tripId) as string}
           crew={crew}
           answered={queued?.dispatch_checklist}
+          header={sheet}
           onSaved={(saved) => {
             if (queued !== null && saved.id === queued.id) setQueued(saved);
             crewQueue.reload();
@@ -503,28 +485,6 @@ const styles = StyleSheet.create({
   verdictSub: { marginTop: 2, fontSize: 12, color: Brand.inkMuted },
 
   divider: { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: Brand.line },
-
-  checkRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.three,
-    minHeight: Hit.rowTwoLine,
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.two + 2,
-  },
-  checkLabel: { fontSize: 14, fontWeight: '600', color: Brand.ink },
-  checkHint: { fontSize: 12, color: Brand.inkMuted },
-
-  toggle: { flexDirection: 'row', gap: Spacing.two },
-  toggleBtn: {
-    width: 44,
-    height: 36,
-    borderRadius: Radius.control,
-    borderWidth: 1,
-    borderColor: Brand.line,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
   actions: { flexDirection: 'row', gap: Spacing.three, alignItems: 'stretch' },
   photoBtn: {

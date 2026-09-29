@@ -144,7 +144,7 @@ class Trucker extends Model
     public function activeVehicle(): ?TruckerVehicle
     {
         return $this->vehicles
-            ->first(static fn (TruckerVehicle $vehicle): bool => $vehicle->status === StatusValue::Available);
+            ->first(static fn (TruckerVehicle $vehicle): bool => $vehicle->isOnTheRoad());
     }
 
     /**

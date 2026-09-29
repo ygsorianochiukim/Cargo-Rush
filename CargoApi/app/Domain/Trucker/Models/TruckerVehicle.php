@@ -6,6 +6,7 @@ namespace App\Domain\Trucker\Models;
 
 use App\Domain\Pricing\Models\TruckCategory;
 use App\Domain\Shared\Enums\StatusValue;
+use App\Domain\Shared\Enums\TruckVerification;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
 use App\Domain\Trip\Models\Trip;
 use Database\Factories\TruckerVehicleFactory;
@@ -36,6 +37,9 @@ class TruckerVehicle extends Model
 
     protected $fillable = [
         'trucker_id', 'plate', 'model', 'capacity_kg', 'truck_category_id', 'status',
+        'photo_front_path', 'photo_left_path', 'photo_right_path', 'photo_back_path',
+        'photo_plate_path', 'photo_engine_path',
+        'verification', 'verified_at', 'verified_by', 'rejection_reason',
     ];
 
     protected function casts(): array
@@ -43,6 +47,8 @@ class TruckerVehicle extends Model
         return [
             'capacity_kg' => 'integer',
             'status' => StatusValue::class,
+            'verification' => TruckVerification::class,
+            'verified_at' => 'datetime',
         ];
     }
 
@@ -64,6 +70,24 @@ class TruckerVehicle extends Model
         return $this->belongsTo(TruckCategory::class, 'truck_category_id');
     }
 
+    /** Has Cargo Rush checked it from its photographs? */
+    public function isVerified(): bool
+    {
+        return $this->verification === TruckVerification::Verified;
+    }
+
+    /**
+     * May it be put under a load today?
+     *
+     * The trucker's switch says it is running, and the office has checked it.
+     * Either alone is not enough — a truck nobody has looked at is exactly as
+     * unusable as one in the shop.
+     */
+    public function isOnTheRoad(): bool
+    {
+        return $this->status === StatusValue::Available && $this->isVerified();
+    }
+
     public function trips(): HasMany
     {
         return $this->hasMany(Trip::class);
@@ -79,7 +103,7 @@ class TruckerVehicle extends Model
      */
     public function canCarry(?int $weightKg, ?string $categoryId): bool
     {
-        if ($this->status !== StatusValue::Available) {
+        if (! $this->isOnTheRoad()) {
             return false;
         }
 

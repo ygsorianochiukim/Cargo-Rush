@@ -10,6 +10,7 @@ use App\Domain\Trip\Requests\DeliverTripRequest;
 use App\Domain\Trip\Resources\TripResource;
 use App\Domain\Trucker\Models\Trucker;
 use App\Domain\Trucker\Requests\TruckerDriverRequest;
+use App\Domain\Trucker\Requests\TruckerVehiclePhotosRequest;
 use App\Domain\Trucker\Requests\TruckerVehicleRequest;
 use App\Domain\Trucker\Resources\JobResource;
 use App\Domain\Trucker\Resources\TruckerDriverResource;
@@ -267,11 +268,31 @@ class PartnerController extends ApiController
 
         $vehicle = $this->truckers->saveVehicle(
             $trucker,
-            $request->validated(),
+            $request->details(),
             $vehicleId,
+            $request->photos(),
         );
 
         return $this->item(new TruckerVehicleResource($vehicle), [], $vehicleId === null ? 201 : 200);
+    }
+
+    /**
+     * New photographs for one of their trucks — usually the ones the office
+     * asked for when it turned the truck down. Sends it back to be checked.
+     */
+    public function vehiclePhotos(TruckerVehiclePhotosRequest $request, string $vehicleId): JsonResponse
+    {
+        $trucker = $this->me($request);
+
+        abort_unless(
+            $trucker->isVetted(),
+            403,
+            'Your account is waiting for approval. You can add trucks once the office approves you.',
+        );
+
+        return $this->item(new TruckerVehicleResource(
+            $this->truckers->resubmitPhotos($trucker, $vehicleId, $request->photos()),
+        ));
     }
 
     /** Their own drivers. Never Cargo Rush's — those are a different table. */

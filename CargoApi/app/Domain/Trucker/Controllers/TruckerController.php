@@ -258,8 +258,35 @@ class TruckerController extends ApiController
         Trucker $trucker,
         ?string $vehicleId = null,
     ): JsonResponse {
-        $vehicle = $this->truckers->saveVehicle($trucker, $request->validated(), $vehicleId);
+        $vehicle = $this->truckers->saveVehicle(
+            $trucker,
+            $request->details(),
+            $vehicleId,
+            $request->photos(),
+            $request->user(),
+        );
 
         return $this->item(new TruckerVehicleResource($vehicle), [], $vehicleId === null ? 201 : 200);
+    }
+
+    /** Checked against its photographs: it may take work. */
+    public function verifyVehicle(Request $request, Trucker $trucker, string $vehicleId): JsonResponse
+    {
+        return $this->item(new TruckerVehicleResource(
+            $this->truckers->verifyVehicle($trucker, $vehicleId, $request->user()),
+        ));
+    }
+
+    /** Turned down, with a reason the trucker reads on their phone. */
+    public function rejectVehicle(Request $request, Trucker $trucker, string $vehicleId): JsonResponse
+    {
+        $validated = $request->validate(
+            ['reason' => ['required', 'string', 'max:500']],
+            ['reason.required' => 'Say what is wrong, so the trucker knows what to send again.'],
+        );
+
+        return $this->item(new TruckerVehicleResource(
+            $this->truckers->rejectVehicle($trucker, $vehicleId, $validated['reason']),
+        ));
     }
 }

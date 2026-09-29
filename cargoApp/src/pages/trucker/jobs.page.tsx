@@ -222,8 +222,9 @@ function Standing({
           <Icon name="fleet" size={28} color={Brand.blue} />
           <Text style={styles.standingTitle}>Add a truck to take jobs</Text>
           <Text style={styles.standingBody}>
-            You are approved. Add your trucks from the More tab — or put one back on the road if
-            it is marked as in the shop — and jobs will appear here.
+            You are approved. Add your trucks with their photos from the More tab — or put one
+            back on the road if it is marked as in the shop. Jobs appear here once Cargo Rush has
+            verified a truck.
           </Text>
           <Pressable accessibilityRole="button" onPress={onRefresh} style={styles.standingBtn}>
             <Text style={styles.standingBtnText}>Refresh</Text>

@@ -13,6 +13,7 @@
   @for (
     option of [
       { key: 'pending', label: 'Waiting for approval' },
+      { key: 'trucks', label: 'Trucks to check' },
       { key: 'active', label: 'Approved' },
       { key: 'inactive', label: 'On hold' },
       { key: 'all', label: 'All' },
@@ -44,6 +45,8 @@
         [title]="
           tab() === 'pending'
             ? 'Nobody waiting'
+            : tab() === 'trucks'
+              ? 'No trucks to check'
             : tab() === 'active'
               ? 'No approved truckers yet'
               : 'Nobody on hold'
@@ -51,8 +54,53 @@
         [body]="
           tab() === 'pending'
             ? 'Registrations from the app appear here for you to check before they can take work.'
-            : 'Truckers register themselves in the app and appear here once they do.'
+            : tab() === 'trucks'
+              ? 'Trucks truckers add in the app appear here, with their photos, for you to verify.'
+              : 'Truckers register themselves in the app and appear here once they do.'
         " />
+    } @else if (tab() === 'trucks') {
+      <!-- One row per truck waiting, not per trucker: each is its own decision. -->
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[760px] border-collapse text-left whitespace-nowrap">
+          <thead>
+            <tr class="border-b border-cr-line">
+              <th class="cr-th px-4 py-2.5">Truck</th>
+              <th class="cr-th px-4 py-2.5">Owner</th>
+              <th class="cr-th px-4 py-2.5 text-right">Capacity</th>
+              <th class="cr-th px-4 py-2.5">Photos</th>
+              <th class="cr-th px-4 py-2.5"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (q of truckQueue(); track q.vehicle.id) {
+              <tr class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint">
+                <td class="px-4 py-3">
+                  <span class="cr-num block text-[13px] font-semibold">{{ q.vehicle.plate }}</span>
+                  <span class="block text-[12px] text-cr-ink-muted">{{ q.vehicle.model }}</span>
+                </td>
+                <td class="px-4 py-3 text-[13px]">
+                  {{ q.trucker.business_name ?? q.trucker.name }}
+                  <span class="cr-num block text-[12px] text-cr-ink-muted">{{ q.trucker.phone }}</span>
+                </td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">
+                  {{ q.vehicle.capacity_kg.toLocaleString() }} kg
+                </td>
+                <td class="cr-num px-4 py-3 text-[13px]">{{ photoCount(q.vehicle) }} of 6</td>
+                <td class="px-4 py-3 text-right">
+                  <button
+                    type="button"
+                    class="inline-flex h-8 items-center gap-1.5 rounded-control bg-cr-blue px-3 text-[12px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+                    [attr.aria-label]="'Check ' + q.vehicle.plate"
+                    (click)="review(q.trucker, q.vehicle)">
+                    <app-icon name="check" [size]="14" />
+                    Check truck
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
     } @else {
       <div class="overflow-x-auto">
         <table class="w-full min-w-[980px] border-collapse text-left whitespace-nowrap">
@@ -87,7 +135,14 @@
                   </span>
                 </td>
 
-                <td class="px-4 py-3 text-[13px]">{{ plate(t) }}</td>
+                <td class="px-4 py-3 text-[13px]">
+                  {{ plate(t) }}
+                  @if (trucksToCheck(t) > 0) {
+                    <span class="block text-[11px] font-semibold text-cr-warning">
+                      {{ trucksToCheck(t) }} to check
+                    </span>
+                  }
+                </td>
 
                 <td class="cr-num px-4 py-3 text-[13px]">{{ t.licence_no ?? '—' }}</td>
 
@@ -179,6 +234,7 @@
   this person is on, and what that has come to.
 -->
 @if (openTrucker(); as t) {
+  @if (checking() === null) {
   <app-modal
     [open]="true"
     [title]="t.business_name ?? t.name"
@@ -267,18 +323,57 @@
       <p class="cr-meta border-b border-cr-line px-4 py-2.5">
         Trucks · {{ t.vehicles?.length ?? 0 }}
       </p>
+      <!--
+        Each truck with its photographs and this desk's check of them. A
+        truck takes work only once it is verified here, whatever the
+        trucker's own switch says.
+      -->
       @for (v of t.vehicles ?? []; track v.id) {
-        <div class="flex items-center gap-3 border-b border-cr-line/70 px-4 py-2.5 last:border-0">
-          <div class="min-w-0 flex-1">
-            <p class="cr-num text-[13px] font-semibold">{{ v.plate }}</p>
-            <p class="cr-num text-[12px] text-cr-ink-muted">
-              {{ v.model }} · {{ v.capacity_kg.toLocaleString() }} kg
-              @if (v.truck_category) {
-                · {{ v.truck_category }}
-              }
-            </p>
+        <div class="border-b border-cr-line/70 px-4 py-2.5 last:border-0">
+          <div class="flex items-center gap-3">
+            <div class="min-w-0 flex-1">
+              <p class="cr-num text-[13px] font-semibold">{{ v.plate }}</p>
+              <p class="cr-num text-[12px] text-cr-ink-muted">
+                {{ v.model }} · {{ v.capacity_kg.toLocaleString() }} kg
+                @if (v.truck_category) {
+                  · {{ v.truck_category }}
+                }
+              </p>
+            </div>
+            <span
+              class="text-[11px] font-semibold"
+              [class]="
+                v.verification === 'verified'
+                  ? 'text-cr-success'
+                  : v.verification === 'rejected'
+                    ? 'text-cr-red'
+                    : 'text-cr-warning'
+              ">
+              {{
+                v.verification === 'verified'
+                  ? 'Verified'
+                  : v.verification === 'rejected'
+                    ? 'Not verified'
+                    : 'Waiting for check'
+              }}
+            </span>
+            <app-status-pill [status]="v.status" />
           </div>
-          <app-status-pill [status]="v.status" />
+
+          @if (v.verification === 'rejected' && v.rejection_reason) {
+            <p class="mt-1 text-[12px] text-cr-red">{{ v.rejection_reason }}</p>
+          }
+
+          <div class="mt-2 flex justify-end">
+            <button
+              type="button"
+              class="inline-flex h-8 items-center gap-1.5 rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+              [attr.aria-label]="(v.verification === 'verified' ? 'View photos of ' : 'Check ') + v.plate"
+              (click)="review(t, v)">
+              <app-icon name="check" [size]="14" />
+              {{ v.verification === 'verified' ? 'View photos' : 'Check truck' }}
+            </button>
+          </div>
         </div>
       } @empty {
         <p class="px-4 py-3 text-[13px] text-cr-ink-muted">No truck on file.</p>
@@ -319,5 +414,166 @@
 
     <!-- The account: shared with Payables, which settles from the same panel. -->
     <app-wallet-panel [truckerId]="t.id" (changed)="refresh()" />
+  </app-modal>
+  }
+}
+
+<!--
+  Checking one truck, and nothing else.
+
+  The decision is about this truck and its photographs, so that is all the
+  modal holds: who owns it, what it is, the six photos large enough to read a
+  plate from, and the two buttons. No other trucks, no drivers, no wallet.
+-->
+@if (checking(); as c) {
+  <app-modal
+    [open]="true"
+    [title]="'Check truck · ' + c.vehicle.plate"
+    [subtitle]="(c.trucker.business_name ?? c.trucker.name) + ' · ' + c.trucker.phone"
+    icon="fleet"
+    size="lg"
+    (closed)="closeCheck()">
+    @if (formError()) {
+      <p class="mb-4 rounded-control bg-cr-red-bg px-3 py-2 text-[13px] font-medium text-cr-red">
+        {{ formError() }}
+      </p>
+    }
+
+    <dl class="grid grid-cols-2 gap-x-4 gap-y-2 rounded-control bg-cr-tint px-4 py-3 text-[13px] sm:grid-cols-4">
+      <div>
+        <dt class="cr-meta">Plate</dt>
+        <dd class="cr-num font-semibold">{{ c.vehicle.plate }}</dd>
+      </div>
+      <div>
+        <dt class="cr-meta">Make and model</dt>
+        <dd>{{ c.vehicle.model }}</dd>
+      </div>
+      <div>
+        <dt class="cr-meta">Capacity</dt>
+        <dd class="cr-num">{{ c.vehicle.capacity_kg.toLocaleString() }} kg</dd>
+      </div>
+      <div>
+        <dt class="cr-meta">Check</dt>
+        <dd
+          class="font-semibold"
+          [class]="
+            c.vehicle.verification === 'verified'
+              ? 'text-cr-success'
+              : c.vehicle.verification === 'rejected'
+                ? 'text-cr-red'
+                : 'text-cr-warning'
+          ">
+          {{
+            c.vehicle.verification === 'verified'
+              ? 'Verified'
+              : c.vehicle.verification === 'rejected'
+                ? 'Not verified'
+                : 'Waiting for check'
+          }}
+        </dd>
+      </div>
+      <div class="col-span-2 sm:col-span-4">
+        <dt class="cr-meta">Owner</dt>
+        <dd>
+          {{ c.trucker.name }} · Licence {{ c.trucker.licence_no ?? 'not given' }}
+          @if (c.trucker.licence_expiry) {
+            · expires {{ fmt.date(c.trucker.licence_expiry) }}
+          }
+        </dd>
+      </div>
+    </dl>
+
+    @if (c.vehicle.verification === 'rejected' && c.vehicle.rejection_reason) {
+      <p class="mt-3 rounded-control bg-cr-red-bg px-3 py-2 text-[13px] text-cr-red">
+        Sent back: {{ c.vehicle.rejection_reason }}
+      </p>
+    }
+
+    <!-- The photos, large. Click one to see it full size. -->
+    @if (enlarged(); as big) {
+      <figure class="mt-4">
+        <img [src]="big.url" [alt]="big.label" class="max-h-[60vh] w-full rounded-control object-contain bg-cr-ink/5" />
+        <figcaption class="mt-2 flex items-center justify-between text-[13px]">
+          <span class="font-semibold">{{ big.label }}</span>
+          <span class="flex gap-3">
+            <a [href]="big.url" target="_blank" rel="noopener" class="font-semibold text-cr-blue">Open original</a>
+            <button type="button" class="font-semibold text-cr-ink-muted" (click)="enlarged.set(null)">
+              Back to all photos
+            </button>
+          </span>
+        </figcaption>
+      </figure>
+    } @else {
+      <div class="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        @for (s of photoSlots; track s.slot) {
+          @if (c.vehicle.photos[s.slot]; as url) {
+            <button
+              type="button"
+              class="block overflow-hidden rounded-control border border-cr-line text-left transition-colors hover:border-cr-blue"
+              [attr.aria-label]="'Enlarge ' + s.label + ' photo'"
+              (click)="enlarged.set({ url, label: s.label })">
+              <img [src]="url" [alt]="s.label" class="h-36 w-full object-cover" />
+              <span class="block px-2 py-1 text-[12px] font-semibold">{{ s.label }}</span>
+            </button>
+          } @else {
+            <div
+              class="flex h-[172px] flex-col items-center justify-center rounded-control border border-dashed border-cr-line text-center">
+              <span class="text-[12px] font-semibold text-cr-ink-muted">{{ s.label }}</span>
+              <span class="text-[12px] text-cr-ink-muted">
+                {{ s.slot === 'engine' ? 'Not sent (optional)' : 'Not sent' }}
+              </span>
+            </div>
+          }
+        }
+      </div>
+    }
+
+    @if (c.vehicle.verification !== 'verified') {
+      @if (rejecting() === c.vehicle.id) {
+        <div class="mt-4">
+          <label class="cr-meta" for="reject-reason">What is wrong</label>
+          <textarea
+            id="reject-reason"
+            rows="2"
+            maxlength="500"
+            class="mt-1 w-full rounded-control border border-cr-line bg-cr-surface px-3 py-2 text-[13px]"
+            placeholder="e.g. The plate photo is blurred — take it again in daylight."
+            [value]="reason()"
+            (input)="reason.set($any($event.target).value)"></textarea>
+          <div class="mt-2 flex justify-end gap-2">
+            <button
+              type="button"
+              class="inline-flex h-9 items-center rounded-control px-4 text-[13px] font-semibold text-cr-ink-muted hover:bg-cr-tint"
+              (click)="rejecting.set(null)">
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="inline-flex h-9 items-center rounded-control bg-cr-red px-4 text-[13px] font-semibold text-cr-surface hover:bg-cr-red-hover"
+              (click)="rejectTruck(c.trucker, c.vehicle)">
+              Send back to trucker
+            </button>
+          </div>
+        </div>
+      } @else {
+        <div class="mt-4 flex justify-end gap-2">
+          @if (c.vehicle.verification === 'pending') {
+            <button
+              type="button"
+              class="inline-flex h-9 items-center rounded-control border border-cr-line px-4 text-[13px] font-semibold text-cr-ink-muted transition-colors hover:border-cr-red hover:text-cr-red"
+              (click)="startReject(c.vehicle)">
+              Reject
+            </button>
+          }
+          <button
+            type="button"
+            class="inline-flex h-9 items-center gap-1.5 rounded-control bg-cr-blue px-4 text-[13px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+            (click)="verifyTruck(c.trucker, c.vehicle)">
+            <app-icon name="check" [size]="15" />
+            Verify truck
+          </button>
+        </div>
+      }
+    }
   </app-modal>
 }

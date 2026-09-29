@@ -587,6 +587,21 @@ permit are real costs that no unit earned.
 > that is the **Income statement** under Financial Statements. Two reports, two questions: what the
 > quarter cost you, and what the quarter committed you to.
 
+### Rent on a hired truck
+
+A truck set to **Rented** with a monthly rent (say ₱50,000) owes that rent for **the whole month
+from its first day**. The charge appears under **Payables → Rented trucks** straight away, **due on
+the last day of the month**. Pay it any time during the month with **Settle**.
+
+- **Not paid by the end of the month?** It stays on the list marked **Overdue**, and next month's
+  rent appears beside it, so you can see two months owed.
+- **A truck added mid-month** owes that month's rent from the day you save it. The rent isn't
+  reduced for the days before it arrived.
+- **Nothing is charged twice.** The system checks every night, and one month's rent is only ever
+  charged once.
+- **The rent is charged whether the truck worked or not.** That's the difference from a
+  revenue-share truck, which owes only a share of the runs it did.
+
 ### Actual income — what is left after what you owe
 
 Quarterly Summary carries two more figures beside Net income:
@@ -931,6 +946,28 @@ something precise to a dispatcher and nothing at all to a customer.
 Their own deliveries and their own invoices, and nothing else. Not the fleet,
 not another firm's work, not a driver's whereabouts beyond the status of their
 own load. Two people at the same company see the same list.
+
+### 8.3 A trucker's trucks
+
+A trucker adds trucks from **More → My trucks**, and only once you have approved their account.
+Each truck goes in with photos:
+
+| Photo | |
+| --- | --- |
+| Front, left side, right side, back | Required |
+| Plate number | Required |
+| Engine | Optional |
+
+A new truck is **waiting for check** and cannot take a job, even if the trucker has it on the road.
+Look at the photos under **Truckers → Trucks to check** (the sidebar badge counts these as well as
+new registrations), open the trucker, and for each truck:
+
+- **Verify.** It can take work from now on. The trucker gets a notification.
+- **Reject**, with a reason — "the plate photo is blurred". The trucker reads it on their phone,
+  sends new photos with **Send new photos**, and the truck comes back to you for checking.
+
+A truck goes back for checking if the trucker changes its plate or sends new photos. Trucks that
+were already on the books before this check existed were marked verified.
 
 ---
 

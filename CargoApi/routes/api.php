@@ -440,6 +440,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('vehicles', [PartnerController::class, 'vehicles']);
             Route::post('vehicles', [PartnerController::class, 'saveVehicle']);
             Route::match(['put', 'patch'], 'vehicles/{vehicleId}', [PartnerController::class, 'saveVehicle']);
+            // Multipart, so POST: PHP does not parse files out of a PATCH body.
+            Route::post('vehicles/{vehicleId}/photos', [PartnerController::class, 'vehiclePhotos']);
 
             // Their own drivers, each with a login of their own. Theirs by
             // construction, and never Cargo Rush's — a different table.
@@ -550,6 +552,9 @@ Route::prefix('v1')->group(function (): void {
 
             Route::post('truckers/{trucker}/vehicles', [TruckerController::class, 'saveVehicle']);
             Route::match(['put', 'patch'], 'truckers/{trucker}/vehicles/{vehicleId}', [TruckerController::class, 'saveVehicle']);
+            // Cargo Rush's check of a trucker's truck, from its photographs.
+            Route::post('truckers/{trucker}/vehicles/{vehicleId}/verify', [TruckerController::class, 'verifyVehicle']);
+            Route::post('truckers/{trucker}/vehicles/{vehicleId}/reject', [TruckerController::class, 'rejectVehicle']);
 
             /**
              * Handing a run to a partner, and taking it back.

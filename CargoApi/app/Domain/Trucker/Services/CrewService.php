@@ -160,6 +160,11 @@ class CrewService
 
             abort_if($truck === null, 404, 'That truck is not on this account.');
             abort_unless(
+                $truck->isVerified(),
+                422,
+                "{$truck->plate} has not been verified by Cargo Rush yet.",
+            );
+            abort_unless(
                 $truck->status === StatusValue::Available,
                 422,
                 "{$truck->plate} is marked as in the shop. Put it back on the road first.",

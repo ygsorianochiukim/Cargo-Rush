@@ -33,6 +33,8 @@ export interface PayableGroup {
   count: number;
   total_cents: number;
   in_flight_cents: number;
+  /** How many of the lines are past their due date. */
+  overdue_count: number;
   lines: PayableLine[];
 }
 
@@ -61,6 +63,11 @@ export interface PayableLine {
   /** Of that, how much has been sent and not landed. */
   in_flight_cents: number;
   due_on: string | null;
+  /**
+   * Past `due_on` and still owed — a month's rent once the month is over.
+   * Worked out by the API, not the page.
+   */
+  overdue: boolean;
   /**
    * The route that settles this line, followed with `?settle={id}`.
    *

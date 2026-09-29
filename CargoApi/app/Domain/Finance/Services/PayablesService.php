@@ -325,9 +325,10 @@ class PayablesService
      * What the fleet owes for trucks it hires in, on either set of terms.
      *
      * **A flat monthly rent** — the charges `cargo:truck-rent` raises, still
-     * unpaid. Not the terms on the vehicle: a truck rented at ₱50,000 a month
-     * is not owed ₱50,000 forever, it is owed for the months that have been
-     * billed and not settled. Owed whether the truck worked or not.
+     * unpaid: the whole month's rent from its first day, due on its last, one
+     * line per month. A month still unpaid once it is over is overdue, and
+     * stays listed beside the current one until it is settled. Owed whether
+     * the truck worked or not.
      *
      * **A share of what it earns** — the owner's wallet balance, which only
      * moves when a delivered run credits it. A share truck that did no runs
@@ -540,6 +541,17 @@ class PayablesService
      */
     private function group(string $key, string $label, string $icon, array $lines): array
     {
+        /**
+         * Past its due date and still owed — a month's rent once the month is
+         * over, a remittance after its deadline. Said by the API so the page
+         * does not decide what "today" is in the reader's timezone.
+         */
+        $today = now()->toDateString();
+        $lines = array_map(static fn (array $line): array => [
+            ...$line,
+            'overdue' => ($line['due_on'] ?? null) !== null && $line['due_on'] < $today,
+        ], $lines);
+
         return [
             'key' => $key,
             'label' => $label,
@@ -547,6 +559,7 @@ class PayablesService
             'count' => count($lines),
             'total_cents' => array_sum(array_column($lines, 'amount_cents')),
             'in_flight_cents' => array_sum(array_column($lines, 'in_flight_cents')),
+            'overdue_count' => count(array_filter(array_column($lines, 'overdue'))),
             'lines' => $lines,
         ];
     }

@@ -84,8 +84,33 @@ export interface TruckerVehicle {
   capacity_kg: number;
   truck_category_id: string | null;
   truck_category?: string | null;
+  /** The trucker's own switch: on the road, or in the shop. */
   status: StatusValue;
+
+  /**
+   * Cargo Rush's check, from the photographs. A truck takes jobs only when it
+   * is `available` and `verified` — and a `rejected` one says why.
+   */
+  verification: TruckVerification;
+  verified_at: string | null;
+  rejection_reason: string | null;
+  /** Photo URLs by slot. Null where none was sent (the engine is optional). */
+  photos: Record<TruckPhotoSlot, string | null>;
 }
+
+export type TruckVerification = 'pending' | 'verified' | 'rejected';
+
+export type TruckPhotoSlot = 'front' | 'left' | 'right' | 'back' | 'plate' | 'engine';
+
+/** In the order the app asks for them: round the truck, the plate, the engine. */
+export const TRUCK_PHOTO_SLOTS: { slot: TruckPhotoSlot; label: string; required: boolean }[] = [
+  { slot: 'front', label: 'Front', required: true },
+  { slot: 'left', label: 'Left side', required: true },
+  { slot: 'right', label: 'Right side', required: true },
+  { slot: 'back', label: 'Back', required: true },
+  { slot: 'plate', label: 'Plate number', required: true },
+  { slot: 'engine', label: 'Engine', required: false },
+];
 
 /**
  * A load on the board — `GET /api/v1/partner/jobs`.

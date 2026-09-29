@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
+import { missingPhotos, TruckPhotoGrid, TruckPhotos } from '@/components/truck-photo-grid';
 import { Card, EmptyState, ErrorState, SkeletonRows, StatusPill } from '@/components/ui/primitives';
 import { Sheet } from '@/components/ui/sheet';
 import { Brand, Hit, Radius, Spacing } from '@/constants/theme';
@@ -22,12 +23,15 @@ export function MyTrucksCard({ approved }: { approved: boolean }) {
   const trucks = useApi(() => truckerService.vehicles(), []);
 
   const [adding, setAdding] = useState(false);
+  /** The turned-down truck whose photos are being re-sent. */
+  const [resending, setResending] = useState<TruckerVehicle | null>(null);
   /** The row whose switch is mid-request, so it cannot be pressed twice. */
   const [switching, setSwitching] = useState<string | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
   const list = trucks.data ?? [];
-  const running = list.filter((t) => t.status === 'available').length;
+  // Running means on the road *and* verified — what can actually take a job.
+  const running = list.filter((t) => t.status === 'available' && t.verification === 'verified').length;
 
   const toggle = async (truck: TruckerVehicle) => {
     if (switching) return;
@@ -82,6 +86,7 @@ export function MyTrucksCard({ approved }: { approved: boolean }) {
                   {truck.model} · {truck.capacity_kg.toLocaleString()} kg
                 </Text>
                 <StatusPill status={truck.status} />
+                <Verification truck={truck} onResend={() => setResending(truck)} />
               </View>
               {approved ? (
               <Pressable
@@ -133,15 +138,125 @@ export function MyTrucksCard({ approved }: { approved: boolean }) {
           }}
         />
       ) : null}
+
+      {resending ? (
+        <ResendPhotosSheet
+          truck={resending}
+          onClose={() => setResending(null)}
+          onSent={() => {
+            setResending(null);
+            trucks.reload();
+          }}
+        />
+      ) : null}
     </Card>
   );
 }
 
-/** Plate, model and working load. */
+/**
+ * Where the truck stands with Cargo Rush's check, under the plate.
+ *
+ * Only said when it is not yet verified — a verified truck just shows its
+ * road status, which is the thing the trucker changes day to day.
+ */
+function Verification({ truck, onResend }: { truck: TruckerVehicle; onResend: () => void }) {
+  if (truck.verification === 'verified') return null;
+
+  if (truck.verification === 'pending') {
+    return <Text style={styles.pending}>Waiting for Cargo Rush to verify</Text>;
+  }
+
+  return (
+    <View style={{ gap: 4 }}>
+      <Text style={styles.rejected}>
+        Not verified{truck.rejection_reason ? `: ${truck.rejection_reason}` : ''}
+      </Text>
+      <Pressable accessibilityRole="button" onPress={onResend} hitSlop={8}>
+        <Text style={styles.resend}>Send new photos</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+/** New photos for a truck the office turned down. Any of the six, at least one. */
+function ResendPhotosSheet({
+  truck,
+  onClose,
+  onSent,
+}: {
+  truck: TruckerVehicle;
+  onClose: () => void;
+  onSent: () => void;
+}) {
+  const [photos, setPhotos] = useState<TruckPhotos>({});
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  const submit = async () => {
+    if (busy) return;
+
+    if (Object.keys(photos).length === 0) {
+      setFailure('Choose at least one photo to send.');
+
+      return;
+    }
+
+    setBusy(true);
+    setFailure(null);
+
+    try {
+      await truckerService.resendPhotos(truck.id, photos);
+      onSent();
+    } catch (error) {
+      setFailure(messageFor(error));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Sheet
+      open
+      onClose={onClose}
+      title={`New photos · ${truck.plate}`}
+      subtitle={truck.rejection_reason ?? 'Replace the photos Cargo Rush asked for.'}
+      icon="camera"
+      footer={
+        <>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ disabled: busy }}
+            disabled={busy}
+            onPress={() => void submit()}
+            style={[styles.confirm, busy && { opacity: 0.5 }]}>
+            {busy ? (
+              <ActivityIndicator color={Brand.surface} />
+            ) : (
+              <Text style={styles.confirmText}>Send for checking</Text>
+            )}
+          </Pressable>
+          <Pressable accessibilityRole="button" onPress={onClose} style={styles.cancel}>
+            <Text style={styles.cancelText}>Cancel</Text>
+          </Pressable>
+        </>
+      }>
+      {failure ? (
+        <Text style={styles.failure} accessibilityRole="alert">
+          {failure}
+        </Text>
+      ) : null}
+      <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
+        <TruckPhotoGrid photos={photos} onChange={setPhotos} onError={setFailure} optional />
+      </ScrollView>
+    </Sheet>
+  );
+}
+
+/** Plate, model, working load, and the photographs Cargo Rush checks it from. */
 function AddTruckSheet({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
   const [plate, setPlate] = useState('');
   const [model, setModel] = useState('');
   const [capacity, setCapacity] = useState('');
+  const [photos, setPhotos] = useState<TruckPhotos>({});
 
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -157,16 +272,27 @@ function AddTruckSheet({ onClose, onAdded }: { onClose: () => void; onAdded: () 
       return;
     }
 
+    const missing = missingPhotos(photos);
+
+    if (missing.length > 0) {
+      setFailure(`Add a photo of the ${missing.join(', ')}.`);
+
+      return;
+    }
+
     setBusy(true);
     setFailure(null);
     setFieldErrors({});
 
     try {
-      await truckerService.saveVehicle({
-        plate: plate.trim().toUpperCase(),
-        model: model.trim(),
-        capacity_kg: Number(capacity),
-      });
+      await truckerService.addVehicle(
+        {
+          plate: plate.trim().toUpperCase(),
+          model: model.trim(),
+          capacity_kg: Number(capacity),
+        },
+        photos,
+      );
       onAdded();
     } catch (error) {
       if (error instanceof ApiRequestError) setFieldErrors(error.fieldErrors);
@@ -180,7 +306,7 @@ function AddTruckSheet({ onClose, onAdded }: { onClose: () => void; onAdded: () 
       open
       onClose={onClose}
       title="Add a truck"
-      subtitle="What it can carry decides which jobs you are offered."
+      subtitle="Cargo Rush checks it from the photos before it can take jobs."
       icon="fleet"
       footer={
         <>
@@ -207,29 +333,41 @@ function AddTruckSheet({ onClose, onAdded }: { onClose: () => void; onAdded: () 
         </Text>
       ) : null}
 
-      <Field
-        label="PLATE"
-        value={plate}
-        onChange={setPlate}
-        placeholder="ABC-1234"
-        autoCapitalize="characters"
-        error={fieldErrors['plate']?.[0]}
-      />
-      <Field
-        label="MAKE AND MODEL"
-        value={model}
-        onChange={setModel}
-        placeholder="e.g. Isuzu Forward"
-        error={fieldErrors['model']?.[0]}
-      />
-      <Field
-        label="CAPACITY (KG)"
-        value={capacity}
-        onChange={setCapacity}
-        placeholder="12000"
-        keyboard="number-pad"
-        error={fieldErrors['capacity_kg']?.[0]}
-      />
+      <ScrollView style={styles.scroll} keyboardShouldPersistTaps="handled">
+        <Field
+          label="PLATE"
+          value={plate}
+          onChange={setPlate}
+          placeholder="ABC-1234"
+          autoCapitalize="characters"
+          error={fieldErrors['plate']?.[0]}
+        />
+        <Field
+          label="MAKE AND MODEL"
+          value={model}
+          onChange={setModel}
+          placeholder="e.g. Isuzu Forward"
+          error={fieldErrors['model']?.[0]}
+        />
+        <Field
+          label="CAPACITY (KG)"
+          value={capacity}
+          onChange={setCapacity}
+          placeholder="12000"
+          keyboard="number-pad"
+          error={fieldErrors['capacity_kg']?.[0]}
+        />
+
+        <Text style={[styles.label, { marginTop: Spacing.three }]}>PHOTOS</Text>
+        <TruckPhotoGrid photos={photos} onChange={setPhotos} onError={setFailure} />
+        {Object.entries(fieldErrors)
+          .filter(([key]) => key.startsWith('photo_'))
+          .map(([key, messages]) => (
+            <Text key={key} style={styles.fieldError}>
+              {messages[0]}
+            </Text>
+          ))}
+      </ScrollView>
     </Sheet>
   );
 }
@@ -294,6 +432,10 @@ const styles = StyleSheet.create({
   },
   plate: { fontSize: 14, fontWeight: '600', color: Brand.ink, fontVariant: ['tabular-nums'] },
   sub: { fontSize: 12, color: Brand.inkMuted },
+  pending: { fontSize: 12, fontWeight: '500', color: Brand.warning },
+  rejected: { fontSize: 12, fontWeight: '500', color: Brand.red },
+  resend: { fontSize: 13, fontWeight: '600', color: Brand.blue },
+  scroll: { maxHeight: 420 },
 
   switch: {
     minHeight: Hit.min,

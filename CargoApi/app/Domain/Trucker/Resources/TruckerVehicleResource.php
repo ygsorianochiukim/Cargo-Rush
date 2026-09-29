@@ -6,6 +6,7 @@ namespace App\Domain\Trucker\Resources;
 
 use App\Domain\Shared\Http\Resources\ApiResource;
 use App\Domain\Trucker\Models\TruckerVehicle;
+use App\Domain\Trucker\Services\TruckPhotoStore;
 use Illuminate\Http\Request;
 
 /**
@@ -26,6 +27,18 @@ class TruckerVehicleResource extends ApiResource
             // which is allowed — an unstated requirement is not a requirement.
             'truck_category' => $this->whenLoaded('category', fn () => $this->category?->name),
             'status' => $this->status->value,
+
+            /**
+             * Cargo Rush's check, beside the trucker's own switch. A truck
+             * takes work only when it is `available` *and* `verified`.
+             */
+            'verification' => $this->verification->value,
+            'verified_at' => $this->iso($this->verified_at),
+            'rejection_reason' => $this->rejection_reason,
+            'photos' => collect(TruckPhotoStore::SLOTS)
+                ->map(fn (bool $required, string $slot): ?string => app(TruckPhotoStore::class)
+                    ->url($this->getAttribute(TruckPhotoStore::column($slot))))
+                ->all(),
 
             ...$this->stamps(),
         ];

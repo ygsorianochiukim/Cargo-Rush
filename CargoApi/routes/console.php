@@ -41,12 +41,12 @@ Schedule::command('cargo:invoices-overdue')->dailyAt('00:05')->withoutOverlappin
 /*
 | The rent on every truck the fleet hires at a flat fee.
 |
-| Monthly, on the first, and it bills the month that has just ended — a rent is
-| a cost of a period rather than of a moment, and charging in advance would put
-| a cost in a month the truck has not worked yet.
+| Daily. The whole month's rent goes on the books on the month's first run, due
+| on its last day, so Payables shows it all month and marks it overdue once the
+| month is over. Daily rather than on the 1st so a missed night costs nothing —
+| and each run also catches up last month if that was missed.
 |
-| Safe if it is missed and run late, and safe if it runs twice: the charge is
-| keyed to the unit and the month, so a second pass finds the first one's row
-| and does nothing.
+| Safe to run twice: the charge is keyed to the unit and the month, so a second
+| pass finds the first one's row and does nothing.
 */
-Schedule::command('cargo:truck-rent')->monthlyOn(1, '00:15')->withoutOverlapping();
+Schedule::command('cargo:truck-rent')->dailyAt('00:15')->withoutOverlapping();

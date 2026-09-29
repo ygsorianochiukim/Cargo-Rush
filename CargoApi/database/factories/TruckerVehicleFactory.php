@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Database\Factories;
 
 use App\Domain\Shared\Enums\StatusValue;
+use App\Domain\Shared\Enums\TruckVerification;
 use App\Domain\Trucker\Models\TruckerVehicle;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -30,7 +31,20 @@ class TruckerVehicleFactory extends Factory
             // capacity.
             'capacity_kg' => 15_000,
             'status' => StatusValue::Available->value,
+            // Checked, so a test about something else is not stopped by the
+            // office's photo check. `awaitingCheck()` for the ones that are.
+            'verification' => TruckVerification::Verified->value,
+            'verified_at' => now(),
         ];
+    }
+
+    /** Photographed and sent, not yet looked at by the office. */
+    public function awaitingCheck(): self
+    {
+        return $this->state(fn (): array => [
+            'verification' => TruckVerification::Pending->value,
+            'verified_at' => null,
+        ]);
     }
 
     /** In the shop, so it cannot be put under a load. */

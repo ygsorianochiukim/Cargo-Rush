@@ -49,7 +49,9 @@
       class="mt-4 block"
       [heading]="group.label"
       [icon]="group.icon"
-      [hint]="money(group.total_cents)"
+      [hint]="
+        money(group.total_cents) + (group.overdue_count > 0 ? ' · ' + group.overdue_count + ' overdue' : '')
+      "
       [padded]="false"
     >
       <ul class="flex flex-col">
@@ -58,11 +60,23 @@
             class="flex flex-wrap items-center gap-3 border-b border-cr-line/70 px-4 py-3 last:border-0"
           >
             <span class="min-w-0 flex-1">
-              <span class="block truncate text-[13px] font-semibold">{{ line.name }}</span>
+              <span class="flex items-center gap-2">
+                <span class="truncate text-[13px] font-semibold">{{ line.name }}</span>
+                @if (line.overdue) {
+                  <span
+                    class="inline-flex flex-none items-center rounded-full bg-cr-red-bg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cr-red"
+                  >
+                    Overdue
+                  </span>
+                }
+              </span>
               <span class="block truncate text-[12px] text-cr-ink-muted">
                 {{ line.detail }}
                 @if (line.due_on) {
-                  · {{ date(line.due_on) }}
+                  ·
+                  <span [class.font-semibold]="line.overdue" [class.text-cr-red]="line.overdue">
+                    {{ line.overdue ? 'was due' : 'due' }} {{ date(line.due_on) }}
+                  </span>
                 }
               </span>
             </span>

@@ -161,7 +161,11 @@ class JobBoardService
             'Your registration is still being reviewed. You will be able to take work once it is approved.',
         );
 
-        abort_if($trucker->activeVehicle() === null, 422, 'Add a truck to your profile before taking work.');
+        abort_if(
+            $trucker->activeVehicle() === null,
+            422,
+            'You need a truck on the road that Cargo Rush has verified before taking work.',
+        );
         abort_unless(
             $trucker->is_online,
             422,

@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 
-import { Trucker } from '../../models/trucker/trucker.model';
+import { TRUCK_PHOTO_SLOTS, Trucker, TruckerVehicle } from '../../models/trucker/trucker.model';
 import { TruckerService } from '../../services/trucker/trucker.service';
 import { Card } from '../../shared/card';
 import { Confirm } from '../../shared/confirm';
@@ -43,6 +43,8 @@ import { WalletPanel } from '../../shared/wallet-panel';
  * is `truckers.view` — the split the drivers module already uses, and for
  * firmer reasons here, since two of the three verbs move money.
  */
+type Tab = 'pending' | 'trucks' | 'active' | 'inactive' | 'all';
+
 @Component({
   selector: 'app-truckers',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -68,7 +70,7 @@ export class TruckersPage {
    * somebody waiting on this desk with an empty app, and it is the one thing
    * here with a person on the other end of it.
    */
-  protected readonly tab = signal<'pending' | 'active' | 'inactive' | 'all'>('pending');
+  protected readonly tab = signal<Tab>('pending');
 
   /* ------------------------------------------------------------ The drawer */
 
@@ -149,13 +151,117 @@ export class TruckersPage {
 
     if (all === null) return null;
 
-    return this.tab() === 'all' ? all : all.filter((t) => t.status === this.tab());
+    return all.filter((t) => this.inTab(t, this.tab()));
   });
 
-  protected countOf(status: 'pending' | 'active' | 'inactive' | 'all'): number {
-    const all = this.truckers() ?? [];
+  protected countOf(tab: Tab): number {
+    return (this.truckers() ?? []).filter((t) => this.inTab(t, tab)).length;
+  }
 
-    return status === 'all' ? all.length : all.filter((t) => t.status === status).length;
+  /** `trucks` is anybody with a truck sent in for checking, whatever their standing. */
+  private inTab(trucker: Trucker, tab: Tab): boolean {
+    if (tab === 'all') return true;
+    if (tab === 'trucks') return this.trucksToCheck(trucker) > 0;
+
+    return trucker.status === tab;
+  }
+
+  protected trucksToCheck(trucker: Trucker): number {
+    return (trucker.vehicles ?? []).filter((v) => v.verification === 'pending').length;
+  }
+
+  /* ------------------------------------------------ Checking their trucks */
+
+  protected readonly photoSlots = TRUCK_PHOTO_SLOTS;
+
+  /**
+   * The one truck being checked, in its own modal.
+   *
+   * Separate from the trucker's drawer on purpose: the decision is about this
+   * truck and its photographs, and the other trucks, the drivers and the
+   * wallet are nothing to do with it. The drawer hides while this is open and
+   * comes back when it closes, if it was open to begin with.
+   */
+  protected readonly checking = signal<{ trucker: Trucker; vehicle: TruckerVehicle } | null>(null);
+
+  /** The photo shown full size inside the check, or null for the grid. */
+  protected readonly enlarged = signal<{ url: string; label: string } | null>(null);
+
+  /** The truck whose rejection reason is being typed, and what has been typed. */
+  protected readonly rejecting = signal<string | null>(null);
+  protected readonly reason = signal('');
+
+  /** Every truck waiting for a check, oldest first, for the "Trucks to check" tab. */
+  protected readonly truckQueue = computed(() =>
+    (this.truckers() ?? [])
+      .flatMap((trucker) =>
+        (trucker.vehicles ?? [])
+          .filter((vehicle) => vehicle.verification === 'pending')
+          .map((vehicle) => ({ trucker, vehicle })),
+      )
+      .sort((a, b) => (a.vehicle.created_at ?? '').localeCompare(b.vehicle.created_at ?? '')),
+  );
+
+  protected photoCount(vehicle: TruckerVehicle): number {
+    return Object.values(vehicle.photos ?? {}).filter(Boolean).length;
+  }
+
+  protected review(trucker: Trucker, vehicle: TruckerVehicle): void {
+    this.checking.set({ trucker, vehicle });
+    this.enlarged.set(null);
+    this.rejecting.set(null);
+    this.formError.set(null);
+  }
+
+  protected closeCheck(): void {
+    this.checking.set(null);
+    this.enlarged.set(null);
+    this.rejecting.set(null);
+    this.formError.set(null);
+  }
+
+  protected verifyTruck(trucker: Trucker, vehicle: TruckerVehicle): void {
+    this.truckersApi.verifyVehicle(trucker.id, vehicle.id).subscribe({
+      next: () => {
+        this.closeCheck();
+        this.reopen(trucker.id);
+      },
+      error: (error: HttpErrorResponse) => this.fail(error),
+    });
+  }
+
+  protected startReject(vehicle: TruckerVehicle): void {
+    this.rejecting.set(vehicle.id);
+    this.reason.set('');
+    this.formError.set(null);
+  }
+
+  protected rejectTruck(trucker: Trucker, vehicle: TruckerVehicle): void {
+    const reason = this.reason().trim();
+
+    if (reason === '') {
+      this.formError.set('Say what is wrong, so the trucker knows what to send again.');
+
+      return;
+    }
+
+    this.truckersApi.rejectVehicle(trucker.id, vehicle.id, reason).subscribe({
+      next: () => {
+        this.closeCheck();
+        this.reopen(trucker.id);
+      },
+      error: (error: HttpErrorResponse) => this.fail(error),
+    });
+  }
+
+  /** Refresh the roster and the open drawer, so the decision shows under the hand that made it. */
+  private reopen(id: string): void {
+    this.refresh();
+    this.truckersApi.find(id).subscribe({
+      next: (fresh) => {
+        if (this.openTrucker()?.id === id) this.openTrucker.set(fresh);
+      },
+    });
   }
 
   /* ------------------------------------------------------------- Deciding */
@@ -216,7 +322,7 @@ export class TruckersPage {
   private fail(error: HttpErrorResponse): void {
     const message = this.messageFor(error);
 
-    if (this.openTrucker() !== null) {
+    if (this.openTrucker() !== null || this.checking() !== null) {
       this.formError.set(message);
 
       return;
@@ -230,6 +336,7 @@ export class TruckersPage {
   protected open(trucker: Trucker): void {
     this.openTrucker.set(trucker);
     this.formError.set(null);
+    this.rejecting.set(null);
   }
 
   protected close(): void {
