@@ -249,11 +249,14 @@ class HiredFleetSeeder extends Seeder
                 // Back-dated, so the sheet and the owner's statement read as a
                 // fortnight of work rather than as everything happening at once
                 // this afternoon.
+                // Put back whatever clock was in force, not the real one: a
+                // test that pinned "a day later" keeps it for the seeders after.
+                $clock = Carbon::getTestNow();
                 Carbon::setTestNow($scheduled->copy()->addHours(7));
 
                 $this->trips->complete($trip, new ProofData(receiver_name: 'J. Cabrera'));
 
-                Carbon::setTestNow();
+                Carbon::setTestNow($clock);
             }
         }
     }

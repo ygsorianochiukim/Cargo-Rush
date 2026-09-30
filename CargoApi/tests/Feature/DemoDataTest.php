@@ -6,9 +6,11 @@ use App\Domain\Finance\Models\Expense;
 use App\Domain\Finance\Models\LedgerEntry;
 use App\Domain\Hr\Models\Applicant;
 use App\Domain\Inspection\Models\Inspection;
+use App\Domain\Payroll\Support\PayrollCalendar;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\VehicleArrangement;
 use App\Domain\Shared\Enums\WalletEntryKind;
+use App\Domain\Tenancy\Models\Company;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Trucker\Models\Trucker;
 use App\Domain\Trucker\Models\WalletEntry;
@@ -247,9 +249,25 @@ it('can be run twice without paying anybody twice', function (): void {
         'maintenance' => (int) DB::table('ledger_entries')->sum('maintenance_cents'),
     ];
 
-    // A day later, because a second run is never the same afternoon and dates
-    // derived from `today` are exactly where a seeder tends to double up.
-    Carbon::setTestNow(now()->addDay());
+    /*
+     * A day later, because a second run is never the same afternoon and dates
+     * derived from `today` are exactly where a seeder tends to double up.
+     *
+     * Unless tomorrow closes a pay period or a month. The seeder writes the
+     * payroll sheet into the period that has just closed and bills rent for
+     * the months that have ended, so a run on the 1st rightly adds the period
+     * and the month that closed overnight — new work, not the old work paid
+     * again, and not what this test measures. On those days the second run is
+     * later the same day instead.
+     */
+    $calendar = PayrollCalendar::for(Company::query()->oldest()->first());
+    $later = now()->addDay();
+
+    if (! $later->isSameMonth(now()) || ! $calendar->justClosed($later)->start->equalTo($calendar->justClosed()->start)) {
+        $later = now()->endOfDay()->subMinute();
+    }
+
+    Carbon::setTestNow($later);
 
     $this->seed(DemoSeeder::class);
 
