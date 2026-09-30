@@ -319,11 +319,14 @@ class PartnerSeeder extends Seeder
                 // Back-dated: the wallet row, the invoice and the statement all
                 // take their date from here, and a week of runs all landing
                 // today would make the statement unreadable.
+                // Put back whatever clock was in force, not the real one: a
+                // test that pinned "a day later" keeps it for the seeders after.
+                $clock = Carbon::getTestNow();
                 Carbon::setTestNow($scheduled->copy()->addHours(6));
 
                 $this->trips->complete($trip, new ProofData(receiver_name: 'R. Ledesma'));
 
-                Carbon::setTestNow();
+                Carbon::setTestNow($clock);
             }
         }
     }
