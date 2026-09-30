@@ -16,7 +16,6 @@ namespace App\Domain\Shared\Enums;
  */
 enum BookingSource: string
 {
-    
     /**
      * The haulier brokered it.
      *
