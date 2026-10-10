@@ -152,7 +152,6 @@ export class PricingPage {
 
   protected readonly previewForm = this.fb.group({
     distance_km: [0],
-    weight_kg: [0],
     truck_category_id: [''],
   });
 
@@ -186,7 +185,43 @@ export class PricingPage {
         (group) => String(group.get('truck_category_id')?.value ?? '') || '*',
       ),
     );
+
+    const baseline = Number(values['diesel_baseline_cents'] ?? 0);
+
+    this.rateLines.set({
+      baselinePesos: baseline > 0 ? Math.floor(baseline) : null,
+      lines: this.brackets.controls.map((group) => ({
+        label: String(group.get('label')?.value ?? ''),
+        baseCents: Math.round(Number(group.get('base')?.value ?? 0) * 100),
+        stepCents: Math.round(Number(group.get('diesel_step')?.value ?? 0) * 100),
+      })),
+    });
   }
+
+  private readonly rateLines = signal<{
+    baselinePesos: number | null;
+    lines: { label: string; baseCents: number; stepCents: number }[];
+  }>({ baselinePesos: null, lines: [] });
+
+  protected readonly dieselGrid = computed(() => {
+    const { baselinePesos, lines } = this.rateLines();
+    const state = this.diesel();
+    const baseline = baselinePesos ?? Math.floor((state?.baseline_cents ?? 0) / 100);
+    const today = state?.current ? Math.floor(state.current.price_per_litre_cents / 100) : null;
+    const first = Math.max(baseline, (today ?? baseline + 7) - 7);
+    const columns = Array.from({ length: 15 }, (_, offset) => first + offset);
+
+    return {
+      today,
+      columns,
+      rows: lines.map((line) => ({
+        label: line.label,
+        prices: columns.map(
+          (pesos) => line.baseCents + line.stepCents * Math.max(0, pesos - baseline),
+        ),
+      })),
+    };
+  });
 
   protected get brackets(): FormArray<FormGroup> {
     return this.form.get('brackets') as FormArray<FormGroup>;
@@ -442,14 +477,14 @@ export class PricingPage {
 
 
   protected preview(): void {
-    const { distance_km, weight_kg, truck_category_id } = this.previewForm.getRawValue();
+    const { distance_km, truck_category_id } = this.previewForm.getRawValue();
 
     this.quoting.set(true);
 
     this.pricingApi
       .quote({
         distance_km: Number(distance_km ?? 0),
-        weight_kg: Number(weight_kg ?? 0),
+        weight_kg: 0,
         truck_category_id: truck_category_id || null,
         pricing_zone_id: this.previewZoneId(),
       })
