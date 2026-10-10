@@ -15,10 +15,6 @@ use Database\Seeders\PermissionSeeder;
 use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * The printed paperwork a truck leaves with — the Official Trip Ticket and the
- * dispatch checklist — filled in from the trip.
- */
 beforeEach(function (): void {
     zoneCard();
 
@@ -65,7 +61,6 @@ it('fills the ticket in from the trip, the crew and the truck', function (): voi
         ->and($ticket['trip']['cargo'])->toBe('Convenience goods, 120 cartons')
         ->and($ticket['crew']['driver'])->toBe('Marco Reyes')
         ->and($ticket['crew']['licence_no'])->toBe($this->driver->licence_no)
-        // In the order they were named.
         ->and($ticket['crew']['helper_1'])->toBe('John Paul Trasadas')
         ->and($ticket['crew']['helper_2'])->toBe('Jeffrey Marba')
         ->and($ticket['vehicle']['plate'])->toBe('NCR 4412')
@@ -97,7 +92,6 @@ it('leaves the helper boxes empty on a run with no helpers', function (): void {
 it('needs trips.view', function (): void {
     $trip = ($this->trip)();
 
-    // A trucker has no reason to read the fleet's dispatch paperwork.
     $trucker = User::create([
         'name' => 'Partner', 'email' => 'partner@test.test',
         'password' => 'password', 'role' => Role::Trucker->value,
@@ -110,7 +104,6 @@ describe('the dispatch checklist, answered on the phone', function (): void {
     beforeEach(function (): void {
         $this->marco = User::where('email', 'marco@cargorush.ph')->firstOrFail();
 
-        /** Every line answered `$answer`, with any overrides. */
         $this->sheet = fn (string $answer = 'yes', array $overrides = []) => [
             ...array_fill_keys(TripTicketService::keys(), $answer),
             ...$overrides,

@@ -11,19 +11,6 @@ use Database\Seeders\PermissionSeeder;
 use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * The firm-wide benefits switch, and choosing who is on benefits.
- *
- * What these are defending:
- *
- *   **Off means nobody.** No SSS, PhilHealth or Pag-IBIG on any payslip —
- *   employee or employer share — whatever the person's own record says.
- *
- *   **Off does not rewrite anybody.** Each person's flags survive, so turning
- *   benefits back on returns everybody to the enrolment they had.
- *
- *   **Tax is not a benefit.** Withholding still comes off with benefits off.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -43,6 +30,9 @@ beforeEach(function (): void {
             'contact' => '0917 555 0199',
             'hired_on' => '2026-01-05',
             'amount_cents' => 3_000_000,
+            'sss_enrolled' => true,
+            'philhealth_enrolled' => true,
+            'pagibig_enrolled' => true,
             ...$overrides,
         ])->assertCreated()->json('data');
 
@@ -84,7 +74,6 @@ it('takes no contribution from anybody with benefits off, but still withholds ta
         ->and($line['sss_enrolled'])->toBeFalse()
         ->and($line['withholding_tax_cents'])->toBeGreaterThan(0);
 
-    // The person's own record is untouched.
     expect(Employee::find($employee['id'])->statutoryEnrolment())
         ->toBe(['sss' => true, 'philhealth' => true, 'pagibig' => true]);
 });
@@ -105,7 +94,6 @@ it('gives benefits only to the people chosen', function (): void {
     $with = ($this->hire)();
     $without = ($this->hire)(['first_name' => 'Jun', 'last_name' => 'Santos']);
 
-    // What the Access Control card sends for somebody taken off benefits.
     $this->actingAs($this->admin)->patchJson("/api/v1/employees/{$without['id']}", [
         'sss_enrolled' => false,
         'philhealth_enrolled' => false,
@@ -120,7 +108,6 @@ it('gives benefits only to the people chosen', function (): void {
         ->and($lines[$without['id']]['pagibig_cents'])->toBe(0)
         ->and($lines[$without['id']]['employer_contributions_cents'])->toBe(0);
 
-    // A partial edit leaves the rest of the record alone.
     expect(Employee::find($without['id'])->first_name)->toBe('Jun');
 });
 

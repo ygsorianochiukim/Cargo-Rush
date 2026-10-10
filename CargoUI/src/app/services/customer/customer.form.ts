@@ -4,13 +4,6 @@ import { Customer } from '../../models/customer/customer.model';
 import { RecordSpec, statusOptions } from '../../shared/record-form-spec';
 import { CustomerService } from './customer.service';
 
-/**
- * Customer Management.
- *
- * Trip count and outstanding balance are absent on purpose: both are derived
- * by the API from trips and unsettled invoices, so entering them would create
- * a number that can disagree with the Billing module.
- */
 export function customerSpec(): RecordSpec<Customer> {
   const customers = inject(CustomerService);
 
@@ -53,14 +46,6 @@ export function customerSpec(): RecordSpec<Customer> {
         options: statusOptions(['active', 'pending', 'inactive']),
       },
 
-      /**
-       * How this firm is taxed.
-       *
-       * Set once here and read by every invoice raised for them — by hand or
-       * by a delivery — so nobody has to remember it per document. Both are
-       * properties of who is being billed rather than of what was hauled,
-       * which is why they live on the customer.
-       */
       {
         key: 'tin',
         label: 'TIN',
@@ -102,8 +87,6 @@ export function customerSpec(): RecordSpec<Customer> {
       status: customer.status,
       tin: customer.tin ?? '',
       vat_treatment: customer.vat_treatment,
-      // The shared form has no checkbox kind, so this is a two-option select
-      // and the strings are mapped back to a boolean on the way out.
       withholds_tax: customer.withholds_tax ? 'yes' : 'no',
     }),
 
@@ -111,8 +94,6 @@ export function customerSpec(): RecordSpec<Customer> {
       name: values['name'],
       contact: values['contact'],
       address: String(values['address'] ?? '').trim() || null,
-      // Absent rather than empty when nothing was typed: the API reads an
-      // address as "give this firm a login", and a blank one is not that.
       email: String(values['email'] ?? '').trim() || undefined,
       rating: Number(values['rating'] ?? 0),
       status: values['status'] || 'active',

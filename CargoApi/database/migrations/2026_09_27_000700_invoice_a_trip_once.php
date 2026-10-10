@@ -7,26 +7,6 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-/**
- * One receivable per haul, enforced by the database.
- *
- * `BillingService::raiseForTrip()` already looks before it raises, but a look
- * is a read, and two completions of the same trip racing each other can both
- * find nothing and both insert. This index is what makes the second insert
- * fail; the service catches that and returns the first document.
- *
- * Nulls are allowed, and many: an invoice raised by hand has no trip, and the
- * index says nothing about those. Soft-deleted rows are covered too — which is
- * why `raiseForTrip()` reads `withTrashed()` before deciding.
- *
- * ## Existing duplicates
- *
- * On a fresh database there are none. On one that has been running, a pair
- * would make the index fail half-way through a deploy, so they are looked for
- * first and the migration stops with their numbers rather than choosing which
- * of two issued documents to throw away — that is a decision about money a
- * person has to make.
- */
 return new class extends Migration
 {
     public function up(): void

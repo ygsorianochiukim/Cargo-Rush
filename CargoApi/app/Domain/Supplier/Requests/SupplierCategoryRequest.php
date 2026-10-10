@@ -9,7 +9,6 @@ use App\Domain\Shared\Http\Requests\ApiFormRequest;
 use App\Domain\Tenancy\Support\Tenant;
 use Illuminate\Validation\Rule;
 
-/** A supplier category's name and whether it is still offered. */
 class SupplierCategoryRequest extends ApiFormRequest
 {
     public function rules(): array

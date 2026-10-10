@@ -9,9 +9,7 @@ use App\Domain\Trucker\Models\TruckerVehicle;
 use App\Domain\Trucker\Services\TruckPhotoStore;
 use Illuminate\Http\Request;
 
-/**
- * @mixin TruckerVehicle
- */
+/** @mixin TruckerVehicle */
 class TruckerVehicleResource extends ApiResource
 {
     public function toArray(Request $request): array
@@ -22,16 +20,9 @@ class TruckerVehicleResource extends ApiResource
             'model' => $this->model,
             'capacity_kg' => $this->capacity_kg,
             'truck_category_id' => $this->truck_category_id,
-            // The word rather than the id, so a card can say "Freezer" without
-            // a second call. Null when the partner did not say what kind it is,
-            // which is allowed — an unstated requirement is not a requirement.
             'truck_category' => $this->whenLoaded('category', fn () => $this->category?->name),
             'status' => $this->status->value,
 
-            /**
-             * Cargo Rush's check, beside the trucker's own switch. A truck
-             * takes work only when it is `available` *and* `verified`.
-             */
             'verification' => $this->verification->value,
             'verified_at' => $this->iso($this->verified_at),
             'rejection_reason' => $this->rejection_reason,

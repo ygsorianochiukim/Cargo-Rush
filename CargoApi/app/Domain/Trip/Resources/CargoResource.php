@@ -8,16 +8,7 @@ use App\Domain\Shared\Http\Resources\ApiResource;
 use App\Domain\Trip\Models\Trip;
 use Illuminate\Http\Request;
 
-/**
- * Cargo Details, as the driver app reads it — DESIGN.md section 5.2.
- *
- * A trip plus its dispatch and delivery records, flattened into the one object
- * that screen shows. Same reasoning as `GpsUnitResource`: the shape a client
- * renders is the API's to define, and stitching three records together in the
- * handset would put a join in the wrong place.
- *
- * @mixin Trip
- */
+/** @mixin Trip */
 class CargoResource extends ApiResource
 {
     public function toArray(Request $request): array
@@ -35,7 +26,6 @@ class CargoResource extends ApiResource
             'customer' => $this->customer?->name,
 
             'pickup_place' => $this->pickup_place ?? $this->origin,
-            // Before it rolls, the plan is the best answer there is.
             'pickup_at' => $this->iso($dispatch?->dispatched_at ?? $this->scheduled_at),
             'dropoff_place' => $this->dropoff_place ?? $this->destination,
             'dropoff_at' => $this->iso($delivery?->delivered_at),

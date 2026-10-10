@@ -18,15 +18,6 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Validation\ValidationException;
 
-/**
- * The places where the money and the documents could drift apart.
- *
- * Each of these was a way to end up with a payment pointing at a document that
- * no longer asked for it, a status the payments contradicted, a statement that
- * never closed, or a dashboard rate measured on two different bases. The fixes
- * are small; what they defend is that every figure the office reads can be
- * reconciled to the allocations beneath it.
- */
 beforeEach(function (): void {
     $this->seed(PermissionSeeder::class);
     $this->seed(NavigationSeeder::class);
@@ -40,7 +31,6 @@ beforeEach(function (): void {
 
     $this->customer = Customer::create(['name' => 'Metro Grocers', 'contact' => '0917 000 0001']);
 
-    // ₱10,000 net, ₱11,200 gross.
     $this->raise = fn (array $overrides = []) => $this->actingAs($this->admin)
         ->postJson('/api/v1/billing', [
             'customer_id' => $this->customer->id,
@@ -116,8 +106,6 @@ describe('cancelling and deleting', function (): void {
         $invoice = ($this->raise)();
         ($this->edit)($invoice['id'], ['status' => 'cancelled'])->assertOk();
 
-        // It used to be accepted, and the status derived from the money
-        // quietly un-cancelled the document.
         ($this->pay)($invoice['id'], 500_000)
             ->assertUnprocessable()
             ->assertJsonValidationErrors('allocations');
@@ -130,7 +118,6 @@ describe('cancelling and deleting', function (): void {
     });
 
     it('leaves a cancelled invoice cancelled when a payment comes off it', function (): void {
-        // A document cancelled before the guard existed, with money on it.
         $invoice = ($this->raise)();
         $payment = ($this->pay)($invoice['id'], 500_000)->json('data.id');
         Invoice::findOrFail($invoice['id'])->forceFill(['status' => StatusValue::Cancelled->value])->save();
@@ -158,7 +145,6 @@ describe('editing re-derives the status', function (): void {
         $invoice = ($this->raise)();
         ($this->pay)($invoice['id'], 800_000)->assertCreated();
 
-        // ₱5,000 net is ₱5,600 gross — less than the ₱8,000 already in.
         ($this->edit)($invoice['id'], ['amount_cents' => 500_000])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('amount_cents');
@@ -190,7 +176,6 @@ describe('editing re-derives the status', function (): void {
         $invoice = ($this->raise)(['issued_at' => now()->subDays(40)->toDateString(), 'due_at' => now()->subDays(10)->toDateString()]);
         ($this->edit)($invoice['id'], ['status' => 'cancelled'])->assertOk();
 
-        // Editing a cancelled document without mentioning status keeps it so.
         ($this->edit)($invoice['id'], ['payee' => null])->assertOk()->assertJsonPath('data.status', 'cancelled');
 
         ($this->edit)($invoice['id'], ['status' => 'pending'])
@@ -216,9 +201,6 @@ describe('settling', function (): void {
 
         app(BillingService::class)->settle($invoice);
 
-        // A second request holding the row as it was before the first landed:
-        // the balance is re-read under the lock, so it is refused rather than
-        // recording the money twice.
         expect(fn () => app(PaymentService::class)->settle($stale))
             ->toThrow(ValidationException::class);
 
@@ -266,21 +248,17 @@ describe('tax arithmetic', function (): void {
     it('rounds VAT and withholding half-up to the centavo', function (): void {
         $this->customer->update(['withholds_tax' => true]);
 
-        // 2% of ₱10,000.25 is ₱200.005 — half a centavo, which rounds up.
-        // Truncation said ₱200.00.
         $body = ($this->raise)(['amount_cents' => 1_000_025]);
 
         expect($body['vat_cents'])->toBe(120_003)
             ->and($body['withholding_cents'])->toBe(20_001);
 
-        // 12% of ₱10,000.05 is ₱1,200.006: ₱1,200.01, not ₱1,200.00.
         expect(($this->raise)(['amount_cents' => 1_000_005])['vat_cents'])->toBe(120_001);
     });
 
     it('keeps net plus VAT at the quoted all-in price', function (): void {
         $this->actingAs($this->admin)->patchJson('/api/v1/company', ['prices_include_vat' => true])->assertOk();
 
-        // ₱10.00 all-in: 1000 / 1.12 = 892.857 — rounded to 893, not cut to 892.
         $body = ($this->raise)(['amount_cents' => 1_000]);
 
         expect($body['net_amount_cents'])->toBe(893)
@@ -320,7 +298,6 @@ describe('the statement of account', function (): void {
         $statement = ($this->statement)();
         $kinds = array_column($statement['lines'], 'kind');
 
-        // Charged the gross, credited the withholding, credited the payment.
         expect($kinds)->toBe(['invoice', 'withholding', 'payment'])
             ->and($statement['lines'][1]['credit_cents'])->toBe(20_000)
             ->and($statement['lines'][1]['date'])->toBe($statement['lines'][0]['date'])
@@ -347,7 +324,6 @@ describe('the statement of account', function (): void {
 
         $statement = ($this->statement)(['to' => now()->subDays(5)->toDateString()]);
 
-        // Still owed at the time — the payment came five days later.
         expect($statement['closing_balance_cents'])->toBe(1_120_000)
             ->and($statement['aging']['total_cents'])->toBe(1_120_000)
             ->and($statement['aging']['days_1_30'])->toBe(1_120_000);
@@ -365,7 +341,6 @@ describe('the dashboard', function (): void {
             'issued_at' => now()->subDays(40)->toDateString(),
             'due_at' => now()->addDays(5)->toDateString(),
         ]);
-        // Its due date passes; nobody runs cargo:invoices-overdue.
         Invoice::findOrFail($invoice['id'])->forceFill(['due_at' => now()->subDays(3)->toDateString()])->save();
 
         expect(($this->receivables)()['overdue_cents'])->toBe(1_120_000);
@@ -382,13 +357,9 @@ describe('the dashboard', function (): void {
     it('measures collection on the window, net of withholding', function (): void {
         $this->customer->update(['withholds_tax' => true]);
 
-        // In the window, and paid at its due — fully collected, although
-        // ₱200 less arrived than the document says.
         $recent = ($this->raise)();
         $this->actingAs($this->admin)->postJson("/api/v1/billing/{$recent['id']}/settle")->assertOk();
 
-        // Raised long before the window and still unpaid: not this window's
-        // collection problem.
         ($this->raise)([
             'issued_at' => now()->subDays(90)->toDateString(),
             'due_at' => now()->subDays(60)->toDateString(),
@@ -411,7 +382,6 @@ describe('re-quoting', function (): void {
         $trip = ($this->trip)();
         $cancelled = ($this->trip)();
 
-        // Double-taxed at a 10% rate that applied when it was raised.
         $wrong = Invoice::create([
             'customer_id' => $this->customer->id, 'trip_id' => $trip->id,
             'issued_at' => now()->toDateString(), 'due_at' => now()->addDays(30)->toDateString(),
@@ -430,7 +400,6 @@ describe('re-quoting', function (): void {
 
         $this->artisan('cargo:invoices-requote')->assertSuccessful();
 
-        // Re-based on the trip's ₱10,000 at the frozen 10% — not today's 12%.
         expect($wrong->fresh()->net_amount_cents)->toBe(1_000_000)
             ->and($wrong->fresh()->vat_cents)->toBe(100_000)
             ->and($wrong->fresh()->vat_rate_bp)->toBe(1_000)

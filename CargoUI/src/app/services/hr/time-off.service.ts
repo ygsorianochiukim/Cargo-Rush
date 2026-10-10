@@ -13,7 +13,6 @@ import {
 } from '../../models/hr/time-off.model';
 import { Envelope, ListQuery } from '../../models/shared/envelope.model';
 
-/** Leave, undertime and performance. */
 @Injectable({ providedIn: 'root' })
 export class TimeOffService {
   private readonly api = inject(ApiService);
@@ -21,8 +20,6 @@ export class TimeOffService {
   overview(): Observable<TimeOffOverview> {
     return this.api.get<TimeOffOverview>('hr/time-off');
   }
-
-  /* --------------------------------------------------------------- Leave */
 
   leave(query?: ListQuery): Observable<Envelope<LeaveRequest[]>> {
     return this.api.envelope<LeaveRequest[]>('hr/leave', query);
@@ -36,13 +33,6 @@ export class TimeOffService {
     return this.api.patch<LeaveRequest>(`hr/leave/${id}`, payload);
   }
 
-  /**
-   * Approve or reject.
-   *
-   * A verb rather than a PATCH on `status`, because the API also records who
-   * decided and when — a status a client could set would let a request be
-   * approved by nobody.
-   */
   decideLeave(
     id: string,
     decision: 'approved' | 'rejected',
@@ -58,8 +48,6 @@ export class TimeOffService {
   removeLeave(id: string): Observable<void> {
     return this.api.delete(`hr/leave/${id}`);
   }
-
-  /* ----------------------------------------------------------- Undertime */
 
   undertime(query?: ListQuery): Observable<Envelope<UndertimeRequest[]>> {
     return this.api.envelope<UndertimeRequest[]>('hr/undertime', query);
@@ -91,8 +79,6 @@ export class TimeOffService {
   removeUndertime(id: string): Observable<void> {
     return this.api.delete(`hr/undertime/${id}`);
   }
-
-  /* --------------------------------------------------------- Performance */
 
   performance(range?: { from: string; to: string }): Observable<PerformanceReport> {
     return this.api.get<PerformanceReport>('hr/performance', range);

@@ -19,32 +19,6 @@ import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 import { Modal } from '../../shared/modal';
 
-/**
- * The store tab — the mini-mart *pautang*, for one person.
- *
- * Goods taken against pay, and what payroll takes back at the cutoff. The
- * balance is the difference between the two kinds of row, and the next payslip
- * takes it — capped, where the person has a cap on their record.
- *
- * ## Why this is not a pay component
- *
- * The salary structure beside it already expresses a standing deduction, and a
- * cash-advance repayment is exactly what it is for. It is the wrong shape for a
- * tab. A component is an instruction with an amount and a date range, ended by
- * somebody remembering to end it; a tab has no amount until the cutoff, because
- * it changes every time the storekeeper writes a line.
- *
- * ## The date is the field that matters
- *
- * A tab is written up at the till and keyed later, and a cutoff is a pair of
- * dates: a charge entered on the 16th for something taken on the 14th belongs
- * on the first payslip. So the form asks when it happened rather than assuming
- * today, and defaults to today because that is right most of the time.
- *
- * A modal off the roster rather than a page of its own, like the allowances
- * beside it: the question is always about one person and is asked while
- * looking at them.
- */
 @Component({
   selector: 'app-employee-store-credits',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -67,13 +41,7 @@ import { Modal } from '../../shared/modal';
         </p>
       }
 
-      <!--
-        The balance first, because it is the only figure anybody opens this for,
-        and beside it what the next payslip will actually take — which is not
-        the same number the moment a cap is set, and is exactly the sort of
-        thing an office should not have to reason out.
-      -->
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div class="grid grid-cols-2 gap-3">
         <div class="rounded-control border border-cr-line px-3 py-2.5">
           <p class="cr-meta">Outstanding</p>
           <p class="cr-num mt-0.5 text-[20px] leading-none font-semibold">
@@ -86,24 +54,14 @@ import { Modal } from '../../shared/modal';
             {{ fmt.money(state()?.next_deduction_cents ?? 0) }}
           </p>
         </div>
-        <div class="rounded-control border border-cr-line px-3 py-2.5">
-          <p class="cr-meta">Cap per payslip</p>
-          <p class="cr-num mt-0.5 text-[20px] leading-none font-semibold">
-            {{ (state()?.cap_cents ?? 0) > 0 ? fmt.money(state()!.cap_cents) : 'No cap' }}
-          </p>
-        </div>
       </div>
 
-      @if ((state()?.cap_cents ?? 0) === 0 && (state()?.balance_cents ?? 0) > 0) {
+      @if ((state()?.balance_cents ?? 0) > 0) {
         <p class="mt-2 text-[12px] text-cr-ink-muted">
-          No cap set, so the next payslip takes the whole balance — or as much of it as the payslip
-          can bear. Set a cap on this person’s record to spread it.
+          The next payslip takes the whole balance, or as much of it as the payslip can bear.
         </p>
       }
 
-      <!-- Adding a line. Deliberately four fields: a tab entered at a till is
-           a date, a figure and a couple of words, and a longer form is one
-           that stays in the notebook. -->
       <form [formGroup]="form" class="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-5">
         <app-field label="Date" class="sm:col-span-1">
           <input type="date" formControlName="charged_on" [class]="inputClass" />
@@ -176,12 +134,6 @@ import { Modal } from '../../shared/modal';
                       {{ row.kind === 'payment' ? '−' : '+' }}{{ fmt.money(row.amount_cents) }}
                     </td>
                     <td class="py-2 text-right">
-                      <!--
-                        A repayment payroll wrote is part of a payslip somebody
-                        has been handed, so there is nothing to offer here — the
-                        API refuses it, and a button that produced a 422 would
-                        be worse than none.
-                      -->
                       @if (!row.from_payroll) {
                         <button
                           type="button"
@@ -260,9 +212,6 @@ export class EmployeeStoreCredits {
       .subscribe({
         next: () => {
           this.busy.set(false);
-          // Reloaded rather than pushed onto the list: the balance and the
-          // next deduction both move, and recomputing them here would be a
-          // second implementation of the cap.
           this.form.patchValue({ description: '', amount: 0 });
           this.load();
         },

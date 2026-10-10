@@ -12,7 +12,6 @@ import { recordList } from '../../shared/record-list';
 import { EmptyState, ErrorState, SkeletonRows } from '../../shared/states';
 import { StatusPill } from '../../shared/status-pill';
 
-/** Drivers Management — DESIGN.md section 5.1. */
 @Component({
   selector: 'app-drivers',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -36,7 +35,6 @@ export class DriversPage {
       .join('');
   }
 
-  /** Flags a licence inside its final 90 days so it can be renewed in time. */
   protected expiringSoon(d: Driver): boolean {
     const days = (new Date(d.licence_expiry).getTime() - Date.now()) / 86_400_000;
     return days <= 90;

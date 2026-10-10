@@ -7,15 +7,6 @@ namespace App\Domain\Finance\DTO;
 use App\Domain\Shared\DTO\Data;
 use App\Domain\Shared\Enums\StatusValue;
 
-/**
- * The key is deliberately not derived here.
- *
- * It is a stable handle — seeded categories are looked up by it, and every
- * expense row points at the category it belongs to — so it is filled in once,
- * on create, by `ExpenseService`. Deriving it in `hydrate()` would look tidier
- * and would silently re-slug the key on every rename, which is the one thing
- * a stable handle must not do.
- */
 final class ExpenseCategoryData extends Data
 {
     public function __construct(
@@ -25,7 +16,6 @@ final class ExpenseCategoryData extends Data
         public readonly ?string $icon = null,
         public readonly ?int $position = null,
         public readonly ?StatusValue $status = null,
-        /** Where its lines post in the chart, by code. See `ExpenseCategory::accountCode()`. */
         public readonly ?string $account_code = null,
     ) {}
 

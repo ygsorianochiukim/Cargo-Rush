@@ -6,17 +6,6 @@ import { Confirm } from './confirm';
 import { RecordDialog } from './record-dialog';
 import { RecordSpec } from './record-form-spec';
 
-/**
- * List + create + edit + delete for one module, in one call.
- *
- * Every list page needs the same four states and the same three verbs. Written
- * per page that came to the same forty lines seven times over, and the seventh
- * copy is where somebody forgets the error state.
- *
- * Call it from a field initializer so `inject()` has a context:
- *
- *     protected readonly list = recordList(this.spec, () => this.api.list().pipe(...));
- */
 export function recordList<T extends { id: string }>(
   spec: RecordSpec<T>,
   load: () => Observable<T[]>,
@@ -25,7 +14,6 @@ export function recordList<T extends { id: string }>(
   const confirm = inject(Confirm);
   const destroyRef = inject(DestroyRef);
 
-  /** Null means still loading — the four states depend on telling that apart. */
   const rows = signal<T[] | null>(null);
   const error = signal<string | null>(null);
 
@@ -44,8 +32,6 @@ export function recordList<T extends { id: string }>(
 
   refresh();
 
-  // Applied locally rather than refetching: the API already returned the saved
-  // row, and a round trip would make the table flicker back to a skeleton.
   dialog.savedFor(spec).pipe(takeUntilDestroyed(destroyRef)).subscribe((saved) => {
     const current = rows() ?? [];
     const exists = current.some((row) => row.id === saved.id);
@@ -65,7 +51,6 @@ export function recordList<T extends { id: string }>(
     create: (): void => dialog.create(spec),
     edit: (record: T): void => dialog.edit(spec, record),
 
-    /** Confirms first, always — DESIGN.md section 8.1. */
     remove: async (record: T): Promise<void> => {
       if (!spec.remove) return;
 

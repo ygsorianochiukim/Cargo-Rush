@@ -13,10 +13,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
-/**
- * Fuel Expense Monitoring — daily budget, requests, odometer, receipts,
- * consumption history and projection.
- */
 class FuelController extends ApiController
 {
     public function __construct(private readonly FuelService $fuel) {}
@@ -50,7 +46,6 @@ class FuelController extends ApiController
         return $this->noContent();
     }
 
-    /** Budget, spend so far, and the month projection. */
     public function budget(Request $request): JsonResponse
     {
         $on = $request->filled('date') ? Carbon::parse($request->string('date')->toString()) : null;

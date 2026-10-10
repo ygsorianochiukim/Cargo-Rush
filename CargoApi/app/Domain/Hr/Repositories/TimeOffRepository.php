@@ -11,22 +11,8 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
 
-/**
- * Both request tables, behind one repository.
- *
- * Not two, because every caller wants them together: the desk works one
- * "waiting on me" queue, the roster shows who is off today whichever way they
- * asked, and performance counts both against the same period. Two repositories
- * would mean every one of those doing the joining itself.
- *
- * Not extending `Repository` either — its `applyFilters` filters a `status`
- * column with the shared `StatusValue` vocabulary, and these two use
- * `RequestStatus`, where "approved" has no equivalent.
- */
 class TimeOffRepository
 {
-    /* --------------------------------------------------------------- Leave */
-
     public function leaveQuery(): Builder
     {
         return LeaveRequest::query()
@@ -35,20 +21,14 @@ class TimeOffRepository
             ->orderByDesc('created_at');
     }
 
-    /**
-     * @param  array<string, mixed>  $filters
-     */
+    /** @param array<string, mixed> $filters */
     public function leave(array $filters = [], int $perPage = 50): LengthAwarePaginator
     {
         return $this->applyFilters($this->leaveQuery(), $filters, 'starts_on', 'ends_on')
             ->paginate($perPage);
     }
 
-    /**
-     * Approved leave overlapping a window, for one employee or all of them.
-     *
-     * @return Collection<int, LeaveRequest>
-     */
+    /** @return Collection<int, LeaveRequest> */
     public function leaveBetween(Carbon $from, Carbon $to, ?string $employeeId = null): Collection
     {
         return LeaveRequest::query()
@@ -58,13 +38,6 @@ class TimeOffRepository
             ->get();
     }
 
-    /**
-     * Does this employee already have leave booked across these dates?
-     *
-     * Cancelled and rejected requests are ignored — those are not leave. A
-     * pending one still counts as a clash, because approving both would put
-     * somebody on two leaves at once and nothing downstream would notice.
-     */
     public function hasLeaveClash(string $employeeId, string $from, string $to, ?string $ignoreId = null): bool
     {
         return LeaveRequest::query()
@@ -75,8 +48,6 @@ class TimeOffRepository
             ->exists();
     }
 
-    /* ----------------------------------------------------------- Undertime */
-
     public function undertimeQuery(): Builder
     {
         return UndertimeRequest::query()
@@ -85,9 +56,7 @@ class TimeOffRepository
             ->orderByDesc('created_at');
     }
 
-    /**
-     * @param  array<string, mixed>  $filters
-     */
+    /** @param array<string, mixed> $filters */
     public function undertime(array $filters = [], int $perPage = 50): LengthAwarePaginator
     {
         return $this->applyFilters($this->undertimeQuery(), $filters, 'date', 'date')
@@ -105,23 +74,13 @@ class TimeOffRepository
             ->get();
     }
 
-    /* --------------------------------------------------------------- Both */
-
-    /** What is waiting on a decision. Drives the nav badge. */
     public function openCount(): int
     {
         return LeaveRequest::query()->open()->count()
             + UndertimeRequest::query()->open()->count();
     }
 
-    /**
-     * Who is off today.
-     *
-     * Built on the bare models with no eager loads or ordering: it is a count
-     * behind a tile, and the roster it belongs to already has the names.
-     *
-     * @return string[] employee ids
-     */
+    /** @return string[] */
     public function awayToday(): array
     {
         $today = Carbon::now()->toDateString();
@@ -135,9 +94,7 @@ class TimeOffRepository
             ->all();
     }
 
-    /**
-     * @param  array<string, mixed>  $filters
-     */
+    /** @param array<string, mixed> $filters */
     private function applyFilters(Builder $query, array $filters, string $fromColumn, string $toColumn): Builder
     {
         if (! empty($filters['employee_id'])) {
@@ -156,9 +113,6 @@ class TimeOffRepository
             $query->open();
         }
 
-        // A range asks "what overlaps this window", not "what starts in it" —
-        // a leave running from last month into this one is this month's
-        // problem too, and a start-date filter would hide it.
         if (! empty($filters['from'])) {
             $query->whereDate($toColumn, '>=', Carbon::parse($filters['from'])->toDateString());
         }

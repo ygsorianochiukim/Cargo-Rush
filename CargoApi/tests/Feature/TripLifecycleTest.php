@@ -11,14 +11,7 @@ use App\Domain\Vehicle\Models\Vehicle;
 use Database\Seeders\Demo\FleetSeeder;
 use Database\Seeders\NavigationSeeder;
 
-/**
- * A trip is not just a row: dispatch and delivery records exist for its whole
- * life, and the module pages assume that. These pin the parts of the lifecycle
- * a client would otherwise have to stitch together itself.
- */
 beforeEach(function (): void {
-    // Pricing is zone-only, and an unpriced run cannot go out or be billed.
-    // One card at the old tariff's figures, so every run here is priced.
     zoneCard();
 
     $this->seed(NavigationSeeder::class);
@@ -53,7 +46,6 @@ it('assigns the reference itself and opens a delivery log with the trip', functi
 });
 
 it('refuses a reference chosen by the client', function (): void {
-    // `reference` is not in the rules, so it is stripped rather than honoured.
     $response = $this->actingAs($this->admin)
         ->postJson('/api/v1/trips', [...$this->payload, 'reference' => 'CR-00001'])
         ->assertCreated();
@@ -111,7 +103,6 @@ it('closes the trip, its dispatch record and its delivery log together', functio
     expect($trip->deliveryLog->pod_ref)->toStartWith('POD-')
         ->and($trip->deliveryLog->delivered_at)->not->toBeNull()
         ->and($trip->dispatchRecord->arrived_at)->not->toBeNull()
-        // Completing a trip is what credits the driver.
         ->and($trip->driver->trips_completed)->toBe($before + 1);
 });
 
@@ -127,15 +118,11 @@ it('scopes the driver endpoints to whoever is calling', function (): void {
         ->assertOk()
         ->assertJsonCount(1, 'data');
 
-    // The administrator has no driver record, and saying so beats an empty
-    // list that reads like an idle day.
     $this->actingAs($this->admin)->getJson('/api/v1/trips/pending')->assertNotFound();
 });
 
 describe('where a trip starts and ends', function (): void {
     it('books a trip with no coordinates at all', function (): void {
-        // Booked over the phone against a town somebody knows. A form that
-        // refuses this would be a worse form than the spreadsheet.
         $this->actingAs($this->admin)->postJson('/api/v1/trips', $this->payload)
             ->assertCreated()
             ->assertJsonPath('data.origin_lat', null)
@@ -159,7 +146,6 @@ describe('where a trip starts and ends', function (): void {
     });
 
     it('refuses a latitude with no longitude', function (): void {
-        // Half a coordinate is not a location.
         $this->actingAs($this->admin)->postJson('/api/v1/trips', [
             ...$this->payload,
             'origin_lat' => 7.8257,
@@ -187,11 +173,6 @@ describe('where a trip starts and ends', function (): void {
             'destination_lng' => 123.8444,
         ])->assertCreated();
 
-        // Pagadian to Ozamis is about 57 km as the crow flies. With no routing
-        // key in the test environment that is an estimate — the straight line
-        // times the detour factor — and marked as one. Checked as a range,
-        // because asserting a haversine to the metre tests arithmetic rather
-        // than behaviour. `RoadDistanceTest` covers the measured case.
         expect($response->json('data.distance_total_m'))
             ->toBeGreaterThan(70_000)
             ->toBeLessThan(90_000)
@@ -199,8 +180,6 @@ describe('where a trip starts and ends', function (): void {
     });
 
     it('leaves a distance somebody entered alone', function (): void {
-        // A dispatcher who knows the road distance has entered something
-        // better than a straight line.
         $response = $this->actingAs($this->admin)->postJson('/api/v1/trips', [
             ...$this->payload,
             'distance_total_m' => 90_000,
@@ -215,7 +194,6 @@ describe('where a trip starts and ends', function (): void {
 });
 
 describe('the driver hands the run over', function (): void {
-    /** A run of Marco's, dispatched and on the road. */
     $onTheRoad = function (array $overrides = []) {
         $id = test()->actingAs(test()->admin)
             ->postJson('/api/v1/trips', [...test()->payload, ...$overrides])
@@ -259,7 +237,6 @@ describe('the driver hands the run over', function (): void {
     });
 
     it('refuses a hand-off for a run that never left the depot', function (): void {
-        // Assigned, not dispatched. There is nothing on the road to deliver.
         $this->actingAs($this->admin)->postJson('/api/v1/trips', [
             ...$this->payload,
             'status' => StatusValue::Assigned->value,
@@ -281,16 +258,12 @@ describe('the driver hands the run over', function (): void {
 
         $this->actingAs($marco)->postJson('/api/v1/trips/current/deliver', $body)->assertOk();
 
-        // The run is no longer in transit, so it is no longer current — the
-        // second press of a button on a bad signal must not pay out again.
         $this->actingAs($marco)->postJson('/api/v1/trips/current/deliver', $body)->assertStatus(422);
 
         expect($this->driver->fresh()->trips_completed)->toBe($before + 1);
     });
 
     it('closes only the caller\'s own run', function () use ($onTheRoad): void {
-        // Two runs on the road at once, one each. The endpoint carries no id,
-        // so the only run Marco can close is his.
         $mine = $onTheRoad();
         $theirs = $onTheRoad(['driver_id' => $this->helper->id, 'helper_ids' => [$this->driver->id]]);
 

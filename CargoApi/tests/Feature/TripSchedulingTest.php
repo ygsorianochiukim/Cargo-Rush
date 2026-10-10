@@ -11,18 +11,7 @@ use App\Domain\Vehicle\Models\Vehicle;
 use Database\Seeders\Demo\FleetSeeder;
 use Database\Seeders\NavigationSeeder;
 
-/**
- * Who moves a trip along, and when.
- *
- * The office books work and nothing else: `scheduled` becomes due on a clock,
- * and the two statuses that describe what happened on the road belong to the
- * driver holding the handset. These pin that division, because it is a rule
- * about permission as much as about workflow — the kind that quietly erodes
- * the moment somebody adds a status dropdown to an admin form.
- */
 beforeEach(function (): void {
-    // Pricing is zone-only, and an unpriced run cannot go out or be billed.
-    // One card at the old tariff's figures, so every run here is priced.
     zoneCard();
 
     $this->seed(NavigationSeeder::class);
@@ -45,14 +34,12 @@ beforeEach(function (): void {
         'scheduled_at' => now()->addHours(3)->toIso8601String(),
     ];
 
-    /** Book a trip as the office, in whatever state the test needs. */
     $this->book = function (array $overrides = []): string {
         return $this->actingAs($this->admin)
             ->postJson('/api/v1/trips', [...$this->payload, ...$overrides])
             ->json('data.id');
     };
 
-    /** Work of Marco's that is confirmed and waiting to be started. */
     $this->waiting = fn (array $overrides = []): string => ($this->book)([
         'status' => StatusValue::Assigned->value,
         ...$overrides,
@@ -94,9 +81,6 @@ describe('scheduled work becomes due', function (): void {
             'scheduled_at' => now()->subMinute()->toIso8601String(),
         ]);
 
-        // This runs every minute in production, so a repeat is the normal
-        // case rather than an edge one: a released trip is no longer
-        // scheduled, so the next sweep cannot find it and cannot alert again.
         $this->artisan('cargo:trips-release');
         $this->artisan('cargo:trips-release');
         $this->artisan('cargo:trips-release');
@@ -105,8 +89,6 @@ describe('scheduled work becomes due', function (): void {
     });
 
     it('does not alert the whole fleet about an unassigned trip', function (): void {
-        // A null user on a notification means fleet-wide, so a trip nobody is
-        // booked on has to produce no row rather than one for everybody.
         ($this->book)([
             'driver_id' => null,
             'helper_ids' => [],
@@ -123,7 +105,6 @@ describe('scheduled work becomes due', function (): void {
 describe('the driver starts the run', function (): void {
     it('moves assigned to in transit and opens the dispatch record', function (): void {
         $id = ($this->waiting)();
-        // A unit does not roll without a passing pre-trip check.
         $this->passPreTripCheck($id);
 
         $this->actingAs($this->marco)
@@ -148,8 +129,6 @@ describe('the driver starts the run', function (): void {
     });
 
     it('will not let a driver start a run that is not theirs', function (): void {
-        // Booked to the helper, so it is not Marco's to leave on. The endpoint
-        // names a trip, so this is the check that makes naming one safe.
         $id = ($this->waiting)([
             'driver_id' => $this->helper->id,
             'helper_ids' => [$this->driver->id],
@@ -161,17 +140,12 @@ describe('the driver starts the run', function (): void {
     });
 
     it('will not start work that is still only scheduled', function (): void {
-        // Not due yet. `cargo:trips-release` is what makes it startable, and
-        // until it runs there is nothing for the driver to act on.
         $id = ($this->waiting)(['status' => StatusValue::Scheduled->value]);
 
         $this->actingAs($this->marco)->postJson("/api/v1/trips/{$id}/start", [])->assertStatus(422);
     });
 
     it('will not start a request the office has not confirmed', function (): void {
-        // `pending` is a request nobody has looked at — it may have no unit and
-        // no agreed time. Letting a driver leave on one would mean whoever
-        // pressed Start first got to skip the confirmation step.
         $id = ($this->waiting)(['status' => StatusValue::Pending->value]);
 
         $this->actingAs($this->marco)->postJson("/api/v1/trips/{$id}/start", [])
@@ -181,8 +155,6 @@ describe('the driver starts the run', function (): void {
     });
 
     it('keeps an unconfirmed request out of the driver queue', function (): void {
-        // The desk's queue, not the driver's. Showing it here would offer a
-        // driver work they cannot start and were never promised.
         ($this->waiting)(['status' => StatusValue::Pending->value]);
 
         $this->actingAs($this->marco)->getJson('/api/v1/trips/pending')
@@ -203,8 +175,6 @@ describe('the driver starts the run', function (): void {
     });
 
     it('runs the whole length of a trip from the handset', function (): void {
-        // scheduled -> assigned -> in transit -> delivered, with the office
-        // having done nothing but book it.
         $id = ($this->book)([
             'status' => StatusValue::Scheduled->value,
             'scheduled_at' => now()->subMinute()->toIso8601String(),
@@ -213,8 +183,6 @@ describe('the driver starts the run', function (): void {
         $this->artisan('cargo:trips-release');
         expect(Trip::findOrFail($id)->status)->toBe(StatusValue::Assigned);
 
-        // The check the driver runs at the yard gate, in its place in the
-        // sequence: released, checked, then out on the road.
         $this->passPreTripCheck($id);
 
         $this->actingAs($this->marco)->postJson("/api/v1/trips/{$id}/start", [])->assertOk();
@@ -230,9 +198,6 @@ describe('the driver starts the run', function (): void {
 
 describe('the office books, the driver reports', function (): void {
     it('refuses a trip the office marks in transit or delivered itself', function (): void {
-        // Both statuses do more than set a column — dispatch records, delivery
-        // logs, proof of delivery and driver credit hang off them — so neither
-        // is a value the booking form gets to write.
         foreach ([StatusValue::InTransit, StatusValue::Delivered] as $status) {
             $this->actingAs($this->admin)
                 ->postJson('/api/v1/trips', [...$this->payload, 'status' => $status->value])
@@ -242,8 +207,6 @@ describe('the office books, the driver reports', function (): void {
     });
 
     it('refuses to patch an existing trip into those either', function (): void {
-        // The rule has to hold on update as well, or the form only has to be
-        // saved twice to get around it.
         $id = ($this->book)();
 
         $this->actingAs($this->admin)

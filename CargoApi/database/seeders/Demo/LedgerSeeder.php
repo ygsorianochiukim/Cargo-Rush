@@ -12,18 +12,6 @@ use Database\Seeders\Concerns\UpsertsByDay;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 
-/**
- * "v3 Cargorush Master Dashboard 2026.xlsx", transcribed.
- *
- * Amounts are the workbook's pesos in centavos. These rows reproduce every
- * aggregate the workbook itself prints, so `finance.spec.ts` on the web side
- * and a roll-up from this API have to agree — if they ever do not, one of the
- * two transcriptions has drifted.
- *
- * Trucks 7 and 8 exist with no plate and no rows. They are not an oversight:
- * DESIGN.md section 5.1 requires an unassigned unit to render as "Unassigned"
- * rather than be filtered away.
- */
 class LedgerSeeder extends Seeder
 {
     use SeedsIntoACompany, UpsertsByDay;
@@ -65,27 +53,11 @@ class LedgerSeeder extends Seeder
         }
     }
 
-    /**
-     * date, income, fuel, driver, helper, maintenance, allowance, route, remarks
-     *
-     * @param  array<int, mixed>  $row
-     */
+    /** @param array<int, mixed> $row */
     private function entry(string $truckId, array $row): void
     {
-        // The workbook's pesos, to centavos. Rounded because 31540.68 has to
-        // land on exactly 3_154_068 and not one centavo either side of it.
         $c = static fn (float $peso): int => (int) round($peso * 100);
 
-        /**
-         * Matched with `whereDate`, not on the string.
-         *
-         * `date` is a date-cast attribute, so Eloquent writes it through the
-         * model's `Y-m-d H:i:s` format and the stored value carries a midnight
-         * time on a driver that keeps one. Comparing it to a bare `Y-m-d`
-         * misses, and a second run of this seeder writes the whole workbook
-         * again beside itself — which doubles every figure the roll-up tests
-         * check. The same reasoning as `FinanceService::openDailyRowForTruck`.
-         */
         $this->upsertOn(
             LedgerEntry::class,
             ['truck_id' => $truckId],
@@ -104,11 +76,7 @@ class LedgerSeeder extends Seeder
         );
     }
 
-    /**
-     * One sheet per truck, exactly as the workbook keeps them.
-     *
-     * @return array<string, array<int, array<int, mixed>>>
-     */
+    /** @return array<string, array<int, array<int, mixed>>> */
     private function rows(): array
     {
         return [
@@ -140,7 +108,6 @@ class LedgerSeeder extends Seeder
                 ['2026-04-12', 27247, 0, 1200, 1600, 0, 1200, 'Pagadian'],
                 ['2026-04-13', 10354, 0, 1000, 1400, 0, 1000, 'Gingoog'],
             ],
-            // Running at a loss over this period, and it must read as one.
             'Truck 3' => [
                 ['2026-03-26', 0, 5002.61, 900, 1400, 0, 400, 'San Fernando'],
                 ['2026-03-27', 0, 0, 0, 0, 0, 0, 'Ozamis'],
@@ -180,7 +147,6 @@ class LedgerSeeder extends Seeder
                 ['2026-04-12', 0, 0, 0, 0, 0, 0, 'Pagadian'],
                 ['2026-04-13', 0, 0, 0, 0, 0, 0, 'Gingoog'],
             ],
-            // Scheduled, but nothing recorded yet — a real state, not a gap.
             'Truck 6' => [
                 ['2026-03-26', 0, 0, 0, 0, 0, 0, 'Dologon'],
                 ['2026-03-27', 0, 0, 0, 0, 0, 0, 'Ozamis'],

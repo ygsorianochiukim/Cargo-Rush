@@ -16,14 +16,6 @@ use Database\Seeders\ExpenseCategorySeeder;
 use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 
-/**
- * The transactions behind the Summary's Total expenses tile.
- *
- * The one thing that matters is that the rows add up to the tile. A breakdown
- * that disagrees with the figure it breaks down tells the office one of the two
- * is wrong and gives them no way to find out which, so every source the total
- * draws on is filed here once and the sum is checked against the Summary's own.
- */
 beforeEach(function (): void {
     $this->seed(PermissionSeeder::class);
     $this->seed(NavigationSeeder::class);
@@ -103,8 +95,6 @@ it('adds up to the Summary total, with every source in it', function (): void {
     ($this->day)('2026-07-15', ['fuel_cents' => 620_000, 'driver_salary_cents' => 150_000]);
     ($this->spend)('2026-08-02', 1_200_000);
     ($this->paidBill)(640_000, '2026-08-20');
-    // A partner paid their share: theirs, passing through — not an expense,
-    // so neither in the total nor among the rows.
     ($this->payout)(380_000, '2026-09-05');
 
     $report = ($this->lines)();
@@ -126,7 +116,6 @@ it('splits a sheet day into one row per cost column, and skips the empty ones', 
 });
 
 it('leaves out what the total leaves out', function (): void {
-    // Outside the window, cancelled, and a bill raised but never paid.
     ($this->day)('2026-06-30', ['fuel_cents' => 500_000]);
     ($this->spend)('2026-10-01', 90_000);
     ($this->spend)('2026-08-01', 70_000, ['status' => 'cancelled']);

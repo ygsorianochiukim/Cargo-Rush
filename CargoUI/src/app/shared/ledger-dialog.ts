@@ -3,15 +3,10 @@ import { Subject } from 'rxjs';
 
 import { LedgerEntry } from '../models/finance/finance.model';
 
-/**
- * Handle for the single daily-ledger dialog (DESIGN.md section 8.1).
- * Mounted once in the shell as `<app-ledger-form />`.
- */
 @Injectable({ providedIn: 'root' })
 export class LedgerDialog {
   readonly open = signal(false);
   readonly entry = signal<LedgerEntry | null>(null);
-  /** Pre-selects the truck when adding from a truck's own sheet. */
   readonly truckId = signal<string | null>(null);
 
   private readonly savedSubject = new Subject<LedgerEntry>();

@@ -13,31 +13,6 @@ use App\Domain\Tenancy\Console\Concerns\RunsPerCompany;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Put the fills logged before fills posted themselves onto their sheets.
- *
- * Totals do not need it: an active fill no row carries is still counted, on
- * its own, by every roll-up. What it fixes is the sheet — the Fuel column on
- * Trip Monitoring reads what the unit really burned, and the column locks
- * against a typed figure — so a firm with history sees the same thing a new
- * one does.
- *
- * Idempotent. It only touches active fills with nothing posted, and posting
- * goes through `FuelPostingService`, which records what it put where; a second
- * run finds nothing left to do.
- *
- * ## `--absorb-typed`: the one-off dedupe
- *
- * Before `/fuel` was the single source, an office often logged a receipt there
- * **and** typed the same figure onto the sheet, and the two were added. With
- * the flag, the figure somebody typed on that truck's day is taken to be the
- * same receipts: it is reduced by the fill's amount (never below zero) before
- * the fill posts, so the day's Fuel column ends up at the larger of the two
- * rather than their sum. Without it, the typed figure is left alone and the
- * fill is added — which is exactly what the totals already counted.
- *
- * Run with `--dry-run` first; it lists every fill and what would move.
- */
 class PostFuelFillsCommand extends Command
 {
     use RunsPerCompany;
@@ -78,7 +53,6 @@ class PostFuelFillsCommand extends Command
 
             $row = LedgerEntry::query()->where('truck_id', $truckId)->whereDate('date', $day)->first();
 
-            // What is on the row that no fill put there — the typed part.
             $typed = $row === null ? 0 : max(0, (int) $row->fuel_cents - (int) FuelRecord::query()
                 ->where('posted_truck_id', $truckId)
                 ->whereDate('posted_on', $day)

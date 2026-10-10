@@ -19,20 +19,6 @@ import { recordList } from '../../shared/record-list';
 import { ErrorState, SkeletonRows } from '../../shared/states';
 import { StatusPill } from '../../shared/status-pill';
 
-/**
- * Employees — the roster, and the access that goes with it.
- *
- * The record itself goes through the shared record form, because it really is
- * a flat record. What does not is everything about the login: creating one has
- * a password in it that is shown once, and module assignment is a set of
- * checkboxes whose available options depend on the role. Both live in the
- * access panel here rather than being bolted onto the generic form.
- *
- * The rule that shapes the panel: module assignment narrows what a role
- * already allows and can never widen it. So the boxes are drawn from what the
- * API says the role permits, and anything the server refuses comes back named
- * rather than silently unticking itself.
- */
 @Component({
   selector: 'app-employees',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -71,7 +57,6 @@ export class EmployeesPage {
 
   protected readonly overview = signal<RosterOverview | null>(null);
 
-  /* ------------------------------------------------------------- Access */
 
   protected readonly accessOpen = signal(false);
   protected readonly subject = signal<Employee | null>(null);
@@ -82,7 +67,6 @@ export class EmployeesPage {
   protected readonly accessNotice = signal<string | null>(null);
   protected readonly busy = signal(false);
 
-  /** Which module keys are ticked. A local mirror the checkboxes drive. */
   protected readonly picked = signal<Set<string>>(new Set());
 
   protected readonly accountForm = this.fb.group({
@@ -91,13 +75,6 @@ export class EmployeesPage {
     password: [''],
   });
 
-  /**
-   * The roles on offer, read from the API rather than hardcoded.
-   *
-   * A Treasury Officer the office added has to be assignable the moment it
-   * exists, and `customer` is filtered out here as well as server-side: that
-   * account belongs to a firm and is created from Customer Management.
-   */
   protected readonly roles = signal<{ value: string; label: string }[]>([]);
 
   constructor() {
@@ -121,14 +98,6 @@ export class EmployeesPage {
     });
   }
 
-  /**
-   * The two pay panels, each held open against one person.
-   *
-   * The employee is kept in a signal of its own rather than reusing `subject`
-   * above, which the access modal owns: two modals sharing one subject means
-   * closing either one blanks the other mid-animation, and the roster is a
-   * screen where somebody opens both in turn.
-   */
   protected readonly payFor = signal<Employee | null>(null);
   protected readonly payOpen = signal(false);
   protected readonly tabFor = signal<Employee | null>(null);
@@ -154,16 +123,6 @@ export class EmployeesPage {
 
     this.accountForm.reset({
       email: employee.email ?? '',
-      /**
-       * Their current role if they have one, and otherwise the first on the
-       * list for the office to change.
-       *
-       * A position used to suggest one, and that link is gone: what somebody
-       * *is* and what they can *open* are different questions, and conflating
-       * them means you cannot have two drivers where one also keeps the books.
-       * So access is chosen here, deliberately, rather than following from a
-       * job title somebody picked on another screen.
-       */
       role: employee.role ?? this.roles()[0]?.value ?? '',
       password: '',
     });
@@ -175,9 +134,6 @@ export class EmployeesPage {
     this.employeesApi.modules(employee.id).subscribe({
       next: (state) => {
         this.moduleState.set(state);
-        // No assignment means the default — everything the role allows — so
-        // every box starts ticked rather than every box starting empty for an
-        // account that in fact sees the lot.
         this.picked.set(
           new Set(state.customised ? state.assigned : state.available.map((m) => m.key)),
         );
@@ -235,9 +191,6 @@ export class EmployeesPage {
       next: (updated) => {
         this.busy.set(false);
         this.subject.set(updated);
-        // A role change clears any module assignment, server-side: the old set
-        // was a subset of what the old role could see. Re-reading is what shows
-        // the promotion actually took.
         this.accessNotice.set(
           'Role updated. Any custom module selection was cleared, so this account sees everything the new role allows.',
         );
@@ -259,7 +212,6 @@ export class EmployeesPage {
 
   protected readonly isPicked = (key: string) => this.picked().has(key);
 
-  /** Ticking everything is the same as no assignment at all, so say so. */
   protected readonly allPicked = computed(() => {
     const state = this.moduleState();
 
@@ -276,9 +228,6 @@ export class EmployeesPage {
     this.accessError.set(null);
     this.accessNotice.set(null);
 
-    // Everything ticked is sent as an empty list, which clears the assignment
-    // and restores the default. Storing a row per module would mean a later
-    // promotion silently kept the old role's menu.
     const modules = this.allPicked() ? [] : [...this.picked()];
 
     this.employeesApi.assignModules(employee.id, modules).subscribe({
@@ -308,20 +257,18 @@ export class EmployeesPage {
     return error.error?.message ?? 'Could not do that. Check the connection and try again.';
   }
 
-  /* ------------------------------------------------------------- Roster */
 
-  /**
-   * The roster is cards, not the shared table, and the photograph is why.
-   *
-   * A staff list is one of the few places in this app where the picture is the
-   * fastest way to find the row — the office knows the face before the payroll
-   * number. A photograph does not fit a dense table, and each row here also
-   * carries two actions rather than one, since editing the record and changing
-   * what the account can reach are different jobs.
-   */
   protected readonly initials = (employee: Employee): string =>
     `${employee.first_name.charAt(0)}${employee.last_name.charAt(0)}`.toUpperCase();
 
-  /** Nobody hired yet is a different screen from a filter that matched nothing. */
+  protected readonly missingContributions = (employee: Employee): string =>
+    [
+      employee.sss_enrolled ? null : 'SSS',
+      employee.philhealth_enrolled ? null : 'PhilHealth',
+      employee.pagibig_enrolled ? null : 'Pag-IBIG',
+    ]
+      .filter((agency) => agency !== null)
+      .join(', ');
+
   protected readonly isEmpty = computed(() => (this.rows() ?? []).length === 0);
 }

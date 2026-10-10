@@ -6,17 +6,6 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-/**
- * What kind of place a supplier is — a garage, a mall, a food stall.
- *
- * The firm's own list, kept on Access Control, so every shop picker can say
- * which kind each name is and sort them together instead of one long run of
- * names. A category with suppliers under it is retired rather than deleted,
- * the way an expense category is, so an old supplier never loses its label.
- *
- * Nullable on the supplier: every shop registered before this has none, and a
- * picker shows it plainly rather than guessing.
- */
 return new class extends Migration
 {
     public function up(): void

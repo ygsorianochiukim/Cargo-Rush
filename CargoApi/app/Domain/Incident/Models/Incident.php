@@ -16,7 +16,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/** Something went wrong, with a time and a place. */
 class Incident extends Model
 {
     /** @use HasFactory<IncidentFactory> */
@@ -50,7 +49,6 @@ class Incident extends Model
         return $this->belongsTo(Trip::class);
     }
 
-    /** Same rule as a trip: the reference is assigned before the insert. */
     protected static function booted(): void
     {
         static::creating(function (self $incident): void {
@@ -58,7 +56,6 @@ class Incident extends Model
         });
     }
 
-    /** The next reference in the INC-#### series. */
     public static function nextReference(): string
     {
         $last = static::withTrashed()

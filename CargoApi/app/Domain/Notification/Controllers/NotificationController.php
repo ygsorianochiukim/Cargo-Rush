@@ -11,7 +11,6 @@ use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/** Notification Management — the feed, and marking it read. */
 class NotificationController extends ApiController
 {
     public function __construct(private readonly NotificationService $notifications) {}

@@ -6,19 +6,6 @@ import { RateCardService } from '../../services/pricing/pricing.service';
 import { Card } from '../../shared/card';
 import { Icon } from '../../shared/icon';
 
-/**
- * The old plain distance card — "450 km is ₱5,000" — kept only to be tidied up.
- *
- * These lines belong to no band and carry their own kilometres. They used to
- * price any run no band covered, and they no longer price anything: pricing is
- * zone-only, and a run the bands miss is saved unpriced for the office to add a
- * zone line or type a price. The API refuses a new line here, so this shows
- * only when an install still has some — to see them, correct them, or remove
- * them — and says plainly that they are not in use.
- *
- * The whole card still saves at once, reconciled by id: a line left out is
- * deleted.
- */
 @Component({
   selector: 'app-distance-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -71,7 +58,6 @@ import { Icon } from '../../shared/icon';
                       />
                     </td>
                     <td class="py-1.5 pr-3">
-                      <!-- Blank is the open-ended top line: "500 km and beyond". -->
                       <input
                         type="number"
                         min="1"
@@ -173,14 +159,6 @@ export class DistanceCard {
   protected readonly cellClass =
     'h-8 rounded-control border border-cr-line bg-cr-surface px-2 text-[13px] focus:border-cr-blue focus:outline-none';
 
-  /**
-   * The card as it is being edited, in **pesos**.
-   *
-   * Centavos on the wire and pesos on screen, converted at both edges rather
-   * than anywhere in between — the office types 5000 and means ₱5,000, and a
-   * form that made them type 500000 would collect a wrong figure sooner or
-   * later.
-   */
   protected readonly rows = signal<EditableLine[] | null>(null);
   protected readonly categories = signal<TruckCategory[]>([]);
 
@@ -204,11 +182,8 @@ export class DistanceCard {
     if (field === 'label') {
       line.label = raw;
     } else if (field === 'truck_category_id') {
-      // Blank is "any truck", and null is what the API reads as that.
       line.truck_category_id = raw === '' ? null : raw;
     } else if (field === 'max_km') {
-      // Blank means open-ended, which is a real answer for the top line and
-      // not the same as zero.
       line.max_km = raw === '' ? null : Number(raw);
     } else {
       (line as unknown as Record<string, number>)[field] = Number(raw);
@@ -240,10 +215,6 @@ export class DistanceCard {
       next: (envelope) => {
         this.busy.set(false);
         this.saved.set(true);
-        // Redrawn from what was stored rather than from what was sent: the API
-        // assigns ids to new lines and orders them, and a screen holding its
-        // own version of the answer is the one that shows a card the server
-        // does not have.
         this.adopt(envelope.data);
       },
       error: (error: HttpErrorResponse) => {
@@ -259,8 +230,6 @@ export class DistanceCard {
       error: () => this.failure.set('Could not load the distance card.'),
     });
 
-    // Active only: a retired category is one the office has stopped running,
-    // and offering it would put new prices back onto it.
     this.rateCard.truckCategories(true).subscribe({
       next: (envelope) => this.categories.set(envelope.data),
       error: () => this.categories.set([]),
@@ -272,8 +241,6 @@ export class DistanceCard {
       brackets.map((bracket) => ({
         id: bracket.id,
         label: bracket.label,
-        // A plain line always has kilometres of its own; the null case is a
-        // line inside a band, and this card is the lines with no band.
         min_km: bracket.min_km ?? 0,
         max_km: bracket.max_km,
         truck_category_id: bracket.truck_category_id,
@@ -285,13 +252,6 @@ export class DistanceCard {
     );
   }
 
-  /**
-   * The server's own words for a 422.
-   *
-   * It knows the two things a card can get wrong that only show up at quote
-   * time — a line ending before it starts, and two lines covering the same
-   * distance for the same kind of truck — and its message names which line.
-   */
   private messageFor(error: HttpErrorResponse): string {
     if (error.status === 422) {
       const errors = error.error?.errors as Record<string, string[]> | undefined;
@@ -308,7 +268,6 @@ export class DistanceCard {
   }
 }
 
-/** One line of the card while it is being edited — money in pesos. */
 interface EditableLine {
   id: string | null;
   label: string;

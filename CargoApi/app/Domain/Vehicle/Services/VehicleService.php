@@ -16,7 +16,6 @@ use Illuminate\Database\Eloquent\Model;
 
 class VehicleService extends CrudService
 {
-    /** How close to the service interval counts as "due". */
     private const SERVICE_WARNING_KM = 500;
 
     public function __construct(
@@ -30,10 +29,6 @@ class VehicleService extends CrudService
         return $this->vehicles;
     }
 
-    /**
-     * A truck added at a flat rent owes this month's rent from today, so it
-     * goes on the books now rather than on the next nightly run.
-     */
     public function create(Data $data): Model
     {
         $vehicle = parent::create($data);
@@ -45,7 +40,6 @@ class VehicleService extends CrudService
         return $vehicle;
     }
 
-    /** The same when an existing truck is switched to a flat rent. */
     public function update(Model $model, Data $data): Model
     {
         $vehicle = parent::update($model, $data);
@@ -57,7 +51,6 @@ class VehicleService extends CrudService
         return $vehicle;
     }
 
-    /** Taking a unit off the road frees whoever was driving it. */
     public function setStatus(Vehicle $vehicle, StatusValue $status): Vehicle
     {
         $vehicle->update([
@@ -70,9 +63,6 @@ class VehicleService extends CrudService
         return $vehicle->refresh();
     }
 
-    /**
-     * Warn on units close to, or past, their service interval. Scheduled work.
-     */
     public function flagServiceDue(): int
     {
         $due = $this->vehicles->query()

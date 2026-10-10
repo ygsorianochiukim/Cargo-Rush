@@ -4,7 +4,6 @@
   </h2>
   <p class="text-[18px] leading-tight font-semibold">Quarterly summary of sales and expenses</p>
 
-  <!-- Quarter slicer, as on the sheet -->
   <div class="mt-4 flex flex-wrap items-center gap-2" role="group" aria-label="Choose a quarter">
   @for (q of quarters; track q.key) {
     <button
@@ -35,12 +34,6 @@
     }
   </div>
 } @else {
-  <!--
-    The quarter at a glance: six cards, each a number and, where there is a
-    story to tell, one small graph of what it is made of — rather than a
-    sentence per figure. Detail is a click (transactions, invoices) or a hover
-    (the bar segments) away.
-  -->
   <section aria-label="Quarter totals" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
     <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
       <span class="flex items-center gap-2">
@@ -60,7 +53,6 @@
       }
     </div>
 
-    <!-- A button: it opens the transactions the figure is made of. -->
     <button type="button" class="group rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60 text-left transition-shadow hover:ring-cr-blue focus-visible:ring-2 focus-visible:ring-cr-blue focus-visible:outline-none" aria-haspopup="dialog" (click)="linesOpen.set(true)">
       <span class="flex items-center gap-2">
         <span class="flex h-7 w-7 flex-none items-center justify-center rounded-full bg-cr-warning-bg text-cr-warning">
@@ -157,7 +149,6 @@
     </div>
   </section>
 
-  <!-- Income vs expenses, one row per unit -->
   <app-card
     heading="Income against expenses"
     icon="billing"
@@ -177,8 +168,6 @@
         </span>
       </div>
 
-      <!-- Income above expenses on one shared scale, so the gap between the
-           two bars is the profit and can be read without arithmetic. -->
       <ul class="flex flex-col gap-1">
         @for (r of active(); track r.truck.id) {
           <li class="relative">
@@ -340,18 +329,6 @@
     </div>
 
     @if (unattributed() > 0) {
-      <!--
-        Why the TOTAL does not add up from the columns above it.
-
-        Three period costs belong to no single unit and are in no column of
-        any truck's row: the overhead (fuel fills on a vehicle no truck points
-        at included), the supplier bills the fleet actually paid over the
-        window, and payroll beyond the crew pay the sheet already holds. Loading either onto a
-        truck would make that unit look unprofitable for money it never spent,
-        and leaving them out of the total would flatter the business — so they
-        sit in the total, and this line says so rather than leaving a reader to
-        find the difference with a calculator.
-      -->
       <p class="border-t border-cr-line px-4 py-3 text-[12px] text-cr-ink-muted">
         Total expenses also carry
         <span class="cr-num font-medium text-cr-ink">{{ fmt.pesos(unattributed()) }}</span>
@@ -361,12 +338,6 @@
       </p>
     }
     @if (totals().trucker_commission_cents + totals().other_income_cents > 0) {
-      <!--
-        And the other way: income in no truck's row. The commission on trucker
-        trips is the fleet's, but no fleet truck earned it; nor did any truck
-        earn an invoice raised by hand. Both are in Total income and net
-        income, and in none of the rows above.
-      -->
       <p class="border-t border-cr-line px-4 py-3 text-[12px] text-cr-ink-muted">
         Total and net income also include
         <span class="cr-num font-medium text-cr-ink">{{

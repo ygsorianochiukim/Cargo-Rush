@@ -8,11 +8,6 @@ use App\Domain\Shared\Enums\LeaveType;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
 use Illuminate\Validation\Rule;
 
-/**
- * `days` is not a field. It is derived from the two dates on write, because a
- * typed total that disagrees with its own dates is the classic HR bug — and it
- * is only ever caught after somebody has been paid on it.
- */
 class LeaveRequestRequest extends ApiFormRequest
 {
     public function rules(): array
@@ -23,8 +18,6 @@ class LeaveRequestRequest extends ApiFormRequest
             'employee_id' => [$required, 'string', 'exists:employees,id'],
             'type' => [$required, Rule::in(LeaveType::values())],
             'starts_on' => [$required, 'date'],
-            // The service checks the order too, because a PATCH can move one
-            // end of the range without resending the other.
             'ends_on' => [$required, 'date', 'after_or_equal:starts_on'],
             'reason' => [$required, 'string', 'max:255'],
         ];

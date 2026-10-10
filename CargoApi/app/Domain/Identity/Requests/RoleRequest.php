@@ -20,9 +20,6 @@ class RoleRequest extends ApiFormRequest
             'position' => ['sometimes', 'integer', 'min:0', 'max:999'],
             'status' => ['sometimes', Rule::in([StatusValue::Active->value, StatusValue::Inactive->value])],
 
-            // Permission *keys*, checked against the vocabulary. A key that is
-            // not in the table gates nothing, so accepting it would produce a
-            // role that looks like it grants something and does not.
             'permissions' => ['sometimes', 'array', 'max:100'],
             'permissions.*' => ['string', 'exists:permissions,key'],
         ];

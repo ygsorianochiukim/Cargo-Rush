@@ -1,8 +1,6 @@
 <div class="grid grid-cols-1 gap-4 xl:grid-cols-3">
-  <!-- Location monitoring -->
   <div class="flex flex-col gap-4 xl:col-span-2">
     <app-card heading="Location monitoring" icon="map-pin" hint="Live positions" [padded]="false">
-      <!-- Placeholder canvas: the real map tiles drop in here unchanged -->
       <div
         class="relative m-4 h-[320px] overflow-hidden rounded-card bg-cr-tint ring-1 ring-cr-line"
         role="img"
@@ -58,7 +56,6 @@
       </div>
     </app-card>
 
-    <!-- Details display -->
     @if (selected(); as u) {
       <app-card heading="Details" icon="gauge" [hint]="'Updated ' + u.updated_at">
         <div class="flex flex-wrap items-center gap-3">
@@ -102,7 +99,6 @@
     }
   </div>
 
-  <!-- Unit list -->
   <app-card heading="Units on the road" icon="fleet" [hint]="moving() + ' moving'" [padded]="false">
     @if (units(); as list) {
       <ul class="flex flex-col">

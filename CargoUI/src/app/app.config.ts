@@ -11,10 +11,6 @@ export const appConfig: ApplicationConfig = {
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
 
-    // Sanctum's SPA flow signs writes with the XSRF-TOKEN cookie it sets.
-    // Angular's built-in XSRF handling is switched off because it refuses to
-    // act on a cross-origin request, which is every call in development —
-    // `csrfInterceptor` does the job with the one origin check that matters.
     provideHttpClient(
       withFetch(),
       withNoXsrfProtection(),

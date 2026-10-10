@@ -20,7 +20,6 @@ class DriverRequest extends ApiFormRequest
             'name' => [$required, 'string', 'max:120'],
             'licence_no' => [
                 $required, 'string', 'max:40',
-                // Unique across the roster, ignoring this driver on a PATCH.
                 Rule::unique('drivers', 'licence_no')->ignore($this->route('driver')),
             ],
             'licence_expiry' => [$required, 'date'],

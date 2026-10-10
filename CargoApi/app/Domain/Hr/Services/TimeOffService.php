@@ -13,34 +13,11 @@ use App\Domain\Shared\Enums\RequestStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
-/**
- * Leave and undertime: asking, and deciding.
- *
- * Three rules live here and nowhere else.
- *
- * The counted figure — `days` on a leave, `hours` on an undertime — is derived
- * from the dates and times on write. A typed total that disagrees with its own
- * dates is the classic HR bug, and it is only ever caught after somebody has
- * been paid on it.
- *
- * A clash is refused rather than merged. Nobody can be on two leaves at once,
- * and a pending request counts as a clash: approving both afterwards is how
- * you end up with a driver rostered while on holiday.
- *
- * A decision is only ever made once, on a pending request. Re-approving an
- * approved one would move `decided_at` and lose who actually made the call;
- * withdrawing is the employee's action and reversing a decision means a fresh
- * request, which leaves the original visible in the history where it belongs.
- */
 class TimeOffService
 {
     public function __construct(private readonly TimeOffRepository $timeOff) {}
 
-    /* --------------------------------------------------------------- Leave */
-
-    /**
-     * @param  array<string, mixed>  $attributes
-     */
+    /** @param array<string, mixed> $attributes */
     public function requestLeave(Employee $employee, array $attributes): LeaveRequest
     {
         $from = Carbon::parse($attributes['starts_on']);
@@ -69,14 +46,7 @@ class TimeOffService
         ])->refresh();
     }
 
-    /**
-     * Correct a request that has not been decided yet.
-     *
-     * Only while pending: an approved leave that could be edited would let
-     * somebody get three days signed off and quietly turn it into ten.
-     *
-     * @param  array<string, mixed>  $attributes
-     */
+    /** @param array<string, mixed> $attributes */
     public function updateLeave(LeaveRequest $leave, array $attributes): LeaveRequest
     {
         $this->assertPending($leave);
@@ -107,11 +77,7 @@ class TimeOffService
         return $leave->refresh();
     }
 
-    /* ----------------------------------------------------------- Undertime */
-
-    /**
-     * @param  array<string, mixed>  $attributes
-     */
+    /** @param array<string, mixed> $attributes */
     public function requestUndertime(Employee $employee, array $attributes): UndertimeRequest
     {
         $hours = UndertimeRequest::hoursBetween(
@@ -132,9 +98,7 @@ class TimeOffService
         ])->refresh();
     }
 
-    /**
-     * @param  array<string, mixed>  $attributes
-     */
+    /** @param array<string, mixed> $attributes */
     public function updateUndertime(UndertimeRequest $undertime, array $attributes): UndertimeRequest
     {
         $this->assertPending($undertime);
@@ -156,15 +120,7 @@ class TimeOffService
         return $undertime->refresh();
     }
 
-    /* ------------------------------------------------------------ Deciding */
-
     /**
-     * Approve or reject, and record who did it.
-     *
-     * `decision_note` is where a rejection says why. It is optional on an
-     * approval and worth insisting on nowhere — a required field somebody has
-     * to fill in gets filled in with a full stop.
-     *
      * @template T of LeaveRequest|UndertimeRequest
      *
      * @param  T  $request
@@ -195,13 +151,6 @@ class TimeOffService
     }
 
     /**
-     * The employee withdrawing their own request.
-     *
-     * Allowed on an approved request as well as a pending one — plans change,
-     * and a leave that is no longer being taken should stop counting against
-     * the person's record. Not allowed once it has been rejected, because
-     * there is nothing left to withdraw.
-     *
      * @template T of LeaveRequest|UndertimeRequest
      *
      * @param  T  $request
@@ -235,13 +184,7 @@ class TimeOffService
         );
     }
 
-    /* ------------------------------------------------------------- Reports */
-
-    /**
-     * The desk's queue, and what it costs the fleet today.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function overview(): array
     {
         $awayToday = $this->timeOff->awayToday();

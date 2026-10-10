@@ -7,7 +7,6 @@ namespace App\Domain\Fuel\DTO;
 use App\Domain\Shared\DTO\Data;
 use App\Domain\Shared\Enums\StatusValue;
 
-/** Money arrives as integer centavos; there is no peso float on this path. */
 final class FuelRecordData extends Data
 {
     public function __construct(

@@ -19,21 +19,6 @@ use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Support\Carbon;
 
-/**
- * The employer's share of SSS, EC, PhilHealth and Pag-IBIG.
- *
- * The worked case throughout is ₱30,000 a month on two cutoffs. A month of it
- * costs the firm, on top of the salary:
- *
- *     SSS         10% of the ₱30,000 credit     ₱3,000.00
- *     EC          credit ≥ ₱15,000                  ₱30.00
- *     PhilHealth  2.5% of ₱30,000                  ₱750.00
- *     Pag-IBIG    2% of ₱30,000, capped at ₱200    ₱200.00
- *                                                 ─────────
- *                                                 ₱3,980.00  → ₱1,990 a cutoff
- *
- * none of which comes off the payslip.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -44,7 +29,6 @@ beforeEach(function (): void {
 
     $this->admin = User::where('email', 'admin@cargorush.ph')->firstOrFail();
 
-    // ₱30,000 a month, office.
     $this->hire = fn () => $this->actingAs($this->admin)
         ->postJson('/api/v1/employees', [
             'first_name' => 'Elena',
@@ -54,6 +38,9 @@ beforeEach(function (): void {
             'contact' => '0917 555 0199',
             'hired_on' => '2026-01-05',
             'amount_cents' => 3_000_000,
+            'sss_enrolled' => true,
+            'philhealth_enrolled' => true,
+            'pagibig_enrolled' => true,
         ])->assertCreated()->json('data');
 
     $this->open = fn (string $start = '2026-09-01', string $end = '2026-09-15') => $this->actingAs($this->admin)
@@ -88,16 +75,12 @@ describe('the arithmetic', function (): void {
     });
 
     it('charges ₱10 EC below a ₱15,000 credit, and caps Pag-IBIG at ₱200', function (): void {
-        // ₱12,000, paid monthly: SSS 10% of ₱12,000, EC ₱10, PhilHealth 2.5%
-        // of ₱12,000, Pag-IBIG 2% would be ₱240 — held at ₱200.
         $share = app(StatutoryDeductions::class)->employerFor(1_200_000, index: 0, count: 1);
 
         expect($share)->toBe(['sss' => 120_000, 'ec' => 1_000, 'philhealth' => 30_000, 'pagibig' => 20_000]);
     });
 
     it('reads the floors on a low basic, like the employee side', function (): void {
-        // ₱4,000: SSS on the ₱5,000 floor credit, PhilHealth on its ₱10,000
-        // floor, Pag-IBIG on what is actually earned.
         $share = app(StatutoryDeductions::class)->employerFor(400_000, index: 0, count: 1);
 
         expect($share)->toBe(['sss' => 50_000, 'ec' => 1_000, 'philhealth' => 25_000, 'pagibig' => 8_000]);
@@ -108,7 +91,6 @@ describe('the arithmetic', function (): void {
 
         expect($deductions->employerFor(0, 0, 2))
             ->toBe(['sss' => 0, 'ec' => 0, 'philhealth' => 0, 'pagibig' => 0])
-            // EC rides on SSS membership.
             ->and($deductions->employerFor(3_000_000, 0, 1, enrolled: ['sss' => false]))
             ->toBe(['sss' => 0, 'ec' => 0, 'philhealth' => 75_000, 'pagibig' => 20_000]);
     });
@@ -124,7 +106,6 @@ describe('the arithmetic', function (): void {
             expect($first[$agency] + $second[$agency])->toBe($month[$agency]);
         }
 
-        // A firm taking the month on the first cutoff takes its own share there too.
         expect($deductions->employerFor(3_000_000, 1, 2, DeductionSchedule::FirstCutoff))
             ->toBe(['sss' => 0, 'ec' => 0, 'philhealth' => 0, 'pagibig' => 0])
             ->and($deductions->employerFor(3_000_000, 0, 2, DeductionSchedule::FirstCutoff)['sss'])->toBe(300_000);
@@ -146,8 +127,6 @@ describe('on the run', function (): void {
             ->and($run['employer_contributions'])->toBe([
                 'sss' => 150_000, 'ec' => 1_500, 'philhealth' => 37_500, 'pagibig' => 10_000, 'total' => 199_000,
             ])
-            // Not deducted: ₱15,000 gross, and the net is the gross less only
-            // what the employee's own side and the tax took.
             ->and($line['gross_cents'])->toBe(1_500_000)
             ->and($line['net_cents'])->toBe(
                 1_500_000 - $line['sss_cents'] - $line['philhealth_cents'] - $line['pagibig_cents'] - $line['withholding_tax_cents'],
@@ -168,7 +147,6 @@ describe('on the run', function (): void {
 
         $withheld = $paid['statutory']['sss'] + $paid['statutory']['philhealth'] + $paid['statutory']['pagibig'];
 
-        // Office staff: wages and the employer share both on 5200.
         expect($lines->where('account_code', '5200')->sum('debit_cents'))->toBe(1_500_000 + 199_000)
             ->and($lines->where('account_code', '2200')->sum('credit_cents'))->toBe($withheld + 199_000)
             ->and($lines->sum('debit_cents'))->toBe($lines->sum('credit_cents'))
@@ -184,6 +162,7 @@ describe('on the run', function (): void {
             'employee_no' => 'EMP-9101', 'first_name' => 'Marco', 'last_name' => 'Villanueva',
             'position' => 'Driver', 'contact' => '0917 555 0123', 'hired_on' => '2026-01-05',
             'status' => 'active', 'driver_id' => $driver->id,
+            'sss_enrolled' => true, 'philhealth_enrolled' => true, 'pagibig_enrolled' => true,
         ]);
         payContract($employee, 'monthly', 3_000_000);
 
@@ -225,9 +204,8 @@ describe('in Finance', function (): void {
             'employee_no' => 'EMP-9102', 'first_name' => 'Marco', 'last_name' => 'Reyes',
             'position' => 'Driver', 'contact' => '0917 555 0124', 'hired_on' => '2026-01-05',
             'status' => 'active', 'driver_id' => $driver->id,
+            'sss_enrolled' => true, 'philhealth_enrolled' => true, 'pagibig_enrolled' => true,
         ]);
-        // ₱10,000 a month: ₱5,000 a cutoff, and the firm's share a cutoff is
-        // SSS ₱500 + EC ₱5 + PhilHealth ₱125 + Pag-IBIG ₱100 = ₱730.
         payContract($employee, 'monthly', 1_000_000);
 
         $vehicle = Vehicle::create([
@@ -236,7 +214,6 @@ describe('in Finance', function (): void {
         ]);
         $truck = Truck::create(['label' => 'Truck 44', 'plate' => $vehicle->plate, 'vehicle_id' => $vehicle->id, 'position' => 44]);
 
-        // The sheet paid him ₱6,000 in the period — more than the payslip.
         LedgerEntry::create([
             'truck_id' => $truck->id, 'date' => '2026-09-10', 'driver_id' => $driver->id,
             'trip_income_cents' => 0, 'driver_salary_cents' => 600_000,
@@ -248,7 +225,6 @@ describe('in Finance', function (): void {
 
         ($this->payRun)($run);
 
-        // The wage is on the sheet already; the share never is.
         expect(($this->period)('2026-09-01', '2026-09-30')['payroll_cents'])->toBe(73_000);
     });
 
@@ -266,9 +242,7 @@ describe('in Finance', function (): void {
 
         expect($group['total_cents'])->toBe($withheld + 199_000)
             ->and($payroll->owedCentsAsOf(Carbon::parse('2026-10-31')))->toBe($withheld + 199_000)
-            // In the expenses already, so actual income does not take it twice.
             ->and($payroll->costedOwedAsOf(Carbon::parse('2026-10-31')))->toBe($withheld + 199_000)
-            // Presumed remitted by the end of the month after the period.
             ->and($payroll->owedCentsAsOf(Carbon::parse('2026-11-01')))->toBe(0);
     });
 });

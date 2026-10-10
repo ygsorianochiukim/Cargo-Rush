@@ -16,28 +16,7 @@ use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * The customer choosing who carries their load.
- *
- * Two answers on one list, and they are not alternatives of the same kind:
- *
- *   **The fleet** is always on it, and never filtered by distance. It has a
- *   yard, a roster and units it can send, so it is an answer for a load across
- *   town and for one two provinces away alike.
- *
- *   **A trucker** is one man with one truck. He is only an answer if he is
- *   close enough to actually turn up, so he is filtered hard — by a recent
- *   position, by a tight radius, and by whether his truck could take the load
- *   at all.
- *
- * Picking one makes the request an **offer** rather than work: it sits on that
- * partner's board alone, nobody else can see it, and it is not a job until they
- * accept. The fleet assigning somebody is the other thing entirely — that is a
- * standing arrangement being exercised, and it needs no acceptance.
- */
 beforeEach(function (): void {
-    // Pricing is zone-only, and an unpriced run cannot go out or be billed.
-    // One card at the old tariff's figures, so every run here is priced.
     zoneCard();
 
     $this->seed(NavigationSeeder::class);
@@ -46,13 +25,10 @@ beforeEach(function (): void {
     $this->seed(FleetSeeder::class);
 
     $this->admin = User::where('email', 'admin@cargorush.ph')->firstOrFail();
-    // Seeded against a firm the office typed in, with a login it minted.
     $this->customer = User::where('email', 'orders@negrosfresh.ph')->firstOrFail();
 
-    // Iponan, Cagayan de Oro — where the load is.
     $this->here = ['lat' => 8.4856, 'lng' => 124.5808];
 
-    /** A vetted, online partner at a given distance from the load. */
     $this->partnerAt = function (string $name, float $lat, float $lng, int $capacityKg = 15_000): Trucker {
         $user = User::factory()->create([
             'role' => Role::Trucker->value,
@@ -84,10 +60,6 @@ describe('the hauler list', function (): void {
     });
 
     it('counts a unit out on a run as one the fleet has', function (): void {
-        // `available` alone was wrong and visibly so: a truck out on a job is
-        // `active`, so a working fleet reported "0 trucks ready" at exactly the
-        // moment it was busiest. The carrier directory counts both, and these
-        // two lists have to agree about the same firm.
         Vehicle::query()->update(['status' => StatusValue::Active->value]);
 
         $fleet = ($this->haulers)()->assertOk()->json('data.0');
@@ -97,9 +69,7 @@ describe('the hauler list', function (): void {
     });
 
     it('offers the fleet even when nobody is anywhere near', function (): void {
-        // The failure this rule prevents: an empty list, which reads as "this
-        // app cannot help you" when the business plainly can.
-        ($this->partnerAt)('Faraway Fred', 14.5995, 120.9842); // Manila
+        ($this->partnerAt)('Faraway Fred', 14.5995, 120.9842);
 
         $body = ($this->haulers)()->assertOk()->json('data');
 
@@ -108,7 +78,7 @@ describe('the hauler list', function (): void {
     });
 
     it('shows a trucker who is genuinely close', function (): void {
-        ($this->partnerAt)('Boyet', 8.5100, 124.5700); // Opol, a few km away
+        ($this->partnerAt)('Boyet', 8.5100, 124.5700);
 
         $body = ($this->haulers)()->assertOk()->json('data');
 
@@ -133,8 +103,6 @@ describe('the hauler list', function (): void {
         $stale = ($this->partnerAt)('Yesterday Man', 8.5100, 124.5700);
         $stale->update(['located_at' => now()->subDays(2)]);
 
-        // A pin from two days ago is not a position, and treating it as one is
-        // how a customer ends up waiting for somebody in another province.
         expect(($this->haulers)()->assertOk()->json('data'))->toHaveCount(1);
     });
 
@@ -153,9 +121,6 @@ describe('the hauler list', function (): void {
 
         $row = ($this->haulers)()->assertOk()->json('data.1');
 
-        // A directory is not a reason to publish a contractor's papers. What a
-        // customer hiring somebody needs is what they can carry and how far
-        // away they are.
         expect($row)->not->toHaveKey('phone')
             ->and($row)->not->toHaveKey('licence_no')
             ->and($row)->toHaveKeys(['name', 'capacity_kg', 'distance_km', 'trips_completed']);
@@ -183,8 +148,6 @@ describe('picking one', function (): void {
 
         $trip = Trip::query()->latest('created_at')->firstOrFail();
 
-        // An offer, not work: still pending, with their name on it, and no
-        // booking source decided until they accept.
         expect($trip->trucker_id)->toBe($this->trucker->getKey())
             ->and($trip->status)->toBe(StatusValue::Pending);
     });
@@ -209,8 +172,6 @@ describe('picking one', function (): void {
             ->assertOk()
             ->assertJsonCount(1, 'data');
 
-        // An offer is not a race. Somebody else's name on it means it is not
-        // on this partner's board at all.
         $this->actingAs($otherUser)
             ->getJson('/api/v1/partner/jobs')
             ->assertOk()
@@ -236,9 +197,6 @@ describe('picking one', function (): void {
             ->postJson("/api/v1/partner/jobs/{$trip->id}/accept")
             ->assertCreated();
 
-        // The customer found the trucker, so the money is between the two of
-        // them and the fleet takes its cut of a run it never touched — the
-        // same terms as a job taken off the open board.
         expect($trip->refresh()->booking_source)->toBe(BookingSource::Direct)
             ->and($trip->status)->toBe(StatusValue::Assigned);
     });
@@ -250,8 +208,6 @@ describe('picking one', function (): void {
 
         expect($trip->trucker_id)->toBeNull();
 
-        // And no trucker sees it. Picking the fleet means asking the fleet:
-        // the request waits on the desk, not on a contractor noticing it.
         $this->actingAs($this->truckerUser)
             ->getJson('/api/v1/partner/jobs')
             ->assertOk()
@@ -275,9 +231,6 @@ describe('picking one', function (): void {
         $rival = $this->makeCompany('Bay Coast Logistics');
         $theirs = $this->asCompany($rival, fn () => Trucker::factory()->approved()->create());
 
-        // Tenant-scoped, so from this customer's side that partner does not
-        // exist at all — which is the right answer rather than a 403 naming
-        // somebody they should never have heard of.
         ($this->ask)(['trucker_id' => $theirs->getKey()])->assertNotFound();
     });
 });

@@ -22,15 +22,6 @@ use App\Domain\Tenancy\Services\CompanyProvisioner;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-/**
- * Records posting themselves to the journal, and keeping those postings true.
- *
- * The reconciliation — that the statements then say what the Finance screens
- * say — is `AutoPostingReconciliationTest`. These pin the mechanism under it:
- * one posting per record, nothing on a re-sync, void-and-repost on a change,
- * a withdrawal when the record stops counting, and silence where there are no
- * books to post to.
- */
 beforeEach(function (): void {
     app(CompanyProvisioner::class)->provision($this->company);
 
@@ -54,12 +45,11 @@ beforeEach(function (): void {
         ->orderBy('source_revision')
         ->get();
 
-    /** What an account stands at from posted entries, debit-positive. */
     $this->balance = fn (string $code) => (int) JournalLine::query()
         ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
         ->where('journal_entries.status', JournalEntry::POSTED)
         ->where('journal_lines.account_id', Account::where('code', $code)->value('id'))
-        ->sum(DB::raw('journal_lines.debit_cents - journal_lines.credit_cents'));
+        ->sum(DB::raw(DB::getQueryGrammar()->wrap('journal_lines.debit_cents').' - '.DB::getQueryGrammar()->wrap('journal_lines.credit_cents')));
 });
 
 it('posts a day on the sheet, balanced, on the day\'s date', function (): void {
@@ -93,7 +83,6 @@ it('changes nothing when the same record is synced again', function (): void {
     expect($result)->toMatchArray(['posted' => 0, 'voided' => 0, 'unchanged' => 1])
         ->and(($this->entriesFor)($row))->toHaveCount(1);
 
-    // A save that changes nothing the books care about is no change either.
     $row->update(['remarks' => 'Tyre looked soft']);
 
     expect(($this->entriesFor)($row))->toHaveCount(1);
@@ -142,7 +131,6 @@ it('withdraws the posting when the record is deleted or stops counting', functio
         ->and($entry->void_reason)->toContain('no longer counts')
         ->and(($this->balance)('5070'))->toBe(0);
 
-    // A pending line is owed, not spent: it posts nothing.
     $pending = Expense::create([
         'category_id' => $category->getKey(),
         'date' => '2026-07-20',
@@ -166,7 +154,6 @@ it('posts an expense to its category\'s account, and falls back to 5900', functi
     expect(($this->balance)('5210'))->toBe(30_000)
         ->and(($this->balance)('5900'))->toBe(7_000);
 
-    // Pointing a category at another account moves its lines there.
     $mine->update(['account_code' => '5230']);
 
     expect(($this->balance)('5900'))->toBe(0)
@@ -191,7 +178,6 @@ it('takes the withholding off receivables at issue, so 1100 is what Billing says
     expect(($this->balance)('1100'))->toBe($invoice->balanceCents())
         ->and(($this->balance)('1260'))->toBe(20_000)
         ->and(($this->balance)('2150'))->toBe(-120_000)
-        // Raised by hand: its net is other income, on the day it was issued.
         ->and(($this->balance)('4090'))->toBe(-1_000_000);
 
     $invoice->update(['status' => StatusValue::Cancelled->value]);
@@ -273,7 +259,6 @@ it('leaves alone what is dated before the day it was told to start', function ()
 
 describe('the backfill', function (): void {
     beforeEach(function (): void {
-        // History from before auto-posting existed.
         config(['cargo.accounting.auto_post.enabled' => false]);
 
         $this->rows = [($this->day)([], '2026-06-30'), ($this->day)([], '2026-07-15')];

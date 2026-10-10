@@ -72,8 +72,6 @@
         @for (employee of staff; track employee.id) {
           <li class="rounded-card border border-cr-line p-3">
             <div class="flex items-start gap-3">
-              <!-- The photograph, or their initials. The office knows the face
-                   before it knows the payroll number. -->
               @if (employee.photo_url) {
                 <img
                   [src]="employee.photo_url"
@@ -119,18 +117,18 @@
                   {{ employee.has_account ? employee.role_label : 'No login' }}
                 </dd>
               </div>
-              <!--
-                The licence, not the driver record's name.
-
-                It used to print the name off the linked `drivers` row, which
-                is the same name already at the top of this card — so the line
-                said nothing except "yes, linked". The licence is the thing
-                somebody on this screen actually wants: it is what expires.
-              -->
               @if (employee.licence_no) {
                 <div class="flex justify-between gap-2">
                   <dt class="text-cr-ink-muted">Licence</dt>
                   <dd class="cr-num truncate">{{ employee.licence_no }}</dd>
+                </div>
+              }
+              @if (employee.has_statutory_exemption) {
+                <div class="flex justify-between gap-2">
+                  <dt class="text-cr-ink-muted">Benefits</dt>
+                  <dd class="truncate font-semibold text-cr-warning">
+                    No {{ missingContributions(employee) }}
+                  </dd>
                 </div>
               }
             </dl>
@@ -160,12 +158,6 @@
               </button>
             </div>
 
-            <!--
-              What this person is paid on top of the basic, and what they owe
-              the store. Two panels rather than one because they are different
-              kinds of thing: an allowance is a standing instruction, and a tab
-              is a balance that changes at the till.
-            -->
             <div class="mt-2 flex items-center gap-2">
               <button
                 type="button"
@@ -191,10 +183,6 @@
   }
 </app-card>
 
-<!--
-  Both panels are modals off the roster, because the question each answers is
-  always about one person and is asked while looking at them.
--->
 @if (payFor(); as employee) {
   <app-employee-pay-components [employee]="employee" [(open)]="payOpen" />
 }
@@ -203,7 +191,6 @@
   <app-employee-store-credits [employee]="employee" [(open)]="tabOpen" />
 }
 
-<!-- Access: the login, the role, and which modules it reaches. -->
 @if (subject(); as employee) {
   <app-modal
     [(open)]="accessOpen"
@@ -223,7 +210,6 @@
     }
 
     @if (credentials(); as creds) {
-      <!-- Shown once. There is no endpoint that will say it again. -->
       <div class="mb-4 rounded-control bg-cr-success-bg px-3 py-3">
         <p class="text-[13px] font-semibold text-cr-success">Account created</p>
         <dl class="mt-2 space-y-1 text-[13px]">
@@ -293,7 +279,6 @@
         </app-field>
       </div>
 
-      <!-- Modules -->
       <div class="mt-6">
         <h3 class="text-[14px] font-semibold">Modules</h3>
         <p class="mt-1 text-[12px] text-cr-ink-muted">Only what the role allows can be ticked.</p>

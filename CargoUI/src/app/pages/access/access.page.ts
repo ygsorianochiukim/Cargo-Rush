@@ -26,18 +26,6 @@ import { Modal } from '../../shared/modal';
 import { ErrorState, SkeletonRows } from '../../shared/states';
 import { StatusPill } from '../../shared/status-pill';
 
-/**
- * Access Control — roles, the permission matrix, and job titles.
- *
- * The matrix is the screen. A role is only understandable next to what it can
- * reach, so the ticks are edited in place rather than behind a dialog, and the
- * groupings match the sidebar so "Finance" means the same thing in both.
- *
- * Two roles behave differently on purpose and the page says so rather than
- * failing on save: the administrator holds everything including permissions
- * added later, so its ticks are not editable; and a system role can have its
- * permissions tuned but cannot be deleted.
- */
 @Component({
   selector: 'app-access',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -64,13 +52,6 @@ export class AccessPage {
   private readonly fb = inject(FormBuilder);
   private readonly identity = inject(IdentityService);
 
-  /**
-   * Whether to show the company card at all.
-   *
-   * The endpoints behind it are gated on `company.manage` regardless — this
-   * only decides whether somebody is shown a control that would 403. A general
-   * manager holds it; an HR officer who can read the roles does not.
-   */
   protected readonly canManageCompany = signal(this.identity.has('company.manage'));
 
   protected readonly inputClass =
@@ -78,7 +59,6 @@ export class AccessPage {
 
   protected readonly tab = signal<'roles' | 'positions'>('roles');
 
-  /** Null means still loading — the four list states depend on telling apart. */
   protected readonly roles = signal<Role[] | null>(null);
   protected readonly positions = signal<Position[] | null>(null);
   protected readonly groups = signal<PermissionGroup[] | null>(null);
@@ -86,7 +66,6 @@ export class AccessPage {
   protected readonly notice = signal<string | null>(null);
 
   protected readonly selectedRoleId = signal<string | null>(null);
-  /** The ticks as edited, before saving. */
   protected readonly picked = signal<Set<string>>(new Set());
   protected readonly busy = signal(false);
 
@@ -102,26 +81,7 @@ export class AccessPage {
   protected readonly positionForm = this.fb.group({
     name: ['', Validators.required],
     description: [''],
-    /**
-     * Does somebody in this job need a `drivers` record?
-     *
-     * Which is the same question as *do they use the handset*. Asked outright
-     * rather than inferred from a role, because a firm that gives its mechanics
-     * a driver login to shunt units around the yard is not hiring drivers.
-     */
     drives: [false],
-    /**
-     * The rate card — one basis, and a figure for each tier.
-     *
-     * A default at the moment of hire, not a salary: hiring into this job opens
-     * the person a contract on the tier's figure, and they carry that from then
-     * on. Editing these changes what the *next* hire is offered and nothing
-     * about anybody already on the job.
-     *
-     * Zero is a real answer and means nobody has priced that tier — the hire
-     * then opens no contract rather than one at ₱0.00, which would look
-     * identical to a real figure on every screen afterwards.
-     */
     pay_basis: ['monthly'],
     trainee: [0],
     probationary: [0],
@@ -163,8 +123,6 @@ export class AccessPage {
     });
   }
 
-  /* --------------------------------------------------------------- Roles */
-
   protected readonly selectedRole = computed(
     () => this.roles()?.find((r) => r.id === this.selectedRoleId()) ?? null,
   );
@@ -186,7 +144,6 @@ export class AccessPage {
 
   protected readonly isPicked = (key: string) => this.picked().has(key);
 
-  /** Every permission in a group ticked — drives the group's select-all box. */
   protected readonly groupAllPicked = (group: PermissionGroup): boolean =>
     group.permissions.length > 0 && group.permissions.every((p) => this.picked().has(p.key));
 
@@ -273,8 +230,6 @@ export class AccessPage {
     });
   }
 
-  /* ----------------------------------------------------------- Positions */
-
   protected openPositionForm(position: Position | null = null): void {
     this.editingPosition.set(position);
 
@@ -303,16 +258,6 @@ export class AccessPage {
     const { name, description, drives, pay_basis, trainee, probationary, regular } =
       this.positionForm.getRawValue();
 
-    /**
-     * All three figures go, whatever the basis.
-     *
-     * Unlike the two columns this replaced, there is nothing to clear on a
-     * switch: the basis says what the amounts *mean* — a month, a day, a trip —
-     * rather than which of them is read. A job moved from monthly to per-trip
-     * keeps its three numbers and they are now per haul, which is wrong often
-     * enough to be worth the office correcting and never stale in the way a
-     * hidden second column was.
-     */
     const payload: PositionPayload = {
       name: String(name),
       description: description || null,
@@ -341,21 +286,8 @@ export class AccessPage {
     });
   }
 
-  /**
-   * The rate card, edited where it is read.
-   *
-   * A price list is a table, and a table somebody has to open a dialog to
-   * change one cell of is a table they will keep a spreadsheet beside instead.
-   * So the basis and the three figures save in place; the dialog is still there
-   * for adding a job and for the fields that are not numbers.
-   *
-   * Sent as a PATCH of the one field that moved rather than the whole row, so
-   * two people editing different columns of the same job cannot overwrite each
-   * other's work with a stale copy of it.
-   */
   protected readonly tiers = PAY_TIERS;
 
-  /** The cell a tier is drawn from, so the table can stay a loop. */
   protected amountFor(position: Position, tier: PayTier): number {
     return (
       {
@@ -373,21 +305,11 @@ export class AccessPage {
   protected setAmount(position: Position, tier: PayTier, pesos: string): void {
     const cents = this.centavos(pesos);
 
-    // Nothing moved, so nothing is sent — a blur on a field somebody only
-    // tabbed through should not write to the roster.
     if (cents === this.amountFor(position, tier)) return;
 
     this.patchPosition(position, { [`${tier}_amount_cents`]: cents });
   }
 
-  /**
-   * One field, saved, with the row replaced by what came back.
-   *
-   * The server's copy rather than the typed one: it has already rounded,
-   * recomposed `pay_summary` off the firm's pay calendar, and answered whether
-   * the job now counts as priced. Patching the local row by hand would be a
-   * second implementation of all three.
-   */
   private patchPosition(position: Position, payload: Partial<PositionPayload>): void {
     this.busy.set(true);
 
@@ -401,24 +323,15 @@ export class AccessPage {
       error: (error: HttpErrorResponse) => {
         this.busy.set(false);
         this.notice.set(this.messageFor(error));
-        // Put the row back as the server still has it, so a rejected edit does
-        // not leave a figure on screen that nothing agreed to.
         this.accessApi.positions().subscribe((res) => this.positions.set(res.data));
       },
     });
   }
 
-  /** Pesos off a form, centavos onto the wire. */
   private centavos(pesos: unknown): number {
     return Math.max(0, Math.round(Number(pesos ?? 0) * 100));
   }
 
-  /**
-   * Delete a position, or hear that it was retired.
-   *
-   * The list is re-read rather than the row removed locally: the two outcomes
-   * look identical from here and only the server knows which happened.
-   */
   protected async removePosition(position: Position): Promise<void> {
     const ok = await this.confirm.ask({
       title: `Delete ${position.name}?`,

@@ -8,14 +8,6 @@ import { fmt } from '../../shared/format';
 import { Modal } from '../../shared/modal';
 import { ErrorState } from '../../shared/states';
 
-/**
- * Who owed the fleet money at the close of the quarter, and how much.
- *
- * Opened from the Receivables tile, and asked about the quarter's last day
- * rather than today — the same way Payables is — so a closed quarter shows
- * what was outstanding then, including invoices that have since been paid.
- * Most overdue first, which is the order anybody chasing money works in.
- */
 @Component({
   selector: 'app-receivable-lines-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -60,7 +52,6 @@ export class ReceivableLinesDialog {
   private readonly router = inject(Router);
 
   readonly open = model(false);
-  /** The quarter's last day. */
   readonly asOf = input.required<string>();
 
   protected readonly report = signal<ReceivableLines | null>(null);
@@ -101,7 +92,6 @@ export class ReceivableLinesDialog {
     });
   }
 
-  /** An invoice opens itself; a partner's balance lives on the Truckers page. */
   protected go(line: ReceivableLine): void {
     this.open.set(false);
 

@@ -13,28 +13,6 @@ use App\Domain\Shared\Enums\JournalCategory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 
-/**
- * The part of a paid run the daily sheet already charged.
- *
- * Payroll posts itself (`PayrollService::post`): the whole gross to wages, the
- * net to cash, the withholdings to their payables. That entry is payroll's and
- * is not touched here. But the sheet's driver and helper columns are the same
- * crew's pay for the same days, and `SheetDayRule` has already charged them to
- * expense (against 2110, accrued) — so the run's gross on top would charge the
- * fleet twice for one fortnight of driving.
- *
- * Finance settles that per payslip (`PayrollCostService`): a run adds only
- * what the sheet never saw. This posts the difference so the books agree:
- *
- *     Dr 2110 Crew pay accrued from the daily sheet
- *       Cr 5020 Driver salaries (payroll's crew-wages account)
- *
- * — the accrual the sheet made is what the run paid, and the expense stays
- * once. The amount is what payroll's own entry charged to expense less what
- * Finance counts of the run, so whatever the run's entry carries (employer
- * contributions included) is matched to the peso. Dated the run's pay date, as
- * Finance dates it; only a paid run whose payroll entry is posted.
- */
 class PayRunRule extends PostingRule
 {
     public function __construct(private readonly PayrollCostService $payroll) {}

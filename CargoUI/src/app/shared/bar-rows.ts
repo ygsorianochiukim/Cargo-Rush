@@ -4,39 +4,19 @@ import { ChartTooltip, TooltipRow } from './chart-tooltip';
 
 export interface BarRow {
   key: string;
-  /** Printed on the left — a plate, or the unit label when there is no plate. */
   label: string;
-  /** The headline figure, already formatted. The API never formats money. */
   value: string;
-  /** Fill, 0–100. For a diverging row this is the distance from the centre. */
   pct: number;
   tone: 'income' | 'expense' | 'net';
-  /** A loss. Only meaningful on a `net` row. */
   negative?: boolean;
   rows?: TooltipRow[];
 }
 
-/**
- * A ranked list of horizontal bars — the shape the workbook uses for
- * per-unit income, expenses and net income.
- *
- * The `net` tone is **diverging**: the axis is the centre line, a profit runs
- * right and a loss runs left. That is the point of it. A loss drawn as a short
- * bar from the left edge reads as "did badly"; drawn left of the axis it reads
- * as "lost money", which is what actually happened.
- *
- * Each row is a `<button>` so hover and keyboard focus are the same code path
- * (DESIGN.md section 9).
- */
 @Component({
   selector: 'app-bar-rows',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ChartTooltip],
   template: `
-    <!-- Centred in the card body: cards in a row are all as tall as the
-         tallest, so a chart with one or two units used to sit pinned to the
-         top of a mostly empty box. With a full set of units the box is full
-         and centring makes no difference. -->
     <ul class="flex h-full flex-col gap-1" [class.justify-center]="align() === 'center'">
       @for (bar of bars(); track bar.key) {
         <li class="relative">
@@ -96,10 +76,6 @@ export interface BarRow {
 })
 export class BarRows {
   readonly bars = input.required<BarRow[]>();
-  /**
-   * `top` for a list beside a taller card, where a short list centred in the
-   * height reads as a chart floating in empty space.
-   */
   readonly align = input<'center' | 'top'>('center');
 
   protected readonly active = signal<string | null>(null);

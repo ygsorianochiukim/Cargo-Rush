@@ -4,30 +4,6 @@ import { PayComponent } from '../../models/hr/payroll.model';
 import { RecordSpec, statusOptions } from '../../shared/record-form-spec';
 import { PayComponentService } from './payroll.service';
 
-/**
- * One row of the firm's salary structure.
- *
- * A flat record, so it uses the shared form. Three of its fields carry the only
- * teaching on this screen, and each of them is a question an office gets wrong
- * in a way nobody notices for months:
- *
- * **Basis.** A percentage follows a rise on its own. A fixed figure has to be
- * re-typed on every promotion, and the one that does not get re-typed is
- * somebody quietly underpaid for a year.
- *
- * **Schedule.** "₱2,000 rice allowance" almost always means a month of it;
- * "₱500 a payslip" means a payslip, which on a semi-monthly payroll is ₱1,000 a
- * month. Neither can be guessed from the number, so the form asks — and getting
- * it wrong is a doubling or a halving of somebody's allowance.
- *
- * **Taxable.** Off by default, and that is the honest default rather than a
- * cautious one: rice, uniform and medical allowances are de minimis benefits up
- * to the BIR's ceilings, which is most of what a fleet pays on top of a basic.
- *
- * Both amount fields are on the form at once and each hides when the other's
- * basis is chosen. `showWhen` drops a hidden field's validators, so the
- * `required` on either cannot block a save for a control nobody can see.
- */
 export function payComponentSpec(): RecordSpec<PayComponent> {
   const components = inject(PayComponentService);
 
@@ -139,7 +115,6 @@ export function payComponentSpec(): RecordSpec<PayComponent> {
       amount_cents: record.amount_cents,
       rate_bp: record.rate_bp,
       schedule: record.schedule,
-      // The select carries strings; the payload builder turns it back.
       taxable: record.taxable ? '1' : '0',
       position: record.position,
       status: record.status,
@@ -153,15 +128,6 @@ export function payComponentSpec(): RecordSpec<PayComponent> {
         name: values['name'],
         kind: values['kind'],
         basis,
-        /**
-         * Only the figure the basis actually uses is sent, and the other is
-         * sent as zero rather than left out.
-         *
-         * Switching a component from a percentage to a fixed amount has to
-         * clear the rate, or the row keeps a stale 10% that nothing reads and
-         * that reappears the moment somebody switches the basis back — a
-         * component that changes its own amount when you look at it twice.
-         */
         amount_cents: basis === 'fixed' ? Number(values['amount_cents'] ?? 0) : 0,
         rate_bp: basis === 'percent_of_basic' ? Number(values['rate_bp'] ?? 0) : 0,
         schedule: values['schedule'],
@@ -177,13 +143,5 @@ export function payComponentSpec(): RecordSpec<PayComponent> {
         ? components.create(values as never)
         : components.update(id, values as never),
 
-    /**
-     * No `remove` on the spec.
-     *
-     * Deliberate: removing a component is not an ordinary destroy. One nobody
-     * is assigned is deleted and one in use is *retired*, and the shared
-     * confirmation cannot say which is about to happen. The page handles it
-     * itself so the office is told which of the two it got.
-     */
   };
 }

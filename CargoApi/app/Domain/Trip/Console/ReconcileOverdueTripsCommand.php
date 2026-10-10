@@ -8,13 +8,6 @@ use App\Domain\Tenancy\Console\Concerns\RunsPerCompany;
 use App\Domain\Trip\Services\TripService;
 use Illuminate\Console\Command;
 
-/**
- * Flip anything past its ETA to `overdue`.
- *
- * `TripService::reconcileOverdue()` was written to be "run on a schedule"
- * and had nothing running it, so lateness was only ever true at the moment
- * somebody happened to look. This is the caller that makes it true.
- */
 class ReconcileOverdueTripsCommand extends Command
 {
     use RunsPerCompany;

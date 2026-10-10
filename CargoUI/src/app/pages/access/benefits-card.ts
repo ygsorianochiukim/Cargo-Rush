@@ -19,23 +19,6 @@ import { Icon } from '../../shared/icon';
 
 type Agency = 'sss_enrolled' | 'philhealth_enrolled' | 'pagibig_enrolled';
 
-/**
- * Whether payroll takes SSS, PhilHealth and Pag-IBIG — for the firm, and for
- * each person.
- *
- * Two levels, and the card keeps them apart on purpose. The switch at the top
- * is the firm's: off, no payslip carries a contribution, employee or employer
- * share. It does **not** rewrite anybody — each person's ticks below survive,
- * so switching back on returns everybody to what they had.
- *
- * The ticks are the same three flags as the employee form, saved on the spot,
- * so "only these people have benefits" is a matter of unticking the rest. A
- * change reaches the next pay run worked out; a run already approved keeps
- * what it froze.
- *
- * Withholding tax is not a benefit and is not on this card: it is owed on
- * taxable pay either way.
- */
 @Component({
   selector: 'app-benefits-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -154,7 +137,6 @@ type Agency = 'sss_enrolled' | 'philhealth_enrolled' | 'pagibig_enrolled';
             </table>
           </div>
 
-          <!-- The same pager the shared table uses, so the two read alike. -->
           <div
             class="mt-1 flex flex-wrap items-center justify-between gap-3 border-t border-cr-line pt-3"
           >
@@ -225,11 +207,6 @@ export class BenefitsCard {
   protected readonly busy = signal(false);
   protected readonly failure = signal<string | null>(null);
 
-  /**
-   * One page of the roster, paged and searched by the API rather than here —
-   * a card on the settings screen should not have to load every employee to
-   * show ten of them.
-   */
   protected readonly people = signal<Employee[]>([]);
   protected readonly loadingPeople = signal(true);
   protected readonly saving = signal<ReadonlySet<string>>(new Set());
@@ -277,7 +254,6 @@ export class BenefitsCard {
   protected setSearch(event: Event): void {
     this.search.set((event.target as HTMLInputElement).value);
 
-    // Wait for a pause in the typing rather than asking once per keystroke.
     clearTimeout(this.searchTimer);
     this.searchTimer = setTimeout(() => this.goTo(1), 300);
   }
@@ -296,7 +272,6 @@ export class BenefitsCard {
     const term = this.search().trim();
 
     this.loadingPeople.set(true);
-    // A slower answer to an older question must not overwrite the newer one.
     this.request?.unsubscribe();
     this.request = this.employees
       .list({
@@ -366,7 +341,6 @@ export class BenefitsCard {
         this.mark(person.id, false);
       },
       error: () => {
-        // Put the tick back where the server still has it.
         undo?.();
         this.mark(person.id, false);
         this.failure.set(`Could not save benefits for ${person.full_name}.`);

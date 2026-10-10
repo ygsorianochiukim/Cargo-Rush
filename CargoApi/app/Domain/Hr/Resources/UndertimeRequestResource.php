@@ -9,9 +9,7 @@ use App\Domain\Hr\Services\PhotoStore;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use Illuminate\Http\Request;
 
-/**
- * @mixin UndertimeRequest
- */
+/** @mixin UndertimeRequest */
 class UndertimeRequestResource extends ApiResource
 {
     public function toArray(Request $request): array
@@ -24,8 +22,6 @@ class UndertimeRequestResource extends ApiResource
             'employee_position' => $this->employee?->position,
             'employee_photo_url' => app(PhotoStore::class)->url($this->employee?->photo_path),
             'date' => $this->date?->toDateString(),
-            // Trimmed to `H:i`: the column is a time and the seconds MySQL
-            // returns are noise nobody typed.
             'from_time' => substr((string) $this->from_time, 0, 5),
             'to_time' => substr((string) $this->to_time, 0, 5),
             'hours' => $this->hours,

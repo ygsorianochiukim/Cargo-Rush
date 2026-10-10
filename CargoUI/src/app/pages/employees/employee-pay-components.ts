@@ -18,30 +18,6 @@ import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 import { Modal } from '../../shared/modal';
 
-/**
- * What one person is paid on top of their basic — and what comes off it.
- *
- * The screen that makes the salary structure worth having. A component in the
- * catalogue pays nobody until somebody is put on it here, and this is where an
- * office does that: once, with a start date, instead of typing the same rice
- * allowance onto the same payslip every fortnight until somebody leaves.
- *
- * ## The two things it is careful about
- *
- * **The amount is usually the catalogue's.** The override field is left blank
- * for almost everybody, and that blank is what keeps a firm-wide raise to one
- * edited row rather than ninety. So an empty box means "whatever the component
- * says" and is sent as null — never as zero, which would pin this person to
- * nothing and look identical on screen.
- *
- * **The end date is how a loan stops.** An assignment with no end runs forever,
- * which is right for an allowance and wrong for a repayment. Setting the date
- * when the loan is granted is the difference between it stopping on the right
- * payslip and stopping when somebody remembers.
- *
- * It is a modal off the roster rather than a page of its own: the question is
- * always about one person, and it is asked while looking at them.
- */
 @Component({
   selector: 'app-employee-pay-components',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -64,8 +40,6 @@ import { Modal } from '../../shared/modal';
         </p>
       }
 
-      <!-- What they are on now. The list first, because somebody opening this
-           is usually checking rather than adding. -->
       @if (rows(); as assignments) {
         @if (assignments.length === 0) {
           <div class="rounded-control border border-dashed border-cr-line px-4 py-6 text-center">
@@ -213,13 +187,6 @@ export class EmployeePayComponents {
   });
 
   constructor() {
-    /**
-     * Load when it opens, not when it is constructed.
-     *
-     * The component sits inside the roster and is built with the page; fetching
-     * then would be one request per employee on a screen showing ninety, to
-     * answer a question nobody has asked yet.
-     */
     effect(() => {
       if (!this.open()) return;
 
@@ -227,13 +194,6 @@ export class EmployeePayComponents {
     });
   }
 
-  /**
-   * What this row is worth, in the unit its basis uses.
-   *
-   * A percentage shows `10%` rather than a peso figure — there is no peso
-   * answer without running payroll, and ₱0.00 would read as an allowance that
-   * pays nothing.
-   */
   protected amountOf(row: EmployeePayComponent): string {
     if (row.effective_rate_bp !== null) {
       const percent = row.effective_rate_bp / 100;
@@ -262,13 +222,6 @@ export class EmployeePayComponents {
         pay_component_id: String(pay_component_id),
         effective_from: String(effective_from),
         effective_to: effective_to === '' ? null : String(effective_to),
-        /**
-         * Blank means "the component's own figure", and is sent as null.
-         *
-         * Not as zero: null is what keeps this person following a firm-wide
-         * change, and zero would pin them to nothing while looking identical
-         * on this screen.
-         */
         amount_cents: amount === '' || amount === null ? null : Math.round(Number(amount) * 100),
       })
       .subscribe({
@@ -306,8 +259,6 @@ export class EmployeePayComponents {
       error: () => this.failure.set('Could not read what this person is paid.'),
     });
 
-    // Active only: the picker offers what payroll will actually use next time,
-    // and a retired component is deliberately not that.
     this.components.list(true).subscribe({
       next: (res) => this.catalogue.set(res.data),
       error: () => this.catalogue.set([]),

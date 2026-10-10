@@ -30,23 +30,13 @@ class BillingService
         private readonly RateBook $rates,
     ) {}
 
-    /**
-     * @param  array<string, mixed>  $filters
-     */
+    /** @param array<string, mixed> $filters */
     public function paginate(array $filters, int $perPage = 25): LengthAwarePaginator
     {
         return $this->invoices->paginate($filters, $perPage);
     }
 
     /**
-     * Every matching document, unpaginated — for the CSV export.
-     *
-     * The one read here that is deliberately not a page. A spreadsheet of the
-     * first 25 rows is not an export, and the filters are the caller's own, so
-     * what comes back is the list they are looking at rather than the whole
-     * table. It stays a `Collection` and not a cursor because these are one
-     * office's invoices for a period, not a platform-wide sweep.
-     *
      * @param  array<string, mixed>  $filters
      * @return Collection<int, Invoice>
      */
@@ -55,21 +45,10 @@ class BillingService
         return $this->invoices->all($filters);
     }
 
-    /**
-     * Raise a document by hand, with its tax worked out.
-     *
-     * The amount the form sends is the figure the desk has — the net haul, or
-     * an all-in price, depending on `cargo.tax.prices_include_vat`. The VAT
-     * and the withholding follow from the customer, and the rates that applied
-     * are frozen on beside them.
-     */
     public function create(InvoiceData $data): Invoice
     {
         $attributes = $data->persistable();
 
-        // Nothing has been paid on a document that did not exist a moment
-        // ago, so an open one is pending or overdue by its due date alone —
-        // whichever of the two the form happened to send.
         if (($attributes['status'] ?? null) !== StatusValue::Cancelled->value) {
             $attributes['status'] = isset($attributes['due_at']) && Carbon::parse($attributes['due_at'])->lt(today())
                 ? StatusValue::Overdue->value
@@ -82,39 +61,7 @@ class BillingService
         ])->refresh();
     }
 
-    /**
-     * Edit one, recomputing the tax when the money or the customer moved.
-     *
-     * Only then: an edit that corrects a due date must not requote the tax,
-     * because the rates may have changed since and the document would quietly
-     * stop matching the copy the customer holds.
-     *
-     * ## The figure that comes in is the *base*, not the gross
-     *
-     * `amount_cents` on a write means what it means on a create — the figure
-     * the desk has, which is the net unless the rate card is quoted all-in.
-     * The tax is added to it. That is why the fallback below is
-     * `taxBaseCents()` and not `amount_cents`: re-quoting an untouched invoice
-     * from its own gross would add 12% to a figure that already contains 12%,
-     * and an edit that changed nothing would raise the document by a seventh.
-     * It did, on every save, until a form was given `taxable_base_cents` to
-     * round-trip instead — see `Invoice::taxBaseCents()`.
-     *
-     * ## The status is the money's, except for cancelling
-     *
-     * `pending`, `partial`, `paid` and `overdue` follow from the allocations
-     * and the due date, so after any edit they are **re-derived** — an amount
-     * raised on a paid invoice reopens it as part-paid, a due date moved into
-     * the past makes it overdue. A form's `pending` or `overdue` is read only
-     * as "not cancelled": it reopens a cancelled document, and the payments
-     * then say which of the open statuses it is.
-     *
-     * Two edits are refused, because both leave money pointing at nothing:
-     * cancelling a document that still has payments against it, and lowering
-     * it below what has already been paid. The payment comes off first.
-     *
-     * @throws ValidationException
-     */
+    /** @throws ValidationException */
     public function update(Invoice $invoice, InvoiceData $data): Invoice
     {
         return DB::transaction(function () use ($invoice, $data): Invoice {
@@ -160,8 +107,6 @@ class BillingService
                 $attributes = [...$attributes, ...$tax->columns()];
             }
 
-            // Only a cancellation is written as given. Anything else is a
-            // placeholder the payments overwrite a line below.
             $attributes['status'] = $cancelling || $staysCancelled
                 ? StatusValue::Cancelled->value
                 : StatusValue::Pending->value;
@@ -174,11 +119,7 @@ class BillingService
         });
     }
 
-    /**
-     * The tax on a set of invoice attributes.
-     *
-     * @param  array<string, mixed>  $attributes
-     */
+    /** @param array<string, mixed> $attributes */
     private function taxFor(array $attributes): TaxBreakdown
     {
         $direction = $attributes['direction'] ?? InvoiceDirection::Receivable->value;
@@ -190,16 +131,7 @@ class BillingService
         );
     }
 
-    /**
-     * Withdraw a document — but not one that money has been put against.
-     *
-     * Deleting it would leave the allocations pointing at a row no list shows:
-     * the payment would read as applied, the customer's statement would carry
-     * a receipt against nothing, and the money would be neither owed nor
-     * collected anywhere. The payment comes off first.
-     *
-     * @throws ValidationException
-     */
+    /** @throws ValidationException */
     public function delete(Invoice $invoice): void
     {
         DB::transaction(function () use ($invoice): void {
@@ -220,27 +152,7 @@ class BillingService
         });
     }
 
-    /**
-     * Settling is a verb, not a status a client gets to set directly.
-     *
-     * It writes `paid`, which used to be `delivered` — the word for a
-     * closed-out haul, borrowed for want of a better one. Sharing a value with
-     * deliveries meant no page could add up money that had actually arrived
-     * without also counting every delivered trip, which is why the Dashboard
-     * could show what was owed and never what was collected.
-     *
-     * **It now leaves a payment behind it.** It used to flip a status and
-     * stamp a date, with nothing underneath — no amount, no method, no
-     * reference to match a bank statement against. `PaymentService::settle`
-     * records the balance as a real payment and derives the status from it,
-     * so the one-click case still exists and no longer creates a document
-     * marked paid by nothing.
-     *
-     * Idempotent: settling an invoice that is already settled returns it
-     * untouched, so a second press does not move the date the money arrived.
-     *
-     * @param  array<string, mixed>  $attributes  Optional method, reference, date.
-     */
+    /** @param array<string, mixed> $attributes */
     public function settle(Invoice $invoice, array $attributes = [], ?int $userId = null): Invoice
     {
         if ($invoice->balanceCents() <= 0) {
@@ -252,20 +164,7 @@ class BillingService
         return $invoice->refresh();
     }
 
-    /**
-     * Receivables by how late they are.
-     *
-     * The report a collections call is made from, and the one the Billing page
-     * could not produce: `totals()` says what is outstanding, and outstanding
-     * money that is nine days late and outstanding money that is ninety are
-     * different problems with different phone calls behind them.
-     *
-     * Buckets are counted from the **due date**, not the issue date, and each
-     * invoice is counted at its **balance** rather than its face value — a
-     * document half-paid is half a problem.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function aging(InvoiceDirection $direction = InvoiceDirection::Receivable): array
     {
         $buckets = ['current' => 0, '1_30' => 0, '31_60' => 0, '61_90' => 0, 'over_90' => 0];
@@ -278,7 +177,6 @@ class BillingService
                 continue;
             }
 
-            // Negative days means not yet due, which is the `current` bucket.
             $daysLate = (int) now()->startOfDay()->diffInDays($invoice->due_at, false) * -1;
 
             $bucket = match (true) {
@@ -303,7 +201,6 @@ class BillingService
             $byCustomer[$name]['total_cents'] += $balance;
         }
 
-        // Worst first: whoever owes the most is the call to make.
         usort($byCustomer, static fn (array $a, array $b): int => $b['total_cents'] <=> $a['total_cents']);
 
         return [
@@ -314,39 +211,14 @@ class BillingService
         ];
     }
 
-    /**
-     * Raise the receivable for a haul that has just been delivered.
-     *
-     * The billing form still exists for everything else — retainers, payables,
-     * an adjustment somebody negotiated — but a delivery no longer waits for
-     * anybody to remember it. The amount is the price the trip was quoted at
-     * when it was booked, so the customer is invoiced what they were told,
-     * and the terms come from configuration rather than from whoever typed
-     * the due date.
-     *
-     * Three cases return null rather than a document, and each is a real one:
-     *
-     *  - **No customer.** The company's own freight. There is nobody to bill,
-     *    and an invoice addressed to nobody is worse than none.
-     *  - **No price.** A trip somebody explicitly zeroed. Billing zero pesos
-     *    puts a document in a customer's history that asks for nothing.
-     *  - **Already invoiced.** The existing document is returned untouched.
-     *    Raising a second one for the same run is the failure this is here to
-     *    prevent, and it is `trip_id` that makes it detectable at all.
-     */
     public function raiseForTrip(Trip $trip, ?CarbonInterface $at = null): ?Invoice
     {
-        // Unpriced is not "zero": it is a run nobody has agreed a figure for,
-        // and billing it — at nothing or at anything — is refused outright.
         PricingService::mustBePriced($trip);
 
         if ($trip->customer_id === null || $trip->price_cents <= 0) {
             return null;
         }
 
-        // `withTrashed`, because the unique index over (trip_id, direction)
-        // still holds a deleted document's row. A run whose invoice somebody
-        // deliberately deleted is not re-billed behind their back.
         $existing = Invoice::withTrashed()
             ->where('trip_id', $trip->id)
             ->where('direction', InvoiceDirection::Receivable->value)
@@ -356,29 +228,10 @@ class BillingService
             return $existing->trashed() ? null : $existing;
         }
 
-        // The day it was delivered — today for a run closed now, the real
-        // day for a past trip entered afterwards, so its terms run from then.
         $issued = $at !== null ? Carbon::instance($at) : now();
 
-        /**
-         * The tax, worked out from the customer being billed.
-         *
-         * The trip's price is the figure the customer was quoted, and it is
-         * the taxable base — or the gross containing the VAT, if the desk
-         * quotes all-in. Either way `TaxService` decides, so a delivery's
-         * invoice and one raised by hand carry the same arithmetic.
-         */
         $tax = $this->tax->on($trip->price_cents, $trip->customer, InvoiceDirection::Receivable);
 
-        /**
-         * The check above is a read, and two completions racing each other can
-         * both pass it. The unique index is what actually stops the second
-         * document; losing that race returns the winner's invoice rather than
-         * an error, which is what the read would have done a moment later.
-         *
-         * Savepointed, so the failed insert does not poison a transaction the
-         * caller has open around the completion.
-         */
         try {
             return DB::transaction(fn (): Invoice => Invoice::create([
                 'customer_id' => $trip->customer_id,
@@ -391,19 +244,13 @@ class BillingService
                 ...$tax->columns(),
             ]));
         } catch (UniqueConstraintViolationException $e) {
-            // Not this index (the number's, say) — not ours to swallow.
             return Invoice::where('trip_id', $trip->id)
                 ->where('direction', InvoiceDirection::Receivable->value)
                 ->first() ?? throw $e;
         }
     }
 
-    /**
-     * Receivables and payables side by side — the two numbers the Billing
-     * page leads with, plus what has actually been collected.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function totals(): array
     {
         $receivable = $this->invoices->outstanding(InvoiceDirection::Receivable);
@@ -412,20 +259,12 @@ class BillingService
         return [
             'receivable_cents' => $receivable,
             'payable_cents' => $payable,
-            // Positive means the business is owed more than it owes.
             'net_position_cents' => $receivable - $payable,
-            // Money in, as against money merely billed.
             'collected_cents' => $this->invoices->collected(InvoiceDirection::Receivable),
             'currency' => 'PHP',
         ];
     }
 
-    /**
-     * Move pending invoices past their due date to `overdue`.
-     *
-     * The same reasoning as trips: the fact is derived from the clock, so
-     * something has to walk the table for the stored status to stay honest.
-     */
     public function reconcileOverdue(): int
     {
         $count = 0;

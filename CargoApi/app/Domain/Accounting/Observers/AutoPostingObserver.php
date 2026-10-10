@@ -22,26 +22,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
 use Throwable;
 
-/**
- * Keeps the books following the records, as they are saved.
- *
- * One observer for every model that posts itself — and for the few that do not
- * but change what another one posts: a maintenance job decides how much of a
- * sheet day's Maintenance is a garage's bill, a trip's frozen commission is the
- * fleet's income on a partner's run, an allocation is part of its payment.
- *
- * **After the commit**, not inside it. The records that post are written in
- * steps — a payment and then its allocations, a partner payout and then the
- * runs it settles — and the posting has to see the finished set. Syncing after
- * the commit sees exactly what the next reader will; and because `sync` is
- * idempotent, the several events a single save fires cost one posting and a
- * few no-ops.
- *
- * **A failure is reported, never thrown.** By the time this runs the record is
- * saved; failing the request for the books' sake would tell the user their
- * delivery did not go through when it did. `cargo:accounting-backfill` puts
- * anything missed right.
- */
 class AutoPostingObserver implements ShouldHandleEventsAfterCommit
 {
     public function __construct(private readonly AutoPostingService $posting) {}
@@ -81,11 +61,7 @@ class AutoPostingObserver implements ShouldHandleEventsAfterCommit
         }
     }
 
-    /**
-     * The records whose postings this change can move.
-     *
-     * @return iterable<Model>
-     */
+    /** @return iterable<Model> */
     private function affected(Model $model): iterable
     {
         if (AutoPostingService::handles($model)) {
@@ -96,7 +72,6 @@ class AutoPostingObserver implements ShouldHandleEventsAfterCommit
 
         switch (true) {
             case $model instanceof LedgerEntry:
-                // A day's crew pay is part of what a paid run over it counts.
                 yield from $this->paidRunsCovering([$model->date, $previous['date'] ?? null]);
                 break;
 
@@ -107,8 +82,6 @@ class AutoPostingObserver implements ShouldHandleEventsAfterCommit
                 break;
 
             case $model instanceof Invoice && $model->direction === InvoiceDirection::Payable:
-                // Paying it moves an expense, and a job carrying it moves how
-                // much of that day's Maintenance was cash.
                 yield from $this->paymentsFor([$model->getKey()]);
                 yield from $this->sheetDaysFor(MaintenanceJob::query()->where('invoice_id', $model->getKey())->get());
                 break;
@@ -136,7 +109,7 @@ class AutoPostingObserver implements ShouldHandleEventsAfterCommit
         }
     }
 
-    /** @param  array<int, mixed>  $invoiceIds */
+    /** @param array<int, mixed> $invoiceIds */
     private function paymentsFor(array $invoiceIds): iterable
     {
         $ids = array_values(array_filter($invoiceIds));
@@ -150,12 +123,7 @@ class AutoPostingObserver implements ShouldHandleEventsAfterCommit
             ->get();
     }
 
-    /**
-     * The sheet days a job's cost landed on — where it is now and, when its
-     * date moved, where it was.
-     *
-     * @param  iterable<MaintenanceJob>  $jobs
-     */
+    /** @param iterable<MaintenanceJob> $jobs */
     private function sheetDaysFor(iterable $jobs, mixed $previousDate = null): iterable
     {
         foreach ($jobs as $job) {
@@ -174,7 +142,7 @@ class AutoPostingObserver implements ShouldHandleEventsAfterCommit
         }
     }
 
-    /** @param  array<int, mixed>  $dates */
+    /** @param array<int, mixed> $dates */
     private function paidRunsCovering(array $dates): iterable
     {
         foreach (array_unique(array_map(static fn ($d): string => Carbon::parse($d)->toDateString(), array_filter($dates))) as $day) {

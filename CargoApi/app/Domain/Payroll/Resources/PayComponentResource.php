@@ -8,16 +8,7 @@ use App\Domain\Payroll\Models\PayComponent;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use Illuminate\Http\Request;
 
-/**
- * One row of the firm's salary structure.
- *
- * The labels and the sentence ride along with the values, as they do on the
- * company's deduction schedule, so a screen offering the choice does not keep
- * its own copy of what "monthly, all on the second cutoff" means. Two clients
- * paraphrasing a payroll rule is two chances to paraphrase it wrongly.
- *
- * @mixin PayComponent
- */
+/** @mixin PayComponent */
 class PayComponentResource extends ApiResource
 {
     public function toArray(Request $request): array
@@ -38,17 +29,8 @@ class PayComponentResource extends ApiResource
             'schedule' => $this->schedule->value,
             'schedule_label' => $this->schedule->label(),
             'schedule_detail' => $this->schedule->detail(),
-            /** Is the amount a month's worth, or one payslip's? */
             'is_monthly' => $this->schedule->isMonthly(),
 
-            /**
-             * Whether this goes into the tax base.
-             *
-             * Reported through the model rather than off the column, so a
-             * deduction always reads false — the flag is meaningless there and
-             * a screen showing "taxable" beside a uniform deduction would be
-             * asking somebody to answer a question that has no answer.
-             */
             'taxable' => $this->isTaxable(),
 
             'status' => $this->status?->value,
@@ -56,13 +38,6 @@ class PayComponentResource extends ApiResource
             'notes' => $this->notes,
             'currency' => 'PHP',
 
-            /**
-             * How many people are on it.
-             *
-             * Only where it has been counted — this is what tells an office
-             * that deleting a component will retire it instead, and it would be
-             * a query per row if it were loaded unconditionally.
-             */
             'assignment_count' => $this->whenCounted('assignments'),
 
             ...$this->stamps(),

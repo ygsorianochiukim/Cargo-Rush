@@ -11,11 +11,6 @@ import { fmt } from '../../shared/format';
 import { SkeletonRows } from '../../shared/states';
 import { StatusPill } from '../../shared/status-pill';
 
-/**
- * GPS Dashboard — DESIGN.md section 5.1.
- * Location monitoring, details display and ETA. Positions are pushed by the
- * driver app (section 5.4); this screen only reads them.
- */
 @Component({
   selector: 'app-gps',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -47,7 +42,6 @@ export class GpsPage {
 
   protected readonly fmt = fmt;
 
-  /** Deterministic pseudo-position so the placeholder map is stable per unit. */
   protected pin(u: GpsUnit, axis: 'x' | 'y'): number {
     let h = 0;
     for (const ch of u.id + axis) h = (h * 31 + ch.charCodeAt(0)) % 1000;

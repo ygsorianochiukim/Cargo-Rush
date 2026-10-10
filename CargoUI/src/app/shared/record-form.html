@@ -17,11 +17,6 @@
       </p>
     }
 
-    <!--
-      `visibleFields()`, not `spec.fields`: a field can declare `showWhen` and
-      appear only once the rest of the form calls for it. The control stays in
-      the group either way — hiding one drops its validators, not its value.
-    -->
     <form [formGroup]="form()" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
       @for (field of visibleFields(); track field.key) {
         <app-field
@@ -59,8 +54,6 @@
               />
             }
             @case ('money') {
-              <!-- Entered in pesos and converted to centavos on submit, so
-                   nobody has to type 307210 for ₱3,072.10. -->
               <input
                 type="number"
                 step="0.01"
@@ -71,9 +64,6 @@
               />
             }
             @case ('file') {
-              <!-- Not bound with `formControlName`: a file input's value is
-                   read-only, so the control holds the `File` the change handler
-                   puts there rather than a path the browser will not accept. -->
               <input
                 type="file"
                 [attr.accept]="field.accept ?? null"

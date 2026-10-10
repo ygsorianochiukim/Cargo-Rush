@@ -10,18 +10,6 @@ import { Column, DataTable } from '../../shared/data-table';
 import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 
-/**
- * Sales Report — takings by day, week or month.
- *
- * One endpoint behind three views, because they are the same roll-up over
- * different buckets; splitting them would let the three disagree about what a
- * month was worth. The window follows the granularity, which is why switching
- * the selector refetches rather than re-bucketing what is already loaded — a
- * year of months cannot be derived from thirty days of history.
- *
- * The figures come off the ledger, so they agree with Profitability and the
- * Quarterly Summary by construction rather than by coincidence.
- */
 @Component({
   selector: 'app-sales',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -51,17 +39,12 @@ export class SalesPage {
   protected readonly totals = computed(() => this.report()?.totals ?? null);
   protected readonly currency = computed(() => this.report()?.currency ?? 'PHP');
 
-  /**
-   * The last 14 buckets, because a column chart with sixty bars in it is a
-   * texture rather than a chart. The table underneath carries the whole range.
-   */
   protected readonly bars = computed<Bar[]>(() => {
     const series = this.series().slice(-14);
     const best = this.totals()?.best?.key ?? null;
 
     return series.map((bucket) => ({
       key: bucket.key,
-      // Trimmed to the day or month, since the axis already says which period.
       label: this.shortLabel(bucket),
       value: bucket.sales_cents,
       highlight: bucket.key === best,
@@ -90,7 +73,6 @@ export class SalesPage {
     return margin === null || margin === undefined ? '—' : `${Math.round(margin * 100)}%`;
   });
 
-  /** A loss is a first-class outcome here, not an error state. */
   protected readonly losing = computed(() => (this.totals()?.net_cents ?? 0) < 0);
 
   protected readonly averageNoun = computed(() =>
@@ -105,6 +87,5 @@ export class SalesPage {
     { label: 'Net', kind: 'num', value: (b) => fmt.money(b.net_cents, this.currency()) },
   ];
 
-  /** Newest first in the table, oldest first in the chart — each reads naturally. */
   protected readonly tableRows = computed(() => [...this.series()].reverse());
 }

@@ -16,15 +16,8 @@ use App\Domain\Trip\Repositories\TripRepository;
 use App\Domain\Vehicle\Repositories\VehicleRepository;
 use Illuminate\Support\Carbon;
 
-/**
- * The consolidated view — DESIGN.md section 5.1, Dashboard.
- *
- * This module owns no table. It composes the other modules' repositories, so
- * a KPI here is by construction the same number the module page prints.
- */
 class DashboardService
 {
-    /** The labels the fleet doughnut prints against each status. */
     private const FLEET_LABELS = [
         'active' => 'On the road',
         'available' => 'Idle at depot',
@@ -39,18 +32,10 @@ class DashboardService
         private readonly IncidentRepository $incidents,
         private readonly DeliveryLogRepository $deliveries,
         private readonly InvoiceRepository $invoices,
-        // Composed, not reimplemented: the two money formulas live in
-        // FinanceService and a KPI here must be the same arithmetic the
-        // Profitability page prints.
         private readonly FinanceService $finance,
     ) {}
 
-    /**
-     * The four tiles. `delta` is null when there is no prior period to
-     * compare against — the client renders no arrow rather than a fake 0%.
-     *
-     * @return array<int, array<string, mixed>>
-     */
+    /** @return array<int, array<string, mixed>> */
     public function kpis(): array
     {
         $counts = $this->trips->countsByStatus();
@@ -90,14 +75,7 @@ class DashboardService
         ];
     }
 
-    /**
-     * Where the fleet is, by status.
-     *
-     * Every bucket is emitted even at zero, so the doughnut keeps the same
-     * four segments and the same colours from one refresh to the next.
-     *
-     * @return array<int, array<string, mixed>>
-     */
+    /** @return array<int, array<string, mixed>> */
     public function fleetBreakdown(): array
     {
         $counts = $this->vehicles->countsByStatus();
@@ -112,14 +90,7 @@ class DashboardService
             ->all();
     }
 
-    /**
-     * Deliveries closed out per day for the last week.
-     *
-     * Days with none are filled in as zero: a gap in a bar chart reads as
-     * "no data", and a quiet Sunday is data.
-     *
-     * @return array<int, array<string, mixed>>
-     */
+    /** @return array<int, array<string, mixed>> */
     public function deliveriesPerDay(int $days = 7): array
     {
         $rows = $this->deliveries->deliveredPerDay($days)->keyBy('day');
@@ -138,12 +109,7 @@ class DashboardService
             ->all();
     }
 
-    /**
-     * The activity feed — the most recent things that actually happened,
-     * merged from three modules and cut to the newest few.
-     *
-     * @return array<int, array<string, mixed>>
-     */
+    /** @return array<int, array<string, mixed>> */
     public function activity(int $limit = 8): array
     {
         $deliveries = $this->deliveries->query()
@@ -197,34 +163,7 @@ class DashboardService
             ->all();
     }
 
-    /**
-     * Money owed against money collected — the two figures the Dashboard was
-     * missing entirely.
-     *
-     * Until deliveries raised their own receivables there was nothing honest
-     * to put here: the only record of what a haul earned was a figure somebody
-     * had typed into a ledger row, and the only record of what had been
-     * *billed* was whatever invoices somebody had remembered to raise. Neither
-     * could be added up and called the business's position.
-     *
-     * Three numbers, and they answer three different questions:
-     *
-     *  - **pending_payment_cents** — invoiced and not yet settled, overdue
-     *    included. What is out there.
-     *  - **successful_payment_cents** — settled. What actually arrived.
-     *  - **income_cents** — what the fleet earned on the road over the window,
-     *    from the ledger. Deliberately not the same as either: a run delivered
-     *    on the last day of the month is income now and cash in thirty days,
-     *    and a dashboard that conflated the two would call a good month a
-     *    cash-flow problem, or the reverse.
-     *
-     * `overdue_cents` is carried separately rather than deducted, because it is
-     * a subset of what is pending and not a fourth bucket — it is the part of
-     * it that needs chasing. It is read from the due date, so it does not wait
-     * on the overdue sweep having run.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function receivables(int $days = 30): array
     {
         $counts = $this->invoices->countsByStatus(InvoiceDirection::Receivable);
@@ -232,14 +171,6 @@ class DashboardService
         $from = now()->subDays($days - 1)->startOfDay();
         $to = now()->endOfDay();
 
-        /**
-         * The same roll-up the Quarterly Summary reads, over this window.
-         *
-         * It used to be `periodTotals()` over the truck rows alone, which left
-         * out both the overhead and the supplier bills — so the tile here and
-         * the summary page reported different net income for the same days,
-         * and the tile was always the flattering one.
-         */
         $ledger = $this->finance->periodRollup(
             Carbon::instance($from),
             Carbon::instance($to),
@@ -248,35 +179,15 @@ class DashboardService
         $collection = $this->invoices->collectionBetween($from, $to);
 
         return [
-            /**
-             * Customer invoices awaiting payment — and only those.
-             *
-             * Not the Finance Summary's receivables, which also count the
-             * commission partner truckers owe the fleet on runs they billed
-             * themselves. The two figures differ on purpose, so the card says
-             * "Invoices awaiting payment" rather than "Receivables".
-             */
             'pending_payment_cents' => $this->invoices->outstanding(InvoiceDirection::Receivable),
             'successful_payment_cents' => $this->invoices->collected(InvoiceDirection::Receivable),
             'overdue_cents' => $this->invoices->overdueTotal(InvoiceDirection::Receivable),
-            // Company trucks' takings plus the commission on partners' runs.
             'income_cents' => (int) $ledger['total_income_cents'],
             'expenses_cents' => (int) $ledger['total_expenses_cents'],
             'net_income_cents' => (int) $ledger['net_income_cents'],
-            // Part-paid documents are still awaiting payment; leaving them
-            // out made the count disagree with the amount above it.
             'pending_count' => ($counts[StatusValue::Pending->value] ?? 0)
                 + ($counts[StatusValue::Partial->value] ?? 0)
                 + ($counts[StatusValue::Overdue->value] ?? 0),
-            /**
-             * The share of the window's billing that has come in.
-             *
-             * Worked out here, from `collectionBetween()`, rather than by the
-             * client dividing the two all-time figures above — see there for
-             * why both halves have to be the same documents, over the same
-             * days, net of withholding. Null when nothing was billed in the
-             * window: that is nothing to report, not a 0% collection rate.
-             */
             'collection' => [
                 ...$collection,
                 'rate_pct' => $collection['billed_cents'] === 0

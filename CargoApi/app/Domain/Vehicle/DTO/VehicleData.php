@@ -19,13 +19,6 @@ final class VehicleData extends Data
         public readonly ?string $driver_id = null,
         public readonly ?int $odometer_km = null,
         public readonly ?int $next_service_km = null,
-        /**
-         * On what terms this truck runs, and who is paid for it.
-         *
-         * Every unit dispatches identically whoever owns the wheels; these
-         * decide only where the money goes when a run closes. See
-         * `VehicleArrangement`.
-         */
         public readonly ?VehicleArrangement $arrangement = null,
         public readonly ?int $wheels = null,
         public readonly ?string $owner_name = null,
@@ -49,8 +42,6 @@ final class VehicleData extends Data
             arrangement: isset($attributes['arrangement'])
                 ? VehicleArrangement::from($attributes['arrangement'])
                 : null,
-            // Cast only when present: `null` is a real instruction on a PATCH
-            // — "this truck has no rent" — and `(int) null` would write zero.
             wheels: isset($attributes['wheels']) ? (int) $attributes['wheels'] : null,
             owner_name: $attributes['owner_name'] ?? null,
             owner_contact: $attributes['owner_contact'] ?? null,

@@ -4,17 +4,9 @@ import { Supplier } from '../../models/supplier/supplier.model';
 import { RecordSpec, statusOptions } from '../../shared/record-form-spec';
 import { SupplierService } from './supplier.service';
 
-/**
- * Suppliers.
- *
- * What has been spent at one is absent on purpose: the API adds it up from the
- * expenses, the maintenance jobs and the bills that name them, so a figure
- * typed here would be a number that can disagree with all three.
- */
 export function supplierSpec(): RecordSpec<Supplier> {
   const suppliers = inject(SupplierService);
 
-  // Active categories only; the list itself is kept on Access Control.
   const categories: { value: string; label: string }[] = [];
 
   suppliers.categories(true).subscribe((rows) => {
@@ -65,14 +57,6 @@ export function supplierSpec(): RecordSpec<Supplier> {
         kind: 'text',
         wide: true,
         placeholder: 'Engine oil, filters, brake parts',
-        /**
-         * A sentence rather than a category, and deliberately.
-         *
-         * A garage that also sells tyres and lends a flatbed is three
-         * categories, and making somebody choose one would file the record
-         * wrong in a way nobody could correct later. What is actually needed is
-         * enough to recognise who to ring.
-         */
         hint: 'In your own words. Enough to tell one shop from another at a glance.',
       },
       { key: 'note', label: 'Note', kind: 'textarea', wide: true },
@@ -101,8 +85,6 @@ export function supplierSpec(): RecordSpec<Supplier> {
     toPayload: (values) => ({
       name: values['name'] as string,
       category_id: (values['category_id'] as string) || null,
-      // Empty means "not recorded", which is a null rather than an empty
-      // string — the same boundary every other optional text field crosses.
       contact: (values['contact'] as string) || null,
       address: (values['address'] as string) || null,
       supplies: (values['supplies'] as string) || null,

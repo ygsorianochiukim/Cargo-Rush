@@ -15,16 +15,6 @@ use Database\Seeders\RoleSeeder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
-/**
- * An owner-operator signing themselves up, and the waiting room they land in.
- *
- * The third public registration, and the one with the most at stake. A bad
- * shipper sign-up wastes a desk's afternoon; a bad trucker sign-up is a
- * stranger driving away with somebody's cargo. So the whole of this feature
- * turns on one column — `truckers.status` — and these tests hold the line it
- * draws from both sides: a registration is real and usable the moment it is
- * approved, and reaches nothing at all until it is.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -39,8 +29,6 @@ beforeEach(function (): void {
         'email' => 'boyet@example.ph',
         'password' => 'ten-wheeler-2026',
         'password_confirmation' => 'ten-wheeler-2026',
-        // No fleet. A trucker registers with the platform's own, wherever in
-        // the country they are — see `TruckerRegistrationService::carrier()`.
         'business_name' => 'Aquino Trucking Services',
         'licence_no' => 'N01-23-456789',
         'device_name' => 'pixel-8',
@@ -55,8 +43,6 @@ describe('signing up', function (): void {
         $user = User::where('email', 'boyet@example.ph')->firstOrFail();
 
         expect($user->role)->toBe(Role::Trucker->value)
-            // Belongs to the fleet they chose from the first second — unlike a
-            // shipper, who belongs to nobody until their first request.
             ->and($user->company_id)->toBe($this->company->getKey());
 
         $trucker = Trucker::query()->firstWhere('user_id', $user->getKey());
@@ -66,17 +52,13 @@ describe('signing up', function (): void {
             ->and($trucker->business_name)->toBe('Aquino Trucking Services')
             ->and($trucker->licence_no)->toBe('N01-23-456789');
 
-        // Trucks come after approval, from the app — not at sign-up.
         expect(TruckerVehicle::query()->where('trucker_id', $trucker->getKey())->count())->toBe(0);
 
-        // Answers signed in, in the shape a login does, so the app carries on
-        // through one code path rather than two.
         $response->assertJsonPath('meta.token_type', 'Bearer')
             ->assertJsonPath('meta.trucker_status', StatusValue::Pending->value);
     });
 
     it('lands pending, whatever the payload says', function (): void {
-        // The one thing a registration must not be able to do is vet itself.
         ($this->signUp)(['status' => StatusValue::Active->value])->assertCreated();
 
         $trucker = Trucker::query()->firstWhere('licence_no', 'N01-23-456789');
@@ -89,9 +71,6 @@ describe('signing up', function (): void {
     it('tells the desk somebody is waiting', function (): void {
         ($this->signUp)()->assertCreated();
 
-        // Not a courtesy: the row sits `pending` until a human acts, so a
-        // notification nobody sends is a partner watching an empty board
-        // indefinitely.
         expect(NotificationItem::query()->where('title', 'New trucker registered')->exists())->toBeTrue();
     });
 
@@ -106,9 +85,6 @@ describe('signing up', function (): void {
     it('refuses the same licence twice at the same fleet, in a sentence', function (): void {
         ($this->signUp)()->assertCreated();
 
-        // A licence is one person, and one person is one partner per haulier.
-        // The unique index guarantees it; this asserts somebody registering for
-        // the second time is told why rather than handed a 500.
         ($this->signUp)(['email' => 'boyet2@example.ph'])
             ->assertStatus(422);
 
@@ -120,9 +96,6 @@ describe('signing up', function (): void {
 
         $rival = $this->makeCompany('Bay Coast Logistics');
 
-        // The licence index is per company on purpose: a man on one haulier's
-        // books and partnered with another is ordinary, and a system-wide index
-        // would refuse it with a message about a duplicate.
         ($this->signUp)([
             'email' => 'boyet@baycoast.ph',
             'company_id' => $rival->getKey(),
@@ -132,11 +105,6 @@ describe('signing up', function (): void {
     });
 
     it('never asks which fleet, and lands them on this one', function (): void {
-        // The form used to offer the public carrier directory, and it was the
-        // wrong question twice over: it asked somebody with a truck to pick a
-        // haulier before they had any basis to, and it implied a choice the
-        // business does not offer. Choosing happens on the customer's side,
-        // per load.
         ($this->signUp)()->assertCreated();
 
         $user = User::where('email', 'boyet@example.ph')->firstOrFail();
@@ -172,7 +140,6 @@ describe('signing up', function (): void {
     });
 
     it('takes an owner with no licence, and two of them do not clash', function (): void {
-        // The owner may never drive; each of their drivers carries a licence.
         ($this->signUp)(['licence_no' => ''])->assertCreated();
         ($this->signUp)(['licence_no' => null, 'email' => 'second@example.ph'])->assertCreated();
 
@@ -195,8 +162,6 @@ describe('the waiting room', function (): void {
     });
 
     it('answers an empty board rather than an error', function (): void {
-        // An empty list *with a reason*. A 403 here would read as a broken app;
-        // the meta is what lets the screen say "we are checking your licence".
         $this->actingAs($this->truckerUser)
             ->getJson('/api/v1/partner/jobs')
             ->assertOk()
@@ -220,14 +185,10 @@ describe('the waiting room', function (): void {
             ->assertJsonPath('data.role', Role::Trucker->value)
             ->assertJsonPath('data.trucker_status', StatusValue::Pending->value)
             ->assertJsonPath('data.trucker_can_take_work', false)
-            // The rate is stated up front, so the board can quote a take
-            // without a second call.
             ->assertJsonPath('data.commission_bp', 1200);
     });
 
     it('cannot reach the office roster', function (): void {
-        // A partner is not staff. `truckers.view` is the desk's permission and
-        // the trucker role holds none of it.
         $this->actingAs($this->truckerUser)->getJson('/api/v1/truckers')->assertForbidden();
         $this->actingAs($this->truckerUser)
             ->postJson("/api/v1/truckers/{$this->trucker->id}/approve")
@@ -235,9 +196,6 @@ describe('the waiting room', function (): void {
     });
 
     it('cannot see the trip board', function (): void {
-        // The whole board, as against their own work. A partner holds no
-        // `trips.view`, and that is what keeps one forgotten `where` from
-        // showing them every load in the company.
         $this->actingAs($this->truckerUser)->getJson('/api/v1/trips')->assertForbidden();
     });
 });
@@ -256,12 +214,8 @@ describe('the desk deciding', function (): void {
             ->assertOk()
             ->assertJsonPath('data.status', StatusValue::Active->value);
 
-        // Approved but not yet online — the two flags are separate, and the
-        // office's decision does not flip the partner's own switch.
         expect($this->trucker->refresh()->canTakeWork())->toBeFalse();
 
-        // Approved, they can now put a truck on the books — which sign-up no
-        // longer asks for — and with it and the switch on, take work.
         Storage::fake(config('cargo.trucks.disk'));
 
         $truckId = $this->actingAs($this->truckerUser)
@@ -274,7 +228,6 @@ describe('the desk deciding', function (): void {
             ->assertCreated()
             ->json('data.id');
 
-        // And once Cargo Rush has checked the truck from its photographs.
         $this->actingAs($this->admin)
             ->postJson("/api/v1/truckers/{$this->trucker->id}/vehicles/{$truckId}/verify")
             ->assertOk();
@@ -308,9 +261,6 @@ describe('the desk deciding', function (): void {
             ->assertOk()
             ->assertJsonPath('data.status', StatusValue::Inactive->value);
 
-        // The switch is deliberately left alone — suspending sets the standing,
-        // and flipping `is_online` here would simply be undone next time they
-        // opened the app. What stops them is `canTakeWork()` needing both.
         expect($this->trucker->refresh()->canTakeWork())->toBeFalse();
 
         $this->actingAs($this->truckerUser)
@@ -319,11 +269,6 @@ describe('the desk deciding', function (): void {
     });
 
     it('has no rate of its own to set — the roster reads the fleet rate', function (): void {
-        // There was an endpoint here, and a number field on the partner's
-        // detail screen behind it. Both are gone: the commission is one
-        // standing term for everybody the firm hauls with, set on the settings
-        // card with the tariff and the tax rates. What the roster shows is
-        // that rate, and moving it moves what every partner reads.
         $this->actingAs($this->admin)
             ->postJson("/api/v1/truckers/{$this->trucker->id}/rate", ['commission_bp' => 800])
             ->assertNotFound();
@@ -357,9 +302,6 @@ describe('tenancy', function (): void {
             'company_id' => $rival->getKey(),
         ]));
 
-        // The partner exists, and belongs to somebody else. A roster that
-        // answered with them would be the one failure the whole tenancy design
-        // exists to prevent.
         $this->actingAs($rivalAdmin)
             ->getJson('/api/v1/truckers')
             ->assertOk()

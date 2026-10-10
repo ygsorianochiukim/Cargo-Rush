@@ -13,36 +13,13 @@ final class CustomerData extends Data
     public function __construct(
         public readonly ?string $name = null,
         public readonly ?string $contact = null,
-        /**
-         * Where the firm's loads leave from.
-         *
-         * Arrives filled in when a shipper signed themselves up and pinned
-         * their store; editable here because the record is the haulier's to
-         * keep straight, and a customer who has moved warehouse will tell the
-         * desk long before they think to change it in the app.
-         */
         public readonly ?string $address = null,
         public readonly ?float $latitude = null,
         public readonly ?float $longitude = null,
         public readonly ?float $rating = null,
         public readonly ?StatusValue $status = null,
-        /**
-         * The address the firm signs in with.
-         *
-         * Deliberately absent from `toArray()`: there is no `email` column on
-         * `customers`, because the login is a `users` row — the same split the
-         * driver has, where the account and the business record are two
-         * things. `CustomerService` reads this to make that account, and left
-         * empty it falls back to the contact when the contact is an address.
-         */
         public readonly ?string $email = null,
 
-        /**
-         * How this firm is taxed.
-         *
-         * Real columns, unlike `email` above — they belong to the customer
-         * record, and every invoice raised for the firm reads them.
-         */
         public readonly ?string $tin = null,
         public readonly ?VatTreatment $vat_treatment = null,
         public readonly ?bool $withholds_tax = null,
@@ -64,8 +41,6 @@ final class CustomerData extends Data
             vat_treatment: isset($attributes['vat_treatment'])
                 ? VatTreatment::from($attributes['vat_treatment'])
                 : null,
-            // Cast rather than passed through: multipart and query strings
-            // deliver "0" and "false" as strings, and both are truthy.
             withholds_tax: isset($attributes['withholds_tax'])
                 ? filter_var($attributes['withholds_tax'], FILTER_VALIDATE_BOOL)
                 : null,

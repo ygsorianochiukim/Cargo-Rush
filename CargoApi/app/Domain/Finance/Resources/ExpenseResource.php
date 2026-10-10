@@ -8,9 +8,7 @@ use App\Domain\Finance\Models\Expense;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use Illuminate\Http\Request;
 
-/**
- * @mixin Expense
- */
+/** @mixin Expense */
 class ExpenseResource extends ApiResource
 {
     public function toArray(Request $request): array
@@ -22,16 +20,8 @@ class ExpenseResource extends ApiResource
             'category_key' => $this->category?->key,
             'category_icon' => $this->category?->icon,
             'truck_id' => $this->truck_id,
-            // Null reads as overhead in the clients, which is what it means.
             'truck_label' => $this->truck?->label,
 
-            /**
-             * Who it was bought from.
-             *
-             * The name rides along so a list can print it without a query per
-             * row; it is null for the one-offs that only ever had a `payee`,
-             * and the screen falls back to that.
-             */
             'supplier_id' => $this->supplier_id,
             'supplier_name' => $this->supplier?->name,
             'trip_id' => $this->trip_id,

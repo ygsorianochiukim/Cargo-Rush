@@ -16,17 +16,12 @@ use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * Access control — roles, what each reaches, and the job titles behind them.
- */
 class AccessController extends ApiController
 {
     public function __construct(
         private readonly AccessService $access,
         private readonly AccessRepository $repository,
     ) {}
-
-    /* --------------------------------------------------------------- Roles */
 
     public function roles(Request $request): JsonResponse
     {
@@ -55,18 +50,10 @@ class AccessController extends ApiController
         return $this->noContent();
     }
 
-    /**
-     * The permission vocabulary, grouped by module.
-     *
-     * Read-only on purpose: a permission is only real if code checks for it, so
-     * one invented here would gate nothing. Adding one is a release.
-     */
     public function permissions(): JsonResponse
     {
         return $this->payload($this->repository->permissionGroups());
     }
-
-    /* ----------------------------------------------------------- Positions */
 
     public function positions(Request $request): JsonResponse
     {
@@ -90,13 +77,6 @@ class AccessController extends ApiController
         );
     }
 
-    /**
-     * Deleting a position somebody holds retires it instead.
-     *
-     * A 200 with the retired row rather than a 204, so the client can say what
-     * happened — a row that vanishes on some presses and greys out on others,
-     * with no explanation, reads as a bug.
-     */
     public function destroyPosition(Position $position): JsonResponse
     {
         if ($this->access->deletePosition($position)) {

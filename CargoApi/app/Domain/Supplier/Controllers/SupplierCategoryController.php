@@ -12,12 +12,6 @@ use App\Domain\Supplier\Resources\SupplierCategoryResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * The kinds of supplier — kept on Access Control.
- *
- * A category somebody has filed suppliers under is retired rather than
- * deleted, so an old shop never loses its label; one nobody used goes.
- */
 class SupplierCategoryController extends ApiController
 {
     public function index(Request $request): JsonResponse

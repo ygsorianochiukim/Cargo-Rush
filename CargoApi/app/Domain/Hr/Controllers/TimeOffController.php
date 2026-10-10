@@ -18,13 +18,6 @@ use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * Leave and undertime — asking, and deciding.
- *
- * Approving is a verb rather than a PATCH on `status`, because it also records
- * who decided and when. A status a client could set directly would let a
- * request be approved by nobody.
- */
 class TimeOffController extends ApiController
 {
     public function __construct(
@@ -32,13 +25,10 @@ class TimeOffController extends ApiController
         private readonly TimeOffRepository $repository,
     ) {}
 
-    /** The desk's queue and what it costs the fleet today. */
     public function overview(): JsonResponse
     {
         return $this->payload($this->timeOff->overview());
     }
-
-    /* --------------------------------------------------------------- Leave */
 
     public function leaveIndex(Request $request): JsonResponse
     {
@@ -87,8 +77,6 @@ class TimeOffController extends ApiController
 
         return $this->noContent();
     }
-
-    /* ----------------------------------------------------------- Undertime */
 
     public function undertimeIndex(Request $request): JsonResponse
     {
@@ -140,15 +128,7 @@ class TimeOffController extends ApiController
         return $this->noContent();
     }
 
-    /**
-     * The filters both lists honour.
-     *
-     * `status` is passed straight through rather than going via the shared
-     * `filters()` helper, because these tables use `RequestStatus` and the
-     * shared vocabulary has no word for "approved".
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     private function timeOffFilters(Request $request): array
     {
         return array_filter(

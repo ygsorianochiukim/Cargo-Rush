@@ -16,14 +16,6 @@ use Database\Seeders\RoleSeeder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
-/**
- * A trucker's truck is photographed on the way in and checked by Cargo Rush
- * before it can take a load.
- *
- * Front, left, right, back and the plate are required; the engine bay is
- * optional. Until the office verifies it the truck is on the books but off the
- * road, whatever the trucker's own switch says.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);

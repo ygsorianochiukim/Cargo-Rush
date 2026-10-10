@@ -11,7 +11,6 @@ import { ListToolbar } from '../../shared/list-toolbar';
 import { recordList } from '../../shared/record-list';
 import { ErrorState } from '../../shared/states';
 
-/** Incident Management — DESIGN.md section 5.1. */
 @Component({
   selector: 'app-incidents',
   changeDetection: ChangeDetectionStrategy.OnPush,

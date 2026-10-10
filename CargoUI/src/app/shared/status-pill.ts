@@ -3,10 +3,6 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 import { StatusValue } from '../models/shared/status.model';
 import { TONE_CLASS, TONE_DOT, statusLabel, toneFor } from './status';
 
-/**
- * Status is never colour-alone: the pill always carries its text label, and a
- * dot gives a second, non-colour cue (DESIGN.md sections 1 and 9).
- */
 @Component({
   selector: 'app-status-pill',
   changeDetection: ChangeDetectionStrategy.OnPush,

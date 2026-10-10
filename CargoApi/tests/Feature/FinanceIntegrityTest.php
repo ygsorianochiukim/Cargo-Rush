@@ -38,13 +38,6 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
-/**
- * The reconciliation fixes — each figure counted once, and every screen that
- * shows it agreeing with the others.
- *
- * Grouped by the bug each one pins. Money is centavos throughout; ₱10,000 is
- * 1_000_000.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -64,7 +57,6 @@ beforeEach(function (): void {
         ...$terms,
     ]);
 
-    /** Book it, run it, close it out on a fleet unit. */
     $this->haul = function (Vehicle $vehicle, int $priceCents = 1_000_000): Trip {
         $trip = Trip::create([
             'customer_id' => $this->customer->getKey(),
@@ -83,7 +75,6 @@ beforeEach(function (): void {
         return $trip->refresh();
     };
 
-    /** A roll-up over a named window, as Profitability reads it. */
     $this->period = fn (string $from, string $to) => $this->actingAs($this->admin)
         ->getJson("/api/v1/finance/profitability?from={$from}&to={$to}")
         ->assertOk()
@@ -94,7 +85,6 @@ beforeEach(function (): void {
         ->assertOk()
         ->json('data');
 
-    /** A supplier bill, raised and optionally paid on a day. */
     $this->bill = fn (int $cents, string $issued = '2026-07-01') => $this->actingAs($this->admin)
         ->postJson('/api/v1/billing', [
             'payee' => 'Davao Lubes',
@@ -130,8 +120,6 @@ describe('a revenue-share truck (fix 1)', function (): void {
         $today = now()->toDateString();
         $totals = ($this->period)($today, $today)['totals'];
 
-        // The owner's ₱8,500 is an expense on the sheet and still owed from
-        // their wallet — both true, and counted once.
         expect($totals['trip_income_cents'])->toBe(1_000_000)
             ->and($totals['owner_share_cents'])->toBe(850_000)
             ->and($totals['net_income_cents'])->toBe(150_000)
@@ -172,13 +160,11 @@ describe('payroll in Finance (fix 3)', function (): void {
             'status' => 'active', 'driver_id' => $this->driver->id,
         ]);
 
-        // What the sheet already recorded paying him in the period: ₱3,000.
         LedgerEntry::create([
             'truck_id' => $this->sheet->id, 'date' => '2026-07-10', 'driver_id' => $this->driver->id,
             'trip_income_cents' => 2_000_000, 'driver_salary_cents' => 300_000,
         ]);
 
-        /** A run for 1–15 July: ₱5,000 gross, ₱500 withheld, ₱4,500 net. */
         $this->run = function (string $status): PayRun {
             $run = PayRun::create([
                 'period_start' => '2026-07-01', 'period_end' => '2026-07-15',
@@ -209,8 +195,6 @@ describe('payroll in Finance (fix 3)', function (): void {
 
         $totals = ($this->period)('2026-07-01', '2026-07-31')['totals'];
 
-        // ₱3,000 on the sheet, ₱5,000 on the payslip for the same fortnight:
-        // the fortnight cost ₱5,000, not ₱8,000.
         expect($totals['driver_salary_cents'])->toBe(300_000)
             ->and($totals['payroll_cents'])->toBe(200_000)
             ->and($totals['total_expenses_cents'])->toBe(500_000)
@@ -236,7 +220,6 @@ describe('payroll in Finance (fix 3)', function (): void {
         expect($july['payables_cents'])->toBe(50_000)
             ->and($july['payables_already_costed_cents'])->toBe(50_000)
             ->and($july['actual_income_cents'])->toBe($july['net_income_cents'])
-            // Presumed remitted by the end of August.
             ->and($september['payables_cents'])->toBe(0);
     });
 
@@ -264,7 +247,6 @@ describe('a partner run priced VAT-inclusive (fix 4)', function (): void {
         $partner = Trucker::factory()->approved()->create(['user_id' => $user->getKey(), 'name' => 'Boyet']);
         TruckerVehicle::factory()->create(['trucker_id' => $partner->getKey()]);
 
-        // ₱11,200 all-in is ₱10,000 of haul and ₱1,200 of the BIR's VAT.
         $trip = Trip::create([
             'customer_id' => $this->customer->getKey(), 'trucker_id' => $partner->getKey(),
             'origin' => 'Iponan', 'destination' => 'Bukidnon', 'cargo' => 'Rice', 'weight_kg' => 10_000,
@@ -293,7 +275,6 @@ describe('paying a partner out (fix 5)', function (): void {
             'amount_cents' => $cents, 'occurred_on' => now()->toDateString(),
         ]);
 
-        // ₱8,800 owed on a brokered run, ₱1,200 owed back on a direct one.
         $this->earning = $row(WalletEntryKind::Earning, 880_000);
         $row(WalletEntryKind::Commission, -120_000);
     });
@@ -305,7 +286,6 @@ describe('paying a partner out (fix 5)', function (): void {
             ->and(WalletEntry::query()->where('trucker_id', $this->partner->id)->whereNull('settled_by')
                 ->where('kind', '!=', WalletEntryKind::Payout->value)->count())->toBe(0);
 
-        // In flight: still owed until it lands, and nothing left to send.
         $summary = app(WalletService::class)->summary($this->partner);
         expect($summary['balance_cents'])->toBe(760_000)
             ->and($summary['in_flight_cents'])->toBe(760_000)
@@ -456,7 +436,6 @@ describe('the Fuel page and the Supplier totals (fix 11)', function (): void {
         $supplier = Supplier::factory()->create(['name' => 'Davao Lubes']);
         $truck = ($this->vehicle)();
 
-        // Booked, quoted, not done: not spend yet.
         MaintenanceJob::create([
             'vehicle_id' => $truck->id, 'kind' => 'Tyres', 'due_at' => '2026-07-20',
             'cost_cents' => 900_000, 'supplier_id' => $supplier->id,
@@ -567,7 +546,6 @@ describe('/fuel as the one source for fuel (fix 14)', function (): void {
             'receipt_no' => 'RC-OLD', 'logged_at' => '2026-07-16 08:30:00', 'status' => 'active',
         ]);
 
-        // Before: typed and logged, both counted.
         expect(($this->period)('2026-07-01', '2026-07-31')['totals']['total_expenses_cents'])->toBe(900_000);
 
         app(Kernel::class)->registerCommand(app(PostFuelFillsCommand::class));

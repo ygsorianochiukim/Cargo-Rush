@@ -6,13 +6,6 @@ namespace App\Domain\Identity\DTO;
 
 use App\Domain\Shared\DTO\Data;
 
-/**
- * A login attempt.
- *
- * `device_name` is the switch DESIGN.md section 7.4 describes: present means
- * the caller wants a bearer token (mobile), absent means set the SPA cookie
- * (web). One endpoint, two auth styles.
- */
 final class CredentialsData extends Data
 {
     public function __construct(
@@ -39,13 +32,11 @@ final class CredentialsData extends Data
         ];
     }
 
-    /** True when the caller wants a token rather than a session cookie. */
     public function wantsToken(): bool
     {
         return $this->device_name !== null && $this->device_name !== '';
     }
 
-    /** Only the part `Auth::attempt()` should ever see. */
     public function onlyCredentials(): array
     {
         return ['email' => $this->email, 'password' => $this->password];

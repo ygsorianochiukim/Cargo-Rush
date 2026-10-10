@@ -22,25 +22,6 @@ use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
-/**
- * A trip is priced off the zone card, by hand, or not at all yet.
- *
- * The office's decision: a run is charged what a line of a zone covering it
- * says, for the class of truck it asked for. Nothing else prices a trip — not
- * the old zoneless distance card, not the config tariff. A run the zones miss
- * is saved **unpriced** (a null figure and the reason), may sit as a request,
- * and may not go any further until somebody adds the zone line or — holding
- * `pricing.manage` — types a price.
- *
- * What these pin, in the order the rule was stated:
- *
- *   1. A zone line prices it; a zoneless line never does.
- *   2. No zone line → unpriced, with the reason and `needs_zone`.
- *   3. Unpriced cannot be confirmed, dispatched, handed to a trucker,
- *      delivered or billed, and never reaches a trucker's board.
- *   4. `cargo:trips-quote` prices it once the card covers it.
- *   5. A typed price is `pricing.manage`'s, marked manual, and never re-quoted.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -59,7 +40,6 @@ beforeEach(function (): void {
 
     $this->tenWheeler = TruckCategory::create(['key' => 'ten-wheeler', 'name' => '10-wheeler']);
 
-    /** The office booking a run, `$km` long. */
     $this->book = fn (int $km, array $overrides = [], ?User $as = null) => $this->actingAs($as ?? $this->admin)
         ->postJson('/api/v1/trips', [
             'customer_id' => $this->customer->id,
@@ -73,7 +53,6 @@ beforeEach(function (): void {
             ...$overrides,
         ]);
 
-    /** A 0–600 km card, one general line at a flat ₱10,000. */
     $this->card = function (?string $truckCategoryId = null): PricingZone {
         $zone = PricingZone::create([
             'name' => 'Up to 600', 'code' => 'Z', 'min_km' => 0, 'max_km' => 601,
@@ -106,7 +85,6 @@ describe('what prices a run', function (): void {
     });
 
     it('ignores a zoneless line, even one that covers the run', function (): void {
-        // The old plain distance card, as an older install still holds it.
         PricingBracket::create([
             'zone_id' => null, 'label' => 'Anywhere', 'min_km' => 0, 'max_km' => null,
             'base_cents' => 500_000, 'position' => 0,
@@ -147,7 +125,6 @@ describe('a run no zone line covers', function (): void {
         expect($trip['price_cents'])->toBeNull()
             ->and($trip['pricing_note'])->toBe('Zone Z (0 – 600 km) has no line for a 10-wheeler.');
 
-        // And the class the zone does price is priced.
         expect(($this->book)(120, ['truck_category_id' => $freezer->id])->json('data.price_cents'))
             ->toBe(1_000_000);
     });
@@ -211,7 +188,6 @@ describe('what an unpriced run may not do', function (): void {
             'scheduled_at' => now()->addDay()->toIso8601String(),
         ])->assertStatus(422)->assertJsonPath('message', PricingService::UNPRICED);
 
-        // Refused inside the transaction, so the request is exactly as it was.
         expect($this->unpriced->refresh()->status)->toBe(StatusValue::Pending)
             ->and($this->unpriced->driver_id)->toBeNull();
     });
@@ -253,15 +229,12 @@ describe('what an unpriced run may not do', function (): void {
             ->postJson("/api/v1/trips/{$this->unpriced->id}/assign-trucker", ['trucker_id' => $trucker->id])
             ->assertStatus(422)->assertJsonPath('message', PricingService::UNPRICED);
 
-        // Held for them by name, as a customer's pick would: still not shown,
-        // and not acceptable by a caller who knows the id.
         $this->unpriced->forceFill(['trucker_id' => $trucker->id])->save();
 
         $this->actingAs($user)->getJson('/api/v1/partner/jobs')->assertOk()->assertJsonCount(0, 'data');
         $this->actingAs($user)->postJson("/api/v1/partner/jobs/{$this->unpriced->id}/accept")
             ->assertStatus(422);
 
-        // Priced, the same offer is on the board.
         $this->unpriced->forceFill(['price_cents' => 1_000_000])->save();
 
         $this->actingAs($user)->getJson('/api/v1/partner/jobs')->assertOk()->assertJsonCount(1, 'data');
@@ -316,8 +289,6 @@ describe('a price typed by hand', function (): void {
 
         ($this->card)();
 
-        // A dispatcher correcting the cargo, and re-sending the figure the form
-        // already held — which is not a pricing decision and is let through.
         $this->actingAs($this->dispatcher)
             ->patchJson("/api/v1/trips/{$id}", ['cargo' => 'Dry goods, 14 pallets', 'price_cents' => 777_700])
             ->assertOk()

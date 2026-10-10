@@ -19,35 +19,10 @@ import { GeoPoint, GeoResult } from '../models/geo/geo.model';
 import { GeoService } from '../services/geo/geo.service';
 import { Icon } from './icon';
 
-/**
- * Where the map opens when there is nothing to centre on — Iponan, Cagayan de
- * Oro, which is where the fleet actually runs from.
- *
- * It opened on Metro Manila before, half the country away, so pinning a local
- * pickup meant panning across Luzon and the Visayas first.
- */
 const DEFAULT_CENTRE: L.LatLngTuple = [8.4856, 124.5808];
 
-/**
- * Leaflet finds its marker images by sniffing the URL of its own stylesheet.
- * Angular bundles that stylesheet into one file at the app root, so the sniff
- * lands in the wrong place and every pin renders as a broken image. The assets
- * are copied to `/leaflet` by the build; this points Leaflet at them.
- */
 L.Icon.Default.imagePath = 'leaflet/';
 
-/**
- * Pick a place: search for it, or drop a pin on the map.
- *
- * Both paths end in the same thing — a name and a pair of coordinates — so it
- * does not matter which one somebody uses. Searching is faster when the place
- * has a name; the map is the only option when it is a gate on a road with no
- * address, which for a depot is often the case.
- *
- * The marker is draggable because a reverse-geocoded name is a neighbourhood,
- * not a gate. Nudging the pin keeps the name and corrects the point, which is
- * the common case straight after a search.
- */
 @Component({
   selector: 'app-map-picker',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -60,17 +35,6 @@ L.Icon.Default.imagePath = 'leaflet/';
           name="search"
           [size]="16"
           class="pointer-events-none absolute left-3 text-cr-ink-muted" />
-        <!--
-          Enter searches; it does not submit whatever form this picker happens
-          to be standing in.
-
-          The picker sits inside a form element on the registration page, and a
-          lone text input in a form means the browser submits it on Enter — so
-          looking for "Cagayan de Oro" would fire "Create company" against a
-          half-filled form and answer with a page of red. The search runs off
-          the input event and is debounced, so nothing is lost by stopping the
-          key.
-        -->
         <input
           type="search"
           [value]="term()"
@@ -100,8 +64,6 @@ L.Icon.Default.imagePath = 'leaflet/';
         <p class="text-[12px] text-cr-ink-muted">Searching…</p>
       }
 
-      <!-- Height is fixed because a map in an auto-height container measures
-           zero and renders as a grey box. -->
       <div
         #canvas
         class="h-[280px] w-full overflow-hidden rounded-card border border-cr-line"
@@ -142,10 +104,8 @@ export class MapPicker implements AfterViewInit, OnDestroy {
   private readonly geo = inject(GeoService);
   private readonly destroyRef = inject(DestroyRef);
 
-  /** A pin is down and its name is still being looked up. */
   protected readonly resolving = signal(false);
 
-  /** The point to open on, when the field already has one. */
   readonly value = input<GeoPoint | null>(null);
 
   readonly changed = output<GeoPoint | null>();
@@ -165,8 +125,6 @@ export class MapPicker implements AfterViewInit, OnDestroy {
   constructor() {
     this.terms
       .pipe(
-        // Nominatim asks for no more than a request a second, and a search per
-        // keystroke would break that inside a single word.
         debounceTime(450),
         distinctUntilChanged(),
         switchMap((term) => {
@@ -188,12 +146,7 @@ export class MapPicker implements AfterViewInit, OnDestroy {
 
     this.map = L.map(this.canvas().nativeElement, {
       center: existing ? [existing.lat, existing.lng] : DEFAULT_CENTRE,
-      // Same zoom either way now. The wider 10 was for a default that named a
-      // whole metro and could only be a rough guess; Iponan is a barangay, so
-      // opening at street level puts the yard itself on screen.
       zoom: 13,
-      // Scroll-to-zoom inside a dialog hijacks the page scroll, which is
-      // exactly what somebody is doing when they meant to scroll past it.
       scrollWheelZoom: false,
     });
 
@@ -208,8 +161,6 @@ export class MapPicker implements AfterViewInit, OnDestroy {
       this.dropPin(event.latlng.lat, event.latlng.lng);
     });
 
-    // Leaflet measures its container on creation. Inside a dialog that is
-    // still animating open it measures zero, and the map renders grey.
     setTimeout(() => this.map?.invalidateSize(), 60);
   }
 
@@ -246,24 +197,9 @@ export class MapPicker implements AfterViewInit, OnDestroy {
     this.changed.emit(null);
   }
 
-  /**
-   * A pin dropped on the map has coordinates but no name, so one is looked up.
-   *
-   * The point is committed straight away so it can never be lost, but with no
-   * stand-in name. The field it feeds fills an empty name from a lookup and
-   * never overwrites a written one — and a literal stand-in like "Dropped pin"
-   * is indistinguishable from something somebody typed, so the real name
-   * arriving a moment later was always refused. Every pinned trip ended up
-   * called "Dropped pin" because of it.
-   *
-   * The point stands either way: a place the geocoder has never heard of is
-   * still a place the truck has to get to, and it keeps its coordinates as its
-   * name rather than a word that names nothing.
-   */
   private dropPin(lat: number, lng: number): void {
     this.placeMarker(lat, lng);
 
-    // A name already on the field is the user's and is left alone.
     const known = this.picked()?.place.trim() ?? '';
 
     this.commit({ place: known, lat, lng });
@@ -282,7 +218,6 @@ export class MapPicker implements AfterViewInit, OnDestroy {
       });
   }
 
-  /** What an unnameable point is called: the coordinates themselves. */
   private coordinateLabel(lat: number, lng: number): string {
     return `${lat.toFixed(5)}, ${lng.toFixed(5)}`;
   }
@@ -297,9 +232,6 @@ export class MapPicker implements AfterViewInit, OnDestroy {
         const position = this.marker?.getLatLng();
         if (!position) return;
 
-        // The name survives a drag: nudging the pin onto the actual gate is
-        // correcting the point, not choosing a different place. With nothing
-        // named yet, the new position is worth looking up.
         const known = this.picked()?.place.trim() ?? '';
 
         if (known === '') {

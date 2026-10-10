@@ -7,7 +7,6 @@ import { Customer, CustomerPayload } from '../../models/customer/customer.model'
 import { Envelope, ListQuery } from '../../models/shared/envelope.model';
 import { Trip } from '../../models/trip/trip.model';
 
-/** Customer Management — records, transaction history, feedback. */
 @Injectable({ providedIn: 'root' })
 export class CustomerService {
   private readonly api = inject(ApiService);
@@ -32,7 +31,6 @@ export class CustomerService {
     return this.api.delete(`customers/${id}`);
   }
 
-  /** The trips and invoices behind one customer. */
   history(id: string): Observable<{ trips: Trip[]; invoices: Invoice[] }> {
     return this.api.get<{ trips: Trip[]; invoices: Invoice[] }>(
       `customers/${id}/history`,

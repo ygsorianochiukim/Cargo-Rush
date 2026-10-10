@@ -12,31 +12,12 @@ use App\Domain\Vehicle\Models\Vehicle;
 use Database\Seeders\Demo\FleetSeeder;
 use Database\Seeders\NavigationSeeder;
 
-/**
- * The invoice as a document — the thing that leaves the building.
- *
- * A screen can leave a lot implicit. A document cannot: it is what a client's
- * accounts department files, what a collector carries, and what somebody reads
- * back in two years to settle an argument. So these tests are about the things
- * a printed invoice has to say and a list row does not — who is billing, both
- * TINs, what the haul was, what has been paid against it, and the amount in
- * words.
- *
- * Plus the export beside it, which is the same list somebody is looking at,
- * unpaginated, with all five tax figures on it. An export missing the
- * withholding cannot be reconciled against a bank statement, which is the only
- * reason anybody exports this.
- */
 beforeEach(function (): void {
-    // Pricing is zone-only, and an unpriced run cannot go out or be billed.
-    // One card at the old tariff's figures, so every run here is priced.
     zoneCard();
 
     $this->seed(NavigationSeeder::class);
     $this->seed(FleetSeeder::class);
 
-    // The haulier, as it would be set up: a registered name, a TIN, an address
-    // and somebody to ring.
     $this->company->update([
         'tin' => '008-123-456-000',
         'address' => 'Iponan, Cagayan de Oro City',
@@ -57,7 +38,6 @@ beforeEach(function (): void {
         'contact' => '0918 222 3344',
     ]);
 
-    /** Book a run, take it out, hand it over — which raises the receivable. */
     $this->haul = function (array $overrides = []): string {
         $id = $this->actingAs($this->admin)->postJson('/api/v1/trips', [
             'origin' => 'Bacolod',
@@ -72,7 +52,6 @@ beforeEach(function (): void {
             ...$overrides,
         ])->json('data.id');
 
-        // A unit does not roll without a passing pre-trip check.
         $this->passPreTripCheck($id);
         $this->actingAs($this->marco)->postJson("/api/v1/trips/{$id}/start", [])->assertOk();
         $this->actingAs($this->marco)
@@ -98,14 +77,11 @@ describe('the delivery invoice', function (): void {
 
         $issuer = ($this->document)()['issuer'];
 
-        // A document with no issuer on it is not an invoice, it is a figure.
         expect($issuer['name'])->toBe($this->company->name)
             ->and($issuer['tin'])->toBe('008-123-456-000')
             ->and($issuer['address'])->toBe('Iponan, Cagayan de Oro City')
             ->and($issuer['contact_phone'])->toBe('0917 555 0100')
             ->and($issuer['contact_email'])->toBe('accounts@cargorush.ph')
-            // Null until somebody uploads one, which the clients render as the
-            // company's initials rather than a gap.
             ->and($issuer)->toHaveKey('logo_url');
     });
 
@@ -114,7 +90,6 @@ describe('the delivery invoice', function (): void {
 
         $billTo = ($this->document)()['bill_to'];
 
-        // A Philippine invoice is expected to carry both parties' TINs.
         expect($billTo['name'])->toBe('Negros Fresh Mart')
             ->and($billTo['tin'])->toBe('004-987-654-000')
             ->and($billTo['address'])->toBe('Bacolod City, Negros Occidental')
@@ -127,8 +102,6 @@ describe('the delivery invoice', function (): void {
 
         $document = ($this->document)();
 
-        // The haul is what makes it a *delivery* invoice rather than a demand
-        // for money: the reference, the route, the load and who drove it.
         expect($document['document']['title'])->toBe('Delivery Invoice')
             ->and($document['lines'])->toHaveCount(1);
 
@@ -141,7 +114,6 @@ describe('the delivery invoice', function (): void {
             ->and($line['plate'])->toBe('NCR 4412')
             ->and($line['driver'])->toBe('Marco Reyes')
             ->and($line['reference'])->toStartWith('CR-')
-            // Delivered today, off the delivery log rather than the schedule.
             ->and($line['delivered_at'])->toBe(now()->toDateString());
     });
 
@@ -151,13 +123,10 @@ describe('the delivery invoice', function (): void {
         $invoice = Invoice::query()->firstOrFail();
         $totals = ($this->document)()['totals'];
 
-        // net + vat = amount, and amount - withholding = due.
         expect($totals['net_amount_cents'])->toBe($invoice->net_amount_cents)
             ->and($totals['vat_cents'])->toBe($invoice->vat_cents)
             ->and($totals['amount_cents'])->toBe($invoice->net_amount_cents + $invoice->vat_cents)
             ->and($totals['due_cents'])->toBe($invoice->amount_cents - $invoice->withholding_cents)
-            // Frozen on the day, so the document reprints years later exactly
-            // as it was issued whatever the rates are by then.
             ->and($totals['vat_rate_bp'])->toBe($invoice->vat_rate_bp)
             ->and($totals['vat_label'])->not->toBeNull();
     });
@@ -168,9 +137,6 @@ describe('the delivery invoice', function (): void {
         $invoice = Invoice::query()->firstOrFail();
         $totals = ($this->document)()['totals'];
 
-        // A figure in words cannot be turned into a bigger one with a pen,
-        // which is why every printed invoice has carried one for a century.
-        // It is the *due* figure — what the payer is actually asked for.
         expect($totals['amount_in_words'])
             ->toBe(Money::inWords($invoice->dueCents(), $invoice->currency))
             ->and($totals['amount_in_words'])->toContain('pesos');
@@ -194,9 +160,6 @@ describe('the delivery invoice', function (): void {
 
         $invoice = Invoice::query()->firstOrFail();
 
-        // Two part payments, which is the case a reprinted invoice has to get
-        // right: one that still asked for the full amount is the document that
-        // starts the argument.
         $this->actingAs($this->admin)->postJson('/api/v1/payments', [
             'customer_id' => $this->customer->id,
             'amount_cents' => 100000,
@@ -218,10 +181,8 @@ describe('the delivery invoice', function (): void {
         $document = ($this->document)();
 
         expect($document['payments'])->toHaveCount(2)
-            // Oldest first, which is the order a statement of account reads.
             ->and($document['payments'][0]['reference'])->toBe('BDO-77120')
             ->and($document['payments'][0]['amount_cents'])->toBe(100000)
-            // `bank_transfer` as somebody would say it.
             ->and($document['payments'][0]['method_label'])->toBe('Bank transfer')
             ->and($document['payments'][1]['reference'])->toBe('CR-2201')
             ->and($document['totals']['paid_cents'])->toBe(150000)
@@ -243,9 +204,6 @@ describe('the delivery invoice', function (): void {
             ->assertOk()
             ->json('data');
 
-        // No delivery on it, so it does not claim to be one — and it still has
-        // a description, because a printed invoice with an empty table is a
-        // figure nobody can approve.
         expect($document['document']['title'])->toBe('Sales Invoice')
             ->and($document['lines'])->toHaveCount(1)
             ->and($document['lines'][0]['description'])->toBe('Freight and hauling services')
@@ -257,8 +215,6 @@ describe('the delivery invoice', function (): void {
 
         $invoice = Invoice::query()->firstOrFail();
 
-        // A driver holds no `billing.view`. Printing an invoice is a read, and
-        // it is gated like every other read of one.
         $this->actingAs($this->marco)
             ->getJson("/api/v1/billing/{$invoice->id}/document")
             ->assertForbidden();
@@ -276,22 +232,16 @@ describe('exporting the list', function (): void {
         $csv = $response->streamedContent();
         $invoice = Invoice::query()->firstOrFail();
 
-        // All five tax figures, not just the gross: a file that cannot be
-        // reconciled against a bank statement is not worth exporting.
         expect($csv)->toContain('Number,Direction,Status,Customer,Trip')
             ->and($csv)->toContain('Withholding')
             ->and($csv)->toContain($invoice->number)
             ->and($csv)->toContain('Negros Fresh Mart')
-            // Pesos with two decimals — the one place in the system where a
-            // formatted amount is the right answer, because a person reads it.
             ->and($csv)->toContain(number_format($invoice->amount_cents / 100, 2, '.', ''));
     });
 
     it('honours the filters the list was looking at', function (): void {
         ($this->haul)();
 
-        // Nothing is a payable, so a payables export is a header and no rows —
-        // the export somebody wants is the one they are looking at.
         $csv = $this->actingAs($this->admin)
             ->get('/api/v1/billing/export?direction=payable')
             ->assertOk()

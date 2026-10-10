@@ -8,9 +8,7 @@ use App\Domain\Delivery\Models\DeliveryLog;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use Illuminate\Http\Request;
 
-/**
- * @mixin DeliveryLog
- */
+/** @mixin DeliveryLog */
 class DeliveryLogResource extends ApiResource
 {
     public function toArray(Request $request): array
@@ -25,9 +23,6 @@ class DeliveryLogResource extends ApiResource
             'helper_names' => $this->trip?->helpers->pluck('name')->all() ?? [],
             'delivered_at' => $this->iso($this->delivered_at),
             'pod_ref' => $this->pod_ref,
-            // Derived, never stored: the disk and its public URL are
-            // configuration, and a URL written into a row is wrong the moment
-            // the install moves.
             'pod_image_url' => $this->podImageUrl(),
             'receiver_name' => $this->receiver_name,
             'status' => $this->status->value,

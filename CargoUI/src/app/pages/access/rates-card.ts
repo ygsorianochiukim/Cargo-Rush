@@ -7,46 +7,6 @@ import { CompanyService } from '../../services/identity/company.service';
 import { Card } from '../../shared/card';
 import { Field } from '../../shared/field';
 
-/**
- * The rates the office sets — what an invoice carries and what a partner's run
- * is split at.
- *
- * Every figure on this card used to be an environment variable. That meant one
- * set of tax rates and one commission for every haulier on the install, and
- * correcting any of them was a deployment — so a firm that wanted to move its
- * payment terms on a Tuesday afternoon raised a support ticket. They are
- * columns on the company now, and this is the screen.
- *
- * ## Where the commission went
- *
- * It was a number field on each partner's own detail screen, beside an approve
- * button and a wallet, and it is here instead. A commission is a commercial
- * term the firm states once for everybody it hauls with — twelve per cent
- * unless somebody moves it — not something re-typed per partner on a screen
- * about somebody's paperwork. Moving it changes what **future** runs split at;
- * every run already settled froze its own rate at delivery and does not move.
- *
- * ## Percentages on screen, basis points on the wire
- *
- * The API speaks basis points and centavos throughout, because there is no
- * float anywhere near a peso in this system. An office types 12 and ₱35, so
- * this card divides on the way in and multiplies on the way out, and it is the
- * only place that conversion happens.
- *
- * ## What it does not offer
- *
- * What a haul is charged. That is the zone card — a zone, a truck class and a
- * diesel step — with its own screen under Pricing, and it is the only thing
- * that prices a run. The fallback tariff (base, per km, per kg, minimum) that
- * used to sit on this card is gone: a run no zone covers is now saved unpriced
- * for the office rather than quoted a figure nobody published. The company's
- * old tariff columns are still in the database, unread.
- *
- * And the payroll contributions. SSS, PhilHealth and Pag-IBIG are the
- * government's figures, the same for every firm on the platform, and a form
- * inviting an office to edit them would be a form inviting an office to get
- * payroll wrong. They stay in configuration.
- */
 @Component({
   selector: 'app-rates-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -55,10 +15,6 @@ import { Field } from '../../shared/field';
     <app-card heading="Rates" icon="tag" hint="What you charge, and what you keep">
       @if (company(); as row) {
         <form [formGroup]="form" class="space-y-5">
-          <!--
-            The commission first, because it is the figure somebody came to
-            this screen for. One rate for every partner the firm hauls with.
-          -->
           <fieldset [disabled]="busy()">
             <legend class="text-[13px] font-semibold">Partner truckers</legend>
             <p class="cr-meta mt-0.5">
@@ -162,14 +118,6 @@ import { Field } from '../../shared/field';
           </fieldset>
         </form>
 
-        <!--
-          What the install would say instead.
-
-          Shown only where the firm has departed from it, and as a sentence
-          rather than a second column of numbers — the point is to let somebody
-          recognise a figure they did not mean to change, not to teach them the
-          defaults.
-        -->
         @if (usingDefaults()) {
           <p class="cr-meta mt-4">
             Every figure here is the system default. Saving adopts them as your own, which only
@@ -218,17 +166,14 @@ export class RatesCard {
   private readonly companyApi = inject(CompanyService);
   private readonly fb = inject(FormBuilder);
 
-  /** The last thing the server said. Everything on screen starts from it. */
   protected readonly company = signal<Company | null>(null);
 
   protected readonly busy = signal(false);
   protected readonly saved = signal(false);
   protected readonly failure = signal<string | null>(null);
 
-  /** Field-by-field messages from a 422, keyed by the API's own field names. */
   protected readonly errors = signal<Record<string, string[]>>({});
 
-  /** Bumped whenever the form changes, so `dirty()` recomputes. */
   private readonly edits = signal(0);
 
   protected readonly inputClass =
@@ -236,14 +181,6 @@ export class RatesCard {
 
   protected readonly numberClass = this.inputClass + ' cr-num';
 
-  /**
-   * Pesos and percentages, which is what an office types.
-   *
-   * The wire carries centavos and basis points; the conversion is here and
-   * nowhere else. Nulls are not possible on this form — every control has a
-   * figure in it from the moment the company loads, because every one of these
-   * rates is always in force.
-   */
   protected readonly form = this.fb.nonNullable.group({
     commission: [12],
     terms: [30],
@@ -253,7 +190,6 @@ export class RatesCard {
     pricesIncludeVat: [false],
   });
 
-  /** Nothing to save until something differs from what the server holds. */
   protected readonly dirty = computed(() => {
     this.edits();
 
@@ -264,7 +200,6 @@ export class RatesCard {
     return JSON.stringify(this.payload()) !== JSON.stringify(this.payloadFor(row.rates));
   });
 
-  /** Is the firm on the install's figures in every respect? */
   protected readonly usingDefaults = computed(() => {
     const row = this.company();
 
@@ -281,13 +216,6 @@ export class RatesCard {
     this.load();
   }
 
-  /**
-   * The install's answer, in one line.
-   *
-   * Only the figures somebody is likely to be checking themselves against —
-   * the cut, the tax and the terms. A full restatement of every
-   * setting would be the form again, in prose, under the form.
-   */
   protected defaultSummary(): string {
     const row = this.company();
 
@@ -302,7 +230,6 @@ export class RatesCard {
     ].join(', ');
   }
 
-  /** The server's own words for a field it refused. */
   protected errorFor(field: string): string | null {
     return this.errors()[field]?.[0] ?? null;
   }
@@ -311,14 +238,6 @@ export class RatesCard {
     this.write(this.payload());
   }
 
-  /**
-   * Back to the install defaults, which is what a null column means.
-   *
-   * Nulls rather than the default figures themselves: typing them in would
-   * pin the firm to today's numbers and quietly stop it following a correction
-   * to the install. The commission is the exception and is sent as a figure —
-   * its column is not nullable and there is nothing underneath it.
-   */
   protected restore(): void {
     const row = this.company();
 
@@ -353,7 +272,6 @@ export class RatesCard {
     });
   }
 
-  /** What the form holds, in the units the API speaks. */
   private payload(): Record<string, unknown> {
     const value = this.form.getRawValue();
 
@@ -367,13 +285,6 @@ export class RatesCard {
     };
   }
 
-  /**
-   * The same shape, built from a set of rates rather than from the form.
-   *
-   * What makes "is this dirty" and "is this the default" one comparison each
-   * instead of ten, and — more to the point — makes them the *same* comparison,
-   * so a field added to one cannot be forgotten in the other.
-   */
   private payloadFor(rates: Company['rates']): Record<string, unknown> {
     return {
       trucker_commission_bp: rates.trucker_commission_bp,
@@ -392,14 +303,6 @@ export class RatesCard {
     });
   }
 
-  /**
-   * Redraw from what the server actually stored, never from what was sent.
-   *
-   * A restore sends nulls and gets the install defaults back; a save of 12.005%
-   * gets 1200 basis points back and should read as 12. A form that kept its own
-   * version of the answer is the form that shows a setting the server does not
-   * have.
-   */
   private adopt(company: Company): void {
     this.company.set(company);
 
@@ -420,7 +323,6 @@ export class RatesCard {
     this.edits.update((n) => n + 1);
   }
 
-  /** A 422's field messages, or one sentence for everything else. */
   private absorb(error: HttpErrorResponse): void {
     if (error.status === 422) {
       this.errors.set((error.error?.errors as Record<string, string[]>) ?? {});

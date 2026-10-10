@@ -1,11 +1,3 @@
-<!--
-  The four statements.
-
-  Two audiences on one page. On screen it is a report with a segmented control
-  and a couple of date fields above it; on paper it is the statement, and
-  nothing else. The `cr-no-print` toolbar disappears, the card becomes the
-  page, and the sheet gets the margins a printer expects rather than the app's.
--->
 <style>
   @media print {
     /* On paper the card is the page. A shadow and a rounded border printed
@@ -32,9 +24,6 @@
 </style>
 
 <div class="cr-no-print mb-4 flex flex-wrap items-end justify-between gap-3">
-  <!-- Four views, as a segmented control rather than four pages: they are the
-       same books answered four ways, and switching between them keeps the
-       dates and the direction. -->
   <div class="flex h-10 items-center gap-1 rounded-control bg-cr-tint p-1" role="tablist">
     <button
       type="button"
@@ -79,8 +68,6 @@
   </div>
 
   <div class="flex flex-wrap items-end gap-3">
-    <!-- Which way the money runs. Shown only where it changes the answer: an
-         income statement has no direction, it has revenue and costs. -->
     @if (view() === 'aging' || view() === 'account') {
       <app-field label="Direction">
         <select
@@ -111,8 +98,6 @@
       </app-field>
     }
 
-    <!-- A balance sheet is a moment; the other three are a period. The fields
-         follow the question rather than being shown and ignored. -->
     @if (view() === 'sheet') {
       <app-field label="As of">
         <input
@@ -156,7 +141,6 @@
 @if (error(); as message) {
   <app-error-state [message]="message" (retry)="reload()" />
 } @else if (view() === 'income') {
-  <!-- ------------------------------------------------- The income statement -->
   @if (income(); as statement) {
     <article
       class="cr-sheet mx-auto max-w-[820px] rounded-card bg-cr-surface p-8 shadow-card ring-1 ring-cr-line/60"
@@ -174,9 +158,6 @@
         </h1>
       </header>
 
-      <!-- Revenue, then the cost of providing it, then everything else — the
-           order a haulier reads it in, because the gap between the first two is
-           the only figure that says whether the hauling itself pays. -->
       <section class="py-5">
         <h2 class="cr-meta">Revenue</h2>
 
@@ -253,9 +234,6 @@
         </div>
       </section>
 
-      <!-- The two gaps that matter, and they are different questions: gross
-           profit says whether the hauling pays, net income says whether the
-           business does. -->
       <section class="cr-totals border-t-2 border-cr-ink/20 pt-5">
         <dl class="ml-auto grid max-w-sm grid-cols-2 gap-y-2 text-[13px]">
           @if (statement.cost_of_services_cents !== null) {
@@ -279,10 +257,6 @@
               {{ fmt.pesos(otherExpenses() ?? 0, statement.currency) }}
             </dd>
           } @else {
-            <!-- The chart has no cost-of-services group, so there is no line to
-                 measure a margin against. A dash rather than a number, because
-                 a margin taken from the wrong half of the expenses is worse
-                 than no margin at all. -->
             <dt class="text-cr-ink-muted">Cost of services</dt>
             <dd class="text-right text-cr-ink-muted">not grouped in the chart</dd>
           }
@@ -308,7 +282,6 @@
     </app-card>
   }
 } @else if (view() === 'sheet') {
-  <!-- ---------------------------------------------------- The balance sheet -->
   @if (sheet(); as balance) {
     <article
       class="cr-sheet mx-auto max-w-[820px] rounded-card bg-cr-surface p-8 shadow-card ring-1 ring-cr-line/60"
@@ -323,9 +296,6 @@
           </h1>
         </div>
 
-        <!-- True is the only acceptable answer, and the difference is printed
-             rather than assumed to be zero: a broken install should say how
-             broken rather than merely that it is. -->
         <span
           class="rounded-control px-2.5 py-1 text-[12px] font-semibold"
           [class]="
@@ -420,11 +390,6 @@
           </div>
         }
 
-        <!-- Named rather than hidden. There is no period close in this system,
-             so the result to date sits in equity because that is where it
-             belongs and nothing has moved it there. An accountant reading this
-             line knows immediately that the books have not been closed, which
-             is a fact about this install and not an error. -->
         <div class="mt-3 flex items-baseline gap-3 py-1">
           <span class="min-w-0 flex-1 text-[13px]">
             Earnings not yet closed
@@ -461,11 +426,8 @@
     </app-card>
   }
 } @else if (view() === 'aging') {
-  <!-- ------------------------------------------------------------- The aging -->
   @if (aging(); as report) {
     <div class="flex flex-col gap-4">
-      <!-- Money nine days late and money ninety days late are different
-           problems with different phone calls behind them. -->
       <div class="cr-aging grid grid-cols-2 gap-3 sm:grid-cols-5">
         @for (bucket of agingBuckets(); track bucket.label) {
           <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
@@ -511,8 +473,6 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-cr-line/70">
-                <!-- Worst first, from the API: whoever owes the most is the
-                     call to make. -->
                 @for (row of report.by_counterparty; track row.counterparty) {
                   <tr>
                     <td class="px-4 py-2 font-semibold">{{ row.counterparty }}</td>
@@ -556,13 +516,10 @@
     </app-card>
   }
 } @else {
-  <!-- --------------------------------------------- The statement of account -->
   @if (account(); as statement) {
     <article
       class="cr-sheet mx-auto max-w-[820px] rounded-card bg-cr-surface p-8 shadow-card ring-1 ring-cr-line/60"
     >
-      <!-- Both parties. A statement that leaves the building is filed by
-           somebody with a drawer full of them from other hauliers. -->
       <header
         class="flex flex-wrap items-start justify-between gap-6 border-b border-cr-ink/10 pb-6"
       >
@@ -649,10 +606,6 @@
         </dl>
       </section>
 
-      <!-- The running account. This is the whole document: an aging report says
-           ₱48,000 is thirty days late, and a statement says how it got there.
-           When a customer disputes a figure the disagreement is always about
-           one line. -->
       <section class="py-6">
         <div class="overflow-x-auto">
           <table class="w-full text-[13px]">
@@ -720,9 +673,6 @@
         </div>
       </section>
 
-      <!-- The collections half of the page: a balance is a number to chase, and
-           how long it has been outstanding is what decides whether the call is
-           a reminder or a conversation. -->
       <section class="cr-aging mt-6 rounded-card bg-cr-tint p-4">
         <h2 class="cr-meta">Aging of the balance</h2>
         <dl class="mt-2 grid grid-cols-2 gap-y-1.5 text-[13px] sm:grid-cols-5 sm:gap-x-4">

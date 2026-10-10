@@ -7,36 +7,16 @@ namespace App\Domain\Tenancy\Requests;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
 use App\Domain\Tenancy\Services\CarrierDirectory;
 
-/**
- * "Which hauliers are near me?"
- *
- * A GET with a form request, unusually for this codebase, because the answer
- * hangs on a pair of coordinates and a bad pair is worth refusing with a
- * sentence rather than quietly searching around latitude zero — which is in the
- * Atlantic, and would return an empty list that looks like "nobody serves you".
- *
- * Everything is optional. A customer who has not granted location permission
- * still gets a list, alphabetically, because a carrier they can ring is more
- * use than a prompt they declined.
- */
 class NearbyCarriersRequest extends ApiFormRequest
 {
     public function rules(): array
     {
         return [
-            // Each half needs the other. Half a coordinate is not a place, and
-            // the two rules make the point where somebody sending one will see
-            // it.
             'lat' => ['nullable', 'numeric', 'between:-90,90', 'required_with:lng'],
             'lng' => ['nullable', 'numeric', 'between:-180,180', 'required_with:lat'],
 
-            // Kilometres. Capped where the service caps it, so the message
-            // comes back as a field error rather than as a silently clamped
-            // search.
             'radius_km' => ['nullable', 'numeric', 'min:1', 'max:'.CarrierDirectory::MAX_RADIUS_KM],
 
-            // Matched against the company name and the yard address, for the
-            // customer who already knows who they are looking for.
             'search' => ['nullable', 'string', 'max:120'],
         ];
     }
@@ -49,7 +29,6 @@ class NearbyCarriersRequest extends ApiFormRequest
         ];
     }
 
-    /** Where the customer is, or null if they did not say. */
     public function point(): ?array
     {
         if (! $this->filled('lat') || ! $this->filled('lng')) {

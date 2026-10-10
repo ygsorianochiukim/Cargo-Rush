@@ -16,18 +16,10 @@ import {
 import { Granularity, SalesReport } from '../../models/finance/sales.model';
 import { Envelope, ListQuery } from '../../models/shared/envelope.model';
 
-/**
- * The three Finance modules — Daily Trip Monitoring, Profitability and
- * Quarterly Summary — over one ledger.
- *
- * Profitability and Summary hit the same server-side roll-up with different
- * ranges, so the two pages cannot print different arithmetic.
- */
 @Injectable({ providedIn: 'root' })
 export class FinanceService {
   private readonly api = inject(ApiService);
 
-  /** Every unit, including the ones with no plate yet. */
   trucks(): Observable<Truck[]> {
     return this.api.get<Truck[]>('finance/trucks');
   }
@@ -44,12 +36,10 @@ export class FinanceService {
     return this.api.delete(`finance/trucks/${id}`);
   }
 
-  /** Routes already used, to suggest in the entry form. */
   routes(): Observable<string[]> {
     return this.api.get<string[]>('finance/routes');
   }
 
-  /** Daily Trip Monitoring: the rows themselves. */
   ledger(query?: ListQuery): Observable<Envelope<LedgerEntry[]>> {
     return this.api.envelope<LedgerEntry[]>('ledger', query);
   }
@@ -66,38 +56,18 @@ export class FinanceService {
     return this.api.delete(`ledger/${id}`);
   }
 
-  /** The workbook's 10-day window, or any range the caller names. */
   profitability(range?: { from: string; to: string }): Observable<PeriodRollup> {
     return this.api.get<PeriodRollup>('finance/profitability', range);
   }
 
-  /**
-   * Everything the fleet owes, across four modules.
-   *
-   * Read-only: each line names the screen that settles it. `finance.view`,
-   * so a manager can see what the week costs without holding the permissions
-   * that would let them pay any of it.
-   */
   payables(): Observable<Payables> {
     return this.api.get<Payables>('finance/payables');
   }
 
-  /**
-   * Sales by day, week or month.
-   *
-   * The window is left to the API when the caller names none: the useful view
-   * of each granularity is a different length of history — a month of days, a
-   * quarter of weeks, a year of months — and deciding that in two places is
-   * how the two start to disagree.
-   */
   sales(granularity: Granularity, range?: { from: string; to: string }): Observable<SalesReport> {
     return this.api.get<SalesReport>('finance/sales', { granularity, ...range });
   }
 
-  /**
-   * The same roll-up over a quarter. The envelope, because `meta` carries the
-   * quarter list the slicer is built from.
-   */
   summary(quarter?: QuarterKey, year?: number): Observable<Envelope<PeriodRollup>> {
     const params = new URLSearchParams();
     if (quarter) params.set('quarter', quarter);
@@ -110,12 +80,10 @@ export class FinanceService {
     );
   }
 
-  /** The transactions a period's Total expenses is made of, newest first. */
   expenseLines(range: DateRange): Observable<ExpenseLines> {
     return this.api.get<ExpenseLines>('finance/expense-lines', { ...range });
   }
 
-  /** What was owed to the fleet at a date, most overdue first. */
   receivableLines(asOf: string): Observable<ReceivableLines> {
     return this.api.get<ReceivableLines>('finance/receivable-lines', { as_of: asOf });
   }

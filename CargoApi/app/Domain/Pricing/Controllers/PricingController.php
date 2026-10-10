@@ -21,18 +21,6 @@ use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * Rate Card — the bands, the pump price, and the quote preview.
- *
- * A zone here is a band of kilometres, the way a subsidy table writes one: A1
- * is 1–40 km, O is 561–600, and the money hangs off the band rather than off a
- * place name.
- *
- * The preview is the endpoint that makes the editor usable. A card typed from a
- * printed table is a card somebody has to check against that table, band by
- * band, and the only way to do that is to ask it what a real run would cost
- * before a customer does.
- */
 class PricingController extends ApiController
 {
     public function __construct(
@@ -47,15 +35,6 @@ class PricingController extends ApiController
         return $this->collection(PricingZoneResource::collection($zones), $zones);
     }
 
-    /**
-     * `GET pricing/card` — the old plain distance card, read-only in effect.
-     *
-     * The lines that belong to no zone. They used to price any run no zone
-     * covered, and no longer price anything: pricing is zone-only, and a run
-     * the zones miss is left unpriced for the office. The endpoint stays so an
-     * install that has such rows can see them and delete them — `saveCard`
-     * refuses to add new ones (see `PricingCardRequest`).
-     */
     public function card(): JsonResponse
     {
         $brackets = $this->zones->card();
@@ -63,7 +42,6 @@ class PricingController extends ApiController
         return $this->collection(PricingBracketResource::collection($brackets), $brackets);
     }
 
-    /** `PUT pricing/card` — the whole card at once, as the editor sends it. */
     public function saveCard(PricingCardRequest $request): JsonResponse
     {
         $brackets = $this->zones->saveCard($request->brackets());
@@ -71,15 +49,6 @@ class PricingController extends ApiController
         return $this->collection(PricingBracketResource::collection($brackets), $brackets);
     }
 
-    /* ------------------------------------------------- Truck categories */
-
-    /**
-     * The kinds of unit the firm runs.
-     *
-     * The second dimension of the rate card: reefer work carries a premium
-     * that has nothing to do with distance, and a card that could only price
-     * distance forced the desk to quote that premium off-system.
-     */
     public function truckCategories(Request $request): JsonResponse
     {
         $categories = TruckCategory::query()
@@ -108,14 +77,6 @@ class PricingController extends ApiController
         return $this->item(new TruckCategoryResource($truckCategory->refresh()));
     }
 
-    /**
-     * `DELETE pricing/truck-categories/{category}` — remove it, or retire it.
-     *
-     * One that prices nothing and is on no unit is deleted. One in use is
-     * retired, because deleting it would widen every rate-card line naming it
-     * to "any truck" — silently changing what a freezer run is quoted, which
-     * is the sort of thing nobody notices until an invoice is short.
-     */
     public function destroyTruckCategory(TruckCategory $truckCategory): JsonResponse
     {
         if ($this->zones->deleteTruckCategory($truckCategory)) {
@@ -157,9 +118,6 @@ class PricingController extends ApiController
         return $this->noContent();
     }
 
-    /* ------------------------------------------------------------- Diesel */
-
-    /** What diesel costs, what the card assumes, and the resulting swing. */
     public function diesel(): JsonResponse
     {
         return $this->payload([
@@ -175,21 +133,6 @@ class PricingController extends ApiController
         return $this->item(new DieselPriceResource($price), status: 201);
     }
 
-    /* ------------------------------------------------------------- Preview */
-
-    /**
-     * What a run would be quoted, which band priced it, and the bands that
-     * also cover the distance.
-     *
-     * Where no zone line covers it, the answer is `needs_zone: true` with the
-     * reason and a null `cents` — never a fallback figure, and never ₱0.
-     *
-     * A POST for something that changes nothing, which is now the weaker of
-     * its two original reasons — the destination that used to make a query
-     * string a privacy problem is gone. It stays a POST because the clients
-     * calling it do, and a method change would be a breaking one for a
-     * screen-level convenience.
-     */
     public function quote(QuotePreviewRequest $request): JsonResponse
     {
         $breakdown = $this->pricing->breakdownFor(

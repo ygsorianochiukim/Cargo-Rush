@@ -1,6 +1,3 @@
-<!-- ============================================================
-     Header — the sheet's "SUMMARY OF 10-DAY MONITORING" block
-     ============================================================ -->
 <header class="rounded-card bg-cr-surface p-5 shadow-card ring-1 ring-cr-line/60">
   <div class="flex flex-wrap items-center gap-x-6 gap-y-4">
     <div class="flex items-center gap-3">
@@ -16,7 +13,6 @@
       </div>
     </div>
 
-    <!-- From / To, exactly the pair the sheet asks you to set -->
     <div class="flex items-center gap-2">
       <button
         type="button"
@@ -70,9 +66,6 @@
     }
   </div>
 } @else {
-  <!-- ==========================================================
-       The five tiles the sheet puts across the top
-       ========================================================== -->
   <section aria-label="Period summary" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3 xl:grid-cols-5">
     <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
       <div class="flex items-center gap-2 text-cr-blue">
@@ -82,8 +75,6 @@
       <p class="cr-num mt-2 text-[24px] leading-none font-semibold">
         {{ fmt.pesos(totals().total_income_cents) }}
       </p>
-      <!-- Where it came from: two rows, amounts aligned. VAT is not income, so
-           it is one quiet line under them rather than a row among them. -->
       <span class="mt-2 block space-y-0.5 text-[12px]">
         <span class="flex justify-between gap-2">
           <span class="text-cr-ink-muted">Own trucks</span>
@@ -121,12 +112,6 @@
       <p class="cr-num mt-2 text-[24px] leading-none font-semibold">
         {{ fmt.pesos(totals().total_expenses_cents) }}
       </p>
-      <!--
-        Said on the tile rather than only under the table, because this is the
-        line an office comes to the page for: what the quarter cost once the
-        suppliers and the partners were actually paid. Hidden at zero — "incl.
-        ₱0 of supplier bills" is a sentence that teaches nobody anything.
-      -->
       @if (totals().supplier_bills_cents > 0) {
         <p class="cr-num mt-1.5 text-[12px] text-cr-ink-muted">
           incl. {{ fmt.pesos(totals().supplier_bills_cents) }} of supplier bills paid
@@ -175,9 +160,6 @@
     </div>
   </section>
 
-  <!-- ==========================================================
-       The sheet's four charts
-       ========================================================== -->
   <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-4">
     <app-card heading="Trip income" icon="billing" hint="By unit">
       <app-bar-rows [bars]="incomeBars()" />
@@ -197,9 +179,6 @@
     </app-card>
   </div>
 
-  <!-- ==========================================================
-       The sheet's table, TOTAL row included
-       ========================================================== -->
   <app-card
     heading="Trip income and expenses by unit"
     icon="route"
@@ -207,7 +186,6 @@
     [padded]="false"
     class="mt-4 block">
     <div class="overflow-x-auto">
-      <!-- Same rule as the monitoring sheet: scroll rather than squeeze. -->
       <table class="w-full min-w-[1240px] border-collapse text-left whitespace-nowrap">
         <thead>
           <tr class="border-b border-cr-line">
@@ -315,18 +293,6 @@
     </div>
 
     @if (unattributed() > 0) {
-      <!--
-        Why the TOTAL does not add up from the columns above it.
-
-        Three period costs belong to no single unit and are in no column of
-        any truck's row: the overhead (fuel fills on a vehicle no truck points
-        at included), the supplier bills the fleet actually paid over the
-        window, and payroll beyond the crew pay the sheet already holds. Loading either onto a
-        truck would make that unit look unprofitable for money it never spent,
-        and leaving them out of the total would flatter the business — so they
-        sit in the total, and this line says so rather than leaving a reader to
-        find the difference with a calculator.
-      -->
       <p class="border-t border-cr-line px-4 py-3 text-[12px] text-cr-ink-muted">
         Total expenses also carry
         <span class="cr-num font-medium text-cr-ink">{{ fmt.pesos(unattributed()) }}</span>
@@ -336,12 +302,6 @@
       </p>
     }
     @if (totals().trucker_commission_cents + totals().other_income_cents > 0) {
-      <!--
-        And the other way: income in no truck's row. The commission on trucker
-        trips is the fleet's, but no fleet truck earned it; nor did any truck
-        earn an invoice raised by hand. Both are in Total income and net
-        income, and in none of the rows above.
-      -->
       <p class="border-t border-cr-line px-4 py-3 text-[12px] text-cr-ink-muted">
         Total and net income also include
         <span class="cr-num font-medium text-cr-ink">{{

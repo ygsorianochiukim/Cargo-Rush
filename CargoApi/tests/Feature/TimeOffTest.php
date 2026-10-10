@@ -8,13 +8,6 @@ use App\Domain\Identity\Models\User;
 use App\Domain\Shared\Enums\Role;
 use Database\Seeders\NavigationSeeder;
 
-/**
- * Leave and undertime.
- *
- * The rules worth pinning are the ones that only bite after somebody has been
- * paid on them: a counted total that disagrees with its own dates, two leaves
- * booked over each other, and a decision made twice by two different people.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
 
@@ -55,7 +48,6 @@ describe('asking for leave', function (): void {
     it('counts the days from the dates rather than taking a typed total', function (): void {
         $response = ($this->ask)()->assertCreated();
 
-        // 14th to 18th inclusive is five days, not four.
         expect($response->json('data.days'))->toEqual(5.0);
         expect($response->json('data.status'))->toBe('pending');
         expect($response->json('data.type_label'))->toBe('Vacation');
@@ -88,8 +80,6 @@ describe('asking for leave', function (): void {
     it('treats a pending request as a clash, not just an approved one', function (): void {
         ($this->ask)()->assertCreated();
 
-        // Still undecided. Approving both afterwards is how a driver ends up
-        // rostered while on holiday.
         ($this->ask)(['starts_on' => '2026-09-18', 'ends_on' => '2026-09-19'])->assertStatus(422);
     });
 
@@ -167,8 +157,6 @@ describe('deciding', function (): void {
             ->postJson("/api/v1/hr/leave/$id/decision", ['decision' => 'approved'])
             ->assertOk();
 
-        // Re-approving would move `decided_at` and lose who actually made
-        // the call.
         $this->actingAs($this->admin)
             ->postJson("/api/v1/hr/leave/$id/decision", ['decision' => 'rejected'])
             ->assertStatus(422);
@@ -189,7 +177,6 @@ describe('deciding', function (): void {
         $this->actingAs($this->approver)
             ->postJson("/api/v1/hr/leave/$id/decision", ['decision' => 'approved']);
 
-        // Otherwise three days signed off could quietly become ten.
         $this->actingAs($this->admin)
             ->patchJson("/api/v1/hr/leave/$id", [
                 'employee_id' => $this->employee->id,
@@ -246,8 +233,6 @@ describe('undertime', function (): void {
     });
 
     it('allows two on the same day, unlike leave', function (): void {
-        // A morning errand and an afternoon one are two real requests; there
-        // is no range to overlap.
         ($this->askUndertime)()->assertCreated();
         ($this->askUndertime)(['from_time' => '08:00', 'to_time' => '09:00'])->assertCreated();
     });
@@ -292,8 +277,6 @@ describe('the queue', function (): void {
         $row = collect($nav->json('data'))->firstWhere('key', 'time-off');
 
         expect($row['badge'])->toBe(2);
-        // The roster's group, whatever it is called this month — the sidebar's
-        // own shape is `NavigationTest`'s business, not this file's.
         expect($row['group'])->toBe('People');
     });
 
@@ -314,8 +297,6 @@ describe('the queue', function (): void {
     });
 
     it('finds a leave that overlaps the window rather than only ones starting in it', function (): void {
-        // Runs from last month into this one. A start-date filter would hide
-        // it, and it is still this month's problem.
         ($this->ask)(['starts_on' => '2026-08-28', 'ends_on' => '2026-09-03']);
 
         $found = $this->actingAs($this->admin)
@@ -343,8 +324,6 @@ describe('the queue', function (): void {
 
         $this->actingAs($this->admin)->deleteJson("/api/v1/employees/{$this->employee->id}");
 
-        // The employee is soft-deleted, so their requests are still there —
-        // an approved leave is part of the record, not scratch data.
         expect(LeaveRequest::count())->toBe(1);
     });
 });

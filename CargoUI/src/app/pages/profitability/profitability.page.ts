@@ -16,15 +16,6 @@ import { Donut, DonutSlice } from '../../shared/donut';
 import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 
-/**
- * Profitability — the workbook's "DashBoard" sheet, laid out the same way:
- * a titled 10-day header with the From/To range, the five summary tiles,
- * the four charts, then the per-unit table with its TOTAL row.
- *
- * The roll-up is the API's, not this page's. Quarterly Summary asks the same
- * endpoint with a different range, so the two pages cannot print arithmetic
- * that disagrees.
- */
 @Component({
   selector: 'app-profitability',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -34,14 +25,6 @@ import { Icon } from '../../shared/icon';
 export class ProfitabilityPage {
   private readonly financeApi = inject(FinanceService);
 
-  /**
-   * The ten days ending today, matching what the API defaults to.
-   *
-   * The workbook opens on 5 April 2026 and this page used to pin that date.
-   * It meant a day recorded now sat outside the window the page opens on, so
-   * the ledger looked as though it never reached Profitability. The From box
-   * and the step buttons still reach April.
-   */
   protected readonly from = signal(currentTenDayStart());
   protected readonly range = computed(() => tenDayRange(this.from()));
 
@@ -56,17 +39,6 @@ export class ProfitabilityPage {
 
   protected readonly totals = computed(() => this.rollup()?.totals ?? emptyTotals());
 
-  /**
-   * The part of the period's expenses that sits in no truck row.
-   *
-   * Office overhead (which includes fuel fills for a vehicle no truck points
-   * at), the supplier bills actually paid over the window, and payroll paid
-   * beyond the crew pay already on the sheet. (What was handed to truckers is
-   * not here: it was theirs, not a cost.) All are real costs of the period and neither is any unit's, so the TOTAL
-   * row is legitimately larger than its own columns add up to — and a reader
-   * who cannot see why will assume the table is broken. The template says the
-   * figure out loud when there is one.
-   */
   protected readonly unattributed = computed(
     () =>
       this.totals().overhead_cents +
@@ -74,14 +46,6 @@ export class ProfitabilityPage {
       this.totals().payroll_cents,
   );
 
-  /**
-   * The same figure broken out, for the sentence that explains it.
-   *
-   * Only the parts that are actually there. Three `@if`s in the template did
-   * this before and needed a fourth for every figure added, plus an "and"
-   * between each pair — which is how a sentence ends up reading "₱0 overhead
-   * and and ₱500 of payouts".
-   */
   protected readonly unattributedParts = computed(() => {
     const t = this.totals();
 
@@ -98,7 +62,6 @@ export class ProfitabilityPage {
     () => this.rollup()?.average_profit_per_truck ?? { cents: 0, trucks: 0 },
   );
 
-  /** Charts show only units that actually traded in the period. */
   protected readonly active = computed(() => this.rows().filter(hasActivity));
 
   protected readonly shares = computed<DonutSlice[]>(() =>
@@ -110,13 +73,6 @@ export class ProfitabilityPage {
     })),
   );
 
-  /**
-   * The three per-unit bar lists.
-   *
-   * Each carries the same breakdown in its tooltip, so a unit can be read in
-   * full from whichever chart the eye landed on rather than only from the
-   * table further down the page.
-   */
   protected readonly incomeBars = computed<BarRow[]>(() =>
     this.active().map((r) => ({
       key: r.truck.id,
@@ -138,15 +94,12 @@ export class ProfitabilityPage {
       value: fmt.pesos(r.total_expenses_cents),
       pct: this.expenseWidth(r.total_expenses_cents),
       tone: 'expense' as const,
-      // The five columns the total is made of — this is where somebody looks
-      // when a unit is expensive and they want to know which part of it is.
       rows: [
         { label: 'Fuel', value: fmt.pesos(r.fuel_cents) },
         { label: 'Driver', value: fmt.pesos(r.driver_salary_cents) },
         { label: 'Helper', value: fmt.pesos(r.helper_salary_cents) },
         { label: 'Maintenance', value: fmt.pesos(r.maintenance_cents) },
         { label: 'Allowance', value: fmt.pesos(r.allowance_cents) },
-        // The two that make the rows add up to the bar.
         { label: 'Owner share', value: fmt.pesos(r.owner_share_cents) },
         { label: 'Other expenses', value: fmt.pesos(r.other_expenses_cents) },
       ],
@@ -186,7 +139,6 @@ export class ProfitabilityPage {
     return Math.round((cents / this.max((r) => r.total_expenses_cents)) * 100);
   }
 
-  /** Net bars are centred: a loss runs left of the axis, a profit right. */
   protected netWidth(cents: number): number {
     return Math.round((Math.abs(cents) / this.max((r) => Math.abs(r.net_income_cents))) * 50);
   }

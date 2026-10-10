@@ -12,27 +12,6 @@ use App\Domain\Trucker\Models\WalletEntry;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 
-/**
- * What is owed **to** the fleet, as at a date — the mirror of Payables.
- *
- * Two kinds of debt, each wound back to the date the way
- * `PayablesService::outstandingAsOf()` winds back its own:
- *
- *   a customer's invoice, from what is due on it less what had been paid
- *   against it by then;
- *   a partner whose wallet had gone into the red by then — the fleet's cut of
- *   a run they billed themselves, not yet remitted. Payables leaves those out
- *   on purpose and says they belong here.
- *
- * "Due" is the face value less the withholding the customer keeps back and
- * remits to the BIR on the fleet's behalf. That money is never coming from the
- * customer, and counting it made a half-paid invoice look entirely unpaid.
- *
- * Not an income figure. The trip income behind an invoice reached the ledger
- * when the run was delivered, so it is already in Net income; this is how much
- * of that has not yet turned into money, and nothing is added to or taken off
- * any other figure because of it.
- */
 class ReceivablesService
 {
     public function outstandingAsOf(CarbonInterface $asOf): int
@@ -40,24 +19,17 @@ class ReceivablesService
         return (int) array_sum(array_column($this->linesAsOf($asOf), 'amount_cents'));
     }
 
-    /**
-     * Each debt as a row, most overdue first.
-     *
-     * @return array<int, array<string, mixed>>
-     */
+    /** @return array<int, array<string, mixed>> */
     public function linesAsOf(CarbonInterface $asOf): array
     {
         $lines = [...$this->invoiceLines($asOf), ...$this->truckerLines($asOf)];
 
-        // The oldest due date first — the order somebody chasing money works
-        // in. Partners carry no due date and go last.
         usort($lines, static fn (array $a, array $b): int => [$a['due_at'] === null, $a['due_at'], $a['key']]
             <=> [$b['due_at'] === null, $b['due_at'], $b['key']]);
 
         return $lines;
     }
 
-    /** Customer invoices raised by the date, less what had been paid on them by it. */
     private function invoiceLines(CarbonInterface $asOf): array
     {
         $date = $asOf->toDateString();
@@ -65,8 +37,6 @@ class ReceivablesService
         return Invoice::query()
             ->with('customer:id,name')
             ->where('direction', InvoiceDirection::Receivable->value)
-            // Paid ones stay in: one settled in October was still owed at the
-            // close of September. Only a cancelled invoice was never owed.
             ->where('status', '!=', StatusValue::Cancelled->value)
             ->whereDate('issued_at', '<=', $date)
             ->withSum(
@@ -77,8 +47,6 @@ class ReceivablesService
             )
             ->get()
             ->map(static function (Invoice $invoice) use ($asOf): array {
-                // Floored, so an overpaid invoice does not lend its credit to
-                // the next one's balance.
                 $balance = max(0, $invoice->dueCents() - (int) ($invoice->paid_by_then ?? 0));
 
                 return [
@@ -98,7 +66,6 @@ class ReceivablesService
             ->all();
     }
 
-    /** Partners whose wallet was in the red by the date, counting only what had landed. */
     private function truckerLines(CarbonInterface $asOf): array
     {
         $owing = WalletEntry::query()

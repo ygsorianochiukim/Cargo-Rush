@@ -12,7 +12,6 @@ use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/** Drivers Management — LTMS violations, licences, driver status. */
 class DriverController extends ApiController
 {
     public function __construct(private readonly DriverService $drivers) {}
@@ -46,13 +45,6 @@ class DriverController extends ApiController
         return $this->noContent();
     }
 
-    /**
-     * The office setting somebody else's availability.
-     *
-     * Behind `drivers.manage` with the rest of the roster: taking a named
-     * driver off the board is a rostering decision, and the person making it is
-     * not the person it is about.
-     */
     public function availability(Request $request, Driver $driver): JsonResponse
     {
         $validated = $request->validate(['available' => ['required', 'boolean']]);
@@ -62,23 +54,6 @@ class DriverController extends ApiController
         ));
     }
 
-    /**
-     * The availability switch on the driver app's dashboard.
-     *
-     * A driver saying whether they are free is not a rostering decision about
-     * somebody, it is somebody answering for themselves — so it takes no driver
-     * id, like every other call the handset makes about its own work, and needs
-     * no `drivers.manage`. That permission is how the office edits the roster,
-     * and no driver holds it: the switch on the dashboard answered 403 for
-     * every driver who ever touched it, which is what this exists to fix.
-     *
-     * There is nothing left to gate. The only row it can reach is the caller's
-     * own, resolved from the token, and an account with no driver record gets a
-     * 404 — the same answer `DriverTripController` gives an administrator
-     * asking for "my trips". A permission on top of that would be one an office
-     * could revoke to break a driver's own switch, which is not a setting
-     * anybody wants.
-     */
     public function ownAvailability(Request $request): JsonResponse
     {
         $validated = $request->validate(['available' => ['required', 'boolean']]);

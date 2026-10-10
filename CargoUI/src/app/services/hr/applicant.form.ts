@@ -4,14 +4,6 @@ import { Applicant } from '../../models/hr/hr.model';
 import { RecordSpec, toFormData } from '../../shared/record-form-spec';
 import { ApplicantService } from './applicant.service';
 
-/**
- * An application — the person, and the two files that come with them.
- *
- * `stage` is not on this form. Moving somebody along the pipeline stamps the
- * date the decision was made, and `hired` builds an employee record from the
- * application — neither of which a field on a create form can do. Both are
- * actions on the applicant list instead.
- */
 export function applicantSpec(): RecordSpec<Applicant> {
   const applicants = inject(ApplicantService);
 
@@ -72,16 +64,12 @@ export function applicantSpec(): RecordSpec<Applicant> {
       rating: record.rating ?? 0,
       address: record.address ?? '',
       notes: record.notes ?? '',
-      // Never prefilled: a file input cannot be given a value, and a missing
-      // file is read as "keep the one already on record".
       photo: null,
       resume: null,
     }),
 
     toPayload: (values) => ({
       ...values,
-      // Zero is not a rating, it is the untouched number field. Sending it
-      // would fail the API's 1–5 rule on every applicant nobody has met yet.
       rating: Number(values['rating'] ?? 0) > 0 ? values['rating'] : undefined,
     }),
 

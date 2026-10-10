@@ -11,32 +11,6 @@ import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 import { Modal } from '../../shared/modal';
 
-/**
- * The cutoff this firm runs on — and, for whoever cannot change it, a way to
- * ask.
- *
- * The person running payroll is the one who *notices* that the fortnight the
- * system pays is not the fortnight the yard works. They are also, by default,
- * the one who cannot do anything about it: moving the cutoff is
- * `company.manage`, which ships with the administrator alone, while building
- * and paying a run is `payroll.manage`. That gap is deliberate — the cutoff
- * reshapes every future period and should not be a field on the screen of
- * whoever happens to be running payroll this week — but a gap with no bridge
- * across it just means the change gets made from memory, in a corridor, on the
- * wrong day.
- *
- * So this card does one of two things depending on who is looking:
- *
- *   **Somebody who can change it** is told so and sent to the settings card,
- *   rather than being offered a request they would immediately approve
- *   themselves.
- *
- *   **Everybody else** gets the button. They pick the days, say why, and an
- *   administrator gets a notification with the change worked out in words.
- *
- * Either way it shows what the firm is on now, because that is the question
- * anybody opening payroll actually has.
- */
 @Component({
   selector: 'app-cutoff-request-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -46,12 +20,6 @@ import { Modal } from '../../shared/modal';
       <p class="text-[14px] font-medium">{{ description() }}</p>
 
       @if (pending(); as request) {
-        <!--
-          Somebody has already asked. Shown to everyone who can see payroll,
-          not just the asker: two people filing the same request in a week is
-          the thing the API refuses, and the honest way to prevent it is to
-          say it is already in hand.
-        -->
         <div class="mt-3 rounded-control border border-cr-line bg-cr-tint p-3">
           <p class="text-[13px] font-semibold">Change requested</p>
           <p class="cr-meta mt-0.5">{{ request.summary }}</p>
@@ -198,16 +166,8 @@ export class CutoffRequestCard {
   protected readonly notice = signal<string | null>(null);
   protected readonly failure = signal<string | null>(null);
 
-  /**
-   * Can this account change the cutoff directly?
-   *
-   * Read off the permissions the API already sent with `me`, not guessed from
-   * the role. Somebody who can is offered the settings card instead of a
-   * request they would approve themselves thirty seconds later.
-   */
   protected readonly canDecide = computed(() => this.identity.can('company.manage'));
 
-  /** What the firm is on, in the API's own words. */
   protected readonly description = signal('Loading the pay cutoff…');
 
   protected readonly firstDayChoices = Array.from({ length: 27 }, (_, i) => i + 1);
@@ -300,11 +260,6 @@ export class CutoffRequestCard {
       next: (request) => {
         this.pending.set(request);
 
-        // A pending request carries the firm's current calendar with it, so
-        // that answer is already here. With nothing waiting there is no
-        // request to carry it and the periods endpoint is asked instead —
-        // which is the same source, and still not this screen working a
-        // calendar out for itself.
         if (request?.current_calendar) {
           this.description.set(request.current_calendar.description);
 
@@ -313,8 +268,6 @@ export class CutoffRequestCard {
 
         this.loadCalendar();
       },
-      // Silent: anybody without payroll access never sees this card, and an
-      // error banner on a card they cannot act on is noise.
       error: () => {
         this.pending.set(null);
         this.loadCalendar();

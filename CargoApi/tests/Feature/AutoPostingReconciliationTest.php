@@ -11,7 +11,6 @@ use App\Domain\Billing\Models\Invoice;
 use App\Domain\Billing\Services\PaymentService;
 use App\Domain\Customer\Models\Customer;
 use App\Domain\Driver\Models\Driver;
-use App\Domain\Finance\Models\Expense;
 use App\Domain\Finance\Models\ExpenseCategory;
 use App\Domain\Finance\Models\LedgerEntry;
 use App\Domain\Finance\Services\FinanceService;
@@ -38,29 +37,10 @@ use Database\Seeders\PermissionSeeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
-/**
- * The statements say what the Finance screens say.
- *
- * The guard on auto-posting. One realistic quarter — every kind of record the
- * roll-up counts, and the awkward cases it deliberately does not — is built
- * through the same doors the office uses, and then the books and the screens
- * are held against each other to the centavo:
- *
- *   income statement revenue    = the roll-up's total income
- *   income statement expenses   = the roll-up's total expenses (payroll in)
- *   1100 Accounts receivable    = what Billing says customers owe
- *   2010 Accounts payable       = the Payables page's supplier bills
- *   2020 − 1160                 = every partner's wallet, netted
- *   2160 + 2200                 = payroll's withholdings still to remit
- *
- * and the balance sheet balances, a correction voids and reposts, re-syncing
- * changes nothing, and a backfill run twice adds nothing.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
 
-    // The books first, so everything after posts as it is written.
     app(CompanyProvisioner::class)->provision($this->company);
     $this->seed(FleetSeeder::class);
 
@@ -69,7 +49,6 @@ beforeEach(function (): void {
     $this->admin = User::where('email', 'admin@cargorush.ph')->firstOrFail();
     $this->driver = Driver::query()->firstOrFail();
 
-    // A customer who withholds 2% EWT on the net.
     $this->customer = Customer::create([
         'name' => 'Pryce Gases', 'contact' => '0917 000 1111',
         'withholds_tax' => true, 'withholding_rate_bp' => 200,
@@ -84,7 +63,6 @@ beforeEach(function (): void {
         ...$terms,
     ]);
 
-    /** A company run, booked, checked and delivered. */
     $this->haul = function (Vehicle $vehicle, int $price): Trip {
         $trip = Trip::create([
             'customer_id' => $this->customer->getKey(), 'origin' => 'Iponan', 'destination' => 'Bukidnon',
@@ -102,7 +80,6 @@ beforeEach(function (): void {
         return $trip->refresh();
     };
 
-    /** A partner's run — the desk brokered it, or the customer picked the partner. */
     $this->partnerRun = function (Trucker $trucker, User $user, bool $direct, int $price): Trip {
         $trip = Trip::create([
             'customer_id' => $this->customer->getKey(), 'origin' => 'Malanang', 'destination' => 'Mambuaya',
@@ -149,26 +126,21 @@ beforeEach(function (): void {
             ...$extra,
         ])->assertCreated()->json('data');
 
-    /** An account's balance from posted entries up to a day, debit-positive. */
     $this->balance = fn (string $code, string $asOf = '2026-09-30') => (int) JournalLine::query()
         ->join('journal_entries', 'journal_entries.id', '=', 'journal_lines.journal_entry_id')
         ->where('journal_entries.status', JournalEntry::POSTED)
         ->whereDate('journal_entries.entry_date', '<=', $asOf)
         ->where('journal_lines.account_id', Account::where('code', $code)->value('id'))
-        ->sum(DB::raw('journal_lines.debit_cents - journal_lines.credit_cents'));
+        ->sum(DB::raw(DB::getQueryGrammar()->wrap('journal_lines.debit_cents').' - '.DB::getQueryGrammar()->wrap('journal_lines.credit_cents')));
 });
 
 it('keeps the books and the Finance screens in agreement over a whole quarter', function (): void {
-    /* ---------------------------------------------------------------- Income */
-
-    // 1. A company truck's run, invoiced on delivery, then paid less its EWT.
     $own = ($this->unit)();
     $ownTrip = ($this->haul)($own, 1_000_000);
     $ownInvoice = Invoice::query()->where('trip_id', $ownTrip->getKey())->firstOrFail();
 
     expect((int) $ownInvoice->withholding_cents)->toBeGreaterThan(0);
 
-    // The office types the day's costs onto the sheet the run opened.
     $ownDay = LedgerEntry::query()->where('trip_id', $ownTrip->getKey())->firstOrFail();
     $this->actingAs($this->admin)->patchJson("/api/v1/ledger/{$ownDay->id}", [
         'driver_salary_cents' => 150_000,
@@ -177,7 +149,6 @@ it('keeps the books and the Finance screens in agreement over a whole quarter', 
 
     ($this->pay)($ownInvoice->id, $ownInvoice->dueCents(), '2026-08-25', 'receivable');
 
-    // 2. A revenue-share truck: the owner's 85% is a cost of the fleet's run.
     $ownerUser = User::factory()->create(['role' => Role::Trucker->value, 'company_id' => $this->company->getKey()]);
     $owner = Trucker::factory()->approved()->create(['name' => 'Delfin Uy', 'licence_no' => null, 'user_id' => $ownerUser->getKey()]);
     $shared = ($this->unit)([
@@ -186,7 +157,6 @@ it('keeps the books and the Finance screens in agreement over a whole quarter', 
     ]);
     ($this->haul)($shared, 800_000);
 
-    // 3 & 4. A partner's run the desk billed, and one the partner billed.
     $partnerUser = User::factory()->create(['role' => Role::Trucker->value, 'company_id' => $this->company->getKey()]);
     $partner = Trucker::factory()->approved()->create(['user_id' => $partnerUser->getKey()]);
     TruckerVehicle::factory()->create(['trucker_id' => $partner->id, 'capacity_kg' => 20_000, 'status' => 'available']);
@@ -194,10 +164,8 @@ it('keeps the books and the Finance screens in agreement over a whole quarter', 
     ($this->partnerRun)($partner, $partnerUser, false, 500_000);
     ($this->partnerRun)($partner, $partnerUser, true, 500_000);
 
-    // Paying the partner everything nets the direct run's commission off.
     app(WalletService::class)->payOut($partner, occurredOn: Carbon::parse('2026-08-28'), cleared: true);
 
-    // 5. An invoice raised by hand — other income — and one cancelled.
     $manual = $this->actingAs($this->admin)->postJson('/api/v1/billing', [
         'customer_id' => $this->customer->id, 'issued_at' => '2026-08-05', 'due_at' => '2026-09-05',
         'amount_cents' => 250_000, 'direction' => 'receivable',
@@ -209,15 +177,11 @@ it('keeps the books and the Finance screens in agreement over a whole quarter', 
     ])->assertCreated()->json('data');
     Invoice::findOrFail($cancelled['id'])->update(['status' => StatusValue::Cancelled->value]);
 
-    /* -------------------------------------------------------------- Expenses */
-
     ($this->spend)('office', '2026-07-10', 1_200_000);
     ($this->spend)('toll-parking', '2026-08-12', 45_000);
     $gone = ($this->spend)('food', '2026-08-13', 60_000);
     $this->actingAs($this->admin)->deleteJson("/api/v1/expenses/{$gone['id']}")->assertSuccessful();
 
-    // A fill on the company truck (posts into its Fuel column) and one on a
-    // unit no truck points at (fleet overhead).
     FuelRecord::create([
         'vehicle_id' => $own->id, 'litres' => 100, 'amount_cents' => 450_000, 'odometer_km' => 1,
         'receipt_no' => 'RC-1', 'logged_at' => '2026-08-12 15:00:00', 'status' => 'active',
@@ -228,9 +192,6 @@ it('keeps the books and the Finance screens in agreement over a whole quarter', 
         'receipt_no' => 'RC-2', 'logged_at' => '2026-08-20 09:00:00', 'status' => 'active',
     ]);
 
-    // A service with no bill, and one the garage billed — its cost is the
-    // job's, so paying the bill adds nothing. Plus a bill for something
-    // else, paid: that one is an expense on the day it was paid.
     $garage = Supplier::factory()->create(['name' => 'Davao Lubes & Parts']);
     $this->actingAs($this->admin)->postJson("/api/v1/vehicles/{$own->id}/maintenance", [
         'kind' => 'Oil change', 'due_at' => '2026-08-14', 'completed_on' => '2026-08-14', 'cost_cents' => 320_000,
@@ -247,15 +208,12 @@ it('keeps the books and the Finance screens in agreement over a whole quarter', 
     ($this->pay)($tyres['id'], 600_000, '2026-09-03', 'payable');
     ($this->bill)(210_000, '2026-09-10');
 
-    /* --------------------------------------------------------------- Payroll */
-
     $hire = fn (string $first, string $position) => $this->actingAs($this->admin)->postJson('/api/v1/employees', [
         'first_name' => $first, 'last_name' => 'Reyes', 'position' => $position, 'department' => 'Operations',
         'contact' => '0917 555 0'.random_int(100, 999), 'hired_on' => '2026-01-05', 'amount_cents' => 3_000_000,
     ])->assertCreated()->json('data');
 
     $hire('Elena', 'Office Staff');
-    // The run's driver, whose ₱1,500 on the sheet is part of the same pay.
     Employee::findOrFail($hire('Marco', 'Driver')['id'])->update(['driver_id' => $this->driver->getKey()]);
 
     $run = $this->actingAs($this->admin)->postJson('/api/v1/payroll', [
@@ -263,8 +221,6 @@ it('keeps the books and the Finance screens in agreement over a whole quarter', 
     ])->assertCreated()->json('data');
     $this->actingAs($this->admin)->postJson("/api/v1/payroll/{$run['id']}/approve")->assertOk();
     $this->actingAs($this->admin)->postJson("/api/v1/payroll/{$run['id']}/pay")->assertOk();
-
-    /* ------------------------------------------------------ Hold them together */
 
     $this->travelTo(Carbon::parse('2026-09-20 17:00:00'));
 
@@ -280,30 +236,22 @@ it('keeps the books and the Finance screens in agreement over a whole quarter', 
         ->and($statement['expenses']['total_cents'])->toBe($rollup['total_expenses_cents'])
         ->and($statement['net_income_cents'])->toBe($rollup['net_income_cents']);
 
-    // VAT is beside the income, never in it.
     expect(-($this->balance)('2150'))->toBe($rollup['vat_collected_cents']);
 
-    // What customers owe.
     $invoicesOwed = collect(app(ReceivablesService::class)->linesAsOf($to))->where('source', 'invoice')->sum('amount_cents');
     expect(($this->balance)('1100'))->toBe((int) $invoicesOwed);
 
-    // What the fleet owes.
     $payables = collect(app(PayablesService::class)->overview()['groups'])->keyBy('key');
     expect(-($this->balance)('2010'))->toBe($payables['supplier_bills']['total_cents'])
         ->and(-($this->balance)('2020') - ($this->balance)('1160'))->toBe((int) WalletEntry::query()->landed()->sum('amount_cents'))
         ->and(-($this->balance)('2160') - ($this->balance)('2200'))->toBe($payables['payroll']['total_cents']);
 
-    // And the sheet balances.
     expect(app(FinancialStatementService::class)->balanceSheet($to)['balanced'])->toBeTrue();
 
-    /* -------------------------------------------- Corrections, and re-running */
-
-    // A save that changes nothing posts nothing.
     $before = JournalEntry::query()->count();
     $this->actingAs($this->admin)->patchJson("/api/v1/ledger/{$ownDay->id}", ['remarks' => 'Tyre looked soft'])->assertOk();
     expect(JournalEntry::query()->count())->toBe($before);
 
-    // A correction voids the day's posting and posts the new one.
     $this->actingAs($this->admin)->patchJson("/api/v1/ledger/{$ownDay->id}", ['allowance_cents' => 40_000])->assertOk();
 
     $sheetEntries = JournalEntry::query()
@@ -316,7 +264,6 @@ it('keeps the books and the Finance screens in agreement over a whole quarter', 
     expect(app(FinancialStatementService::class)->incomeStatement($from, $to)['expenses']['total_cents'])
         ->toBe($rollup['total_expenses_cents']);
 
-    // Every record synced again: nothing to do.
     $service = app(AutoPostingService::class);
     $changes = 0;
 
@@ -329,7 +276,6 @@ it('keeps the books and the Finance screens in agreement over a whole quarter', 
 
     expect($changes)->toBe(0);
 
-    // And a backfill, twice, adds nothing either.
     $count = JournalEntry::query()->count();
     $this->artisan('cargo:accounting-backfill')->assertSuccessful();
     $this->artisan('cargo:accounting-backfill')->assertSuccessful();

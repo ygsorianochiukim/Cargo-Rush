@@ -17,18 +17,6 @@ class SupplierRequest extends ApiFormRequest
         $required = $this->requiredOnCreate();
 
         return [
-            /**
-             * One name per haulier.
-             *
-             * Scoped to the company and ignoring the row being edited, which
-             * are the two halves a unique rule gets wrong: without the first,
-             * two fleets cannot both buy from Shell; without the second,
-             * saving a supplier without renaming it collides with itself.
-             *
-             * Soft-deleted rows are excluded, so a supplier the office removed
-             * and later adds back is a new record rather than a 422 pointing at
-             * something they cannot see.
-             */
             'name' => [
                 $required, 'string', 'max:120',
                 Rule::unique('suppliers', 'name')

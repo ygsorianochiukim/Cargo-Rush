@@ -8,9 +8,7 @@ use App\Domain\Inspection\Models\Inspection;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use Illuminate\Http\Request;
 
-/**
- * @mixin Inspection
- */
+/** @mixin Inspection */
 class InspectionResource extends ApiResource
 {
     public function toArray(Request $request): array
@@ -24,7 +22,6 @@ class InspectionResource extends ApiResource
             'driver_id' => $this->driver_id,
             'driver_name' => $this->driver?->name,
             'results' => $this->results,
-            // The API's call, not the client's.
             'good_to_go' => $this->good_to_go,
             'failures' => $this->failures(),
             'notes' => $this->notes,

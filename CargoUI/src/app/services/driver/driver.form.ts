@@ -4,12 +4,6 @@ import { Driver } from '../../models/driver/driver.model';
 import { RecordSpec, statusOptions } from '../../shared/record-form-spec';
 import { DriverService } from './driver.service';
 
-/**
- * Drivers Management — DESIGN.md section 5.1.
- *
- * Helpers are entered here too: a helper is a driver record without the keys,
- * so there is no second form for them.
- */
 export function driverSpec(): RecordSpec<Driver> {
   const drivers = inject(DriverService);
 

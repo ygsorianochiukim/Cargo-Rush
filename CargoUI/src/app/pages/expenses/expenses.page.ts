@@ -17,19 +17,6 @@ import { ListToolbar } from '../../shared/list-toolbar';
 import { recordList } from '../../shared/record-list';
 import { ErrorState } from '../../shared/states';
 
-/**
- * Other Expenses — DESIGN.md section 5.1's Finance group.
- *
- * Two things on this page are worth knowing before reading the code.
- *
- * The report answers "what are we spending it on", which the ledger's five
- * fixed columns cannot: everything that was not fuel, salary, maintenance or
- * allowance used to be pushed into `allowance_cents` or left off the books.
- *
- * And overhead is shown as its own figure rather than folded into the total.
- * Spend with no truck on it is real and belongs to the period, but charging it
- * to a unit would make that unit look unprofitable for paying the office rent.
- */
 @Component({
   selector: 'app-expenses',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -43,15 +30,6 @@ export class ExpensesPage {
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
 
-  /**
-   * One expense named by a link, waiting for the list to arrive.
-   *
-   * Payables links here at a row — a month's rent on a hired truck, a bill
-   * somebody filed as spend — rather than at the page. The edit dialog wants
-   * the record and the list fetches itself, so the link has to wait for it.
-   * A plain field, not a signal: nothing renders it, it fires once and is
-   * spent.
-   */
   private settleId: string | null = this.route.snapshot.queryParamMap.get('settle');
 
   protected readonly fmt = fmt;
@@ -69,14 +47,6 @@ export class ExpensesPage {
 
   protected readonly report = signal<ExpenseReport | null>(null);
 
-  /**
-   * The window the report covers, or null for the API's default of this month.
-   *
-   * The inputs read their dates back off the report rather than off this, so
-   * the page never works out "this month" itself — the server's clock and the
-   * browser's disagree around midnight on the last day, and the server's is
-   * the one the totals were counted with.
-   */
   private readonly range = signal<{ from: string; to: string } | null>(null);
   protected readonly isThisMonth = computed(() => this.range() === null);
   protected readonly categories = signal<ExpenseCategory[] | null>(null);
@@ -92,19 +62,6 @@ export class ExpensesPage {
     this.refreshReport();
     this.refreshCategories();
 
-    /**
-     * Followed a Payables line to one expense — open it.
-     *
-     * The rent charges `cargo:truck-rent` raises land here as pending
-     * expenses, and marking one settled is editing its status. Opening the
-     * row is therefore the whole of "settle this" on this page.
-     *
-     * An effect because `recordList` owns the fetch and returns a signal. It
-     * spends the latch on the first non-null list, so the refresh that
-     * follows a save does not reopen the dialog over the edit just made, and
-     * drops the parameter so a refresh tomorrow does not reopen a row already
-     * dealt with.
-     */
     effect(() => {
       const rows = this.list.rows();
 
@@ -119,7 +76,6 @@ export class ExpensesPage {
     });
   }
 
-  /** Move one end of the window, keeping the other where the report has it. */
   protected setRange(end: 'from' | 'to', value: string): void {
     const current = this.report()?.range;
 
@@ -148,13 +104,6 @@ export class ExpensesPage {
     });
   }
 
-  /**
-   * Where the money went, as bars. Biggest first — the API already sorted it.
-   *
-   * Scaled against the biggest category rather than against the total, so the
-   * shape of the spend is readable. Against the total, a month spread over
-   * eight categories draws eight bars nobody can compare.
-   */
   protected readonly spendBars = computed<BarRow[]>(() => {
     const rows = this.report()?.categories ?? [];
     const currency = this.report()?.currency ?? 'PHP';
@@ -187,24 +136,6 @@ export class ExpensesPage {
       sub: (e) => e.note,
     },
     { label: 'Date', kind: 'num', value: (e) => fmt.date(e.date) },
-    /**
-     * Who it was bought from, and who it was for.
-     *
-     * This column used to be "Charged to", naming the truck the spend was
-     * filed against. The form stopped asking for a truck — what a unit costs to
-     * run is a maintenance job on the unit now — so the column would have read
-     * "Fleet overhead" on every row for ever, which is a column that has
-     * stopped saying anything.
-     *
-     * The supplier's name where there is one, and the typed `payee` where there
-     * is not: a one-off from a roadside seller never gets a record, and still
-     * has to print as something.
-     *
-     * The driver underneath is history rather than a field: the form stopped
-     * asking who spend was for — what a crew costs is payroll and the sheet's
-     * own crew columns — and the rows filed before that still have to read back
-     * the way they were entered.
-     */
     {
       label: 'Bought from',
       value: (e) => e.supplier_name ?? e.payee,
@@ -214,8 +145,6 @@ export class ExpensesPage {
     { label: 'Amount', kind: 'num', value: (e) => fmt.money(e.amount_cents, e.currency) },
     { label: 'Status', kind: 'status', status: (e) => e.status },
   ];
-
-  /* --------------------------------------------------------- Categories */
 
   protected addCategory(): void {
     if (this.categoryForm.invalid) {
@@ -238,14 +167,6 @@ export class ExpensesPage {
       });
   }
 
-  /**
-   * Delete a category, or hear that it was retired instead.
-   *
-   * The list is re-read rather than the row being removed locally, because the
-   * two outcomes look identical from the call site and only the server knows
-   * which happened. A category that comes back switched off was kept, and the
-   * office is told why.
-   */
   protected async removeCategory(category: ExpenseCategory): Promise<void> {
     const ok = await this.confirm.ask({
       title: `Delete ${category.name}?`,

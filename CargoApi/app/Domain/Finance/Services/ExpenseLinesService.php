@@ -15,29 +15,8 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
-/**
- * The transactions behind a period's Total expenses, one row each.
- *
- * `FinanceService::periodTotals()` adds five sources into one figure: the
- * daily sheet's cost columns, the categorised expense lines, the fills logged
- * in the Fuel module that no sheet row carries, the supplier bills paid, and
- * payroll paid beyond the sheet's crew pay. A fill that posted onto a sheet row
- * is listed as its own receipt and taken out of that row's Fuel line, so it is
- * in the list once, as it is in the total. Payouts to partners are not
- * among them — a partner's share was their money, passing through (see
- * "Income from partners" on `FinanceService`). A tile showing that figure has to
- * be able to say what it is made of, and the list has to add up to it to the
- * centavo — a breakdown that is ₱200 off the number it breaks down is worse
- * than none. So every row here comes from the same query the roll-up sums, with
- * the same exclusions, and the test pins the two together.
- *
- * A sheet day is split into one row per column it has a cost in. "Truck 1, 14
- * July, ₱18,400" is not a transaction anybody recognises; "Fuel, Truck 1, 14
- * July, ₱6,200" is.
- */
 class ExpenseLinesService
 {
-    /** The sheet's cost columns, in the order the workbook has them. */
     private const COLUMNS = [
         'fuel_cents' => 'Fuel',
         'driver_salary_cents' => 'Driver salary',
@@ -55,16 +34,11 @@ class ExpenseLinesService
         private readonly PayrollCostService $payroll,
     ) {}
 
-    /**
-     * @return array{range: array{from: string, to: string}, lines: array<int, array<string, mixed>>, total_cents: int, currency: string}
-     */
+    /** @return array{range: array{from: string, to: string}, lines: array<int, array<string, mixed>>, total_cents: int, currency: string} */
     public function between(Carbon $from, Carbon $to): array
     {
         $trucks = $this->ledger->trucks()->keyBy('id');
 
-        // Fills that posted onto a listed truck's row in the window. Each is
-        // listed as its own receipt, and taken out of the sheet's Fuel line
-        // for that day so the two do not both claim it.
         $posted = $this->fuel->postedBetween($from, $to)
             ->filter(static fn (FuelRecord $fill): bool => $trucks->has($fill->posted_truck_id))
             ->values();
@@ -77,8 +51,6 @@ class ExpenseLinesService
             ...$this->payrollLines($from, $to),
         ];
 
-        // Newest first, like every other list of money in the app. The key
-        // breaks ties so the same window always reads in the same order.
         usort($lines, static fn (array $a, array $b): int => [$b['date'], $a['key']] <=> [$a['date'], $b['key']]);
 
         return [
@@ -89,12 +61,6 @@ class ExpenseLinesService
         ];
     }
 
-    /**
-     * The daily sheet, a row per cost column.
-     *
-     * Only days on a truck the fleet still lists — the roll-up is built truck
-     * by truck, so a day on any other would be in this list and not the total.
-     */
     private function sheetLines(Carbon $from, Carbon $to, Collection $trucks, Collection $posted): array
     {
         $lines = [];
@@ -103,8 +69,6 @@ class ExpenseLinesService
             ->filter(static fn (LedgerEntry $entry): bool => $trucks->has($entry->truck_id))
             ->load('helpers.driver:id,name');
 
-        // What `/fuel` put on each truck's day, to take back out of that day's
-        // Fuel column — the fills are listed as receipts of their own below.
         $fromFills = $posted->groupBy(static fn (FuelRecord $fill): string => $fill->posted_truck_id.'|'.$fill->posted_on->toDateString())
             ->map(static fn (Collection $fills): int => (int) $fills->sum('posted_cents'))
             ->all();
@@ -115,8 +79,6 @@ class ExpenseLinesService
             foreach (self::COLUMNS as $column => $label) {
                 $cents = (int) $entry->{$column};
 
-                // Only the part of the Fuel column somebody typed. Several
-                // rows on one truck's day share the day's fills, first come.
                 if ($column === 'fuel_cents') {
                     $day = $entry->truck_id.'|'.$entry->date->toDateString();
                     $taken = min($cents, $fromFills[$day] ?? 0);
@@ -128,9 +90,6 @@ class ExpenseLinesService
                     continue;
                 }
 
-                // Helper pay is one row per helper, named, rather than the
-                // day's total — two helpers are two people paid two amounts.
-                // The lines sum to the column, so the list still adds up.
                 if ($column === 'helper_salary_cents' && $entry->helpers->isNotEmpty()) {
                     foreach ($entry->helpers as $line) {
                         if ($line->salary_cents === 0) {
@@ -168,7 +127,6 @@ class ExpenseLinesService
         return $lines;
     }
 
-    /** The categorised lines: a truck's, and the overhead that is no truck's. */
     private function expenseLines(Carbon $from, Carbon $to, Collection $trucks): array
     {
         return $this->expenses->between($from, $to)
@@ -192,14 +150,6 @@ class ExpenseLinesService
             ->all();
     }
 
-    /**
-     * The fills logged in Fuel Expense Monitoring, one receipt each.
-     *
-     * Two kinds, counted once each: a fill that posted onto a listed truck's
-     * row (its figure was taken out of that row's Fuel line above), and a
-     * fill no row carries — overhead when no truck points at its vehicle, and
-     * its plate is still printed: it is the only name the fill has.
-     */
     private function fuelLogLines(Carbon $from, Carbon $to, Collection $trucks, Collection $posted): array
     {
         $truckOf = $trucks->whereNotNull('vehicle_id')->pluck('id', 'vehicle_id');
@@ -228,14 +178,6 @@ class ExpenseLinesService
             ->all();
     }
 
-    /**
-     * Pay runs paid in the window, at what the roll-up counts of each — the
-     * gross beyond what the sheet's crew columns already recorded for the
-     * same people — and, on a row of its own, the employer's contributions on
-     * top, which no sheet ever carries. Two rows because they are two
-     * different costs: a reader checking wages against payslips should not
-     * find ₱3,980 a head they cannot account for. See `PayrollCostService`.
-     */
     private function payrollLines(Carbon $from, Carbon $to): array
     {
         $lines = [];
@@ -274,10 +216,8 @@ class ExpenseLinesService
         return $lines;
     }
 
-    /** Supplier bills, at what each payment put against them, on the day it was paid. */
     private function supplierBillLines(Carbon $from, Carbon $to): array
     {
-        // The roll-up's own query, garage bills a service job carries and all.
         return $this->finance->supplierBillSettlements($from, $to)
             ->load('invoice')
             ->map(fn (PaymentAllocation $allocation): array => $this->line(
@@ -313,8 +253,6 @@ class ExpenseLinesService
             'description' => $description === '' ? null : $description,
             'truck' => $truck,
             'amount_cents' => $cents,
-            // The record a row opens: the sheet day, the expense, the bill, or
-            // the partner. Which screen that is depends on `source`.
             'record_id' => $recordId,
         ];
     }

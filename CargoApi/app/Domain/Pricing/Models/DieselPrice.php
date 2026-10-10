@@ -10,7 +10,6 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** What diesel cost on a given day. One row per day. */
 class DieselPrice extends Model
 {
     use BelongsToCompany, HasUlids;

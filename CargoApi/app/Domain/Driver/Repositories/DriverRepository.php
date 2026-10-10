@@ -31,7 +31,6 @@ class DriverRepository extends Repository
         return $this->query()->where('user_id', $userId)->first();
     }
 
-    /** Licences inside the warning window, for the notification feed. */
     public function licencesExpiringWithin(int $days = 60): Collection
     {
         return $this->query()
@@ -39,11 +38,6 @@ class DriverRepository extends Repository
             ->get();
     }
 
-    /**
-     * On-time rate across the whole roster, weighted by trips completed — the
-     * dashboard KPI. A simple mean of the rates would let a driver with three
-     * trips move the number as much as one with five hundred.
-     */
     public function fleetOnTimeRate(): float
     {
         $row = Driver::query()

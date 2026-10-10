@@ -12,14 +12,6 @@ use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Trip\Models\Trip;
 use Database\Seeders\NavigationSeeder;
 
-/**
- * Performance, derived from the operational record.
- *
- * The tests that matter are the ones about what *does not* count: a cancelled
- * run is not the driver failing, a trip with no promised ETA is not late, a
- * pending leave request is not time off, and an office clerk with no trips is
- * not the worst driver on the fleet.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
 
@@ -43,7 +35,6 @@ beforeEach(function (): void {
 
     $this->reference = 0;
 
-    /** A trip on Marco, with whatever status and timings the test needs. */
     $this->trip = function (array $overrides = []): Trip {
         $this->reference++;
 
@@ -92,8 +83,6 @@ describe('one person', function (): void {
     it('counts the runs they rode on as helper too', function (): void {
         ($this->trip)(['driver_id' => null])->setHelpers([$this->driver->id]);
 
-        // Counting only the driver's seat would show every helper as a zero
-        // and make the module useless for half the crew.
         expect(($this->figures)()->json('data.trips_completed'))->toBe(1);
     });
 
@@ -104,8 +93,6 @@ describe('one person', function (): void {
         $response = ($this->figures)()->assertOk();
 
         expect($response->json('data.trips_cancelled'))->toBe(1);
-        // One delivered of one completable — a customer calling off a booking
-        // is not the driver failing to complete it.
         expect($response->json('data.completion_rate'))->toEqual(1.0);
     });
 
@@ -127,8 +114,6 @@ describe('one person', function (): void {
     });
 
     it('does not call a run late when nobody promised a time', function (): void {
-        // Booked over the phone against a town name, with no ETA entered.
-        // Marking it late would punish the driver for what the desk skipped.
         $trip = ($this->trip)(['eta' => null]);
         ($this->deliver)($trip, now()->subDays(2)->toDateTimeString());
 
@@ -140,7 +125,6 @@ describe('one person', function (): void {
 
         $response = ($this->figures)()->assertOk();
 
-        // Null, not 100% — a green figure over an empty month is a lie.
         expect($response->json('data.on_time_rate'))->toBeNull();
     });
 
@@ -178,7 +162,6 @@ describe('one person', function (): void {
             'reason' => 'Family trip',
         ])->json('data.id');
 
-        // Still pending — counting it would penalise them for asking.
         expect(($this->figures)()->json('data.leave_days'))->toEqual(0.0);
 
         $this->actingAs($this->admin)

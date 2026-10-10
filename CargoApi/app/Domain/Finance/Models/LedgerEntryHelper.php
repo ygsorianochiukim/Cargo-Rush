@@ -9,13 +9,6 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/**
- * One helper on a day's sheet, and what they were paid for it.
- *
- * The day's `helper_salary_cents` is the sum of these. `driver_id` is null for
- * pay entered without saying whose it was — a real cost of the day, counted
- * toward nobody's payslip.
- */
 class LedgerEntryHelper extends Model
 {
     use HasUlids;

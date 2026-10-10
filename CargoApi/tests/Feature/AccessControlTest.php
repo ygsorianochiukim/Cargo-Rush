@@ -11,18 +11,6 @@ use Database\Seeders\PermissionSeeder;
 use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * Roles, positions, and what each actually reaches.
- *
- * The tests that matter are the enforcement ones. Before this, permissions
- * decided only what the sidebar showed — every endpoint was reachable by any
- * account that could sign in, so a driver's token could read the payroll. The
- * matrix below is what stops that quietly coming back.
- *
- * The rest are the ways an access screen locks a business out of its own
- * system: a role deleted while people hold it, the administrator's permissions
- * emptied, a system role removed.
- */
 beforeEach(function (): void {
     $this->seed(PermissionSeeder::class);
     $this->seed(RoleSeeder::class);
@@ -37,7 +25,6 @@ beforeEach(function (): void {
 describe('enforcement', function (): void {
     it('lets a role reach its own modules and refuses the rest', function (): void {
         $expected = [
-            // role            => [path => status]
             'general-manager' => ['employees' => 200, 'finance/sales' => 200, 'pricing/zones' => 200, 'access/roles' => 200],
             'treasury' => ['employees' => 403, 'finance/sales' => 200, 'pricing/zones' => 200, 'access/roles' => 403],
             'hr-officer' => ['employees' => 200, 'finance/sales' => 403, 'pricing/zones' => 403, 'access/roles' => 200],
@@ -58,8 +45,6 @@ describe('enforcement', function (): void {
     it('separates reading a module from changing it', function (): void {
         $treasury = ($this->as)('treasury');
 
-        // Treasury quotes from the rate card but does not redraw it — that is
-        // the accountant's, and it changes what every future run is billed.
         expect($this->actingAs($treasury)->getJson('/api/v1/pricing/zones')->getStatusCode())->toBe(200);
 
         $this->actingAs($treasury)
@@ -70,8 +55,6 @@ describe('enforcement', function (): void {
     it('keeps an HR officer out of the ledger and away from granting themselves it', function (): void {
         $hr = ($this->as)('hr-officer');
 
-        // They can read the roles list, because registering a hire means
-        // offering one — but not change what any role reaches.
         $this->actingAs($hr)->getJson('/api/v1/access/roles')->assertOk();
         $this->actingAs($hr)->postJson('/api/v1/access/roles', ['name' => 'Superuser'])->assertForbidden();
         $this->actingAs($hr)->getJson('/api/v1/ledger')->assertForbidden();
@@ -84,15 +67,11 @@ describe('enforcement', function (): void {
     });
 
     it('lets a driver file the day from the cab, which the office also does', function (): void {
-        // One endpoint reached two ways: `finance.write` for the handset,
-        // `finance.manage` for the desk. Requiring both would lock out each.
         $this->actingAs(($this->as)('driver'))->getJson('/api/v1/ledger')->assertOk();
         $this->actingAs(($this->as)('accountant'))->getJson('/api/v1/ledger')->assertOk();
     });
 
     it('turns an unauthenticated call away as unauthorised, not forbidden', function (): void {
-        // A 403 would leave a signed-out session staring at "forbidden"; the
-        // client's interceptor sends a 401 to the login screen.
         $this->getJson('/api/v1/employees')->assertUnauthorized();
     });
 });
@@ -125,10 +104,6 @@ describe('roles', function (): void {
             'permissions' => ['trips.view', 'expenses.view'],
         ])->assertOk();
 
-        // Re-resolved rather than reusing the instance: permissions are read
-        // from the role once per request and cached on the model for the rest
-        // of it, so a long-lived object in a test holds the old list where a
-        // real request would build a fresh one.
         $this->actingAs($lead->fresh())->getJson('/api/v1/expenses')->assertOk();
     });
 
@@ -164,8 +139,6 @@ describe('roles', function (): void {
     });
 
     it('keeps the administrator holding permissions added in a later release', function (): void {
-        // `all_permissions` rather than a stored list, so a new permission is
-        // not silently missing until somebody notices an unticked box.
         expect($this->admin->hasPermission('a.permission.invented.tomorrow'))->toBeTrue();
     });
 
@@ -184,8 +157,6 @@ describe('roles', function (): void {
 
         ($this->as)('warehouse-lead');
 
-        // Deleting would leave that account pointing at nothing — a person who
-        // can sign in and see an empty app with no way to explain why.
         $response = $this->actingAs($this->admin)
             ->deleteJson("/api/v1/access/roles/$id")
             ->assertStatus(422);
@@ -227,8 +198,6 @@ describe('positions', function (): void {
         $treasury = collect($positions)->firstWhere('key', 'treasury-officer');
 
         expect($treasury['name'])->toBe('Treasury Officer');
-        // A position says what the job is and what it pays. What somebody in
-        // it can open is chosen on their account.
         expect($treasury['drives'])->toBeFalse();
     });
 
@@ -249,9 +218,6 @@ describe('positions', function (): void {
     });
 
     it('starts a job unpriced rather than guessing what it pays', function (): void {
-        // Zero and "nobody has said" look identical from the outside, so the
-        // API says which it is — and an unpriced job writes no contract on a
-        // hire rather than putting somebody on ₱0.00.
         $mechanic = collect($this->actingAs($this->admin)->getJson('/api/v1/access/positions')->json('data'))
             ->firstWhere('key', 'mechanic');
 
@@ -261,16 +227,10 @@ describe('positions', function (): void {
     });
 
     it('marks the jobs that need a drivers record, and only those', function (): void {
-        // The question is "do they use the handset", and it is the job's to
-        // answer — it used to be inferred from the role a position suggested,
-        // which read correctly right up to the firm that gave its mechanics a
-        // driver login to shunt units around the yard.
         $positions = collect($this->actingAs($this->admin)->getJson('/api/v1/access/positions')->json('data'))
             ->pluck('drives', 'key');
 
         expect($positions['driver'])->toBeTrue()
-            // A helper is a driver record without the keys: they ride along,
-            // they are named on the trip, and the roster keeps their licence.
             ->and($positions['helper'])->toBeTrue()
             ->and($positions['dispatcher'])->toBeFalse()
             ->and($positions['mechanic'])->toBeFalse();

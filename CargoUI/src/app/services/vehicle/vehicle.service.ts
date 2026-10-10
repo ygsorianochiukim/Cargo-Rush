@@ -10,7 +10,6 @@ import {
   VehiclePayload,
 } from '../../models/vehicle/vehicle.model';
 
-/** Vehicle Management — DESIGN.md section 5.1. */
 @Injectable({ providedIn: 'root' })
 export class VehicleService {
   private readonly api = inject(ApiService);
@@ -35,7 +34,6 @@ export class VehicleService {
     return this.api.delete(`vehicles/${id}`);
   }
 
-  /** Its own call: taking a unit off the road also releases its driver. */
   setStatus(id: string, status: StatusValue): Observable<Vehicle> {
     return this.api.post<Vehicle>(`vehicles/${id}/status`, { status });
   }

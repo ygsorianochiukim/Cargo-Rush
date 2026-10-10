@@ -11,23 +11,11 @@ use App\Domain\Trucker\Services\TruckPhotoStore;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Validation\Rule;
 
-/**
- * A partner's truck, added or corrected.
- *
- * Used by the partner for their own record and by the desk for anybody's. The
- * fields are identical either way — a plate is a plate — and who may call it is
- * the route's business.
- */
 class TruckerVehicleRequest extends ApiFormRequest
 {
     public function rules(): array
     {
         return [
-            /**
-             * Once per company, as the index says — asked here first so a
-             * plate already on the books is a sentence, not a 500. Deleted
-             * rows count, because the index counts them.
-             */
             'plate' => [
                 $this->requiredOnCreate(), 'string', 'max:20',
                 Rule::unique('trucker_vehicles', 'plate')
@@ -37,12 +25,6 @@ class TruckerVehicleRequest extends ApiFormRequest
             'model' => [$this->requiredOnCreate(), 'string', 'max:120'],
             'capacity_kg' => [$this->requiredOnCreate(), 'integer', 'min:100', 'max:100000'],
             'truck_category_id' => ['nullable', 'string', 'max:26'],
-            /**
-             * Only the two idle states. A truck's `status` here says whether it
-             * is running or in the shop, and there is no third thing for a
-             * partner to set it to — a unit under a load is described by the
-             * trip it is under, not by a column somebody can contradict.
-             */
             'status' => ['sometimes', 'string', 'in:'.implode(',', [
                 StatusValue::Available->value,
                 StatusValue::Maintenance->value,
@@ -52,17 +34,7 @@ class TruckerVehicleRequest extends ApiFormRequest
         ];
     }
 
-    /**
-     * The photographs, on a new truck.
-     *
-     * Required from a trucker adding their own, because they are what the
-     * office checks the truck from. Optional from the desk: a truck the office
-     * adds is one somebody there has already seen. Not taken on a correction —
-     * re-sending photographs is its own call (`TruckerVehiclePhotosRequest`),
-     * because it sends the truck back for checking.
-     *
-     * @return array<string, array<int, string>>
-     */
+    /** @return array<string, array<int, string>> */
     private function photoRules(): array
     {
         if (! $this->creating()) {
@@ -110,11 +82,7 @@ class TruckerVehicleRequest extends ApiFormRequest
         ];
     }
 
-    /**
-     * The uploaded photographs, by slot.
-     *
-     * @return array<string, UploadedFile>
-     */
+    /** @return array<string, UploadedFile> */
     public function photos(): array
     {
         return collect(array_keys(TruckPhotoStore::SLOTS))
@@ -123,11 +91,7 @@ class TruckerVehicleRequest extends ApiFormRequest
             ->all();
     }
 
-    /**
-     * The truck's own fields, without the files.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function details(): array
     {
         return collect($this->validated())

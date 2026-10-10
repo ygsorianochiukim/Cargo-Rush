@@ -5,14 +5,6 @@ declare(strict_types=1);
 use App\Domain\Identity\Models\User;
 use Database\Seeders\NavigationSeeder;
 
-/**
- * A fresh install has navigation and one account, and nothing else.
- *
- * This is the state a client actually starts in, so it gets the same coverage
- * as a populated one. The failure it guards against is the one that makes an
- * empty system look broken: a list that errors instead of returning nothing,
- * or a create that 500s because it relied on a value the demo data supplied.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
 
@@ -60,11 +52,6 @@ it('reports no margin rather than a zero one when nothing has been earned', func
 });
 
 describe('entering the first records', function (): void {
-    /**
-     * The status column has a database default, and `persistable()` omits what
-     * the caller did not send — so a create with no status used to hand the
-     * Resource a model whose enum was still null. This is that.
-     */
     it('creates a driver without being told a status', function (): void {
         $this->actingAs($this->user)->postJson('/api/v1/drivers', [
             'name' => 'Real Driver',
@@ -108,8 +95,6 @@ describe('entering the first records', function (): void {
     });
 
     it('adds a ledger unit with no plate yet', function (): void {
-        // Units 7 and 8 in the workbook have no plate. A business entering its
-        // own fleet hits the same case on day one.
         $this->actingAs($this->user)->postJson('/api/v1/finance/trucks', [
             'label' => 'Unit 1',
         ])
@@ -130,8 +115,6 @@ describe('entering the first records', function (): void {
             'fuel_cents' => 500_000,
         ])->assertCreated();
 
-        // Deleting it would take the money with it, and a period that used to
-        // balance would quietly stop.
         $this->actingAs($this->user)
             ->deleteJson("/api/v1/finance/trucks/{$truck}")
             ->assertStatus(422);

@@ -6,7 +6,6 @@ export interface FilterOption {
   count: number;
 }
 
-/** Filters sit in one row above the content (DESIGN.md section 8 / dataviz interaction). */
 @Component({
   selector: 'app-filter-bar',
   changeDetection: ChangeDetectionStrategy.OnPush,

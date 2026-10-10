@@ -14,11 +14,6 @@ import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 import { LedgerDialog } from '../../shared/ledger-dialog';
 
-/**
- * Daily Trip Monitoring — the workbook's per-truck sheets (MAR1390, CBS8862, …).
- * Pick a unit, see and edit its daily rows; the header totals mirror the
- * summary row the workbook keeps above each table.
- */
 @Component({
   selector: 'app-monitoring',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -32,7 +27,6 @@ export class MonitoringPage {
   private readonly records = inject(RecordDialog);
   private readonly unitSpec = truckSpec();
 
-  /** Local so a newly added unit shows without a refetch. */
   private readonly loadedTrucks = toSignal(this.financeApi.trucks(), { initialValue: null });
   private readonly addedTrucks = signal<Truck[]>([]);
 
@@ -48,14 +42,9 @@ export class MonitoringPage {
     { initialValue: null },
   );
 
-  /** Local overlay so create/edit/delete show without a refetch. */
   private readonly overrides = signal<LedgerEntry[] | null>(null);
   private readonly all = computed(() => this.overrides() ?? this.loaded());
 
-  /**
-   * Which sheet is open. Empty until the trucks arrive — ids come from the
-   * API now, so there is no id this page could sensibly guess at first paint.
-   */
   private readonly picked = signal<string | null>(null);
 
   protected readonly selectedId = computed(
@@ -75,7 +64,6 @@ export class MonitoringPage {
       .sort((a, b) => a.date.localeCompare(b.date));
   });
 
-  /** The sheet-header totals for the selected truck. */
   protected readonly totals = computed(() => {
     const rows = this.rows() ?? [];
     const sum = (pick: (e: LedgerEntry) => number) => rows.reduce((t, e) => t + pick(e), 0);
@@ -114,7 +102,6 @@ export class MonitoringPage {
     this.picked.set(id);
   }
 
-  /** Add a unit to the ledger — its own sheet, with or without a plate. */
   protected addUnit(): void {
     this.records.create(this.unitSpec);
   }

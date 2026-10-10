@@ -17,7 +17,6 @@ class TruckRequest extends ApiFormRequest
                 $this->requiredOnCreate(), 'string', 'max:60',
                 Rule::unique('trucks', 'label')->ignore($this->route('truck')),
             ],
-            // Null is allowed and meaningful: the unit renders as "Unassigned".
             'plate' => ['nullable', 'string', 'max:20'],
             'vehicle_id' => ['nullable', 'string', 'exists:vehicles,id'],
             'position' => ['sometimes', 'integer', 'min:0', 'max:999'],

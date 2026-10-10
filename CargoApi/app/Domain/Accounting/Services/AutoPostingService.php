@@ -31,50 +31,6 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-/**
- * Every operational record, kept posted in the general journal.
- *
- * The income statement and the balance sheet are built from posted journal
- * lines, and for a long time the only thing that posted any was payroll — so
- * the statements showed ₱0 revenue for a fleet that had billed all quarter,
- * while Profitability and the Quarterly Summary showed the real figure. This
- * closes that gap: the sheet, invoices, payments, expense lines, fuel, supplier
- * bills and partners' wallets each post themselves, by a `PostingRule` per
- * kind of record, and the statements now say what the Finance screens say.
- *
- * ## One operation: sync
- *
- * `sync($record)` asks the record's rule which entries it *should* have, looks
- * at which automatic entries it *has*, and makes the second match the first:
- *
- *   the same lines, accounts and date — nothing happens;
- *   different — the old entry is voided ("Superseded by a change to …") and
- *   the new one posted, as the next revision;
- *   no longer wanted (cancelled, deleted, pending) — the old one is voided.
- *
- * So it is idempotent and safe to call as often as anything likes. That is the
- * point of it: the observers call it on every save, the backfill calls it on
- * every record, and neither has to know whether anything changed. Posted
- * entries are never edited — `JournalService` would refuse — so history reads
- * honestly: what was posted, what replaced it, and why.
- *
- * ## What it will not touch
- *
- * Anything it did not post. It reads and writes only `source = auto` entries,
- * so a manual entry and payroll's own posting are invisible to it. (That cuts
- * both ways: an accountant who also journalises the same invoices by hand gets
- * both. `cargo.accounting.auto_post.from` is where the two are divided.)
- *
- * An entry the accountant voids by hand is simply not there on the next sync,
- * and is posted again. Correct the record, not its entry.
- *
- * ## When it stays quiet
- *
- * Switched off (`cargo.accounting.auto_post.enabled`), a company with no chart
- * of accounts, or a chart missing an account a rule needs — the last with a
- * warning in the log, and the record's entries left as they were. A record
- * saving is never the thing that fails because the books could not follow it.
- */
 class AutoPostingService
 {
     /** @var array<class-string<Model>, class-string<PostingRule>> */
@@ -98,13 +54,12 @@ class AutoPostingService
         return (bool) config('cargo.accounting.auto_post.enabled', true);
     }
 
-    /** @return array<int, class-string<Model>> the kinds of record that post themselves */
+    /** @return array<int, class-string<Model>> */
     public static function sources(): array
     {
         return array_keys(self::RULES);
     }
 
-    /** What the journal calls the kind of record that posted an entry. */
     public static function sourceLabel(?string $type): ?string
     {
         return match ($type) {
@@ -124,11 +79,7 @@ class AutoPostingService
         return isset(self::RULES[$source::class]);
     }
 
-    /**
-     * Make the record's automatic entries match what it should post.
-     *
-     * @return array{posted: int, voided: int, unchanged: int, skipped: bool}
-     */
+    /** @return array{posted: int, voided: int, unchanged: int, skipped: bool} */
     public function sync(Model $source, bool $dryRun = false, ?Carbon $from = null): array
     {
         $result = ['posted' => 0, 'voided' => 0, 'unchanged' => 0, 'skipped' => true];
@@ -139,8 +90,6 @@ class AutoPostingService
 
         $company = $source->getAttribute('company_id');
 
-        // Posted into the record's own company, whichever one the code that
-        // saved it had in force — the accounts and the entry are both scoped.
         if ($company !== null && $company !== $this->tenant->id()) {
             return $this->tenant->use($company, fn (): array => $this->sync($source, $dryRun, $from));
         }
@@ -151,9 +100,6 @@ class AutoPostingService
 
         $from ??= $this->startDate();
 
-        // Read again rather than trusted: the instance an observer holds can
-        // be a step behind (an `increment`, a relation written after it), and
-        // the backfill must reach the same answer as the observer did.
         $fresh = $source->newQueryWithoutScopes()->whereKey($source->getKey())->first();
 
         $wanted = $fresh === null || $this->isTrashed($fresh)
@@ -179,8 +125,6 @@ class AutoPostingService
 
         foreach ($wanted as $posting) {
             if (! $posting->isBalanced()) {
-                // A rule bug, not a user error. Logged loudly and left alone
-                // rather than posted half right.
                 Log::error('Auto-posting skipped: a rule produced an unbalanced entry.', [
                     'source' => $source::class, 'id' => $source->getKey(), 'rule' => $posting->rule,
                 ]);
@@ -202,8 +146,6 @@ class AutoPostingService
                 /** @var Collection<int, JournalEntry> $current */
                 $current = $existing->get($rule, collect());
 
-                // Before `from`, and nothing wanted in its place: somebody's
-                // earlier books, or history this install chose not to own.
                 if ($posting === null && $from !== null) {
                     $current = $current->filter(static fn (JournalEntry $e): bool => $e->entry_date->toDateString() >= $from->toDateString());
                 }
@@ -249,7 +191,6 @@ class AutoPostingService
         return $result;
     }
 
-    /** The first day auto-posting owns, if the install set one. */
     public function startDate(): ?Carbon
     {
         $from = config('cargo.accounting.auto_post.from');
@@ -287,11 +228,7 @@ class AutoPostingService
         ]));
     }
 
-    /**
-     * This record's live automatic entries, by rule.
-     *
-     * @return Collection<string, Collection<int, JournalEntry>>
-     */
+    /** @return Collection<string, Collection<int, JournalEntry>> */
     private function existing(Model $source): Collection
     {
         return JournalEntry::query()
@@ -306,9 +243,6 @@ class AutoPostingService
     }
 
     /**
-     * Account ids by code for everything the postings name, or null when the
-     * chart is missing one of them.
-     *
      * @param  Posting[]  $postings
      * @return array<string, string>|null
      */
@@ -325,12 +259,6 @@ class AutoPostingService
         return count($found) === count($codes) ? $found : null;
     }
 
-    /**
-     * What makes two entries the same posting: the day, the category and every
-     * line's account, side, amount and subject. Not the memo — rewording a
-     * narration is not a change to the books, and reposting for it would fill
-     * the journal with voids nobody needs.
-     */
     private function fingerprint(JournalEntry $entry): string
     {
         $lines = $entry->lines
@@ -344,7 +272,7 @@ class AutoPostingService
         return $entry->entry_date->toDateString().'#'.$entry->category->value.'#'.$lines;
     }
 
-    /** @param  array<string, string>  $accounts */
+    /** @param array<string, string> $accounts */
     private function wantedFingerprint(Posting $posting, array $accounts): string
     {
         $lines = collect($posting->lines())

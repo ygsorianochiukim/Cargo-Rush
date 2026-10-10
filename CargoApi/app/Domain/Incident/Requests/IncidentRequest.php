@@ -18,7 +18,6 @@ class IncidentRequest extends ApiFormRequest
         return [
             'kind' => [$required, 'string', 'max:120'],
             'place' => [$required, 'string', 'max:160'],
-            // Something that has not happened yet is not an incident.
             'occurred_at' => [$required, 'date', 'before_or_equal:now'],
             'driver_id' => ['nullable', 'string', 'exists:drivers,id'],
             'vehicle_id' => ['nullable', 'string', 'exists:vehicles,id'],

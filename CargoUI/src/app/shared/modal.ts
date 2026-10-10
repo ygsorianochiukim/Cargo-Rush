@@ -17,20 +17,6 @@ export type ModalSize = 'sm' | 'md' | 'lg';
 
 const WIDTHS: Record<ModalSize, number> = { sm: 420, md: 560, lg: 820 };
 
-/**
- * The one modal in the system (DESIGN.md section 8). Every dialog — create,
- * edit, detail, confirm — uses this shell, so focus handling, Escape, the
- * scrim and the header/footer layout are written once.
- *
- * ```html
- * <app-modal [(open)]="editing" title="Edit trip" size="md" (closed)="reset()">
- *   <p>…form…</p>
- *   <ng-container modal-footer>
- *     <button (click)="save()">Save</button>
- *   </ng-container>
- * </app-modal>
- * ```
- */
 @Component({
   selector: 'app-modal',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -84,7 +70,6 @@ const WIDTHS: Record<ModalSize, number> = { sm: 420, md: 560, lg: 820 };
             <ng-content />
           </div>
 
-          <!-- Hidden when a dialog puts nothing in it, rather than an empty band. -->
           <footer
             class="flex flex-none items-center justify-end gap-2 border-t border-cr-line bg-cr-tint/40 px-5 py-3 [&:not(:has(*))]:hidden"
           >
@@ -116,9 +101,7 @@ export class Modal {
   readonly subtitle = input<string>();
   readonly icon = input<string>();
   readonly size = input<ModalSize>('md');
-  /** Destructive dialogs tint the header icon red. */
   readonly danger = input(false);
-  /** Blocks scrim-click and Escape while a request is in flight. */
   readonly locked = input(false);
 
   readonly closed = output<void>();
@@ -139,7 +122,6 @@ export class Modal {
     effect(() => {
       if (this.open()) {
         this.restoreTo = document.activeElement as HTMLElement | null;
-        // Wait for the panel to exist, then move focus into it.
         queueMicrotask(() => this.focusFirst());
       } else if (this.restoreTo) {
         this.restoreTo.focus?.();
@@ -159,7 +141,6 @@ export class Modal {
     if (this.open()) this.dismiss();
   }
 
-  /** Keeps Tab inside the dialog while it is open. */
   @HostListener('document:keydown.tab', ['$event'])
   @HostListener('document:keydown.shift.tab', ['$event'])
   protected onTab(raw: Event): void {
@@ -197,7 +178,6 @@ export class Modal {
 
   private focusFirst(): void {
     const items = this.focusable();
-    // Skip the close button when there is something more useful to focus.
     const target = items.find((el) => el.getAttribute('aria-label') !== 'Close dialog') ?? items[0];
     target?.focus();
   }

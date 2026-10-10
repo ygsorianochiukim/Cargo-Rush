@@ -145,7 +145,6 @@
   }
 </style>
 
-<!-- Toolbar: never printed. -->
 <div class="cr-no-print mb-4 flex flex-wrap items-center justify-between gap-3">
   <a
     routerLink="/trips"
@@ -172,7 +171,6 @@
 
 @if (ticket(); as t) {
   <div class="tt-wrap overflow-x-auto">
-    <!-- ========================================================= Sheet 1 -->
     <section class="tt-sheet rounded-panel shadow-panel min-w-[640px]">
       <header class="flex items-center gap-4">
         <img [src]="logo()" alt="" class="h-16 w-16 flex-none object-contain" />
@@ -340,7 +338,6 @@
       </table>
     </section>
 
-    <!-- ========================================================= Sheet 2 -->
     <section class="tt-sheet tt-compact rounded-panel shadow-panel min-w-[640px]">
       <header class="flex flex-col items-center text-center">
         <img [src]="logo()" alt="" class="h-10 w-10 object-contain" />
@@ -389,7 +386,6 @@
         </tr>
       </table>
 
-      <!-- Request type -->
       <p class="tt-band mt-3">Request Type</p>
       <div class="flex flex-wrap gap-x-8 gap-y-1 border border-t-0 border-[#333] px-3 py-2">
         @for (kind of ['Fuel', 'Bank Transfer', 'Allowance', 'Other']; track kind) {
@@ -397,7 +393,6 @@
         }
       </div>
 
-      <!-- Itemized particulars -->
       <table class="tt-grid">
         <colgroup>
           <col style="width: 30%" />
@@ -425,7 +420,6 @@
         </tr>
       </table>
 
-      <!-- Release method -->
       <p class="tt-band mt-3">Release Method</p>
       <div class="flex flex-wrap gap-x-8 gap-y-1 border border-t-0 border-[#333] px-3 py-2">
         @for (kind of ['Cash', 'Bank Transfer', 'Fuel Card', 'Cheque']; track kind) {
@@ -433,7 +427,6 @@
         }
       </div>
 
-      <!-- The checklist -->
       <p class="tt-band mt-3 text-center">Safety, LTO and Warehouse Compliance Checklist</p>
       <p class="border border-t-0 border-[#333] py-0.5 text-center text-[10px] italic">
         Check one box for every item.
@@ -450,7 +443,6 @@
           @for (item of group.items; track item.key) {
             <tr>
               <td>{{ item.label }}</td>
-              <!-- Ticked from the driver's answer in the app; empty if unanswered. -->
               <td class="whitespace-nowrap text-center">
                 <span class="mr-3"
                   ><span class="tt-box" [class.tt-ticked]="item.answer === 'yes'"></span>YES</span
@@ -481,7 +473,6 @@
         </tr>
       </table>
 
-      <!-- Approvals: roles only; the names are signed in. -->
       <div class="mt-4 grid grid-cols-4 gap-4">
         @for (
           role of [

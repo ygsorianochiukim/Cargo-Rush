@@ -7,17 +7,6 @@ namespace App\Domain\Trip\DTO;
 use App\Domain\Shared\DTO\Data;
 use App\Domain\Shared\Enums\StatusValue;
 
-/**
- * What it takes to book, request or amend a trip.
- *
- * `reference` is absent on purpose: the API assigns it (DESIGN.md section 5.3
- * makes it the human-readable id), so a client cannot choose one.
- *
- * `price_cents` is present but almost never sent. The zone card quotes it
- * (`PricingService`), and the only reason it is here at all is the negotiated
- * rate — a price the office agreed by hand, which the service must be able to
- * tell from a price it derived. `Data::wasGiven()` is how it tells.
- */
 final class TripData extends Data
 {
     public function __construct(
@@ -35,25 +24,10 @@ final class TripData extends Data
         public readonly ?int $price_cents = null,
         public readonly ?string $currency = null,
         public readonly ?string $driver_id = null,
-        /**
-         * Who rides along to load and unload, in order. Null when the caller
-         * did not mention the crew — which leaves it as it is — and an empty
-         * list when they cleared it. Written to `trip_helpers` by the
-         * service rather than to a column, so it is not in `toArray()`.
-         *
-         * @var string[]|null
-         */
+        /** @var string[]|null */
         public readonly ?array $helper_ids = null,
         public readonly ?string $vehicle_id = null,
-        /** The kind of unit the job needs, as asked for at booking. */
         public readonly ?string $truck_category_id = null,
-        /**
-         * The band this run is priced in, where the desk chose one.
-         *
-         * Only here because a subsidy table holds two bands over the same
-         * kilometres — A1 beside A2 at different money — and a distance cannot
-         * decide between them. Left out, the band is derived from the distance.
-         */
         public readonly ?string $pricing_zone_id = null,
         public readonly ?StatusValue $status = null,
         public readonly ?string $pickup_place = null,
@@ -61,7 +35,6 @@ final class TripData extends Data
         public readonly ?string $scheduled_at = null,
         public readonly ?string $eta = null,
         public readonly ?int $distance_total_m = null,
-        /** The account that asked for it, on a customer's own request. */
         public readonly ?int $requested_by = null,
     ) {}
 

@@ -11,15 +11,6 @@ use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * Supplier categories — GARAGE, MALL, FOODS — kept on Access Control.
- *
- *   **The firm's own list.** Added, renamed and switched off by the office.
- *
- *   **A used category is retired, not deleted,** so an old shop keeps its label.
- *
- *   **A supplier carries its category** to every picker that lists it.
- */
 beforeEach(function (): void {
     $this->seed(PermissionSeeder::class);
     $this->seed(RoleSeeder::class);
@@ -43,7 +34,6 @@ it('adds, lists and renames categories', function (): void {
 
     $list = $this->actingAs($this->admin)->getJson('/api/v1/supplier-categories')->assertOk();
 
-    // Alphabetical, so the picker and the settings card agree.
     expect(array_column($list->json('data'), 'name'))->toBe(['FOODS', 'GARAGE', 'MALL', 'SUPPLIER'])
         ->and($list->json('meta.total'))->toBe(4);
 
@@ -74,7 +64,6 @@ it('files a supplier under a category and shows it', function (): void {
     $listed = $this->actingAs($this->admin)->getJson('/api/v1/suppliers')->json('data.0');
     expect($listed['category_name'])->toBe('GARAGE');
 
-    // And can be taken out of it again.
     $this->actingAs($this->admin)
         ->patchJson("/api/v1/suppliers/{$supplier['id']}", ['category_id' => null])
         ->assertOk()
@@ -101,10 +90,8 @@ it('deletes an unused category, and retires a used one', function (): void {
         ->assertJsonPath('meta.retired', true)
         ->assertJsonPath('data.status', 'inactive');
 
-    // The shop keeps its label.
     expect(Supplier::where('name', 'Davao Lubes')->first()->category?->name)->toBe('GARAGE');
 
-    // And the picker's list leaves the retired one out.
     $active = $this->actingAs($this->admin)->getJson('/api/v1/supplier-categories?active=1')->json('data');
     expect($active)->toBe([]);
 });

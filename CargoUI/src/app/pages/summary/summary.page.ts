@@ -19,13 +19,6 @@ import { SplitBar, SplitPart } from '../../shared/split-bar';
 import { ExpenseLinesDialog } from './expense-lines.dialog';
 import { ReceivableLinesDialog } from './receivable-lines.dialog';
 
-/**
- * Quarterly Summary — the workbook's "Summary" sheet and its quarter slicer.
- *
- * The same roll-up Profitability shows, over a wider window. Both call
- * `FinanceService`, so "the same aggregation" is a fact rather than an
- * intention that two pages have to keep honouring separately.
- */
 @Component({
   selector: 'app-summary',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -35,22 +28,10 @@ import { ReceivableLinesDialog } from './receivable-lines.dialog';
 export class SummaryPage {
   private readonly financeApi = inject(FinanceService);
 
-  /**
-   * The book runs by calendar year, and Table11 defines the boundaries within
-   * it. Taken from the clock rather than fixed at 2026, so the page does not
-   * quietly start reporting last year's figures come January.
-   */
   private readonly year = new Date().getUTCFullYear();
 
   protected readonly quarters = quarters(this.year);
 
-  /**
-   * Opens on the quarter we are actually in.
-   *
-   * This was pinned to `q1`, so a day recorded in any other quarter was
-   * outside the opening view and the ledger looked as though it never reached
-   * the summary. The slicer still reaches every quarter.
-   */
   protected readonly quarter = signal<QuarterKey>(currentQuarter());
 
   protected readonly range = computed(
@@ -66,27 +47,13 @@ export class SummaryPage {
 
   protected readonly loading = computed(() => this.rollup() === null);
 
-  /** The Total expenses tile's transaction list. */
   protected readonly linesOpen = signal(false);
 
-  /** The Receivables tile's invoice list, asked about the quarter's last day. */
   protected readonly receivablesOpen = signal(false);
 
   protected readonly rows = computed(() => this.rollup()?.trucks ?? []);
   protected readonly totals = computed(() => this.rollup()?.totals ?? emptyTotals());
 
-  /**
-   * The part of the period's expenses that sits in no truck row.
-   *
-   * Office overhead (fuel fills on a vehicle no truck points at included), the
-   * supplier bills actually paid over the window, and payroll beyond the crew
-   * pay the sheet already holds. (What was handed to truckers is not here: it
-   * was theirs, not a cost.) All are real costs of the period and none is any
-   * unit's, so the TOTAL
-   * row is legitimately larger than its own columns add up to — and a reader
-   * who cannot see why will assume the table is broken. The template says the
-   * figure out loud when there is one.
-   */
   protected readonly unattributed = computed(
     () =>
       this.totals().overhead_cents +
@@ -94,14 +61,6 @@ export class SummaryPage {
       this.totals().payroll_cents,
   );
 
-  /**
-   * The same figure broken out, for the sentence that explains it.
-   *
-   * Only the parts that are actually there. Three `@if`s in the template did
-   * this before and needed a fourth for every figure added, plus an "and"
-   * between each pair — which is how a sentence ends up reading "₱0 overhead
-   * and and ₱500 of payouts".
-   */
   protected readonly unattributedParts = computed(() => {
     const t = this.totals();
 
@@ -113,7 +72,6 @@ export class SummaryPage {
       .filter(([cents]) => cents > 0)
       .map(([cents, what]) => `${fmt.pesos(cents)} ${what}`);
   });
-  /** Total income, by where it came from — the split bar on the income card. */
   protected readonly incomeParts = computed<SplitPart[]>(() => {
     const t = this.totals();
 
@@ -134,11 +92,6 @@ export class SummaryPage {
     ];
   });
 
-  /**
-   * Total expenses, by where they were spent. The trucks' share is what the
-   * truck rows carry (the sheet, their expense lines, their fuel logs); the
-   * other two are the period's, and no truck's.
-   */
   protected readonly expenseParts = computed<SplitPart[]>(() => {
     const t = this.totals();
     const trucks =
@@ -169,10 +122,8 @@ export class SummaryPage {
 
   protected readonly best = computed(() => this.rollup()?.best_performer ?? null);
 
-  /** Charts show only units that actually traded in the period. */
   protected readonly active = computed(() => this.rows().filter(hasActivity));
 
-  /** Income and expenses share one scale so the pair can be read against each other. */
   private readonly scaleMax = computed(() =>
     Math.max(
       1,
@@ -184,15 +135,8 @@ export class SummaryPage {
     return Math.round((cents / this.scaleMax()) * 100);
   }
 
-  /** The unit under the pointer or holding focus. */
   protected readonly hovered = signal<string | null>(null);
 
-  /**
-   * What the pair of bars adds up to.
-   *
-   * The chart shows income against expenses; this is the arithmetic between
-   * them, which is the thing somebody is squinting at the gap to work out.
-   */
   protected breakdown(row: TruckPnl): TooltipRow[] {
     return [
       { label: 'Trip income', value: fmt.pesos(row.trip_income_cents) },
@@ -220,6 +164,5 @@ export class SummaryPage {
   }
 
   protected readonly fmt = fmt;
-  /** One placeholder per tile, so the first paint is the shape of the real one. */
   protected readonly skeleton = [0, 1, 2, 3, 4, 5, 6];
 }

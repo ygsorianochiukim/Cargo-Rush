@@ -113,6 +113,9 @@ ln -sfn "$SHARED_DIR/storage/app/public" "$API_DIR/public/storage"
 # ---------------------------------------------------------------------------
 cd "$API_DIR"
 
+log "Prefixing tables"
+"$PHP" artisan fms:prefix-tables --no-interaction
+
 log "Running migrations"
 "$PHP" artisan migrate --force --no-interaction
 

@@ -9,15 +9,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { environment } from '../../../environments/environment';
 import { csrfInterceptor } from './csrf.interceptor';
 
-/**
- * These exist because the failure they guard against is silent from the
- * client's side: the request goes out looking fine and Laravel answers
- * "CSRF token mismatch" with no clue that a header was dropped.
- *
- * Angular's own XSRF interceptor drops it on any cross-origin request, which
- * is every call in development. If someone swaps this back for
- * `withXsrfConfiguration`, the first case here fails.
- */
 describe('csrfInterceptor', () => {
   const api = environment.apiUrl || '';
   const url = `${api}/api/v1/trips`;
@@ -57,8 +48,6 @@ describe('csrfInterceptor', () => {
   });
 
   it('decodes the cookie, because Laravel URL-encodes it', () => {
-    // A real Sanctum token is base64 and routinely ends in `=`, which arrives
-    // as `%3D`. Passing that through raw is a mismatch every time.
     setCookie(encodeURIComponent('abc+/=='));
 
     http.post(url, {}).subscribe();

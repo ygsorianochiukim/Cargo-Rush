@@ -13,14 +13,6 @@ use Database\Seeders\RoleSeeder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
-/**
- * A partner managing their own trucks from the app.
- *
- * Sign-up takes one truck; everything after that is here. A partner may run
- * several, and a run goes under the first one marked available — so adding a
- * truck and taking one off the road are the two things that matter, and a
- * partner must never be able to touch somebody else's.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -47,9 +39,6 @@ beforeEach(function (): void {
 });
 
 /**
- * The photographs a truck is sent in with. The five required ones by
- * default; `$with` adds or overrides, and `null` in it leaves one out.
- *
  * @param  array<string, mixed>  $with
  * @return array<string, mixed>
  */

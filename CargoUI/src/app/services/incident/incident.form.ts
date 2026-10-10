@@ -6,12 +6,6 @@ import { DriverService } from '../driver/driver.service';
 import { VehicleService } from '../vehicle/vehicle.service';
 import { IncidentService } from './incident.service';
 
-/**
- * Incident Management.
- *
- * The reference is absent because the API assigns it, the same way it assigns
- * a trip's. Reporting one also raises a notification, API-side.
- */
 export function incidentSpec(): RecordSpec<Incident> {
   const incidents = inject(IncidentService);
   const drivers = inject(DriverService);
@@ -60,7 +54,6 @@ export function incidentSpec(): RecordSpec<Incident> {
     toForm: (incident) => ({
       kind: incident.kind,
       place: incident.place,
-      // `datetime-local` wants no timezone and no seconds.
       occurred_at: incident.occurred_at?.slice(0, 16) ?? '',
       status: incident.status,
       driver_id: incident.driver_id ?? '',

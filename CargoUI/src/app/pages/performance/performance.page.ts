@@ -9,14 +9,6 @@ import { Column, DataTable } from '../../shared/data-table';
 import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 
-/**
- * Performance — the crew ranked by the work they actually completed.
- *
- * Every figure is recomputed from trips, deliveries and incidents on each load
- * rather than stored, so it cannot drift from the operational record. There is
- * deliberately no single score: the weights would be invented here and then
- * used to decide somebody's job.
- */
 @Component({
   selector: 'app-performance',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -59,7 +51,6 @@ export class PerformancePage {
     return rate === null || rate === undefined ? '—' : `${Math.round(rate * 100)}%`;
   });
 
-  /** A rate is null when nothing was delivered — "—", never a green 100%. */
   protected readonly pct = (value: number | null): string =>
     value === null ? '—' : `${Math.round(value * 100)}%`;
 

@@ -8,13 +8,6 @@ import { IdentityService } from '../../services/identity/identity.service';
 import { Field } from '../../shared/field';
 import { Wordmark } from '../../shared/wordmark';
 
-/**
- * Sign in — the only route outside the layout.
- *
- * It sits outside because there is no sidebar to render yet: the nav and the
- * user chip both come from an authenticated call, and a shell full of
- * skeletons behind a login form would be pretending.
- */
 @Component({
   selector: 'app-login',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -47,15 +40,6 @@ export class LoginPage {
     return 'Check this value.';
   }
 
-  /**
-   * Say which thing went wrong.
-   *
-   * These are four different problems with four different fixes, and lumping
-   * them into "could not reach the server" sends somebody to restart an API
-   * that is already running. Status 0 is the only one that actually means
-   * unreachable — the browser reports a blocked or failed request that way,
-   * with no response to read.
-   */
   private messageFor(error: HttpErrorResponse): string {
     if (error.status === 422) {
       return (
@@ -73,9 +57,6 @@ export class LoginPage {
       return 'The session token was rejected. Reload the page and try again.';
     }
 
-    // Five attempts a minute on the address being tried. Somebody who has
-    // mistyped their password three times needs to be told to wait, not told
-    // the number 429.
     if (error.status === 429) {
       return 'Too many sign-in attempts. Wait a minute and try again.';
     }
@@ -97,7 +78,6 @@ export class LoginPage {
     this.submitting.set(true);
     this.failure.set(null);
 
-    // No `device_name`: this is the SPA, so the API sets a session cookie.
     this.identity.login(this.form.getRawValue()).subscribe({
       next: () => {
         this.identity.loadNavigation().subscribe();

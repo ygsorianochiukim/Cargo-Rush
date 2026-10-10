@@ -1,11 +1,4 @@
 @if (payables(); as p) {
-  <!--
-    The one figure the page exists for.
-
-    "On the way" sits beside it rather than inside it: money already sent but
-    not landed is still owed, and folding the two together would say a
-    transfer had arrived the moment somebody typed it.
-  -->
   <app-card>
     <div class="flex flex-wrap items-end justify-between gap-4">
       <div>
@@ -85,11 +78,6 @@
               <span class="cr-num block text-[14px] font-semibold">
                 {{ money(line.amount_cents) }}
               </span>
-              <!--
-                Of what is owed, how much is already out of the door. Only a
-                partner payment can be in this state — a supplier bill is paid
-                or it is not.
-              -->
               @if (line.in_flight_cents > 0) {
                 <span class="cr-num block text-[11px] font-semibold text-cr-blue">
                   {{ money(line.in_flight_cents) }} sent
@@ -97,14 +85,6 @@
               }
             </span>
 
-            <!--
-              Where it is settled.
-
-              In place, always: the button opens the dialog that owns the debt
-              — the partner's wallet, the bill's payment form, the expense, or
-              a payroll confirmation — over this page, so the reader stays on
-              the list they are working through.
-            -->
             <button
               type="button"
               class="inline-flex h-8 items-center gap-1 rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint disabled:opacity-60"
@@ -126,7 +106,6 @@
   <app-card><app-skeleton-rows [count]="5" /></app-card>
 }
 
-<!-- A partner's wallet, opened from a Settle button, over the list. -->
 @if (walletFor(); as line) {
   <app-modal
     [open]="true"
@@ -140,7 +119,6 @@
   </app-modal>
 }
 
-<!-- A payroll line: confirm the pay was released, or the contributions remitted. -->
 @if (payrollFor(); as line) {
   <app-payroll-settle-dialog
     [line]="line"

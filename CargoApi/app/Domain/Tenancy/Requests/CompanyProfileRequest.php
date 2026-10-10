@@ -9,20 +9,6 @@ use App\Domain\Shared\Enums\DeductionSchedule;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
 use Illuminate\Validation\Rule;
 
-/**
- * What a company may change about itself.
- *
- * A short list, and the omissions are the design. The **name** is on every
- * invoice already issued, the **code** is what makes every other company's
- * uniqueness work, and the **status** is the platform's answer about a firm
- * rather than the firm's about itself. None of the three is a field a form
- * fills in, so none of them is here — rather than being here and quietly
- * dropped by the service.
- *
- * `sometimes` throughout, because this is a PATCH: moving a map pin should not
- * require resending a phone number, and a client that sent only the pin must
- * not blank the rest by omission.
- */
 class CompanyProfileRequest extends ApiFormRequest
 {
     public function rules(): array
@@ -33,104 +19,21 @@ class CompanyProfileRequest extends ApiFormRequest
             'contact_phone' => ['sometimes', 'nullable', 'string', 'max:40'],
             'address' => ['sometimes', 'nullable', 'string', 'max:200'],
 
-            /**
-             * Where the yard is.
-             *
-             * A pair or nothing, the same rule both ends of a trip follow: half
-             * a coordinate is not a place, and a latitude stored without its
-             * longitude would put the company on the carrier list at a point
-             * off the coast of Africa.
-             *
-             * Both nullable together, which is how a firm takes itself off the
-             * list — sending nulls is the only way to stop being discoverable,
-             * and it is a deliberate act rather than a flag to find.
-             */
             'latitude' => ['sometimes', 'nullable', 'numeric', 'between:-90,90', 'required_with:longitude'],
             'longitude' => ['sometimes', 'nullable', 'numeric', 'between:-180,180', 'required_with:latitude'],
 
-            /**
-             * Which cutoff the monthly contributions come off.
-             *
-             * A policy rather than a rate, which is why it is settable at all:
-             * the SSS percentage is the government's and lives in
-             * configuration, but whether a firm loads a month of contributions
-             * onto the first payslip or the second is the firm's own decision.
-             * See `DeductionSchedule`.
-             */
             'payroll_deduct_on' => ['sometimes', Rule::enum(DeductionSchedule::class)],
 
-            /**
-             * Whether payroll takes SSS, PhilHealth and Pag-IBIG at all.
-             *
-             * The firm-wide switch; who is enrolled when it is on is each
-             * employee's own record.
-             */
             'payroll_benefits_enabled' => ['sometimes', 'boolean'],
 
-            /**
-             * The days this firm's pay periods close on.
-             *
-             * The other payroll policy, and the one that used to be an
-             * environment variable — which meant one cutoff for every haulier
-             * on the install. `PayrollCutoffDays` carries the rules and the
-             * reasons for each of them, including why an open draft run blocks
-             * the change.
-             *
-             * Nullable, and that is how a firm goes back to the install
-             * default rather than a state it has to guess its way out of.
-             */
             'payroll_cutoff_days' => ['sometimes', 'nullable', 'array', new PayrollCutoffDays],
 
-            /**
-             * Days between a cutoff and the release.
-             *
-             * Nought to fourteen. Zero is a firm paying on the cutoff itself;
-             * past a fortnight is a cash-flow arrangement rather than a payroll
-             * lag, and somebody has mistyped. Null is the install default.
-             */
             'payroll_release_lag_days' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:14'],
 
-            /*
-            |--------------------------------------------------------------
-            | The rates
-            |--------------------------------------------------------------
-            |
-            | The numbers that used to be environment variables. Every one is
-            | `sometimes` and nullable, and **null is the interesting value**:
-            | it is how a firm goes back to the install default rather than
-            | having to know what that default was and retype it. `RateBook`
-            | resolves the null; nothing here needs to.
-            |
-            | The bounds are sanity rather than policy: the floors are zero and
-            | only the ceilings are opinions.
-            |
-            | The four `tariff_*` fields are gone from this form. They were the
-            | fallback for a run the zone card did not cover, and pricing is
-            | zone-only now — such a run waits unpriced for the office. Sent
-            | anyway, they are not in the rules and are dropped; the columns
-            | keep whatever a firm last set.
-            */
-
-            /**
-             * The haulier's cut of a partner's run.
-             *
-             * Not nullable, unlike the rest: the column is not either. Twelve
-             * per cent is its default and there is no "unset" state to return
-             * to. Nought to fifty — waiving the cut for somebody is a real
-             * arrangement, and a rate over half is a typo rather than a
-             * negotiation.
-             */
             'trucker_commission_bp' => ['sometimes', 'integer', 'min:0', 'max:5000'],
 
-            /** Payment terms. A year is the outside edge of a credit term. */
             'billing_terms_days' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:365'],
 
-            /*
-             * Tax. Whether the firm charges VAT at all is a fact about its
-             * registration, and the rate is the statute's — both are settable
-             * because both have been changed by circular before and will be
-             * again, and neither should need a deployment.
-             */
             'vat_registered' => ['sometimes', 'boolean'],
             'vat_rate_bp' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:5000'],
             'withholding_rate_bp' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:5000'],
@@ -147,19 +50,7 @@ class CompanyProfileRequest extends ApiFormRequest
         ];
     }
 
-    /**
-     * The fields to write, coordinates as numbers.
-     *
-     * Named `toAttributes` and not `attributes`: the latter is Laravel's own
-     * hook for the display names in a validation message, and overriding it
-     * with a payload would rename every field in every error this form raises.
-     *
-     * Cast here rather than left as the strings a query string or a JSON
-     * document can carry, so what reaches the column is a number and what comes
-     * back out of the cast is the same number.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function toAttributes(): array
     {
         $attributes = $this->safe()->only([
@@ -176,17 +67,6 @@ class CompanyProfileRequest extends ApiFormRequest
             }
         }
 
-        /*
-         * The rates, as the types the columns hold.
-         *
-         * Validation says what a value may be, not what it is: `integer`
-         * accepts the string "1200" that a form post carries, and storing that
-         * leaves the column agreeing with itself only because the cast tidies
-         * it on the way back out. Cast on the way in, so the row is right.
-         *
-         * Null is left alone throughout — it is the setting, not a missing
-         * one, and `(int) null` would silently store a rate of zero.
-         */
         foreach ([
             'trucker_commission_bp',
             'billing_terms_days', 'vat_rate_bp', 'withholding_rate_bp', 'payroll_release_lag_days',
@@ -202,17 +82,6 @@ class CompanyProfileRequest extends ApiFormRequest
             }
         }
 
-        /**
-         * Stored as ints, ascending.
-         *
-         * Sorted here rather than on the way out, so the column and the
-         * calendar built from it are the same list in the same order. A client
-         * that sent `[31, 15]` meant the same thing as one that sent `[15, 31]`
-         * and should not leave the row looking different.
-         *
-         * An empty array is stored as null — "back to the install default" —
-         * which is the same state the column starts in.
-         */
         if (array_key_exists('payroll_cutoff_days', $attributes)) {
             $days = array_values(array_unique(array_map('intval', (array) $attributes['payroll_cutoff_days'])));
             sort($days);

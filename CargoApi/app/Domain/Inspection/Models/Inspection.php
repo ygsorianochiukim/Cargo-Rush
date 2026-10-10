@@ -16,10 +16,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/**
- * A completed pre-trip check. Mobile-only capture (DESIGN.md section 5.4) —
- * the web app reads these but never writes one.
- */
 class Inspection extends Model
 {
     /** @use HasFactory<InspectionFactory> */
@@ -27,8 +23,6 @@ class Inspection extends Model
 
     protected $fillable = [
         'trip_id', 'vehicle_id', 'driver_id', 'results',
-        // A trucker's truck and driver — never set together with the two
-        // fleet columns above. See the migration that added them.
         'trucker_vehicle_id', 'trucker_driver_id',
         'good_to_go', 'notes', 'inspected_at',
     ];
@@ -67,13 +61,11 @@ class Inspection extends Model
         return $this->belongsTo(TruckerDriver::class);
     }
 
-    /** Whoever did the check — a Cargo Rush driver or a trucker's. */
     public function inspectorName(): ?string
     {
         return $this->driver?->name ?? $this->truckerDriver?->name;
     }
 
-    /** Which checklist keys came back failed. */
     public function failures(): array
     {
         return array_keys(array_filter($this->results ?? [], static fn ($ok) => $ok === false));

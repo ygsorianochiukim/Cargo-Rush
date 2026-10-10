@@ -16,35 +16,16 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
-/**
- * People — the roster, the pipeline, and who sees which module.
- *
- * The behaviour worth pinning is the boundary between the three records this
- * system keeps for a person. An employee is the HR record; `drivers` is still
- * the operational history every trip points at; `users` is still the login. HR
- * links them and replaces neither, and the tests below are what stops a later
- * change from quietly collapsing the three into one.
- *
- * And the module assignment, which is the one piece of this that is a security
- * question rather than a display one: it narrows what a role allows and can
- * never widen it.
- */
 beforeEach(function (): void {
     Storage::fake('public');
 
-    // Roles are rows now, so an account cannot be given one the table does not
-    // have. A fresh install seeds these; a test that issues logins needs them.
     $this->seed(PermissionSeeder::class);
     $this->seed(RoleSeeder::class);
-    // Positions, because whether a hire needs a licence is read off the job
-    // they land in — see `Position::drives()`.
     $this->seed(PositionSeeder::class);
     $this->seed(NavigationSeeder::class);
 
     $this->admin = User::factory()->create(['role' => Role::Administrator]);
 
-    // The three jobs these tests turn on: one that drives, one that rides
-    // along, and one that never goes near a truck.
     $this->drivingJob = Position::where('key', 'driver')->firstOrFail();
     $this->helperJob = Position::where('key', 'helper')->firstOrFail();
     $this->officeJob = Position::where('key', 'office-staff')->firstOrFail();
@@ -72,6 +53,61 @@ beforeEach(function (): void {
 });
 
 describe('registering an employee', function (): void {
+    it('keeps the blood type and religion, and changes them on an edit', function (): void {
+        $id = ($this->register)(['blood_type' => 'O+', 'religion' => 'Roman Catholic'])
+            ->assertCreated()
+            ->assertJsonPath('data.blood_type', 'O+')
+            ->assertJsonPath('data.religion', 'Roman Catholic')
+            ->json('data.id');
+
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/employees/$id", ['blood_type' => 'AB-', 'religion' => 'Iglesia ni Cristo'])
+            ->assertOk()
+            ->assertJsonPath('data.blood_type', 'AB-')
+            ->assertJsonPath('data.religion', 'Iglesia ni Cristo');
+    });
+
+    it('leaves the blood type and religion blank when not given', function (): void {
+        ($this->register)()
+            ->assertCreated()
+            ->assertJsonPath('data.blood_type', null)
+            ->assertJsonPath('data.religion', null);
+    });
+
+    it('refuses a blood type that is not one of the eight', function (): void {
+        ($this->register)(['blood_type' => 'C+'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('blood_type');
+    });
+
+    it('clears an optional detail emptied on an edit, and leaves the rest alone', function (): void {
+        $id = ($this->register)([
+            'email' => 'elena@example.ph',
+            'religion' => 'Roman Catholic',
+            'blood_type' => 'O+',
+            'address' => 'Toril, Davao City',
+        ])->assertCreated()->json('data.id');
+
+        $this->actingAs($this->admin)
+            ->post("/api/v1/employees/$id", [
+                '_method' => 'PATCH',
+                'email' => '',
+                'religion' => '',
+                'blood_type' => '',
+            ], ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('data.email', null)
+            ->assertJsonPath('data.religion', null)
+            ->assertJsonPath('data.blood_type', null)
+            ->assertJsonPath('data.address', 'Toril, Davao City');
+    });
+
+    it('refuses a religion that is not on the list', function (): void {
+        ($this->register)(['religion' => 'Pastafarian'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('religion');
+    });
+
     it('allocates a payroll number when the office has none to give', function (): void {
         $response = ($this->register)()->assertCreated();
 
@@ -114,17 +150,6 @@ describe('registering an employee', function (): void {
         expect(Employee::findOrFail($id)->photo_path)->toBe($before);
     });
 
-    /**
-     * The driver details, separated out.
-     *
-     * The form used to carry a **Driver record** dropdown listing every driver
-     * on file. It asked a mechanic to pick from a fleet of drivers for no
-     * reason, and it asked somebody hiring an actual driver to pick a record
-     * that does not exist yet — so registering a driver meant creating half a
-     * person in Drivers Management first. The licence replaces it: the office
-     * types what they have in their hand, and the system works out whether that
-     * means an existing record or a new one.
-     */
     describe('the driver details', function (): void {
         it('asks for no licence when the job does not drive', function (): void {
             $response = ($this->register)(['position_id' => $this->officeJob->id])->assertCreated();
@@ -161,15 +186,6 @@ describe('registering an employee', function (): void {
             expect(Employee::count())->toBe(0);
         });
 
-        /**
-         * The fleet usually knew the driver before HR did.
-         *
-         * A business running before it had an HR module has every driver in
-         * `drivers` already. Matching on the licence is what lets HR register
-         * that person without creating a second record — and without the office
-         * having to know whether one exists, which is the one thing about this
-         * they had no way to check.
-         */
         it('links the record that licence already belongs to, rather than opening a second', function (): void {
             $existing = Driver::create([
                 'name' => 'Marco Reyes',
@@ -187,9 +203,6 @@ describe('registering an employee', function (): void {
             expect(Driver::count())->toBe(1)
                 ->and($response->json('data.driver_id'))->toBe($existing->id);
 
-            // The operational record stands: every trip in the system points at
-            // it. Only the expiry moved, because that is the renewal the office
-            // was recording.
             expect($existing->refresh()->trips_completed)->toBe(412)
                 ->and($existing->licence_expiry->toDateString())->toBe('2029-01-01');
         });
@@ -213,14 +226,6 @@ describe('registering an employee', function (): void {
             expect(Driver::count())->toBe(1);
         });
 
-        /**
-         * A helper is a driver record without the keys.
-         *
-         * They ride along, they are named on the trip, and the roster keeps
-         * their licence — which is why `PositionSeeder` gives both jobs the
-         * driver's role, and why reading the requirement off that role covers
-         * both without a second list to maintain.
-         */
         it('treats a helper as somebody who needs a driver record', function (): void {
             ($this->register)([
                 'position_id' => $this->helperJob->id,
@@ -260,12 +265,6 @@ describe('registering an employee', function (): void {
             expect(Driver::firstOrFail()->licence_no)->toBe('N01-23-456789');
         });
 
-        /**
-         * A licence sent for an office job is ignored, not obeyed.
-         *
-         * The position decides, so a stray field on a payload cannot put the
-         * bookkeeper on the driver roster.
-         */
         it('ignores a licence sent for a job that does not drive', function (): void {
             ($this->register)([
                 'position_id' => $this->officeJob->id,
@@ -387,8 +386,6 @@ describe('role and module assignment', function (): void {
 
         $keys = collect($state->json('data.available'))->pluck('key');
         expect($keys)->toContain('trips');
-        // A dispatcher holds no finance permission, so the rate card is not
-        // among the modules that could even be offered to them.
         expect($keys)->not->toContain('pricing');
     });
 
@@ -414,8 +411,6 @@ describe('role and module assignment', function (): void {
             ->assertOk();
 
         expect($response->json('data.assigned'))->toBe(['dashboard']);
-        // Named back rather than silently dropped, so the UI can say why the
-        // box would not stick.
         expect($response->json('meta.rejected'))->toEqualCanonicalizing(['pricing', 'employees']);
 
         $nav = $this->actingAs($this->employee->user)->getJson('/api/v1/navigation');
@@ -452,7 +447,6 @@ describe('role and module assignment', function (): void {
 
         $nav = $this->actingAs($this->employee->user->refresh())->getJson('/api/v1/navigation');
 
-        // The promotion actually took: the accountant's modules are there.
         expect(collect($nav->json('data'))->pluck('key'))->toContain('pricing');
     });
 
@@ -547,6 +541,38 @@ describe('hiring an applicant', function (): void {
         expect($response->json('data.employee_no'))->toBe('EMP-0001');
     });
 
+    it('pays a hire with no stated figure from the job’s rate card, on their tier', function (): void {
+        $this->helperJob->update([
+            'pay_basis' => 'monthly',
+            'probationary_amount_cents' => 1_500_000,
+            'regular_amount_cents' => 1_700_000,
+        ]);
+
+        $id = ($this->apply)()->json('data.id');
+
+        $response = $this->actingAs($this->admin)
+            ->postJson("/api/v1/applicants/$id/hire", [
+                'position_id' => $this->helperJob->id,
+                'employment_type' => 'probationary',
+            ])
+            ->assertCreated();
+
+        expect($response->json('data.position_id'))->toBe($this->helperJob->id);
+        expect($response->json('data.position'))->toBe($this->helperJob->name);
+        expect($response->json('data.amount_cents'))->toBe(1_500_000);
+    });
+
+    it('leaves a hire with neither a job nor a figure off payroll rather than on ₱0', function (): void {
+        $id = ($this->apply)()->json('data.id');
+
+        $employeeId = $this->actingAs($this->admin)
+            ->postJson("/api/v1/applicants/$id/hire")
+            ->assertCreated()
+            ->json('data.id');
+
+        expect(Employee::findOrFail($employeeId)->contractOn())->toBeNull();
+    });
+
     it('closes the application and points it at the new employee', function (): void {
         $id = ($this->apply)()->json('data.id');
 
@@ -587,15 +613,6 @@ describe('hiring an applicant', function (): void {
 });
 
 describe('editing with a new upload', function (): void {
-    /**
-     * The client cannot send a photograph on a PATCH.
-     *
-     * PHP does not populate `$_FILES` on a PUT or a PATCH, so the web client
-     * posts an edit with `_method=PATCH` in the body — Laravel's own method
-     * override. This pins that the route actually accepts it: without the
-     * override the request reaches `POST /employees/{id}`, which no route
-     * defines, and every photograph change would 405.
-     */
     it('accepts a multipart edit posted with _method=PATCH', function (): void {
         $id = ($this->register)()->json('data.id');
         $before = Employee::findOrFail($id)->photo_path;
@@ -622,9 +639,6 @@ describe('editing with a new upload', function (): void {
             'photo' => UploadedFile::fake()->create('second.jpg', 120, 'image/jpeg'),
         ])->assertOk();
 
-        // One file, not two. A photograph is re-taken whenever somebody does
-        // not like theirs, and without the replace every attempt would stay on
-        // disk forever with nothing pointing at it.
         expect(Storage::disk('public')->allFiles('people/employees'))->toHaveCount(1);
     });
 

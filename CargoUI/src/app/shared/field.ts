@@ -1,9 +1,5 @@
 import { ChangeDetectionStrategy, Component, booleanAttribute, input } from '@angular/core';
 
-/**
- * Label + control + error wrapper, so every form in the app spaces and
- * announces its fields the same way (DESIGN.md section 8).
- */
 @Component({
   selector: 'app-field',
   changeDetection: ChangeDetectionStrategy.OnPush,

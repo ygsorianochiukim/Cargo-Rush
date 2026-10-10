@@ -20,14 +20,6 @@ import { Modal } from './modal';
 import { FieldSpec, RecordSpec } from './record-form-spec';
 import { RecordDialog } from './record-dialog';
 
-/**
- * Renders whichever module's record form the dialog is holding.
- *
- * Mounted once in the layout. Building the `FormGroup` from the spec means a
- * module adds a field by naming it, and its label, its validation and its
- * place in the payload all follow — rather than being three edits in three
- * files that can drift.
- */
 @Component({
   selector: 'app-record-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -64,45 +56,24 @@ export class RecordForm {
 
     if (spec === null) return '';
 
-    // "an employee", "an invoice" — the article follows the noun's first sound.
     const article = /^[aeiou]/i.test(spec.noun) ? 'an' : 'a';
 
     return record ? spec.title(record) : `Add ${article} ${spec.noun} to the system`;
   });
 
-  /**
-   * The form's current values, mirrored into a signal.
-   *
-   * `FormGroup` is not reactive to Angular's signal graph, so `visibleFields`
-   * below cannot be computed from it directly — a field whose visibility
-   * depends on another field's value would never re-evaluate.
-   */
   private readonly values = signal<Record<string, unknown>>({});
 
-  /**
-   * The fields actually on screen right now.
-   *
-   * A spec without any `showWhen` gets its whole list back, which is all but
-   * one of them.
-   */
   protected readonly visibleFields = computed(() => {
     const spec = this.spec();
     if (spec === null) return [];
 
     const values = this.values();
 
-    return spec.fields.filter((field) => field.showWhen?.(values) ?? true);
+    const editing = this.editing();
+
+    return spec.fields.filter((field) => field.showWhen?.(values, editing) ?? true);
   });
 
-  /**
-   * The half-width fields that would sit alone on their row.
-   *
-   * The form is two columns, and a half-width field followed by a wide one —
-   * or left over at the end — used to leave an empty half beside it: Email
-   * alone under a pair, a lone select half the width of everything around it.
-   * Such a field takes the whole row instead. Worked out on what is visible,
-   * so a field that appears or disappears re-flows the rest.
-   */
   protected readonly fillsRow = computed(() => {
     const lone = new Set<string>();
     let open: string | null = null;
@@ -121,25 +92,15 @@ export class RecordForm {
     return lone;
   });
 
-  /**
-   * A field's note, resolved against the current values.
-   *
-   * A plain string for almost every field. A function where the note depends on
-   * the rest of the form — the salary hint that says what the chosen job pays
-   * is the case — and read here rather than in the template so the template
-   * stays a template.
-   */
   protected hintFor(field: FieldSpec): string {
     const hint = field.hint;
 
-    if (typeof hint === 'function') return hint(this.values());
+    if (typeof hint === 'function') return hint(this.values(), this.editing());
 
     return hint ?? '';
   }
 
   constructor() {
-    // Rebuilt whenever the dialog opens, because the next module's fields are
-    // a different set of controls, not the same ones with new values.
     effect((onCleanup) => {
       if (!this.open()) return;
 
@@ -161,10 +122,6 @@ export class RecordForm {
       this.values.set(group.getRawValue());
       this.applyValidators(spec, group);
 
-      // Visibility can depend on any value, so the mirror and the validators
-      // are refreshed on every change rather than only on the fields a spec
-      // happens to name. Cheap for a form of this size, and it means a spec
-      // does not have to declare what its `showWhen` reads.
       const changes = group.valueChanges.subscribe(() => {
         this.values.set(group.getRawValue());
         this.applyValidators(spec, group);
@@ -176,16 +133,6 @@ export class RecordForm {
     });
   }
 
-  /**
-   * Validators follow visibility.
-   *
-   * A hidden `required` field would be invalid with no way for anybody to fix
-   * it — the save button would simply stop working, and the field explaining
-   * why is not on screen. So a field that is not shown holds no rules.
-   *
-   * `emitEvent: false` matters: this runs *from* `valueChanges`, and
-   * re-emitting would loop.
-   */
   private applyValidators(spec: RecordSpec, group: FormGroup): void {
     const values = group.getRawValue();
 
@@ -193,14 +140,13 @@ export class RecordForm {
       const control = group.get(field.key);
       if (!control) continue;
 
-      const shown = field.showWhen?.(values) ?? true;
+      const shown = field.showWhen?.(values, this.editing()) ?? true;
 
       control.setValidators(shown ? this.validatorsFor(field) : []);
       control.updateValueAndValidity({ emitEvent: false });
     }
   }
 
-  /** Options are resolved per open, so a select can hold rows fetched since. */
   protected optionsFor(field: FieldSpec) {
     return field.options?.() ?? [];
   }
@@ -250,12 +196,6 @@ export class RecordForm {
     });
   }
 
-  /**
-   * Put the API's own validation back on the fields it belongs to.
-   *
-   * The rules live server-side, so a 422 is the authority — showing it as one
-   * banner would make the person hunt for which field it meant.
-   */
   private applyServerErrors(error: HttpErrorResponse): void {
     const errors = error.error?.errors as Record<string, string[]> | undefined;
 
@@ -268,7 +208,6 @@ export class RecordForm {
         }
       }
 
-      // A rule about a field the form does not show still has to be readable.
       const orphan = Object.entries(errors).find(([key]) => !this.form().get(key));
       this.failure.set(orphan ? orphan[1][0] : null);
 
@@ -278,20 +217,12 @@ export class RecordForm {
     this.failure.set(error.error?.message ?? 'Could not save. Check the connection and try again.');
   }
 
-  /** A server message wins over the generic one for that field. */
   protected serverError(key: string): string | null {
     const control = this.form().get(key);
 
     return (control?.errors?.['server'] as string | undefined) ?? null;
   }
 
-  /**
-   * Hold the chosen file on the control.
-   *
-   * A file input's `value` cannot be written to, so it is never bound to the
-   * form; the control carries the `File` object itself and the spec's
-   * `toPayload` packs it into `FormData`.
-   */
   protected pickFile(key: string, event: Event): void {
     const input = event.target as HTMLInputElement;
 
@@ -301,7 +232,6 @@ export class RecordForm {
     this.form().get(key)?.markAsDirty();
   }
 
-  /** The chosen filename, so the person can see the upload actually took. */
   protected fileName(key: string): string | null {
     const value = this.form().get(key)?.value;
 
@@ -309,14 +239,9 @@ export class RecordForm {
   }
 
   private blankFor(field: FieldSpec): unknown {
-    // A field that says what empty means for it wins. See `FieldSpec.blank` —
-    // a money field whose blank is `0` cannot express "not answered", and a
-    // payload builder that drops unanswered fields needs it to.
     if (field.blank !== undefined) return field.blank;
 
     if (field.kind === 'number' || field.kind === 'money') return 0;
-    // Null rather than an empty string: the payload builder drops nulls, and a
-    // file field that was never touched must not be sent at all.
     if (field.kind === 'file') return null;
 
     return '';

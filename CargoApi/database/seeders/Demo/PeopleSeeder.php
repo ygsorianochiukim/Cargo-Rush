@@ -26,51 +26,10 @@ use Database\Seeders\Concerns\SeedsIntoACompany;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 
-/**
- * The office: a roster with some variety in it, and the paperwork that follows.
- *
- *     php artisan db:seed --class="Database\Seeders\Demo\PeopleSeeder"
- *
- * `PayrollSeeder` hires the four people a payroll run needs to be worth
- * reading. This is what the HR half of the system is actually made of and none
- * of which a payroll needs: applications, time off, the store tab, the standing
- * allowances and deductions, and a request to move the cutoff.
- *
- * Run it after `PayrollSeeder`, which is where the staff it hangs all of this
- * on come from. On its own it seeds the extra roster and warns about the rest
- * rather than inventing employees the payroll demo would then pay twice.
- *
- * ## Every screen gets all of its states
- *
- * Time off, undertime and the cutoff request share one `RequestStatus`, and a
- * demo where everything is approved shows a queue with nothing in it. So each
- * list below has something pending, something approved and something refused —
- * the pending rows are what the approver's screen is for, and they are the ones
- * a walkthrough clicks.
- *
- * ## Idempotent
- *
- * Staff match on their employee number, applicants on their name, a request on
- * the person and what they wrote, a store line on the person and what they
- * took, components on their name. **Never on a date**: every date here is
- * relative to today, so a key that included one would find nothing tomorrow and
- * file the whole lot again. Running it twice tops up rather than doubling
- * anybody's tab.
- */
 class PeopleSeeder extends Seeder
 {
     use AdoptsTrashedRows, SeedsIntoACompany;
 
-    /**
-     * The rest of the roster: number, first, last, position, type, status,
-     * department, hired, contact.
-     *
-     * A trainee, a probationary, a contractual and somebody who has left.
-     * Employment type is what decides which of a job's three rates a new hire
-     * starts on, so a roster of nothing but regulars hides the whole tier
-     * system — and a resigned employee is what proves the payroll picks up the
-     * active ones rather than everybody who ever worked here.
-     */
     private const STAFF = [
         ['DEMO-05', 'Cristina', 'Rivera', 'Dispatcher', 'regular', 'active', 'Operations', '2026-02-16'],
         ['DEMO-06', 'Alvin', 'Tagalog', 'Helper', 'probationary', 'active', 'Operations', '2026-06-01'],
@@ -79,13 +38,6 @@ class PeopleSeeder extends Seeder
         ['DEMO-09', 'Hazel', 'Ocampo', 'Office Staff', 'regular', 'inactive', 'Administration', '2025-09-15'],
     ];
 
-    /**
-     * first, last, job applied for, contact, source, days ago, stage, rating.
-     *
-     * One at every stage the pipeline has, because the applicants board is a
-     * board — columns with nothing in them demonstrate the columns and not the
-     * board.
-     */
     private const APPLICANTS = [
         ['Jomar', 'Ruiz', 'Driver', '0917 555 0601', 'Walk-in', 2, 'applied', null],
         ['Precious', 'Lim', 'Office Staff', '0917 555 0602', 'Referral — C. Rivera', 5, 'screening', 3],
@@ -95,7 +47,6 @@ class PeopleSeeder extends Seeder
         ['Melvin', 'Dizon', 'Driver', '0917 555 0606', 'Walk-in', 26, 'rejected', 2],
     ];
 
-    /** employee no, type, from, to, days, reason, status */
     private const LEAVE = [
         ['DEMO-05', 'vacation', 6, 10, 5.0, 'Family trip to Camiguin.', 'pending'],
         ['DEMO-03', 'sick', -3, -2, 2.0, 'Fever and cough, with a medical certificate.', 'approved'],
@@ -104,19 +55,12 @@ class PeopleSeeder extends Seeder
         ['DEMO-07', 'bereavement', -16, -14, 3.0, 'Death in the family.', 'approved'],
     ];
 
-    /** employee no, days from today, from, to, hours, reason, status */
     private const UNDERTIME = [
         ['DEMO-07', 1, '15:00', '17:00', 2.0, 'Barangay clearance appointment.', 'pending'],
         ['DEMO-05', -4, '14:30', '17:00', 2.5, 'Dental appointment.', 'approved'],
         ['DEMO-06', -11, '16:00', '17:00', 1.0, 'Left early, no reason given at the time.', 'rejected'],
     ];
 
-    /**
-     * The store tab: employee no, kind, pesos, what for, outlet, days ago.
-     *
-     * Charges and a payment against them, because the balance is the difference
-     * and a tab of nothing but charges never shows anybody paying one down.
-     */
     private const STORE = [
         ['DEMO-03', 'charge', 1450, 'Rice, 25kg', 'Yard canteen', -18],
         ['DEMO-03', 'charge', 620, 'Cooking oil and canned goods', 'Yard canteen', -11],
@@ -125,14 +69,6 @@ class PeopleSeeder extends Seeder
         ['DEMO-06', 'charge', 780, 'Work gloves and boots', 'Yard canteen', -7],
     ];
 
-    /**
-     * The standing allowances and deductions: name, kind, basis, pesos,
-     * rate in basis points, schedule, taxable.
-     *
-     * A fixed rice allowance and a percentage COLA are the two shapes a
-     * component comes in, and having one of each is what makes the payslip's
-     * component lines worth reading.
-     */
     private const COMPONENTS = [
         ['Rice allowance', 'earning', 'fixed', 2000, 0, 'monthly_split', false],
         ['COLA', 'earning', 'percent_of_basic', 0, 500, 'monthly_split', true],
@@ -140,16 +76,12 @@ class PeopleSeeder extends Seeder
         ['SSS salary loan', 'deduction', 'fixed', 1200, 0, 'second_cutoff', false],
     ];
 
-    /** Who is on what: employee no, component name, pesos or null for the catalogue figure. */
     private const ASSIGNMENTS = [
         ['DEMO-01', 'Rice allowance', null],
         ['DEMO-01', 'COLA', null],
         ['DEMO-02', 'Rice allowance', null],
         ['DEMO-02', 'SSS salary loan', null],
         ['DEMO-05', 'Rice allowance', null],
-        // On a figure of their own, which is the reason an assignment may carry
-        // an amount at all: the catalogue says what the firm usually pays, and
-        // somebody's own arrangement overrides it without editing the rule.
         ['DEMO-05', 'Uniform deduction', 150],
     ];
 
@@ -199,10 +131,6 @@ class PeopleSeeder extends Seeder
                 'pagibig_enrolled' => true,
             ]);
 
-            // Opened off the job at the tier their employment type puts them
-            // on, exactly as hiring through the form would — and only where
-            // there is not one already, so a re-run cannot append a second
-            // contract and silently restate somebody's pay.
             if ($position !== null && $employee->contractOn() === null) {
                 $this->contracts->openFromPosition($employee, $position, $employee->hired_on);
             }
@@ -214,15 +142,6 @@ class PeopleSeeder extends Seeder
         foreach (self::APPLICANTS as [$first, $last, $job, $contact, $source, $days, $stage, $rating]) {
             $appliedOn = Carbon::today()->subDays($days);
 
-            /**
-             * Keyed on the name, with the day it came in as an ordinary value.
-             *
-             * Not on the date, although the date is what makes it this
-             * application: every date here is relative to today, so a seeder
-             * run again tomorrow would find nothing matching and file the same
-             * six people a second time. The same reasoning applies to the leave,
-             * undertime and store rows below.
-             */
             $this->restoreOrCreate(Applicant::class,
                 ['first_name' => $first, 'last_name' => $last],
                 [
@@ -234,9 +153,6 @@ class PeopleSeeder extends Seeder
                     'source' => $source,
                     'stage' => $stage,
                     'rating' => $rating,
-                    // Only a decided application carries a decision date, which
-                    // is what separates a board somebody is working through
-                    // from a pile of closed files.
                     'decided_at' => in_array($stage, ['hired', 'rejected'], true)
                         ? $appliedOn->copy()->addDays(6)
                         : null,
@@ -302,13 +218,6 @@ class PeopleSeeder extends Seeder
         }
     }
 
-    /**
-     * The *pautang* ledger.
-     *
-     * Charges and payments, left unsettled on purpose: what a cutoff takes off
-     * a payslip is capped by `store_deduction_cap_cents` on the employee, and a
-     * tab that is already square would never show the cap doing anything.
-     */
     private function storeTab(): void
     {
         $staff = Employee::query()->pluck('id', 'employee_no');
@@ -332,12 +241,6 @@ class PeopleSeeder extends Seeder
                 ],
             );
         }
-
-        // A ceiling on what a single payslip may take, so somebody with a large
-        // tab still goes home with something. ₱2,000 a cutoff.
-        Employee::query()->where('store_deduction_cap_cents', 0)->update([
-            'store_deduction_cap_cents' => 200000,
-        ]);
     }
 
     private function components(): void
@@ -369,9 +272,6 @@ class PeopleSeeder extends Seeder
             $this->restoreOrCreate(EmployeePayComponent::class,
                 ['employee_id' => $employee, 'pay_component_id' => $component],
                 [
-                    // Null means "whatever the catalogue says", which is the
-                    // ordinary case: change the rice allowance once and
-                    // everybody on it moves.
                     'amount_cents' => $peso === null ? null : $peso * 100,
                     'effective_from' => Carbon::today()->startOfYear()->toDateString(),
                     'status' => StatusValue::Active->value,
@@ -380,14 +280,6 @@ class PeopleSeeder extends Seeder
         }
     }
 
-    /**
-     * A request to move the cutoff, sitting with whoever decides it.
-     *
-     * The cutoff days are a company setting that payroll reads for every
-     * period, so changing them is not something one screen should do quietly —
-     * it is asked for, with a reason, and approved. Seeded pending, because the
-     * point of the feature is the decision.
-     */
     private function cutoffRequest(): void
     {
         $company = $this->seedCompany();

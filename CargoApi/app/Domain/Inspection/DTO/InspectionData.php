@@ -6,15 +6,9 @@ namespace App\Domain\Inspection\DTO;
 
 use App\Domain\Shared\DTO\Data;
 
-/**
- * A submitted pre-trip check. `good_to_go` is not taken from the client — the
- * service derives it from the results so the call cannot be overridden.
- */
 final class InspectionData extends Data
 {
-    /**
-     * @param  array<string, bool>|null  $results
-     */
+    /** @param array<string, bool>|null $results */
     public function __construct(
         public readonly ?string $trip_id = null,
         public readonly ?string $vehicle_id = null,

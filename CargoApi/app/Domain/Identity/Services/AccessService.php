@@ -13,35 +13,11 @@ use App\Domain\Shared\Enums\StatusValue;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
-/**
- * Who can reach what.
- *
- * The rules here are all about not letting somebody lock the business out of
- * its own system, which is the failure mode every access screen has:
- *
- *   A role nobody holds can be deleted. A role somebody holds cannot, because
- *   deleting it would leave those accounts pointing at nothing — and an account
- *   with no role resolves to no permissions, which is a person who can sign in
- *   and see an empty app with no way to explain why.
- *
- *   A system role cannot be deleted or renamed by key at all. `driver` and
- *   `customer` are the two the product itself depends on: the handset opens on
- *   a different set of tabs for each. Its *permissions* stay editable, because
- *   tuning what a driver reaches is a legitimate thing to want.
- *
- *   The administrator's permission list cannot be emptied. `all_permissions` is
- *   what keeps it holding permissions added in later releases, and turning it
- *   off would be one click away from an install nobody can administer.
- */
 class AccessService
 {
     public function __construct(private readonly AccessRepository $access) {}
 
-    /* --------------------------------------------------------------- Roles */
-
-    /**
-     * @param  array<string, mixed>  $attributes
-     */
+    /** @param array<string, mixed> $attributes */
     public function createRole(array $attributes): Role
     {
         return DB::transaction(function () use ($attributes): Role {
@@ -51,8 +27,6 @@ class AccessService
                 ),
                 'name' => (string) $attributes['name'],
                 'description' => $attributes['description'] ?? null,
-                // Only the seeders make system roles. A role the office adds is
-                // one it can also remove.
                 'is_system' => false,
                 'all_permissions' => false,
                 'position' => (int) ($attributes['position'] ?? 500),
@@ -65,9 +39,7 @@ class AccessService
         });
     }
 
-    /**
-     * @param  array<string, mixed>  $attributes
-     */
+    /** @param array<string, mixed> $attributes */
     public function updateRole(Role $role, array $attributes): Role
     {
         return DB::transaction(function () use ($role, $attributes): Role {
@@ -76,8 +48,6 @@ class AccessService
                 array_flip(['name', 'description', 'position', 'status']),
             ));
 
-            // Absent means "not part of this edit" — renaming a role must not
-            // be read as an instruction to strip it of everything.
             if (array_key_exists('permissions', $attributes)) {
                 $this->syncPermissions($role, $attributes['permissions']);
             }
@@ -86,13 +56,6 @@ class AccessService
         });
     }
 
-    /**
-     * Remove a role, if nothing depends on it.
-     *
-     * Refused rather than cascading: reassigning people is a decision, and
-     * doing it silently would move somebody's access without anybody choosing
-     * where to.
-     */
     public function deleteRole(Role $role): void
     {
         abort_if(
@@ -111,20 +74,10 @@ class AccessService
                 : "$holders accounts still hold this role. Move them to another role first.",
         );
 
-        // Any position defaulting to it is left pointing at nothing rather than
-        // silently re-pointed — `nullOnDelete` on the column, and the position
-        // screen then shows it as having no default.
         $role->delete();
     }
 
-    /**
-     * Tick and untick permissions on a role.
-     *
-     * Keys, not ids: the client works from the permission vocabulary, and an id
-     * is a detail of how this install stored it.
-     *
-     * @param  array<int, string>  $keys
-     */
+    /** @param array<int, string> $keys */
     private function syncPermissions(Role $role, array $keys): void
     {
         abort_if(
@@ -138,11 +91,7 @@ class AccessService
         $role->permissions()->sync($ids);
     }
 
-    /* ----------------------------------------------------------- Positions */
-
-    /**
-     * @param  array<string, mixed>  $attributes
-     */
+    /** @param array<string, mixed> $attributes */
     public function createPosition(array $attributes): Position
     {
         $position = Position::create([
@@ -155,8 +104,6 @@ class AccessService
             'position' => (int) ($attributes['position'] ?? 500),
             'status' => $attributes['status'] ?? StatusValue::Active->value,
 
-            // The rate card. Zero means nobody has priced this tier, which
-            // opens no contract — see `Position::startingPay()`.
             'pay_basis' => $attributes['pay_basis'] ?? PayBasis::Monthly->value,
             'trainee_amount_cents' => (int) ($attributes['trainee_amount_cents'] ?? 0),
             'probationary_amount_cents' => (int) ($attributes['probationary_amount_cents'] ?? 0),
@@ -166,18 +113,13 @@ class AccessService
         return $position->refresh();
     }
 
-    /**
-     * @param  array<string, mixed>  $attributes
-     */
+    /** @param array<string, mixed> $attributes */
     public function updatePosition(Position $position, array $attributes): Position
     {
         $position->update(array_intersect_key(
             $attributes,
             array_flip([
                 'name', 'description', 'drives', 'position', 'status',
-                // Changing what the job pays changes what the *next* hire is
-                // offered, and nothing about anybody already on it — their pay
-                // is a contract of their own. See the migration.
                 'pay_basis', 'trainee_amount_cents', 'probationary_amount_cents',
                 'regular_amount_cents',
             ]),
@@ -186,15 +128,6 @@ class AccessService
         return $position->refresh();
     }
 
-    /**
-     * Remove a position, or retire it if anybody holds it.
-     *
-     * The same trade `ExpenseService` makes with a category that has spend
-     * against it: deleting would take the link with it, and the roster would
-     * quietly lose what those people do.
-     *
-     * @return bool true when it was deleted, false when it was retired instead
-     */
     public function deletePosition(Position $position): bool
     {
         if ($position->employees()->exists()) {
@@ -208,7 +141,6 @@ class AccessService
         return true;
     }
 
-    /** "treasury", then "treasury-2" — a name somebody reuses must not collide. */
     private function uniqueKey(string $base): string
     {
         $base = $base === '' ? 'role' : $base;

@@ -8,13 +8,6 @@ use Database\Seeders\Demo\OperationsSeeder;
 use Database\Seeders\NavigationSeeder;
 use Laravel\Sanctum\PersonalAccessToken;
 
-/**
- * The contract both clients are written against — DESIGN.md section 7.
- *
- * These are not tests of any one module. They are tests that the rules the
- * clients rely on hold everywhere: the envelope, the status vocabulary, the
- * money format, and the fact that the shell is data-driven.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(FleetSeeder::class);
@@ -36,8 +29,6 @@ describe('authentication', function (): void {
             'device_name' => 'pixel-8',
         ])
             ->assertCreated()
-            // The token rides in `meta` so the shape of `data` does not change
-            // with the auth style.
             ->assertJsonPath('data.role', 'driver')
             ->assertJsonPath('meta.token_type', 'Bearer')
             ->assertJsonStructure(['data' => ['id', 'name', 'role', 'role_label'], 'meta' => ['token']]);
@@ -90,7 +81,6 @@ describe('the navigation endpoint', function (): void {
 
         expect($webKeys)->toContain('billing', 'profitability')
             ->and($mobileKeys)->toContain('cargo', 'tracking')
-            // Billing is not a thing a driver does from the cab.
             ->and($mobileKeys)->not->toContain('billing');
     });
 
@@ -99,7 +89,6 @@ describe('the navigation endpoint', function (): void {
             $this->actingAs($this->driver)->getJson('/api/v1/navigation')->json('data')
         )->pluck('key');
 
-        // A driver holds `trips.view` but not `finance.view`.
         expect($keys)->toContain('trips')->not->toContain('profitability');
     });
 
@@ -128,9 +117,6 @@ describe('the navigation endpoint', function (): void {
 
 describe('cookie auth from an unconfigured origin', function (): void {
     it('explains itself instead of throwing a 500', function (): void {
-        // No Origin header, so Sanctum does not treat this as first-party and
-        // no session store is attached. Asking for a cookie here cannot work —
-        // the reply has to say why rather than blow up in the session layer.
         $this->postJson('/api/v1/login', [
             'email' => 'admin@cargorush.ph',
             'password' => 'password',
@@ -140,8 +126,6 @@ describe('cookie auth from an unconfigured origin', function (): void {
     });
 
     it('still issues a token to the same caller when one is asked for', function (): void {
-        // A device does not need a session, so the identical request with a
-        // device_name is fine from anywhere.
         $this->postJson('/api/v1/login', [
             'email' => 'admin@cargorush.ph',
             'password' => 'password',
@@ -152,20 +136,6 @@ describe('cookie auth from an unconfigured origin', function (): void {
     });
 });
 
-/**
- * Staying signed in — what the handset rests on.
- *
- * cargoApp keeps its bearer token in the keychain and reuses it on the next
- * launch, because asking a driver for a password at the start of every shift,
- * in a cab, is the friction that gets an app put down. That only holds if the
- * server keeps its half of the bargain, and there are three separate ways it
- * could stop: the token could expire, a second handset could evict the first,
- * or signing out on one could sign out the other.
- *
- * All three look identical from the cab — "it logged me out" — and none of them
- * belongs to any one module, so they are pinned here beside the rest of the
- * contract the clients are written against.
- */
 describe('staying signed in', function (): void {
     beforeEach(function (): void {
         $this->signIn = fn (string $device): string => $this->postJson('/api/v1/login', [
@@ -178,8 +148,6 @@ describe('staying signed in', function (): void {
     it('issues a token with no expiry, so a stored one still opens the app weeks later', function (): void {
         $token = ($this->signIn)('cargoApp Pixel 8 a1b2c3');
 
-        // Both halves matter: `sanctum.expiration` overrides whatever is on the
-        // row, so a null column under a configured lifetime would still expire.
         expect(config('sanctum.expiration'))->toBeNull()
             ->and(PersonalAccessToken::findToken($token)->expires_at)->toBeNull();
 
@@ -189,11 +157,6 @@ describe('staying signed in', function (): void {
     });
 
     it('leaves one handset signed in when the same driver signs in on another', function (): void {
-        // Two handsets, two names. The app names a token after the device it
-        // was issued to rather than after the platform, and this is why: a
-        // shared name means the second sign-in deletes the first phone's token,
-        // and that phone drops to the sign-in form on its next call with
-        // nothing to tell the driver why.
         $first = ($this->signIn)('cargoApp Pixel 8 a1b2c3');
         $second = ($this->signIn)('cargoApp SM-G991B d4e5f6');
 
@@ -217,10 +180,6 @@ describe('staying signed in', function (): void {
 
         $this->withToken($first)->postJson('/api/v1/logout')->assertNoContent();
 
-        // The container lives across calls inside one test, and the guard holds
-        // on to whoever it resolved last — so without this the next request is
-        // answered from that cache and passes on a token that is already gone.
-        // Nothing the app ever sees: every real request gets its own container.
         $this->app['auth']->forgetGuards();
 
         $this->withToken($first)->getJson('/api/v1/me')->assertUnauthorized();
@@ -228,10 +187,6 @@ describe('staying signed in', function (): void {
     });
 
     it('answers a revoked token with 401, the one status the app signs out on', function (): void {
-        // The handset tells a dead token apart from a dead signal by the status
-        // alone. Anything else — a timeout, a 500, a server that is not up yet —
-        // leaves the stored token in place and tries again next launch, so this
-        // status is load bearing rather than incidental.
         $token = ($this->signIn)('cargoApp Pixel 8 a1b2c3');
 
         PersonalAccessToken::findToken($token)->delete();

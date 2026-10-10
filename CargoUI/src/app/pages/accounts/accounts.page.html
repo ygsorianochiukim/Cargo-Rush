@@ -6,9 +6,6 @@
   (add)="list.create()"
 />
 
-<!-- What the chart is, before what is in it. Nobody opens this page daily, so
-     the two figures worth stating are how many accounts are in use and how many
-     have been retired — a retired one is still here, keeping its history. -->
 <div class="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
   <app-card heading="In use" icon="tag">
     <p class="cr-num text-[28px] leading-none font-semibold">{{ activeCount() }}</p>
@@ -21,9 +18,6 @@
   </app-card>
 
   <app-card heading="How this is numbered" icon="clipboard" class="sm:col-span-1">
-    <!-- The convention rather than a house style, and worth saying once on the
-         page: an accountant, an auditor and a BIR examiner all expect to find
-         cash in the 1000s. -->
     <dl class="space-y-1 text-[12px] text-cr-ink-muted">
       <div class="flex justify-between">
         <dt>1000s</dt>
@@ -52,10 +46,6 @@
 @if (list.error(); as message) {
   <app-error-state [message]="message" />
 } @else if (sections(); as groups) {
-  <!-- One card per kind, in the order a chart is read: assets, liabilities,
-       equity, income, expenses. Not one long table, because the kind is the
-       thing that decides how every figure in the section behaves — it is a
-       heading, not a column. -->
   <div class="flex flex-col gap-4">
     @for (section of groups; track section.type) {
       <app-card [heading]="section.label" icon="tag" [padded]="false">

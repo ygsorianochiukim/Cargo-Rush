@@ -5,9 +5,7 @@ import { ChartTooltip } from './chart-tooltip';
 export interface DonutSlice {
   key: string;
   label: string;
-  /** Signed value. Negative slices take arc length from their magnitude. */
   value: number;
-  /** Optional formatted amount for the tooltip, e.g. "₱117,714.07". */
   detail?: string;
 }
 
@@ -16,34 +14,18 @@ interface Arc extends DonutSlice {
   length: number;
   offset: number;
   negative: boolean;
-  /** One brand hue stepped by opacity — no new colours enter the palette. */
   opacity: number;
 }
 
 const RADIUS = 54;
 const CIRC = 2 * Math.PI * RADIUS;
-/** Sequential steps of --cr-blue, darkest first. */
 const STEPS = [1, 0.78, 0.6, 0.45, 0.33, 0.24, 0.17, 0.12];
 
-/**
- * The workbook's "% OF NET INCOME" doughnut.
- *
- * Arc length uses each slice's magnitude — the same thing Excel does with a
- * negative value in a pie — but a loss keeps its minus sign in the legend and
- * is drawn in `--cr-red`, so it can never read as a contribution.
- *
- * **Interaction.** Hovering or focusing a legend row lifts the matching arc
- * and shows its figures. The legend is the interactive surface, not the ring:
- * a legend row is a proper hit target at any size, it is already in reading
- * order for a keyboard, and a 6°-wide arc is neither.
- */
 @Component({
   selector: 'app-donut',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [ChartTooltip],
   template: `
-    <!-- Stacked, not side by side: the card is one column of a four-up grid,
-         and a legend squeezed beside the ring truncates the plate numbers. -->
     <div class="flex flex-col items-center gap-4">
       <svg
         viewBox="0 0 140 140"
@@ -104,7 +86,6 @@ export class Donut {
   protected readonly radius = RADIUS;
   protected readonly circumference = CIRC;
 
-  /** The slice under the pointer or holding focus. Null means none. */
   protected readonly active = signal<string | null>(null);
 
   protected readonly arcs = computed<Arc[]>(() => {
@@ -119,8 +100,6 @@ export class Donut {
       const length = (Math.abs(s.value) / magnitude) * CIRC;
       const arc: Arc = {
         ...s,
-        // Share keeps its sign and divides by the signed total, exactly as the
-        // workbook's "% OF NET INCOME" column does.
         share: signedTotal === 0 ? 0 : s.value / signedTotal,
         length,
         offset,
@@ -133,7 +112,6 @@ export class Donut {
     });
   });
 
-  /** Everything except the active arc fades, so the one in question stands out. */
   protected dimmed(arc: Arc): boolean {
     const active = this.active();
 
@@ -147,7 +125,6 @@ export class Donut {
     ];
   }
 
-  /** What a screen reader hears on the legend row itself. */
   protected spoken(arc: Arc): string {
     const detail = arc.detail ? `, ${arc.detail}` : '';
 

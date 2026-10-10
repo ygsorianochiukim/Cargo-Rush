@@ -6,8 +6,6 @@
   (add)="list.create()"
 />
 
-<!-- Every stage, empty ones included: a pipeline with gaps in it reads as a
-     broken screen, and "nobody is at interview" is the useful signal. -->
 <app-card
   heading="Pipeline"
   icon="inbox"
@@ -186,8 +184,6 @@
   }
 </app-card>
 
-<!-- Hiring: the employee record is built from the application, so this asks
-     only for what an application does not know. -->
 @if (candidate(); as applicant) {
   <app-modal
     [(open)]="hireOpen"
@@ -221,20 +217,16 @@
           <input type="date" formControlName="hired_on" [class]="inputClass" />
         </app-field>
 
-        <app-field label="Position" required>
-          <input type="text" formControlName="position" [class]="inputClass" />
+        <app-field label="Position" required hint="Sets their pay from the job’s rate card.">
+          <select formControlName="position_id" [class]="inputClass">
+            <option value="" disabled>Select…</option>
+            @for (position of positions(); track position.id) {
+              <option [value]="position.id">{{ position.name }}</option>
+            }
+          </select>
         </app-field>
 
-        <app-field label="Department">
-          <input
-            type="text"
-            formControlName="department"
-            placeholder="Operations"
-            [class]="inputClass"
-          />
-        </app-field>
-
-        <app-field label="Employment">
+        <app-field label="Employment" class="sm:col-span-2">
           <select formControlName="employment_type" [class]="inputClass">
             <option value="trainee">Trainee</option>
             <option value="probationary">Probationary</option>
@@ -242,20 +234,6 @@
             <option value="contractual">Contractual</option>
             <option value="part_time">Part-time</option>
           </select>
-        </app-field>
-
-        <app-field
-          label="Pay (₱)"
-          class="sm:col-span-2"
-          hint="Leave at 0 to use the job’s rate for the employment type above."
-        >
-          <input
-            type="number"
-            step="0.01"
-            min="0"
-            formControlName="amount"
-            [class]="inputClass + ' cr-num'"
-          />
         </app-field>
       </form>
     }

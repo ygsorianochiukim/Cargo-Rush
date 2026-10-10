@@ -1,7 +1,4 @@
 <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
-  <!-- The four questions somebody opens a journal with: when, what kind, which
-       state, and which account. Laid out as filters rather than tabs because
-       they combine — "fuel entries against 5010 last month" is one question. -->
   <div class="flex flex-wrap items-end gap-3">
     <app-field label="From">
       <input
@@ -109,10 +106,6 @@
     />
   </app-card>
 
-  <!-- The per-row verbs. Below the table rather than crammed into it: a
-       journal row is already six columns wide, and posting and voiding are
-       decisions rather than navigation — each wants its own label and its own
-       confirmation, which a 32px icon button cannot carry. -->
   @if (rows(); as entries) {
     @if (entries.length > 0) {
       <app-card heading="What can be done with these" icon="tag" class="mt-4">
@@ -184,9 +177,6 @@
   }
 }
 
-<!-- The entry form. Its own dialog because an entry is a head and a variable
-     set of sides, with a rule tying them together that has to be shown while
-     somebody types. -->
 <app-modal
   [open]="formOpen()"
   (openChange)="formOpen.set($event)"
@@ -219,9 +209,6 @@
       </app-field>
     </div>
 
-    <!-- The sides. Each line is an account, a direction and an amount — never
-         two amount columns, because "debit 500 and credit 200" is not a line
-         anybody would write. -->
     <div class="rounded-card ring-1 ring-cr-line/60">
       <header class="flex items-center gap-3 border-b border-cr-line px-4 py-2.5">
         <h3 class="text-[14px] font-semibold">Lines</h3>
@@ -285,9 +272,6 @@
         }
       </div>
 
-      <!-- The running check, in the place a ledger keeps it: under the lines,
-           both columns, and the difference when there is one. The figure is
-           what finds a transposed number — "does not balance" is not a clue. -->
       <footer
         class="flex flex-wrap items-center gap-4 border-t border-cr-line px-4 py-3"
         [class.bg-cr-red-bg]="!balanced() && totalDebits() + totalCredits() > 0"
@@ -328,8 +312,6 @@
   </form>
 
   <ng-container modal-footer>
-    <!-- Two ways out, and the difference matters: a draft is somebody's work in
-         progress and changes no balance, while posting is final. -->
     <button
       type="button"
       class="h-10 rounded-control px-4 text-[14px] font-semibold text-cr-ink-muted transition-colors hover:bg-cr-tint"
@@ -356,8 +338,6 @@
   </ng-container>
 </app-modal>
 
-<!-- Voiding. A dialog rather than a confirmation, because the reason is the
-     point: it stays on the entry as the record of the correction. -->
 <app-modal
   [open]="voiding() !== null"
   (openChange)="!$event && voiding.set(null)"

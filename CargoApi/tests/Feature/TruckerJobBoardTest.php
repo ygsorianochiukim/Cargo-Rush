@@ -18,25 +18,6 @@ use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * What a partner is shown, and what they may take.
- *
- * **There is no open board**, and most of this file is that rule from every
- * angle. A trucker sees a run only because somebody put their name on it — a
- * customer picking them off the hauler list, or the desk handing it to them —
- * so what is tested here is mainly *absence*: the loads that must not appear,
- * and the people who must not be able to take one.
- *
- * The rule is enforced twice on purpose. The list hides what was not offered,
- * and the accept refuses it outright; a screen that hides a row while the
- * endpoint still honours the id is not a rule, it is a decoration.
- *
- * The other half is the fork that decides the money. A partner accepting a run
- * a customer chose them for is doing their own business and bills the customer
- * (`direct`); one the desk hands a load to is hauling the fleet's work and is
- * paid out of it (`cargo_rush`). Both are the same percentage in opposite
- * directions, so which one a run records is not a detail.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -46,7 +27,6 @@ beforeEach(function (): void {
     $this->admin = User::where('email', 'admin@cargorush.ph')->firstOrFail();
     $this->customer = Customer::query()->firstOrFail();
 
-    /** A vetted partner with a login, online, with one working truck. */
     $this->partner = function (string $name, int $capacityKg = 15_000): array {
         $user = User::factory()->create([
             'role' => Role::Trucker->value,
@@ -65,7 +45,6 @@ beforeEach(function (): void {
         return [$user, $trucker->refresh()->load('vehicles')];
     };
 
-    /** A customer's request nobody has placed yet. Invisible to every partner. */
     $this->load = fn (array $overrides = []) => Trip::create([
         'customer_id' => $this->customer->getKey(),
         'origin' => 'Iponan',
@@ -73,20 +52,12 @@ beforeEach(function (): void {
         'cargo' => 'Rice, 200 sacks',
         'weight_kg' => 10_000,
         'status' => StatusValue::Pending->value,
-        // Not nullable on `trips`, so every fixture carries one. The board does
-        // not read it; it is the desk's column and is here to make a row legal.
         'scheduled_at' => now()->addDay(),
         'price_cents' => 1_000_000,
         'currency' => 'PHP',
         ...$overrides,
     ]);
 
-    /**
-     * A request a customer held for one partner by name.
-     *
-     * The only kind of row that ever reaches a trucker's screen, so it is where
-     * most of these tests start — see `JobBoardService::open()`.
-     */
     $this->offer = fn (Trucker $trucker, array $overrides = []) => ($this->load)([
         'trucker_id' => $trucker->getKey(),
         ...$overrides,
@@ -104,15 +75,10 @@ describe('what a partner is shown', function (): void {
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.price_cents', 1_000_000)
             ->assertJsonPath('data.0.commission_bp', 1200)
-            // The figure that actually lands with them. A board quoting the
-            // gross would be quoting a number nobody receives.
             ->assertJsonPath('data.0.your_take_cents', 880_000);
     });
 
     it('quotes their take on the net when prices include VAT', function (): void {
-        // ₱10,000 all-in is ₱8,928.57 of haul and ₱1,071.43 of VAT. The wallet
-        // splits the haul, so the board must too — 88% of the net, not of the
-        // gross, or the quote promises ₱942.86 delivery never credits.
         $this->company->update(['prices_include_vat' => true]);
 
         [$user, $trucker] = ($this->partner)('Boyet');
@@ -127,10 +93,6 @@ describe('what a partner is shown', function (): void {
     });
 
     it('never shows work nobody has offered them', function (): void {
-        // The rule this screen is built on. A request the office has not placed
-        // is the office's to place: a customer who asked Cargo Rush to carry
-        // something asked *Cargo Rush*, and quietly putting that load in front
-        // of every contractor is not the deal they made.
         [$user] = ($this->partner)('Boyet');
         ($this->load)();
 
@@ -150,8 +112,6 @@ describe('what a partner is shown', function (): void {
         [$user, $trucker] = ($this->partner)('Boyet');
         $driver = Driver::query()->firstOrFail();
 
-        // Offered to them, then crewed in-house before they answered. The
-        // offer is off the table and must not still be pressable.
         ($this->offer)($trucker, ['driver_id' => $driver->getKey()]);
 
         $this->actingAs($user)->getJson('/api/v1/partner/jobs')->assertOk()->assertJsonCount(0, 'data');
@@ -161,9 +121,6 @@ describe('what a partner is shown', function (): void {
         [$user, $trucker] = ($this->partner)('Boyet');
         ($this->offer)($trucker, ['status' => StatusValue::Assigned->value]);
 
-        // A run stops being on the board by ceasing to be `pending`. There is
-        // no cancellation step anywhere, which is the point of building the
-        // board as a view rather than a queue.
         $this->actingAs($user)->getJson('/api/v1/partner/jobs')->assertOk()->assertJsonCount(0, 'data');
     });
 
@@ -190,7 +147,6 @@ describe('what a partner is shown', function (): void {
 
         ($this->offer)($trucker, ['truck_category_id' => $freezer->getKey(), 'cargo' => 'Frozen tuna']);
 
-        // A load that needs a freezer is never offered to a flatbed.
         $this->actingAs($user)->getJson('/api/v1/partner/jobs')->assertOk()->assertJsonCount(0, 'data');
     });
 
@@ -203,8 +159,6 @@ describe('what a partner is shown', function (): void {
         ]);
         $trucker->vehicles()->first()->update(['truck_category_id' => $flatbed->getKey()]);
 
-        // An unstated requirement is not a requirement. Refusing on it would
-        // empty the board for every run somebody booked in a hurry.
         ($this->offer)($trucker, ['truck_category_id' => null]);
 
         $this->actingAs($user)->getJson('/api/v1/partner/jobs')->assertOk()->assertJsonCount(1, 'data');
@@ -218,11 +172,6 @@ describe('what a partner is shown', function (): void {
             ->postJson("/api/v1/trips/{$trip->id}/assign-trucker", ['trucker_id' => $trucker->getKey()])
             ->assertOk();
 
-        // Assigning is a decision rather than an offer: the run is already
-        // theirs, with nothing left to accept, so it belongs on their queue and
-        // not on a board of work to choose from. It also pays the other way
-        // round, and a board where two cards meant different deals would be a
-        // board nobody could read.
         $this->actingAs($user)->getJson('/api/v1/partner/jobs')->assertOk()->assertJsonCount(0, 'data');
 
         $this->actingAs($user)->getJson('/api/v1/partner/trips')->assertOk()->assertJsonCount(1, 'data');
@@ -244,8 +193,6 @@ describe('what a partner is shown', function (): void {
 
     it('does not sort by a pin from last week', function (): void {
         [$user, $trucker] = ($this->partner)('Boyet');
-        // Online, but the position is three days old. Sorting by it would send
-        // a load to wherever they happened to be on Tuesday.
         $trucker->update([
             'latitude' => 8.4856,
             'longitude' => 124.5808,
@@ -255,8 +202,6 @@ describe('what a partner is shown', function (): void {
         $first = ($this->offer)($trucker, ['origin' => 'Davao', 'origin_lat' => 7.0731, 'origin_lng' => 125.6128]);
         ($this->offer)($trucker, ['origin' => 'Opol', 'origin_lat' => 8.5100, 'origin_lng' => 124.5700]);
 
-        // Unsorted, so the order is the one the query gave — and neither row
-        // carries a distance it cannot justify.
         $this->actingAs($user)
             ->getJson('/api/v1/partner/jobs')
             ->assertOk()
@@ -290,20 +235,12 @@ describe('taking a job', function (): void {
         $trip->refresh();
 
         expect($trip->trucker_id)->toBe($trucker->getKey())
-            // No truck yet: which of theirs takes it is the trucker's pick,
-            // made before it starts (a single fitting truck is filled in then).
             ->and($trip->trucker_vehicle_id)->toBeNull()
-            // Straight to `assigned`: accepting supplies the four things the
-            // desk's confirmation exists to supply.
             ->and($trip->status)->toBe(StatusValue::Assigned)
-            // The customer chose them, so they bill the customer for it.
             ->and($trip->booking_source)->toBe(BookingSource::Direct);
     });
 
     it('refuses a job nobody has offered them', function (): void {
-        // The other half of "no open board": not merely hidden from the list,
-        // but refused outright to somebody who has the id anyway. A screen that
-        // hides a row while the endpoint still honours it is not a rule.
         [$user] = ($this->partner)('Boyet');
         $trip = ($this->load)();
 
@@ -320,9 +257,6 @@ describe('taking a job', function (): void {
 
         $trip = ($this->offer)($other);
 
-        // The same 409, in the same words, as a job that does not exist:
-        // somebody holding an id they were never offered learns nothing from
-        // the difference.
         $this->actingAs($user)
             ->postJson("/api/v1/partner/jobs/{$trip->id}/accept")
             ->assertStatus(409);
@@ -338,9 +272,6 @@ describe('taking a job', function (): void {
             ->postJson("/api/v1/trips/{$trip->id}/assign-trucker", ['trucker_id' => $trucker->getKey()])
             ->assertOk();
 
-        // The haulier quoted and will invoice, so the partner is paid out of
-        // that rather than charged. These two lines and the `direct` above are
-        // the whole of the money fork — nothing else writes this column.
         expect($trip->refresh()->booking_source)->toBe(BookingSource::CargoRush);
     });
 
@@ -352,9 +283,6 @@ describe('taking a job', function (): void {
         $trucker = Trucker::factory()->create(['user_id' => $user->getKey()]);
         TruckerVehicle::factory()->create(['trucker_id' => $trucker->getKey()]);
 
-        // Offered to them all the same — a customer could have picked them
-        // before the office got round to reading the licence. Vetting is the
-        // gate, not the offer.
         $trip = ($this->offer)($trucker->refresh()->load('vehicles'));
 
         $this->actingAs($user)
@@ -392,16 +320,11 @@ describe('running it', function (): void {
     });
 
     it('rolls out without a pre-trip check', function (): void {
-        // A driver cannot leave without one; a partner can. The gate is the
-        // haulier inspecting the haulier's own unit, and a partner's truck is
-        // not the haulier's to clear.
         $this->actingAs($this->user)
             ->postJson("/api/v1/partner/trips/{$this->trip->id}/start")
             ->assertOk()
             ->assertJsonPath('data.status', StatusValue::InTransit->value);
 
-        // The dispatch record is still written, so Dispatch Monitoring shows no
-        // gap for a run that plainly left.
         expect($this->trip->refresh()->dispatchRecord)->not->toBeNull();
     });
 
@@ -443,8 +366,6 @@ describe('running it', function (): void {
     it('will not let a partner touch a run that is not theirs', function (): void {
         [$other] = ($this->partner)('Liza');
 
-        // The same answer as an id that does not exist. A partner holding a
-        // trip id they were never given must learn nothing from the difference.
         $this->actingAs($other)
             ->postJson("/api/v1/partner/trips/{$this->trip->id}/start")
             ->assertNotFound();
@@ -510,9 +431,6 @@ describe('the desk handing work out', function (): void {
         expect($trip->trucker_id)->toBeNull()
             ->and($trip->status)->toBe(StatusValue::Pending);
 
-        // And it is back with the office, not back on anybody's board. There is
-        // no open board to return it to: a request with no name on it is the
-        // desk's to place again.
         $this->actingAs($user)->getJson('/api/v1/partner/jobs')->assertOk()->assertJsonCount(0, 'data');
 
         $this->actingAs($this->admin)
@@ -531,8 +449,6 @@ describe('the desk handing work out', function (): void {
             ->postJson("/api/v1/partner/trips/{$trip->id}/deliver", ['receiver_name' => 'Mrs Uy'])
             ->assertOk();
 
-        // Unpicking a wallet entry and an invoice is a correction the office
-        // makes deliberately, not a side effect of clearing a name off a row.
         $this->actingAs($this->admin)
             ->deleteJson("/api/v1/trips/{$trip->id}/assign-trucker")
             ->assertStatus(422);
@@ -557,28 +473,19 @@ describe('the desk handing work out', function (): void {
         $board = collect($this->actingAs($this->admin)->getJson('/api/v1/trips')->assertOk()->json('data'))
             ->keyBy('id');
 
-        // The fleet's own crew.
         expect($board[$own->id]['hauled_by'])->toBe('company')
             ->and($board[$own->id]['booking_source'])->toBe('cargo_rush');
 
-        // A contractor the desk handed it to: still the fleet's to invoice.
         expect($board[$handed->id]['hauled_by'])->toBe('trucker')
             ->and($board[$handed->id]['booking_source'])->toBe('cargo_rush')
             ->and($board[$handed->id]['trucker_name'])->toBe('Boyet')
-            // The desk hands it to the trucker, not to one of their trucks.
             ->and($board[$handed->id]['trucker_plate'])->toBeNull();
 
-        // A contractor who found it themselves: theirs to invoice.
         expect($board[$taken->id]['hauled_by'])->toBe('trucker')
             ->and($board[$taken->id]['booking_source'])->toBe('direct');
     });
 
     it('does not let a partner run read as unassigned', function (): void {
-        // The failure this column exists to prevent. A partner's run has no
-        // driver, no helper and no vehicle — none of those are the fleet's —
-        // so from the crew fields alone it is indistinguishable from work
-        // nobody has picked up, which is the one thing a dispatcher must not
-        // be told by mistake.
         [$user, $trucker] = ($this->partner)('Boyet');
         $trip = ($this->offer)($trucker);
 
@@ -589,7 +496,6 @@ describe('the desk handing work out', function (): void {
 
         expect($row['driver_name'])->toBeNull()
             ->and($row['vehicle_plate'])->toBeNull()
-            // …and yet the board knows exactly who has it.
             ->and($row['hauled_by'])->toBe('trucker')
             ->and($row['trucker_name'])->toBe('Boyet');
     });
@@ -599,7 +505,6 @@ describe('the desk handing work out', function (): void {
         $driver = Driver::query()->firstOrFail();
 
         ($this->load)(['driver_id' => $driver->getKey()]);
-        // Booked but not yet crewed: still the company's work, not a partner's.
         ($this->load)();
         $taken = ($this->offer)($trucker);
 
@@ -611,8 +516,6 @@ describe('the desk handing work out', function (): void {
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $taken->id);
 
-        // `company` is the absence of a partner rather than the presence of a
-        // driver — a run booked before anybody was named is still the fleet's.
         $this->actingAs($this->admin)
             ->getJson('/api/v1/trips?hauled_by=company')
             ->assertOk()
@@ -630,7 +533,6 @@ describe('the desk handing work out', function (): void {
             ->assertOk();
         $this->actingAs($user)->postJson("/api/v1/partner/jobs/{$taken->id}/accept")->assertCreated();
 
-        // The audit cut: everything a contractor billed themselves.
         $this->actingAs($this->admin)
             ->getJson('/api/v1/trips?booking_source=direct')
             ->assertOk()
@@ -640,8 +542,6 @@ describe('the desk handing work out', function (): void {
 
     it('lists who is actually available to be given one', function (): void {
         ($this->partner)('Boyet');
-        // Approved but offline, and approved with the only truck in the shop:
-        // neither belongs in the desk assign dialog.
         [, $offline] = ($this->partner)('Liza');
         $offline->update(['is_online' => false]);
         [, $noTruck] = ($this->partner)('Rey');

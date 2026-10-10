@@ -22,31 +22,16 @@ use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
-/**
- * Trips and the five records that hang off them.
- *
- * Dates are relative to today rather than pinned to a fixed day, so the
- * dashboard, the GPS view and the overdue badge all still have something to
- * show whenever this is run.
- */
 class OperationsSeeder extends Seeder
 {
     use AdoptsTrashedRows, NeedsAZoneCard, SeedsIntoACompany;
 
     public function __construct(private readonly PricingService $pricing) {}
 
-    /**
-     * reference, origin, destination, cargo, kg, driver, helper, plate,
-     * customer, status, hours from now to departure, hours to ETA.
-     */
     private const TRIPS = [
         ['CR-24817', 'Manila', 'Batangas', 'Dry goods, 12 pallets', 3200, 'Marco Reyes', 'Jun Abad', 'NCR 4412', 'Southline Trading', 'in_transit', -6, 2],
         ['CR-24818', 'Cebu', 'Dumaguete', 'Chilled produce', 1450, 'Liza Tan', null, 'CEB 1180', 'Negros Fresh Mart', 'delivered', -30, -23],
         ['CR-24819', 'Davao', 'General Santos', 'Construction steel', 5100, 'Paolo Uy', 'Nico Diaz', 'DVO 7731', 'Metro Grocers', 'assigned', 18, null],
-        // A customer's own request, exactly as the portal files one: a route,
-        // a load and a weight, and no crew, no unit and no agreed time until
-        // somebody at the desk confirms it. `pending` means nobody has decided
-        // about this yet, which is why the demo needs one sitting there.
         ['CR-24823', 'Bacolod', 'Iloilo', 'Chilled produce, 8 crates', 1800, null, null, null, 'Negros Fresh Mart', 'pending', 26, null],
         ['CR-24820', 'Manila', 'Baguio', 'Retail cartons', 2750, 'Ana Villar', 'Rey Cruz', 'NCR 9032', 'Highland Retail', 'overdue', -34, -26],
         ['CR-24821', 'Iloilo', 'Bacolod', 'Packaged food', 890, 'Rico Santos', null, 'ILO 2204', 'Metro Grocers', 'assigned', 2, 8],
@@ -92,16 +77,11 @@ class OperationsSeeder extends Seeder
                 'distance_total_m' => random_int(60, 220) * 1000,
             ]);
 
-            // Quoted off the same zone card a real booking goes through, so the
-            // demo board shows the prices a walkthrough is about to talk about
-            // rather than a column of zeros. Written after the create because
-            // the quote reads the distance, which is set in it.
             $trip->forceFill([
                 'price_cents' => $this->pricing->quote($trip),
                 'currency' => $this->pricing->currency(),
             ])->save();
 
-            // The crew beside the driver, now a list rather than a column.
             $trip->setHelpers($helper === null || ! isset($drivers[$helper]) ? [] : [$drivers[$helper]]);
 
             $this->records($trip, $status, $scheduled);
@@ -110,11 +90,6 @@ class OperationsSeeder extends Seeder
         $this->incidents($drivers, $vehicles);
     }
 
-    /**
-     * The dispatch record, delivery log and GPS trail that belong with a trip
-     * in that state. A delivered trip with no proof of delivery, or one in
-     * transit with no position, would be a gap the UI has to apologise for.
-     */
     private function records(Trip $trip, string $status, Carbon $scheduled): void
     {
         $left = in_array($status, ['in_transit', 'delivered', 'overdue'], true);
@@ -131,10 +106,6 @@ class OperationsSeeder extends Seeder
 
         $this->restoreOrCreate(DeliveryLog::class, ['trip_id' => $trip->id], [
             'delivered_at' => $status === 'delivered' ? $trip->eta : null,
-            // `pod_ref` is deliberately absent: the model assigns the next one
-            // in the `POD-` series when `delivered_at` is set, exactly as it
-            // does on a real hand-off. Seeding a made-up reference would put
-            // numbers in the table that the live series then hands out again.
             'receiver_name' => $status === 'delivered' ? 'L. Tan' : null,
             'status' => $status === 'delivered' ? 'delivered' : ($status === 'cancelled' ? 'cancelled' : $status),
         ]);
@@ -146,20 +117,6 @@ class OperationsSeeder extends Seeder
         }
     }
 
-    /**
-     * The check that cleared this run to leave.
-     *
-     * Captured on the handset before a departure (DESIGN.md section 5.4), so
-     * anything that has left has one and anything still waiting on the desk
-     * does not — a pending request nobody has crewed yet has no unit to look
-     * over and nobody to look at it.
-     *
-     * One run fails its check on purpose. A demo where every checklist is seven
-     * ticks shows the screen and not the feature: a failure on a critical item
-     * is what holds a unit, and `failures()` is what the office reads to find
-     * out which. The unit picked for it is the one already in the workshop, so
-     * the fleet screen and the inspection agree about why it is not moving.
-     */
     private function preTripCheck(Trip $trip, string $status): void
     {
         if (! in_array($status, ['in_transit', 'delivered', 'overdue', 'assigned'], true)) {
@@ -182,19 +139,12 @@ class OperationsSeeder extends Seeder
             'vehicle_id' => $trip->vehicle_id,
             'driver_id' => $trip->driver_id,
             'results' => $results,
-            // Derived from the results rather than stated, exactly as
-            // `InspectionService` derives it: a check that said "good to go"
-            // while a critical item failed would be worse than no check.
             'good_to_go' => ! $held,
             'notes' => $held ? 'Pedal soft and pulling left. Held for the workshop.' : null,
             'inspected_at' => $trip->scheduled_at?->copy()->subMinutes(25) ?? now(),
         ]);
     }
 
-    /**
-     * A short history rather than a single point, because average speed is
-     * derived from distance over time and one ping cannot express that.
-     */
     private function trail(Trip $trip): void
     {
         $trip->pings()->delete();

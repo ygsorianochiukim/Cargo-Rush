@@ -25,7 +25,6 @@ class NotificationRepository extends Repository
         return ['title', 'detail'];
     }
 
-    /** Mine, plus everything addressed to the whole fleet. */
     public function forUser(int $userId): Builder
     {
         return $this->query()->where(fn (Builder $q) => $q

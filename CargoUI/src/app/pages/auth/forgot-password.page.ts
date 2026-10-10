@@ -8,21 +8,6 @@ import { IdentityService } from '../../services/identity/identity.service';
 import { Field } from '../../shared/field';
 import { Wordmark } from '../../shared/wordmark';
 
-/**
- * "I've forgotten my password."
- *
- * Until this existed there was no answer to that: every account was created by
- * somebody else, so a forgotten password meant a person with server access
- * running a command. Fine for one office, impossible once strangers register
- * their own company.
- *
- * **The confirmation is deliberately non-committal.** The API answers the same
- * way whether or not the address has an account, because saying otherwise
- * would make this a way of asking who is on the platform — and this one hosts
- * hauliers who compete with each other. So the screen says *if that address
- * has an account*, and never "we've sent you an email", which would be a claim
- * the server refused to make.
- */
 @Component({
   selector: 'app-forgot-password',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -72,9 +57,6 @@ export class ForgotPasswordPage {
         this.submitting.set(false);
 
         if (error.status === 429) {
-          // The one failure worth its own sentence. A generic message here
-          // reads as "it is broken" when the truth is "you have asked several
-          // times already and the emails are on their way".
           this.failure.set('Too many attempts. Wait a minute and try again.');
 
           return;

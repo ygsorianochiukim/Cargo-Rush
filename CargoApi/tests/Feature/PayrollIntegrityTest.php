@@ -17,15 +17,6 @@ use Database\Seeders\PermissionSeeder;
 use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * Payroll's integrity: the right tax table, one run per period, a tab taken
- * once, every trip paid exactly once, no payslip below nothing, and wages in
- * the right half of the income statement.
- *
- * Each block is a bug that shipped. The worked figures are asserted to the
- * centavo because each one is a sum somebody can redo on paper from the BIR's
- * own table.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -45,6 +36,9 @@ beforeEach(function (): void {
             'contact' => '0917 555 0199',
             'hired_on' => '2026-01-05',
             'amount_cents' => 3_000_000,
+            'sss_enrolled' => true,
+            'philhealth_enrolled' => true,
+            'pagibig_enrolled' => true,
             ...$overrides,
         ])->assertCreated()->json('data');
 
@@ -65,9 +59,11 @@ beforeEach(function (): void {
             'hired_on' => '2026-01-05',
             'status' => 'active',
             'driver_id' => $driver->id,
+            'sss_enrolled' => true,
+            'philhealth_enrolled' => true,
+            'pagibig_enrolled' => true,
         ]);
 
-        // ₱1,500 a haul.
         payContract($employee, 'per_trip', 150_000);
 
         return $employee->refresh();
@@ -104,8 +100,6 @@ beforeEach(function (): void {
 
 describe('the withholding tables', function (): void {
     it('withholds ₱10,937.45 on ₱60,000 of semi-monthly taxable pay', function (): void {
-        // Over ₱33,333: ₱4,270.70 + 25% of the ₱26,667 above it. The old table
-        // put this in a 30% bracket that is not on the 2023 schedule at all.
         $tax = app(StatutoryDeductions::class)->for(
             monthlyBasicCents: 12_000_000,
             periodGrossCents: 6_000_000,
@@ -125,10 +119,6 @@ describe('the withholding tables', function (): void {
         $line = ($this->open)(['period_start' => '2026-09-01', 'period_end' => '2026-09-30'])
             ->assertCreated()->json('data.lines.0');
 
-        // ₱1,750 SSS (5% of the ₱35,000 ceiling), ₱1,250 PhilHealth, ₱200
-        // Pag-IBIG — taxable ₱46,800. Over ₱33,333 on the *monthly* table:
-        // ₱1,875 + 20% of ₱13,467 = ₱4,568.40. The semi-monthly table this
-        // used to read charged about ₱7,638.
         expect($line['sss_cents'])->toBe(175_000)
             ->and($line['philhealth_cents'])->toBe(125_000)
             ->and($line['pagibig_cents'])->toBe(20_000)
@@ -140,9 +130,6 @@ describe('the withholding tables', function (): void {
 
         $line = ($this->open)()->assertCreated()->json('data.lines.0');
 
-        // ₱25,000 less ₱1,600 of contributions is ₱23,400: ₱937.50 + 20% of
-        // ₱6,733 = ₱2,284.10 — twice that is within ₱0.20 of the monthly
-        // figure above, which is how the two tables are meant to agree.
         expect($line['withholding_tax_cents'])->toBe(228_410);
     });
 
@@ -155,8 +142,6 @@ describe('the withholding tables', function (): void {
             enrolled: ['sss' => false, 'philhealth' => false, 'pagibig' => false],
         )['withholding_tax'];
 
-        // ₱30,000 a month on the monthly table is 15% of ₱9,167 = ₱1,375.05,
-        // a third of it per run.
         expect($tax)->toBe(45_835);
     });
 
@@ -164,9 +149,7 @@ describe('the withholding tables', function (): void {
         $deductions = app(StatutoryDeductions::class);
 
         expect($deductions->for(10_000_000, 5_000_000, 0, 1)['sss'])->toBe(175_000)
-            // The ₱5,000 floor on a small basic…
             ->and($deductions->for(300_000, 300_000, 0, 1)['sss'])->toBe(25_000)
-            // …and nothing on nothing.
             ->and($deductions->for(0, 0, 0, 1)['sss'])->toBe(0);
     });
 });
@@ -192,9 +175,6 @@ describe('who is exempt', function (): void {
 
         $line = ($this->open)()->assertCreated()->json('data.lines.0');
 
-        // ₱18,000 + ₱6,000 is ₱24,000 a month — over the ₱20,833 exemption,
-        // so taxed: ₱9,000 + ₱3,000 less ₱775 of contributions is ₱11,225,
-        // 15% of the ₱808 above ₱10,417.
         expect($line['withholding_tax_cents'])->toBe(12_120);
     });
 
@@ -240,7 +220,6 @@ describe('one run per period', function (): void {
         ($this->hire)();
         $run = ($this->open)()->assertCreated()->json('data');
 
-        // A duplicate from before the rule, or from a race.
         $original = PayRun::with('lines')->findOrFail($run['id']);
         $twin = $original->replicate(['reference']);
         $twin->save();
@@ -280,7 +259,6 @@ describe('the store tab', function (): void {
     it('is re-capped at approval, and never driven below zero', function (): void {
         $run = ($this->open)()->assertCreated()->json('data');
 
-        // Paid down in cash after the period closed, before approval.
         $this->actingAs($this->admin)->postJson("/api/v1/employees/{$this->employee['id']}/store-credits", [
             'kind' => 'payment',
             'amount_cents' => 30_000,
@@ -304,8 +282,6 @@ describe('the store tab', function (): void {
             ->assertCreated()->json('data');
         ($this->approve)($second['id'])->assertOk();
 
-        // The second half's repayment is dated its own pay day, after this
-        // period ends — and must still count against it.
         $first = ($this->open)()->assertCreated()->json('data.lines.0');
 
         expect($first['store_deduction_cents'])->toBe(0)
@@ -334,14 +310,11 @@ describe('a payslip never pays less than nothing', function (): void {
 
         $run = ($this->open)()->assertCreated()->json('data');
 
-        // ₱13,271.30 before the tab. Leave ₱271.30 of room and the tab takes
-        // that, not ₱500; the rest waits for the next payslip.
         $line = ($this->adjust)($run, ['other_deductions_cents' => 1_300_000])->assertOk()->json('data.lines.0');
 
         expect($line['store_deduction_cents'])->toBe(27_130)
             ->and($line['net_cents'])->toBe(0);
 
-        // And grows back when the room returns.
         $line = ($this->adjust)($run, ['other_deductions_cents' => 0])->assertOk()->json('data.lines.0');
 
         expect($line['store_deduction_cents'])->toBe(50_000);
@@ -372,14 +345,12 @@ describe('every trip paid exactly once', function (): void {
         expect($first['lines'][0]['trips'])->toBe(1);
         ($this->approve)($first['id'])->assertOk();
 
-        // Delivered on the 10th, entered after the 1st–15th was approved.
         ($this->haul)('2026-09-10', $this->driver->driver_id);
         ($this->haul)('2026-09-20', $this->driver->driver_id);
 
         $second = ($this->open)(['period_start' => '2026-09-16', 'period_end' => '2026-09-30'])
             ->assertCreated()->json('data');
 
-        // The 20th and the late 10th; the 5th was paid already.
         expect($second['lines'][0]['trips'])->toBe(2)
             ->and($second['lines'][0]['basic_cents'])->toBe(300_000);
 
@@ -390,7 +361,6 @@ describe('every trip paid exactly once', function (): void {
 
         expect($third['lines'][0]['trips'])->toBe(0);
 
-        // Three trips, three payments, across three runs.
         expect(PayRunLineTrip::query()->settled()->count())->toBe(3);
     });
 
@@ -406,14 +376,12 @@ describe('every trip paid exactly once', function (): void {
         $third = ($this->open)(['period_start' => '2026-10-01', 'period_end' => '2026-10-15'])
             ->assertCreated()->json('data');
 
-        // Both drafts reached back for the late trip.
         expect($second['lines'][0]['trips'])->toBe(1)
             ->and($third['lines'][0]['trips'])->toBe(1);
 
         ($this->approve)($second['id'])->assertOk();
         ($this->approve)($third['id'])->assertStatus(422);
 
-        // Worked out again, it drops the trip and can go.
         $rebuilt = $this->actingAs($this->admin)->postJson("/api/v1/payroll/{$third['id']}/rebuild")
             ->assertOk()->json('data');
 
@@ -440,9 +408,6 @@ describe('where the wages post', function (): void {
 
         $wages = $lines->reject(fn (array $line): bool => str_contains((string) $line['memo'], 'employer share'));
 
-        // The wages, and each side's employer share beside them: the driver's
-        // ₱3,000 month (one ₱1,500 haul, times two) gives ₱410 a cutoff, the
-        // office's ₱30,000 gives ₱1,990.
         expect($wages->where('account_code', '5020')->sum('debit_cents'))->toBe(150_000)
             ->and($wages->where('account_code', '5200')->sum('debit_cents'))->toBe(1_500_000)
             ->and($lines->where('account_code', '5020')->sum('debit_cents'))->toBe(150_000 + 41_000)

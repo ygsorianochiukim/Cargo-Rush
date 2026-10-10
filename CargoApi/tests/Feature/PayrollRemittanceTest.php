@@ -12,16 +12,6 @@ use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Support\Carbon;
 
-/**
- * Recording that a paid run's contributions and tax reached the agencies.
- *
- *   **Off Payables from the day it was sent,** not at the presumed deadline.
- *
- *   **Posted as the reverse of what paying the run owed,** so the payables for
- *   SSS/PhilHealth/Pag-IBIG and withholding tax are square for that run.
- *
- *   **Once only,** and only on a paid run.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -107,7 +97,6 @@ it('posts the remittance as the reverse of what paying the run owed', function (
         ->and($by('1020', 'credit'))->toBe($paid['owed_to_agencies_cents'])
         ->and($by('2200', 'debit') + $by('2160', 'debit'))->toBe($paid['owed_to_agencies_cents']);
 
-    // Across both of the run's entries, the payables it raised are square.
     $net = fn (string $code) => (int) JournalEntry::query()
         ->where('source_id', $this->run['id'])
         ->with('lines.account')
@@ -149,7 +138,6 @@ it('numbers each remittance REM-YYYY-#### automatically', function (): void {
 
     ($this->approveAndPay)();
 
-    // No agency reference given — the number is still assigned.
     $run = ($this->remit)(['reference' => null])->assertOk()->json('data');
 
     expect($run['remittance_no'])->toBe('REM-2026-0001')

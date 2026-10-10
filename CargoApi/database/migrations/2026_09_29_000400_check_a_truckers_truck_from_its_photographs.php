@@ -7,18 +7,6 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-/**
- * A trucker's truck is photographed and checked before it hauls.
- *
- * Six photographs — the four sides, the plate, and the engine bay if the
- * trucker has one to hand — and the office's verdict on them. Paths only; the
- * URL is derived on read, as it is for staff photographs and proof of delivery.
- *
- * Trucks already on the books are marked verified. They were added by truckers
- * the office had approved, before there was anything to check them against,
- * and taking every one of them off the road at once would empty the job board
- * of work that is already running.
- */
 return new class extends Migration
 {
     public function up(): void

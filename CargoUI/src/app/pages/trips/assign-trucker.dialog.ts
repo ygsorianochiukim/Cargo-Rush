@@ -18,39 +18,6 @@ import { Icon } from '../../shared/icon';
 import { Modal } from '../../shared/modal';
 import { EmptyState, SkeletonRows } from '../../shared/states';
 
-/**
- * Hand a run to a partner trucker.
- *
- * The desk's alternative to the open board, and it exists for the case the
- * board cannot serve: nobody nearby picked the load up, or it is far enough out
- * that sending one of the fleet's own units would cost more than it earns.
- *
- * ## This dialog decides money, and says so
- *
- * A run assigned here stays **the fleet's work**: the fleet quoted it, invoices
- * the customer and collects, and the partner is paid their share out of that.
- * A run the same partner takes off the board themselves is **their** work: they
- * bill the customer and the fleet's cut is charged to their wallet instead.
- *
- * Same percentage, opposite directions. That is not a detail to leave implicit
- * in a dialog whose only button commits the firm to paying a contractor, so the
- * split is spelled out in pesos against the trip's own price before anybody
- * presses Assign.
- *
- * ## Who is offered
- *
- * `truckers/available` rather than the whole roster: vetted, online, and
- * holding a truck that is not in the shop. Capacity is checked here as well so
- * a load too heavy for somebody's trucks is visibly ruled out rather than
- * refused by the API after the press — the same rule the job board applies, in
- * the place where a person is choosing.
- *
- * ## The desk picks the trucker, not the truck
- *
- * A trucker is offered when **any** of their trucks on the road can carry the
- * load, and greyed out only when none can. Which truck goes is the trucker's
- * call, made on their phone before the run starts; this dialog never names one.
- */
 @Component({
   selector: 'app-assign-trucker',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -69,17 +36,8 @@ import { EmptyState, SkeletonRows } from '../../shared/states';
         </p>
       }
 
-      <!--
-        What this costs, before the button rather than after it.
-
-        Assigning commits the firm to paying somebody outside it, and the figure
-        is derived from the trip's own price so it cannot disagree with what the
-        wallet will post at delivery.
-      -->
       @if (trip(); as t) {
         @if (t.price_cents === null) {
-          <!-- Nothing to share out: no zone line covers the run, and the API
-               refuses to hand an unpriced run to anybody. -->
           <p class="mb-4 rounded-control bg-cr-warning-bg px-4 py-3 text-[13px] text-cr-warning" role="alert">
             This run has no price yet — add a zone line on the Pricing card or enter a price.
             @if (t.pricing_note) {
@@ -178,7 +136,6 @@ export class AssignTruckerDialog {
 
   readonly open = model(false);
   readonly trip = input<Trip | null>(null);
-  /** The updated run, so the board can swap the row in without a refetch. */
   readonly assigned = output<Trip>();
 
   protected readonly fmt = fmt;
@@ -190,9 +147,6 @@ export class AssignTruckerDialog {
   protected readonly error = signal<string | null>(null);
 
   constructor() {
-    // Read each time the dialog opens rather than once on construction: who is
-    // online changes minute to minute, and a list fetched when the page loaded
-    // would be stale by the time somebody opened this.
     effect(() => {
       if (!this.open()) return;
 
@@ -247,12 +201,6 @@ export class AssignTruckerDialog {
     });
   }
 
-  /**
-   * Which of this trucker's trucks could take the load.
-   *
-   * On the road, big enough, and of the kind the load asks for when it asks —
-   * the same rule `TruckerVehicle::canCarry` applies on the API.
-   */
   private fitting(trucker: Trucker): TruckerVehicle[] {
     const trip = this.trip();
 
@@ -266,12 +214,10 @@ export class AssignTruckerDialog {
     );
   }
 
-  /** Can any of their trucks take it? Greyed out only when none can. */
   protected canCarry(trucker: Trucker): boolean {
     return this.fitting(trucker).length > 0;
   }
 
-  /** "2 of 3 trucks can carry 1,800 kg", or why none can. */
   protected fitOf(trucker: Trucker): string {
     const onRoad = (trucker.vehicles ?? []).filter((v) => v.status === 'available');
     const fits = this.fitting(trucker).length;
@@ -289,8 +235,6 @@ export class AssignTruckerDialog {
   }
 
   protected commissionOn(cents: number, bp: number): number {
-    // Integer arithmetic, truncating, exactly as `WalletService` does it — so
-    // the figure quoted here is the figure that will be posted.
     return Math.floor((cents * bp) / 10_000);
   }
 

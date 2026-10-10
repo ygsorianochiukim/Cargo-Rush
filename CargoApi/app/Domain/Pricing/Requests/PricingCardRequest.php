@@ -9,20 +9,6 @@ use App\Domain\Tenancy\Support\Tenant;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
-/**
- * The old plain distance card — the lines that belong to no zone.
- *
- * These no longer price anything. Pricing is zone-only (see `PricingService`):
- * a run is charged off a line of a zone that covers it, or left unpriced for
- * the office. So this form can no longer **add** a zoneless line — every line
- * it saves must be one that already exists, and a line with no `id` is refused
- * with a pointer to the zone editor. What it still does is let an office tidy
- * up or delete the rows it has, which are otherwise left untouched in the
- * table rather than dropped behind anybody's back.
- *
- * The whole card arrives at once, as the zone editor's does: lines left out
- * are deleted.
- */
 class PricingCardRequest extends ApiFormRequest
 {
     public function rules(): array
@@ -35,28 +21,12 @@ class PricingCardRequest extends ApiFormRequest
             'brackets.*.max_km' => ['nullable', 'integer', 'min:1', 'max:100000'],
             'brackets.*.base_cents' => ['required', 'integer', 'min:0'],
 
-            /**
-             * Pesos added per ₱1/L of diesel above the baseline, in centavos.
-             *
-             * Here as well as on a zone's lines, because a firm may well band
-             * part of its card and price the rest plainly — a subsidy table to
-             * 600 km with one "600 km and beyond" line under it — and the line
-             * past the end of the table needs the same fuel arithmetic as the
-             * ones inside it. Zero or absent keeps the percentage model.
-             */
             'brackets.*.diesel_step_cents' => ['sometimes', 'integer', 'min:0'],
 
             'brackets.*.per_km_cents' => ['sometimes', 'integer', 'min:0'],
             'brackets.*.per_kg_cents' => ['sometimes', 'integer', 'min:0'],
             'brackets.*.minimum_cents' => ['sometimes', 'integer', 'min:0'],
 
-            /**
-             * Which kind of unit this line prices. Null is "any".
-             *
-             * Scoped to the caller's company: `exists` runs outside the tenant
-             * scope, so without the clause a card could be pointed at another
-             * firm's category and price nothing this company can see.
-             */
             'brackets.*.truck_category_id' => [
                 'nullable', 'string',
                 Rule::exists('truck_categories', 'id')
@@ -66,20 +36,6 @@ class PricingCardRequest extends ApiFormRequest
         ];
     }
 
-    /**
-     * Two mistakes a card can express, and neither shows up until a quote is
-     * wrong.
-     *
-     * A line ending before it starts prices nothing. Two lines covering the
-     * same distance **for the same kind of unit** make the price depend on row
-     * order — which is precisely what `BracketResolver`'s specificity rule
-     * exists to avoid having to think about, and it can only do that if the
-     * card has no ambiguity at a given specificity.
-     *
-     * Overlap is checked *within* a category rather than across the card: a
-     * general 0–50 km line and a freezer 0–50 km line are the whole point, not
-     * a clash.
-     */
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
@@ -130,9 +86,7 @@ class PricingCardRequest extends ApiFormRequest
         ];
     }
 
-    /**
-     * @return array<int, array<string, mixed>>
-     */
+    /** @return array<int, array<string, mixed>> */
     public function brackets(): array
     {
         return (array) ($this->validated()['brackets'] ?? []);

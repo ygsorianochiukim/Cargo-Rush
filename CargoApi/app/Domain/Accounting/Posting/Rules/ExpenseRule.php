@@ -12,15 +12,6 @@ use App\Domain\Shared\Enums\JournalCategory;
 use App\Domain\Shared\Enums\StatusValue;
 use Illuminate\Database\Eloquent\Model;
 
-/**
- * A categorised expense line — and a flat-rented truck's monthly rent, which
- * `TruckRentService` files as one.
- *
- * Dr the category's account (`ExpenseCategory::accountCode()`), Cr cash, on the
- * line's date. Only a line Finance counts (`Expense::counted()`, which is
- * `active`): a `pending` one is spend nobody has settled, which the Payables
- * page lists as owed and no period has paid for yet.
- */
 class ExpenseRule extends PostingRule
 {
     public function postings(Model $source): array
@@ -32,7 +23,6 @@ class ExpenseRule extends PostingRule
             return [];
         }
 
-        // A line on a truck the fleet no longer lists is in no roll-up row.
         if ($expense->truck_id !== null && ! Truck::query()->whereKey($expense->truck_id)->exists()) {
             return [];
         }

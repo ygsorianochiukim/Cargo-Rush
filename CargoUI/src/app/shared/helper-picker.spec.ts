@@ -5,12 +5,6 @@ import { describe, expect, it } from 'vitest';
 import { Driver } from '../models/driver/driver.model';
 import { HelperPicker } from './helper-picker';
 
-/**
- * A run's helpers — several of them, where the trip form used to take one.
- *
- * What is pinned is what would pay somebody twice: the driver is never offered
- * as their own helper, and nobody already on the run is offered again.
- */
 const person = (id: string, name: string): Driver =>
   ({ id, name, status: 'available' }) as unknown as Driver;
 

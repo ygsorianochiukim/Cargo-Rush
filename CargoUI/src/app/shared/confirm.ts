@@ -5,33 +5,18 @@ import { Modal } from './modal';
 export interface ConfirmOptions {
   title: string;
   body: string;
-  /** Defaults to "Confirm". */
   confirmLabel?: string;
   cancelLabel?: string;
-  /** Red confirm button and red header icon. */
   danger?: boolean;
   icon?: string;
 }
 
-/**
- * Centralised confirmation dialog (DESIGN.md section 8).
- *
- * Any component can `await confirm.ask({...})` without declaring a template —
- * the single `<app-confirm-host />` in the shell renders it.
- *
- * ```ts
- * if (await this.confirm.ask({ title: 'Delete trip?', body: '…', danger: true })) {
- *   this.api.deleteTrip(id);
- * }
- * ```
- */
 @Injectable({ providedIn: 'root' })
 export class Confirm {
   readonly options = signal<ConfirmOptions | null>(null);
   private resolver: ((value: boolean) => void) | null = null;
 
   ask(options: ConfirmOptions): Promise<boolean> {
-    // A second ask while one is open resolves the first as cancelled.
     this.resolver?.(false);
     this.options.set(options);
     return new Promise<boolean>((resolve) => {

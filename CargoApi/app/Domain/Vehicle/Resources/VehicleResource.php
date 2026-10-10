@@ -8,9 +8,7 @@ use App\Domain\Shared\Http\Resources\ApiResource;
 use App\Domain\Vehicle\Models\Vehicle;
 use Illuminate\Http\Request;
 
-/**
- * @mixin Vehicle
- */
+/** @mixin Vehicle */
 class VehicleResource extends ApiResource
 {
     public function toArray(Request $request): array
@@ -26,16 +24,8 @@ class VehicleResource extends ApiResource
             'driver_name' => $this->driver?->name,
             'odometer_km' => $this->odometer_km,
             'next_service_km' => $this->next_service_km,
-            // Negative means the interval has already passed.
             'km_to_service' => $this->kmToService(),
 
-            /**
-             * On what terms this truck runs, and who is paid for it.
-             *
-             * `arrangement` is the one field a screen branches on; the rest
-             * are the terms that go with it and are null for the fleet's own
-             * units, which is most of them.
-             */
             'arrangement' => $this->terms()->value,
             'arrangement_label' => $this->terms()->label(),
             'hired' => $this->terms()->isHired(),
@@ -45,16 +35,6 @@ class VehicleResource extends ApiResource
             'owner_contact' => $this->owner_contact,
             'rent_cents' => $this->rent_cents,
 
-            /**
-             * The rate as it actually applies, and whether the truck is
-             * properly set up to pay it.
-             *
-             * `shares_revenue` is false for a unit marked as a share
-             * arrangement with nobody named to receive it — a half-configured
-             * truck that would haul all month and credit nothing. The fleet
-             * screen shows the gap rather than letting it surface as an
-             * owner asking where their money went.
-             */
             'share_bp' => $this->terms()->sharesRevenue() ? $this->shareRateBp() : null,
             'shares_revenue' => $this->sharesRevenue(),
             'owner_trucker_id' => $this->owner_trucker_id,

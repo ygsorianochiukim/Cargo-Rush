@@ -32,28 +32,6 @@ class DeliveryService extends CrudService
         return $this->logs->forDriver($driverId);
     }
 
-    /**
-     * Attach proof of delivery to a log.
-     *
-     * The reference is not a parameter any more: `DeliveryLog` assigns it on
-     * save once `delivered_at` is set, so a log completed here gets the next
-     * number in the `POD-` series rather than whatever the caller supplied.
-     *
-     * **A log whose trip is still open is closed through the trip**, not
-     * around it. This route used to write the log and set the trip's status to
-     * `delivered` itself, which meant a run closed this way skipped everything
-     * else delivering does — the dispatch record stayed open, the driver went
-     * uncredited, the day's income never reached the ledger and the customer
-     * was never invoiced. Two paths to `delivered` that did different amounts
-     * of work is exactly the kind of split that leaves a month's books short
-     * and nobody able to say which runs are missing. So this defers to
-     * `TripService::complete`, and there is one hand-off in the system.
-     *
-     * What stays here is the genuinely different case: proof arriving *after*
-     * the run was already closed — a photograph that would not upload from the
-     * gate, sent again from somewhere with signal. That writes the evidence and
-     * nothing else, because the money moved when the run closed.
-     */
     public function attachProof(DeliveryLog $log, ProofData $proof): DeliveryLog
     {
         $trip = $log->trip;
@@ -71,9 +49,6 @@ class DeliveryService extends CrudService
                 'status' => StatusValue::Delivered->value,
             ]);
 
-            // Only written when a photograph actually arrived. Assigning null
-            // over an existing path would delete the evidence, so a second
-            // attempt cannot wipe the first.
             $path = $this->proofs->store($proof->photo);
 
             if ($path !== null) {
@@ -86,12 +61,7 @@ class DeliveryService extends CrudService
         });
     }
 
-    /**
-     * The delivery report DESIGN.md section 5.1 asks for: pending, active and
-     * complete side by side.
-     *
-     * @return array<string, int>
-     */
+    /** @return array<string, int> */
     public function report(): array
     {
         $counts = DeliveryLog::query()

@@ -9,7 +9,6 @@ import {
 } from '../../models/fuel/fuel.model';
 import { Envelope, ListQuery } from '../../models/shared/envelope.model';
 
-/** Fuel Expense Monitoring — DESIGN.md section 5.1. */
 @Injectable({ providedIn: 'root' })
 export class FuelService {
   private readonly api = inject(ApiService);
@@ -18,7 +17,6 @@ export class FuelService {
     return this.api.envelope<FuelRecord[]>('fuel', query);
   }
 
-  /** Logging a fill also moves the vehicle's odometer forward, API-side. */
   create(payload: FuelRecordPayload): Observable<FuelRecord> {
     return this.api.post<FuelRecord>('fuel', payload);
   }
@@ -31,7 +29,6 @@ export class FuelService {
     return this.api.delete(`fuel/${id}`);
   }
 
-  /** Budget, spend so far, and the month projection. */
   budget(date?: string): Observable<FuelBudget> {
     return this.api.get<FuelBudget>('fuel/budget', date ? { from: date } : undefined);
   }

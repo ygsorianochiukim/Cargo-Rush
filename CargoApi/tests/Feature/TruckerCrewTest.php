@@ -19,15 +19,6 @@ use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * A trucker's own drivers — added by the owner, each with their own login.
- *
- * The rule that matters is separation, from every side. A trucker's driver is
- * never one of Cargo Rush's drivers: not in Drivers Management, not on the
- * trip board, not able to reach the owner's money or another trucker's runs.
- * They see exactly the runs their owner handed them, and every screen that
- * lists them says who they drive for.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -37,7 +28,6 @@ beforeEach(function (): void {
     $this->admin = User::where('email', 'admin@cargorush.ph')->firstOrFail();
     $this->customer = Customer::query()->firstOrFail();
 
-    /** An owner with a login and a truck, approved unless told otherwise. */
     $this->owner = function (string $business, string $status = 'active'): array {
         $user = User::factory()->create([
             'role' => Role::Trucker->value,
@@ -65,7 +55,6 @@ beforeEach(function (): void {
             ...$overrides,
         ]);
 
-    /** A run the owner has taken and not started. */
     $this->run = fn (Trucker $trucker, array $overrides = []) => Trip::create([
         'customer_id' => $this->customer->getKey(),
         'origin' => 'Iponan',
@@ -82,7 +71,6 @@ beforeEach(function (): void {
         ...$overrides,
     ]);
 
-    /** Every checklist item ticked. */
     $this->allPass = fn (): array => array_fill_keys(
         ['tires', 'oil', 'gears', 'brakes', 'lights', 'coolant', 'documents'],
         true,
@@ -150,7 +138,6 @@ describe('handing a run to a driver', function (): void {
     });
 
     it('shows the driver only the runs they were handed', function (): void {
-        // Another of the owner's runs, not handed to anybody.
         ($this->run)($this->trucker);
 
         $this->actingAs($this->ownerUser)
@@ -165,7 +152,6 @@ describe('handing a run to a driver', function (): void {
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $this->trip->id);
 
-        // The owner still sees both.
         $this->actingAs($this->ownerUser)->getJson('/api/v1/partner/trips')->assertJsonCount(2, 'data');
     });
 
@@ -174,7 +160,6 @@ describe('handing a run to a driver', function (): void {
             ->postJson("/api/v1/partner/trips/{$this->trip->id}/driver", ['trucker_driver_id' => $this->driverId])
             ->assertOk();
 
-        // The pre-trip check first, as a Cargo Rush driver would.
         $this->actingAs($this->driverUser)
             ->postJson("/api/v1/crew/trips/{$this->trip->id}/inspection", ['results' => ($this->allPass)()])
             ->assertCreated()
@@ -182,7 +167,6 @@ describe('handing a run to a driver', function (): void {
 
         $this->actingAs($this->driverUser)->postJson("/api/v1/crew/trips/{$this->trip->id}/start")->assertOk();
 
-        // In the Tracking screen's shape: progress, position, both ends.
         $this->actingAs($this->driverUser)->getJson('/api/v1/crew/trips/current')
             ->assertOk()
             ->assertJsonPath('data.id', $this->trip->id)
@@ -191,7 +175,6 @@ describe('handing a run to a driver', function (): void {
             ->assertJsonPath('data.inspection.checked_by', 'Nonoy Bacalso')
             ->assertJsonPath('data.vehicle_plate', $this->trucker->vehicles->first()->plate);
 
-        // And the map's position reports land on the run.
         $this->actingAs($this->driverUser)
             ->postJson('/api/v1/gps/pings', [
                 'trip_id' => $this->trip->id,
@@ -471,7 +454,6 @@ describe('the owner running a crew', function (): void {
             'recorded_at' => now()->toIso8601String(),
         ];
 
-        // Not handed to them yet.
         $this->actingAs($this->driverUser)->postJson('/api/v1/gps/pings', $ping())->assertNotFound();
 
         ($this->hand)([])->assertOk();
@@ -482,7 +464,6 @@ describe('the owner running a crew', function (): void {
 
 describe('which truck takes it — the trucker\'s choice', function (): void {
     beforeEach(function (): void {
-        // One truck too small for a 5,000 kg load, one big enough.
         $this->trucker->vehicles()->update(['capacity_kg' => 1_200]);
         $this->big = TruckerVehicle::factory()->create([
             'trucker_id' => $this->trucker->id, 'capacity_kg' => 18_000, 'status' => 'available',

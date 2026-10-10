@@ -9,12 +9,6 @@ use App\Domain\Shared\Http\Requests\ApiFormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
-/**
- * One of a trucker's drivers, added or corrected by the trucker.
- *
- * The login is set once, on add. Changing a driver's email or password
- * afterwards is theirs to do from their own account, not the owner's.
- */
 class TruckerDriverRequest extends ApiFormRequest
 {
     public function rules(): array
@@ -24,9 +18,6 @@ class TruckerDriverRequest extends ApiFormRequest
         return [
             'name' => [$required, 'string', 'max:120'],
             'phone' => ['nullable', 'string', 'max:40'],
-            // Once per trucker, as the index says — asked here so a clash is a
-            // sentence and not a 500. Removed drivers count, because the index
-            // counts them.
             'licence_no' => [
                 $required, 'string', 'max:60',
                 Rule::unique('trucker_drivers', 'licence_no')
@@ -42,7 +33,6 @@ class TruckerDriverRequest extends ApiFormRequest
                 ? ['required', Password::defaults()]
                 : ['prohibited'],
 
-            // Only the owner's two: driving for them, or stood down.
             'status' => ['sometimes', 'string', 'in:'.implode(',', [
                 StatusValue::Active->value,
                 StatusValue::Inactive->value,
