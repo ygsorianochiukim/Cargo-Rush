@@ -91,24 +91,14 @@
 
   <app-card heading="What would this cost?" icon="tag">
     <form [formGroup]="previewForm" class="space-y-3">
-      <div class="grid grid-cols-2 gap-3">
-        <app-field label="Distance (km)">
-          <input
-            type="number"
-            min="0"
-            formControlName="distance_km"
-            [class]="inputClass + ' cr-num'"
-          />
-        </app-field>
-        <app-field label="Weight (kg)">
-          <input
-            type="number"
-            min="0"
-            formControlName="weight_kg"
-            [class]="inputClass + ' cr-num'"
-          />
-        </app-field>
-      </div>
+      <app-field label="Distance (km)">
+        <input
+          type="number"
+          min="0"
+          formControlName="distance_km"
+          [class]="inputClass + ' cr-num'"
+        />
+      </app-field>
       <app-field label="Class of truck">
         <select formControlName="truck_category_id" [class]="inputClass">
           <option value="">Current fleet</option>
@@ -204,7 +194,7 @@
   </app-card>
 </div>
 
-<div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
+<div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
   <app-card heading="Bands" icon="map-pin" [padded]="false">
     @if (loadError(); as message) {
       <app-error-state [message]="message" (retry)="refresh()" />
@@ -252,6 +242,7 @@
         creating() ? 'New band' : (selected()?.code ?? '') + ' — ' + (selected()?.name ?? '')
       "
       icon="tag"
+      class="min-w-0"
       hint="A range of kilometres, and the money for each class of truck"
     >
       <div card-actions class="ml-auto flex items-center gap-2">
@@ -378,24 +369,20 @@
         <div class="overflow-x-auto">
           <table
             class="w-full border-collapse text-left whitespace-nowrap"
-            style="min-width: 860px"
+            style="min-width: 560px"
           >
             <thead>
               <tr class="border-b border-cr-line">
                 <th class="cr-th px-2 py-2.5">Rate</th>
                 <th class="cr-th px-2 py-2.5">Class of truck</th>
                 <th class="cr-th px-2 py-2.5 text-right">Base (₱)</th>
-                <th class="cr-th px-2 py-2.5 text-right">Per ₱1/L diesel</th>
-                <th class="cr-th px-2 py-2.5 text-right">Per km (₱)</th>
-                <th class="cr-th px-2 py-2.5 text-right">Per kg (₱)</th>
-                <th class="cr-th px-2 py-2.5 text-right">Minimum (₱)</th>
+                <th class="cr-th px-2 py-2.5 text-right">+ per ₱1/L diesel (₱)</th>
                 <th class="cr-th px-2 py-2.5"><span class="sr-only">Remove</span></th>
               </tr>
             </thead>
-            <tbody [formGroup]="form">
-              <ng-container formArrayName="brackets">
-                @for (bracket of brackets.controls; track $index) {
-                  <tr class="border-b border-cr-line/70 last:border-0" [formGroupName]="$index">
+            <tbody>
+                @for (bracket of brackets.controls; track bracket) {
+                  <tr class="border-b border-cr-line/70 last:border-0" [formGroup]="bracket">
                     <td class="px-2 py-2">
                       <input type="text" formControlName="label" [class]="inputClass" />
                     </td>
@@ -432,33 +419,6 @@
                         [class]="inputClass + ' cr-num text-right'"
                       />
                     </td>
-                    <td class="px-2 py-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        formControlName="per_km"
-                        [class]="inputClass + ' cr-num text-right'"
-                      />
-                    </td>
-                    <td class="px-2 py-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        formControlName="per_kg"
-                        [class]="inputClass + ' cr-num text-right'"
-                      />
-                    </td>
-                    <td class="px-2 py-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        formControlName="minimum"
-                        [class]="inputClass + ' cr-num text-right'"
-                      />
-                    </td>
                     <td class="px-2 py-2 text-right">
                       <button
                         type="button"
@@ -471,7 +431,6 @@
                     </td>
                   </tr>
                 }
-              </ng-container>
             </tbody>
           </table>
         </div>
@@ -484,9 +443,48 @@
           </p>
         } @else {
           <p class="mt-3 text-[12px] text-cr-ink-muted">
-            The band above sets the kilometres; these set the money. One rate per class of truck —
-            leave the class blank for the fleet as it stands.
+            Price = base + the diesel amount for every peso the pump price is above the
+            baseline. One rate per class of truck — Current fleet is the default.
           </p>
+
+          <div class="mt-6">
+            <h3 class="text-[14px] font-semibold">Price at each diesel price</h3>
+            <p class="cr-meta mt-0.5">The same grid as the subsidy table. Today's price is highlighted.</p>
+
+            <div class="mt-2 overflow-x-auto">
+              <table class="w-full border-collapse text-right whitespace-nowrap text-[12px]">
+                <thead>
+                  <tr class="border-b border-cr-line">
+                    <th class="cr-th sticky left-0 bg-cr-surface px-2 py-2 text-left">Diesel (₱/L)</th>
+                    @for (column of dieselGrid().columns; track column) {
+                      <th
+                        class="cr-th px-1.5 py-2 text-right"
+                        [class.bg-cr-tint]="column === dieselGrid().today"
+                      >
+                        {{ column }}
+                      </th>
+                    }
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of dieselGrid().rows; track $index) {
+                    <tr class="border-b border-cr-line/70 last:border-0">
+                      <td class="sticky left-0 bg-cr-surface px-2 py-2 text-left font-semibold">{{ row.label }}</td>
+                      @for (cents of row.prices; track $index) {
+                        <td
+                          class="cr-num px-1.5 py-2"
+                          [class.bg-cr-tint]="dieselGrid().columns[$index] === dieselGrid().today"
+                          [class.font-semibold]="dieselGrid().columns[$index] === dieselGrid().today"
+                        >
+                          {{ fmt.money(cents) }}
+                        </td>
+                      }
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
         }
       </div>
     </app-card>
