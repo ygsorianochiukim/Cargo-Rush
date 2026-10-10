@@ -11,7 +11,6 @@ import { Column, DataTable } from '../../shared/data-table';
 import { FilterBar, FilterOption } from '../../shared/filter-bar';
 import { fmt } from '../../shared/format';
 
-/** Delivery Logs — DESIGN.md section 5.1. */
 @Component({
   selector: 'app-delivery-logs',
   changeDetection: ChangeDetectionStrategy.OnPush,

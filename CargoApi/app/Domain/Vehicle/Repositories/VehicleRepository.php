@@ -18,9 +18,6 @@ class VehicleRepository extends Repository
 
     public function query(): Builder
     {
-        // The owner comes with the row because the fleet list names whoever is
-        // paid for a hired truck, and a query per unit for a column that is
-        // null on most of them is the wrong trade.
         return Vehicle::query()
             ->with(['driver:id,name', 'ownerPartner:id,name'])
             ->orderBy('plate');
@@ -36,7 +33,7 @@ class VehicleRepository extends Repository
         return $this->query()->where('plate', $plate)->first();
     }
 
-    /** @return array<string, int> status value => count, for the fleet doughnut. */
+    /** @return array<string, int> */
     public function countsByStatus(): array
     {
         return Vehicle::query()
@@ -47,10 +44,6 @@ class VehicleRepository extends Repository
             ->all();
     }
 
-    /**
-     * Share of the fleet that is out working. Maintenance and out-of-service
-     * units stay in the denominator — that is the point of a utilisation figure.
-     */
     public function utilisation(): float
     {
         $total = Vehicle::query()->count();

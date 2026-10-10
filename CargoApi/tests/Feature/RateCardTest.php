@@ -9,35 +9,11 @@ use App\Domain\Shared\Enums\Role;
 use App\Domain\Trip\Models\Trip;
 use Database\Seeders\NavigationSeeder;
 
-/**
- * The rate card: a band of kilometres, its rates, and what diesel does to them.
- *
- * A zone is a band — `A1` is 1–40 km — the way the trade's own subsidy tables
- * write one. What is worth pinning here is not chiefly the arithmetic; it is
- * the edges, because each of them used to produce a zero and a zero reaches
- * the ledger as revenue the business never earned:
- *
- *   a distance past the end of the table,
- *   a band with no rate line on it,
- *   two bands over the same kilometres,
- *   a band the distance has moved out of since it was chosen,
- *   an install that has never recorded a pump price.
- *
- * The published figures themselves are pinned in `SubsidyRateCardTest`, which
- * checks the seeded card against the document it was typed from.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
 
     $this->accountant = User::factory()->create(['role' => Role::Accountant]);
 
-    /**
-     * Band A1 of the workbook: 1–40 km at ₱4,165, plus ₱14 for every ₱1/L
-     * diesel sits above ₱43.
-     *
-     * Starting at zero rather than one, as the seeder does, so a trip nobody
-     * has pinned still lands on a published rate.
-     */
     $this->band = [
         'name' => 'Zone A1',
         'code' => 'A1',
@@ -68,8 +44,6 @@ describe('the band editor', function (): void {
         $response = ($this->createBand)()->assertCreated();
 
         expect($response->json('data.code'))->toBe('A1');
-        // The upper bound is stored exclusive and shown inclusive, so the band
-        // reads the way the printed table does rather than a kilometre out.
         expect($response->json('data.band'))->toBe('0 – 40 km');
         expect($response->json('data.brackets'))->toHaveCount(1);
         expect($response->json('data.brackets.0.diesel_step_cents'))->toBe(1_400);
@@ -82,8 +56,6 @@ describe('the band editor', function (): void {
     it('gives a rate line the band’s kilometres rather than its own', function (): void {
         $line = ($this->createBand)()->assertCreated()->json('data.brackets.0');
 
-        // Null, deliberately: the band is written down once. A line carrying a
-        // copy is a second place for 1–40 km to be wrong.
         expect($line['min_km'])->toBeNull();
         expect($line['max_km'])->toBeNull();
         expect($line['range'])->toBe('0 – 40 km');
@@ -122,8 +94,6 @@ describe('the band editor', function (): void {
             ],
         ]);
 
-        // Two lines with no class of truck between them is the ambiguity the
-        // editor refuses, so the card is built one line at a time instead.
         $zone->assertStatus(422)->assertJsonValidationErrors('brackets.1.base_cents');
     });
 
@@ -145,9 +115,6 @@ describe('the band editor', function (): void {
     it('accepts two bands over the same kilometres, because that is the table', function (): void {
         ($this->createBand)()->assertCreated();
 
-        // A1 and A2 are both 1–40 km at different money. Nothing about the
-        // distance separates them, and refusing the second would make half of
-        // every subsidy table unrepresentable.
         ($this->createBand)([
             'name' => 'Zone A2',
             'code' => 'A2',
@@ -165,15 +132,12 @@ describe('quoting from a band', function (): void {
         expect($quote->json('data.source'))->toBe('zone');
         expect($quote->json('data.zone.code'))->toBe('A1');
         expect($quote->json('data.bracket.label'))->toBe('Current fleet');
-        // The band is a flat rate. Weight and the exact kilometre inside the
-        // band change nothing, which is the whole point of banding it.
         expect($quote->json('data.card_cents'))->toBe(416_500);
     });
 
     it('charges part-kilometres as whole ones when choosing the band', function (): void {
         ($this->createBand)(['min_km' => 0, 'max_km' => 2]);
 
-        // 1.2 km bills as 2, and 2 is outside a band that stops at 2.
         expect(($this->quote)(['distance_m' => 1_200])->json('data.km'))->toBe(2);
         expect(($this->quote)(['distance_m' => 1_200])->json('data.source'))->toBe('unzoned');
         expect(($this->quote)(['distance_m' => 900])->json('data.source'))->toBe('zone');
@@ -184,8 +148,6 @@ describe('quoting from a band', function (): void {
 
         $quote = ($this->quote)(['distance_km' => 700])->assertOk();
 
-        // No figure rather than a guess: the principal has published no rate
-        // for 700 km, and there is no fallback tariff to invent one any more.
         expect($quote->json('data.source'))->toBe('unzoned');
         expect($quote->json('data.needs_zone'))->toBeTrue();
         expect($quote->json('data.zone'))->toBeNull();
@@ -200,9 +162,6 @@ describe('quoting from a band', function (): void {
 
         expect($quote->json('data.source'))->toBe('unzoned');
         expect($quote->json('data.cents'))->toBeNull();
-        // Named even though it did not price the run, so the office can see the
-        // band was found and the *line* was missing rather than hunt for a
-        // banding problem that is not there.
         expect($quote->json('data.zone.code'))->toBe('A1');
     });
 
@@ -233,10 +192,6 @@ describe('two bands over one distance', function (): void {
     it('takes the table’s own order when nobody has chosen', function (): void {
         $quote = ($this->quote)(['distance_km' => 30])->assertOk();
 
-        // A1 over A2 — the order the table prints them, and the lower of the
-        // two figures. A figure somebody argues up is the error the office
-        // catches; an overcharge from a system that guessed is the one nobody
-        // reports.
         expect($quote->json('data.zone.code'))->toBe('A1');
         expect($quote->json('data.card_cents'))->toBe(416_500);
     });
@@ -246,8 +201,6 @@ describe('two bands over one distance', function (): void {
 
         expect($quote->json('data.zone_alternatives'))->toHaveCount(1);
         expect($quote->json('data.zone_alternatives.0.code'))->toBe('A2');
-        // The band that priced it is not repeated in the list of what else
-        // could have.
         expect(collect($quote->json('data.zone_alternatives'))->pluck('code'))->not->toContain('A1');
     });
 
@@ -279,8 +232,6 @@ describe('diesel, the way the table states it', function (): void {
 
         $quote = ($this->quote)(['distance_km' => 20])->assertOk();
 
-        // The published figure. ₱85 is 42 pesos above the ₱43 baseline, band A1
-        // adds ₱14 a peso, and the table's own ₱85 column says ₱4,753.
         expect($quote->json('data.diesel.pesos_above_baseline'))->toBe(42);
         expect($quote->json('data.fuel_surcharge_cents'))->toBe(58_800);
         expect($quote->json('data.cents'))->toBe(475_300);
@@ -288,16 +239,12 @@ describe('diesel, the way the table states it', function (): void {
     });
 
     it('stays on the peso the table prints rather than between two columns', function (): void {
-        // ₱85.60 sits on the ₱85 column. Rounding up would charge for a peso
-        // of diesel the document never published a figure for.
         ($this->diesel)(8_560)->assertCreated();
 
         expect(($this->quote)(['distance_km' => 20])->json('data.cents'))->toBe(475_300);
     });
 
     it('adds nothing for diesel inside the baseline band', function (): void {
-        // The card holds from ₱30 to ₱43 a litre. ₱38 is what the printed
-        // price already assumes, not a discount the table forgot to offer.
         ($this->diesel)(3_800)->assertCreated();
 
         $quote = ($this->quote)(['distance_km' => 20])->assertOk();
@@ -329,16 +276,11 @@ describe('diesel, the way the table states it', function (): void {
 
 describe('the percentage fuel model, for a card with no table behind it', function (): void {
     it('still scales a line that declares no step', function (): void {
-        // No `diesel_step_cents`, and a ₱65.00 baseline — a firm that has one
-        // card and prices fuel as a share of the fare. Nothing about banding
-        // the card took that away.
         ($this->createBand)([
             'diesel_baseline_cents' => 6_500,
             'brackets' => [['label' => 'Current fleet', 'base_cents' => 185_000]],
         ]);
 
-        // ₱71.50 against ₱65.00 is a 10% move, passed through at the 0.35 fuel
-        // share: +350 bp.
         ($this->diesel)(7_150)->assertCreated();
 
         $quote = ($this->quote)(['distance_km' => 20])->assertOk();
@@ -366,8 +308,6 @@ describe('the percentage fuel model, for a card with no table behind it', functi
             'brackets' => [['label' => 'Current fleet', 'base_cents' => 185_000]],
         ]);
 
-        // Triple the baseline. Uncapped that is +7,000 bp; the guard rail is
-        // 2,500, and a quote nobody can explain is worse than a stale card.
         ($this->diesel)(19_500)->assertCreated();
 
         expect(($this->quote)(['distance_km' => 20])->json('data.fuel_adjustment_bp'))->toBe(2_500);
@@ -442,14 +382,9 @@ describe('a booked trip', function (): void {
             'brackets' => [['label' => 'Current fleet', 'base_cents' => 523_000]],
         ])->json('data');
 
-        // Booked with no distance at all — the phone-booking case — so it is
-        // quoted in the lowest band and the trace records A1.
         $id = ($this->book)(['distance_total_m' => 0])->assertCreated()->json('data.id');
         expect(Trip::findOrFail($id)->price_cents)->toBe(416_500);
 
-        // A dispatcher then pins the route at 60 km. Honouring the recorded
-        // band would charge a 60 km haul at the 0–40 km rate for ever, which
-        // is the cost of the trace and the choice sharing one column.
         $this->actingAs($this->admin)
             ->patchJson("/api/v1/trips/{$id}", ['distance_total_m' => 60_000])
             ->assertOk();
@@ -464,8 +399,6 @@ describe('a booked trip', function (): void {
 
         $trip = Trip::findOrFail(($this->book)(['price_cents' => 0])->assertCreated()->json('data.id'));
 
-        // Zero is how the company books its own freight, and the card must not
-        // overrule it on the way in.
         expect($trip->price_cents)->toBe(0);
     });
 
@@ -479,20 +412,10 @@ describe('a booked trip', function (): void {
             ->assertNoContent();
 
         expect($trip->refresh()->price_cents)->toBe(416_500);
-        // Soft-deleted, so the trace still resolves — the invoice can say where
-        // its figure came from even after the table is redrawn.
         expect(PricingZone::withTrashed()->find($zone['id'])->code)->toBe('A1');
     });
 });
 
-/**
- * Nothing on this screen should be enterable twice.
- *
- * Three ways a band can be duplicated, and they fail differently: a retyped
- * code, the same band under a second code, and a class of truck priced twice
- * inside one band. The editor catches all three before the request — see
- * `PricingPage` — and these pin the half that actually guarantees it.
- */
 describe('refusing a duplicate', function (): void {
     it('refuses a second band with the same code', function (): void {
         ($this->createBand)()->assertCreated();
@@ -505,8 +428,6 @@ describe('refusing a duplicate', function (): void {
     it('refuses a second band with the same name', function (): void {
         ($this->createBand)()->assertCreated();
 
-        // The commoner mistake: the same band typed again under a new code,
-        // which the code rule alone would let straight through.
         ($this->createBand)(['code' => 'A9'])
             ->assertStatus(422)
             ->assertJsonValidationErrors('name');
@@ -532,17 +453,6 @@ describe('refusing a duplicate', function (): void {
             ->deleteJson("/api/v1/pricing/zones/{$zone['id']}")
             ->assertNoContent();
 
-        /**
-         * The unique index is on `(company_id, code)` and knows nothing about
-         * `deleted_at`, so a rule that excused retired rows would pass
-         * validation and then hit the database — a 500 with a constraint name
-         * in it, where the office typed a duplicate and deserved to be told.
-         *
-         * Keeping the code taken is also right on its own terms: a band is
-         * retired rather than removed so the trips it priced can still name
-         * it, and a second `A1` would leave an old invoice unable to say which
-         * of the two quoted it.
-         */
         ($this->createBand)()
             ->assertStatus(422)
             ->assertJsonValidationErrors('code');

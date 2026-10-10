@@ -11,8 +11,6 @@ class DieselPriceRequest extends ApiFormRequest
     public function rules(): array
     {
         return [
-            // Today unless told otherwise: the common case is somebody keying
-            // in the price they have just seen at the pump.
             'effective_on' => ['sometimes', 'date'],
             'price_per_litre_cents' => ['required', 'integer', 'min:1'],
             'source' => ['nullable', 'string', 'max:120'],

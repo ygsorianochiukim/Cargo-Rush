@@ -15,17 +15,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * Money that moved.
- *
- * One event, recorded once, and then **applied** to one or more invoices
- * through `payment_allocations`. That split is the whole design: a payment
- * belongs to the day a cheque cleared, and where it was put is a separate
- * decision that can span four documents or half of one.
- *
- * Nothing here is derived from an invoice. An invoice's status is derived from
- * *these*, which is the direction that keeps them from disagreeing.
- */
 class Payment extends Model
 {
     use BelongsToCompany, HasUlids, SoftDeletes;
@@ -66,20 +55,11 @@ class Payment extends Model
             ->withTimestamps();
     }
 
-    /**
-     * How much of this payment has been put against a document.
-     *
-     * Usually the whole of it. The gap is a real state and worth being able to
-     * see: a customer who pays a round ₱100,000 against ₱97,340 of invoices
-     * has ₱2,660 sitting unapplied, and that is a credit on their account
-     * rather than an error — it goes against whatever they are billed next.
-     */
     public function allocatedCents(): int
     {
         return (int) $this->allocations()->sum('amount_cents');
     }
 
-    /** The part not yet put anywhere. Zero on a payment applied in full. */
     public function unallocatedCents(): int
     {
         return max(0, $this->amount_cents - $this->allocatedCents());

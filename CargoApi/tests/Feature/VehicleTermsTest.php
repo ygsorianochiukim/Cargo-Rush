@@ -11,20 +11,6 @@ use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * Putting a truck on the fleet, and the terms that come with it.
- *
- * Four arrangements, and only one of them owes anybody anything. What made the
- * form confusing was that all four asked the same questions: adding a truck the
- * fleet owns outright wanted its monthly rent, the percentage the fleet keeps
- * and who to pay that to — three questions with no answer, on the commonest
- * case of the four.
- *
- * The screen now shows a term only when the arrangement has one. These are the
- * API's half of that: a driver is optional whatever the arrangement, and a term
- * that does not apply is refused a value rather than quietly stored against a
- * truck nobody owes anything for.
- */
 beforeEach(function (): void {
     $this->seed(PermissionSeeder::class);
     $this->seed(RoleSeeder::class);
@@ -49,8 +35,6 @@ beforeEach(function (): void {
 
 describe('the driver', function (): void {
     it('is optional, because a truck arrives before anybody is put on it', function (): void {
-        // Bought on a Friday, crewed on the Monday. The form says so in the
-        // label now; this is the half that has to agree with it.
         $vehicle = ($this->add)()->assertCreated()->json('data');
 
         expect($vehicle['driver_id'])->toBeNull();
@@ -75,11 +59,6 @@ describe('the terms', function (): void {
 
         $vehicle = Vehicle::query()->firstOrFail();
 
-        // The form hides all three for an owned truck, and clears them on the
-        // way out — hiding a control leaves its value behind, so a truck moved
-        // from rented to owned would otherwise keep the rent somebody typed
-        // before they changed their mind, and the rent command would go on
-        // billing for a unit the fleet owns.
         expect($vehicle->rent_cents)->toBeNull()
             ->and($vehicle->share_bp)->toBeNull()
             ->and($vehicle->owner_trucker_id)->toBeNull();
@@ -102,8 +81,6 @@ describe('the terms', function (): void {
     });
 
     it('insists on somebody to pay when a truck shares what it earns', function (): void {
-        // The other half of the split the form now draws: a share arrangement
-        // asks who the share is credited to, and a rented one never does.
         ($this->add)(['arrangement' => 'rented_share', 'share_bp' => 1500])
             ->assertStatus(422)
             ->assertJsonValidationErrors('owner_trucker_id');

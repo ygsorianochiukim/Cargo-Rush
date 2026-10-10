@@ -15,9 +15,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
-/**
- * Applicants — the hiring pipeline in front of the roster.
- */
 class ApplicantController extends ApiController
 {
     public function __construct(private readonly ApplicantService $applicants) {}
@@ -65,20 +62,11 @@ class ApplicantController extends ApiController
         return $this->noContent();
     }
 
-    /** How many sit at each stage, empty stages included. */
     public function pipeline(): JsonResponse
     {
         return $this->payload($this->applicants->pipeline());
     }
 
-    /**
-     * Move somebody along.
-     *
-     * A verb rather than a PATCH on `stage`, because it stamps the decision
-     * date — and because `hired` is refused here: hiring creates an employee
-     * record, and a stage change that sometimes did that and sometimes did not
-     * would be a trap.
-     */
     public function stage(Request $request, Applicant $applicant): JsonResponse
     {
         $validated = $request->validate([
@@ -90,35 +78,16 @@ class ApplicantController extends ApiController
         return $this->item(new ApplicantResource($moved));
     }
 
-    /**
-     * Hire them: build the employee record from the application.
-     *
-     * Returns the new employee rather than the applicant, because that is what
-     * the office does next — give them a login, set their salary, put them on
-     * a truck.
-     */
     public function hire(Request $request, Applicant $applicant): JsonResponse
     {
         $overrides = $request->validate([
             'hired_on' => ['sometimes', 'date'],
             'position' => ['sometimes', 'string', 'max:60'],
-            // The managed job title, which is what decides whether the licence
-            // below is wanted — see `positions.drives`.
             'position_id' => ['nullable', 'string', 'exists:positions,id'],
             'department' => ['nullable', 'string', 'max:60'],
             'employment_type' => ['sometimes', 'string'],
             'pay_basis' => ['sometimes', 'string'],
             'amount_cents' => ['sometimes', 'integer', 'min:0'],
-            /**
-             * The licence, where the applicant is being hired to drive.
-             *
-             * Optional even then, unlike registering somebody directly. An
-             * application is not a licence check: the desk hires the person
-             * first and the licence turns up with them on day one, and
-             * refusing the hire for want of a number nobody has yet would send
-             * the office to create the employee by hand instead. Left out, the
-             * driver record is opened later by editing the roster.
-             */
             'licence_no' => ['nullable', 'string', 'max:40'],
             'licence_expiry' => ['nullable', 'date', 'required_with:licence_no'],
         ]);

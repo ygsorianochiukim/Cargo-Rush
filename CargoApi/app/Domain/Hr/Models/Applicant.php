@@ -12,14 +12,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * Somebody who has applied.
- *
- * Kept after the decision rather than deleted, and that is deliberate on both
- * outcomes. A hire keeps its application so the record shows where the employee
- * came from; a rejection is kept because "we already spoke to this person in
- * March" is the single most useful thing this list can tell an office.
- */
 class Applicant extends Model
 {
     use BelongsToCompany, HasUlids, SoftDeletes;
@@ -40,7 +32,6 @@ class Applicant extends Model
         ];
     }
 
-    /** Set once the application became a hire. */
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
@@ -51,12 +42,6 @@ class Applicant extends Model
         return trim("{$this->first_name} {$this->last_name}");
     }
 
-    /**
-     * Still waiting on the office.
-     *
-     * The nav badge counts these, so the rule lives here rather than being
-     * restated as a `whereNotIn` wherever somebody needs it.
-     */
     public function scopeOpen(Builder $query): Builder
     {
         return $query->whereNotIn('stage', [

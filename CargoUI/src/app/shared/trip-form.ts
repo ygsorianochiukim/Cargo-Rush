@@ -32,14 +32,8 @@ import { LocationField } from './location-field';
 import { Modal } from './modal';
 import { TripDialog } from './trip-dialog';
 
-/** An empty place: no name, no pin. */
 const BLANK_LOCATION: TripLocation = { place: '', lat: null, lng: null };
 
-/**
- * The straight line between two pins, in metres — a floor under the road
- * distance the API measures on save, used only to preview which band a newly
- * pinned run would land in.
- */
 function straightLineMetres(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const rad = (deg: number) => (deg * Math.PI) / 180;
   const dLat = rad(lat2 - lat1);
@@ -50,32 +44,8 @@ function straightLineMetres(lat1: number, lng1: number, lat2: number, lng2: numb
   return Math.round(6_371_000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
-/**
- * The statuses the office owns, and only those.
- *
- * `in_transit` and `delivered` are absent deliberately, and the API agrees:
- * each is reached by a driver doing something (leaving on the run, handing it
- * over) and each writes more than a column — a dispatch record, a delivery log
- * with its proof, the driver's credit, the day's income, the customer's
- * invoice. Offering them here would be offering a choice the API answers 422
- * to.
- *
- * `pending` on this list means what it means everywhere: a request nobody has
- * decided about yet. Moving one to `assigned` is `Confirm`, on Trip
- * Management, because that transition needs a driver, a unit and a time.
- *
- * `delivered` is here for one case: entering a trip that **already happened**.
- * The API runs it through the real delivery, dated the day it was delivered —
- * the log, the sheet income, the invoice — and refuses it for a future date.
- */
 const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered', 'cancelled'];
 
-/**
- * The create/edit trip dialog. One component serves both — pass `trip` to edit,
- * leave it null to create — so the form, validation and labels exist once.
- * Mounted in the shell for the global "New trip" button and reused per-row on
- * the Trip Management page.
- */
 @Component({
   selector: 'app-trip-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -91,9 +61,6 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
       (closed)="reset()"
     >
       <form [formGroup]="form" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <!-- Delivered and billed: the income, the invoice and any trucker's
-             settlement are on the books, so the unit and the status are locked
-             here and the API refuses them. The rest can still be corrected. -->
         @if (billed()) {
           <p
             class="rounded-control bg-cr-tint px-3 py-2 text-[12px] text-cr-ink-muted sm:col-span-2"
@@ -186,9 +153,6 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
           </select>
         </app-field>
 
-        <!-- A trip that already happened: when it was delivered, and to whom.
-             Only for a new or not-yet-delivered trip — editing a delivered one
-             does not deliver it again. -->
         @if (enteringPast() && trip()?.status !== 'delivered') {
           <p class="rounded-control bg-cr-tint px-3 py-2 text-[12px] text-cr-ink-muted">
             For a past trip. It's billed and recorded on the day it was delivered.
@@ -205,13 +169,6 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
             />
           </app-field>
         }
-        <!--
-          The price. Worked out from the zone card, never typed by default —
-          and where no zone line covers the run, said so plainly instead of a
-          figure, because there is no fallback price any more. Only somebody
-          with pricing.manage may type one, and a typed figure is marked as
-          such and never re-quoted.
-        -->
         <div class="rounded-control border border-cr-line px-3 py-3 sm:col-span-2">
           <div class="flex flex-wrap items-center gap-2">
             <p class="text-[13px] font-semibold">Price</p>
@@ -300,7 +257,6 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
 
       <ng-container modal-footer>
         @if (editing()) {
-          <!-- The paperwork for this trip, on a page of its own to print. -->
           <button
             type="button"
             class="mr-auto inline-flex h-10 items-center gap-1.5 rounded-control border border-cr-line px-4 text-[14px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint disabled:opacity-50"
@@ -342,14 +298,12 @@ export class TripForm {
 
   private readonly dialog = inject(TripDialog);
 
-  /** State lives in the service so any page can drive this one instance. */
   protected readonly open = this.dialog.open;
   protected readonly trip = this.dialog.trip;
 
   protected readonly saving = signal(false);
   protected readonly editing = computed(() => this.trip() !== null);
 
-  /** Close the dialog and open this trip's printable ticket and checklist. */
   protected printTicket(): void {
     const trip = this.trip();
 
@@ -358,9 +312,7 @@ export class TripForm {
     this.open.set(false);
     void this.router.navigate(['/trips', trip.id, 'ticket']);
   }
-  /** Already on the books, so the money-bearing fields are not the form's to change. */
   protected readonly billed = computed(() => !!this.trip()?.billed_at);
-  /** What the API said when it refused a save, so a refusal is never silent. */
   protected readonly failure = signal<string | null>(null);
   protected readonly statuses = STATUSES;
 
@@ -370,13 +322,6 @@ export class TripForm {
   protected readonly vehicles = signal<Vehicle[]>([]);
   protected readonly drivers = signal<Driver[]>([]);
 
-  /**
-   * The two places, each a name plus optional coordinates.
-   *
-   * Held beside the form rather than in it: a location is three values that
-   * are only meaningful together, and three sibling controls would let a
-   * latitude survive a change of place.
-   */
   protected readonly origin = signal<TripLocation>(BLANK_LOCATION);
   protected readonly destination = signal<TripLocation>(BLANK_LOCATION);
 
@@ -389,50 +334,23 @@ export class TripForm {
     driver_id: ['', Validators.required],
     scheduled_at: ['', Validators.required],
     status: ['scheduled' as StatusValue],
-    /** Only for a past trip entered as Delivered. Blank means the scheduled time. */
     delivered_at: [''],
     receiver_name: [''],
-    /**
-     * A price typed by hand, in pesos. Blank is "the zone card prices it".
-     *
-     * Only offered to `pricing.manage`, and only sent when it was touched — a
-     * form that re-sent the card's own figure would be a no-op the API ignores,
-     * but one that sent a blank for somebody who never looked at it would hand
-     * a negotiated rate back to the card behind their back.
-     */
     price: [''],
   });
 
-  /** May this account type a price? The API is the gate; this picks the screen. */
   protected readonly canPrice = computed(() => this.identity.can('pricing.manage'));
 
-  /** Was the trip being edited priced by hand? */
   protected readonly manuallyPriced = computed(() => !!this.trip()?.manually_priced);
 
-  /**
-   * What the zone card would charge for the run as it stands on the form.
-   *
-   * Only for an account that can read the card (`pricing.view`) — the preview
-   * endpoint is behind it — and never a fallback figure: where no zone line
-   * covers the run it is `needs_zone` with the reason, shown as such.
-   */
   protected readonly preview = signal<QuoteBreakdown | null>(null);
 
-  /** Is the preview's distance the straight line between the pins? */
   protected readonly estimated = signal(false);
 
   private readonly weight = toSignal(this.form.controls.weight_kg.valueChanges, {
     initialValue: this.form.controls.weight_kg.value,
   });
 
-  /**
-   * The distance to preview against, in metres.
-   *
-   * The trip's own measured distance while its pins are where they were; the
-   * straight line between them once somebody moves one (the API measures the
-   * road on save, so the preview says it is an estimate); nothing for an
-   * unpinned run, which the card prices in its lowest band until it is pinned.
-   */
   private readonly previewDistance = computed(() => {
     const t = this.trip();
     const o = this.origin();
@@ -452,32 +370,24 @@ export class TripForm {
     return { metres: straightLineMetres(o.lat, o.lng, d.lat, d.lng), estimate: true };
   });
 
-  /** Is this being entered as a trip that already happened? */
   protected readonly enteringPast = toSignal(
     this.form.controls.status.valueChanges.pipe(map((s) => s === 'delivered')),
     { initialValue: false },
   );
 
-  /**
-   * The helpers, held beside the form like the two places: a list of ids the
-   * picker owns, rather than a control per helper.
-   */
   protected readonly helpers = signal<string[]>([]);
 
-  /** Whoever is driving, so the picker does not offer them as a helper. */
   protected readonly driverId = toSignal(this.form.controls.driver_id.valueChanges, {
     initialValue: this.form.controls.driver_id.value,
   });
 
   constructor() {
-    // The name drives `required`; the signal carries the whole location.
     effect(() => this.form.get('origin')?.setValue(this.origin().place));
     effect(() => this.form.get('destination')?.setValue(this.destination().place));
 
     this.vehiclesApi.list().subscribe((res) => this.vehicles.set(res.data));
     this.driversApi.list().subscribe((res) => this.drivers.set(res.data));
 
-    // The live preview: re-asked, debounced, whenever the run changes shape.
     toObservable(
       computed(() => ({
         open: this.open(),
@@ -505,7 +415,6 @@ export class TripForm {
       )
       .subscribe((quote) => this.preview.set(quote));
 
-    // Load the row being edited whenever the dialog opens.
     effect(() => {
       if (!this.open()) return;
       const t = this.trip();
@@ -532,8 +441,6 @@ export class TripForm {
         status: t?.status ?? 'scheduled',
         delivered_at: '',
         receiver_name: '',
-        // A hand-typed figure is shown so it can be corrected or cleared; a
-        // card figure is not, so saving without touching it leaves it the card's.
         price: t?.manually_priced && t.price_cents !== null ? String(t.price_cents / 100) : '',
       });
 
@@ -558,12 +465,6 @@ export class TripForm {
     return fmt.money(cents, currency);
   }
 
-  /**
-   * `price_cents`, only when somebody allowed to type one touched the field.
-   *
-   * Blank on a run that was hand-priced is null — "back to the card". Blank on
-   * a run the card priced is nothing at all, so the card keeps it.
-   */
   private pricePayload(raw: string): { price_cents?: number | null } {
     const control = this.form.controls.price;
 
@@ -600,7 +501,6 @@ export class TripForm {
     const raw = this.form.getRawValue();
     const existing = this.trip();
 
-    // No id and no reference: the API assigns both, so neither is sent.
     const origin = this.origin();
     const destination = this.destination();
 
@@ -614,13 +514,10 @@ export class TripForm {
       cargo: raw.cargo,
       weight_kg: Number(raw.weight_kg),
       driver_id: raw.driver_id || null,
-      // Always sent, so removing the last helper really takes them off. The
-      // driver is left out in case they were picked as a helper first.
       helper_ids: this.helpers().filter((id) => id !== raw.driver_id),
       vehicle_id: raw.vehicle_id || null,
       status: raw.status,
       scheduled_at: new Date(raw.scheduled_at).toISOString(),
-      // A past trip: when it was really delivered, and who took it.
       ...(raw.status === 'delivered' && existing?.status !== 'delivered'
         ? {
             delivered_at: raw.delivered_at ? new Date(raw.delivered_at).toISOString() : null,

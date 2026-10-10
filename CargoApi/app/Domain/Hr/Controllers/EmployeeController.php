@@ -16,9 +16,6 @@ use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * Employees — the roster, their logins, and what each of those can see.
- */
 class EmployeeController extends ApiController
 {
     public function __construct(
@@ -32,8 +29,6 @@ class EmployeeController extends ApiController
             [
                 ...$this->filters($request),
                 ...$request->only(['position', 'department', 'employment_type']),
-                // Explicitly read as a boolean so `?has_account=0` is the
-                // question it looks like rather than a truthy string.
                 ...$request->has('has_account') ? ['has_account' => $request->boolean('has_account')] : [],
             ],
             $this->perPage($request, 50),
@@ -52,8 +47,6 @@ class EmployeeController extends ApiController
         $employee = $this->employees->register(
             $request->toData(),
             $request->photo(),
-            // Null unless the job drives. The service opens or finds the
-            // `drivers` row; the client no longer names one.
             $request->toLicence(),
         );
 
@@ -74,21 +67,11 @@ class EmployeeController extends ApiController
         return $this->noContent();
     }
 
-    /** Headcount, the shape of the roster, and who still has no login. */
     public function overview(): JsonResponse
     {
         return $this->payload($this->employees->overview());
     }
 
-    /* ----------------------------------------------------------- Accounts */
-
-    /**
-     * Give an employee a login.
-     *
-     * The password comes back in the response and only here, so whoever added
-     * them can pass it on. It is a starting password rather than a secret —
-     * the same trade `CustomerAccountService` makes, for the same reason.
-     */
     public function createAccount(StaffAccountRequest $request, Employee $employee): JsonResponse
     {
         $credentials = $this->accounts->createFor(
@@ -105,7 +88,6 @@ class EmployeeController extends ApiController
         );
     }
 
-    /** Change the role on an employee's login. */
     public function assignRole(RoleAssignmentRequest $request, Employee $employee): JsonResponse
     {
         abort_if($employee->user === null, 422, 'This employee has no account to assign a role to.');
@@ -115,7 +97,6 @@ class EmployeeController extends ApiController
         return $this->item(new EmployeeResource($employee->refresh()->load(['user', 'driver'])));
     }
 
-    /** What this employee's account can see, and what it could. */
     public function modules(Employee $employee): JsonResponse
     {
         abort_if($employee->user === null, 422, 'This employee has no account yet.');
@@ -123,13 +104,6 @@ class EmployeeController extends ApiController
         return $this->payload($this->accounts->moduleState($employee->user));
     }
 
-    /**
-     * Choose which modules the account sees.
-     *
-     * `rejected` in the meta is the honest answer to a request for a module the
-     * role cannot open: it was not assigned, and here is the list, rather than
-     * a checkbox that quietly refuses to stick.
-     */
     public function assignModules(ModuleAssignmentRequest $request, Employee $employee): JsonResponse
     {
         abort_if($employee->user === null, 422, 'This employee has no account yet.');

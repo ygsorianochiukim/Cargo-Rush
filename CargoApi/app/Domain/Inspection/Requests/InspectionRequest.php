@@ -19,7 +19,6 @@ class InspectionRequest extends ApiFormRequest
             'results.*' => ['boolean'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'inspected_at' => ['sometimes', 'date', 'before_or_equal:now'],
-            // The pass/fail call belongs to the API — see InspectionService.
             'good_to_go' => ['prohibited'],
         ];
     }

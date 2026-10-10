@@ -14,25 +14,6 @@ use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * Truck Maintenance — the fleet's servicing, read as spend.
- *
- * The rows are the ones a unit's own screen has always shown. What is new is
- * the question they are asked: not "what is booked on this truck" but "what has
- * the fleet spent keeping its trucks running, and on which of them".
- *
- * Two things are worth pinning beyond the list itself.
- *
- * **The money still goes through one door.** However the row was opened, the
- * cost lands in that unit's Maintenance column exactly once — so everything
- * `SupplierAndServicingTest` proves about correcting a figure holds here too,
- * and the tests below only check the cases this route adds.
- *
- * **Who may file one.** A garage's invoice is keyed by whoever files the
- * fleet's spend, and that is an accountant, who holds `expenses.manage` and not
- * `vehicles.manage`. A rule that made them ask a dispatcher to type a receipt
- * they are holding is a rule that ends with nobody typing it.
- */
 beforeEach(function (): void {
     $this->seed(PermissionSeeder::class);
     $this->seed(RoleSeeder::class);
@@ -56,7 +37,6 @@ beforeEach(function (): void {
     $this->spare = ($this->unit)('XYZ 9999');
     $this->garage = Supplier::factory()->create(['name' => 'Davao Lubes & Parts']);
 
-    /** File a service from the office screen — the unit is in the payload. */
     $this->file = fn (array $payload = [], ?User $as = null) => $this->actingAs($as ?? $this->accountant)
         ->postJson('/api/v1/maintenance', [
             'vehicle_id' => $this->truck->id,
@@ -65,7 +45,6 @@ beforeEach(function (): void {
             ...$payload,
         ]);
 
-    /** What a unit's sheet says it cost in maintenance on a day. */
     $this->sheet = function (Vehicle $vehicle, string $date): int {
         $truck = Truck::query()->where('vehicle_id', $vehicle->id)->first();
 
@@ -94,9 +73,6 @@ describe('the fleet list', function (): void {
             ->and($rows['Oil change']['supplier_name'])->toBe('Davao Lubes & Parts')
             ->and($rows['Two front tyres']['vehicle_plate'])->toBe('XYZ 9999');
 
-        // Totalled over the window rather than over the page, because "what did
-        // servicing cost" is a question about the filter, not about the first
-        // twenty-five rows of it.
         expect($response->json('meta.costed_total_cents'))->toBe(2_080_000);
     });
 
@@ -108,8 +84,6 @@ describe('the fleet list', function (): void {
             ->pluck('kind')
             ->all();
 
-        // What has not happened yet is what somebody has to act on; history
-        // sorts underneath it.
         expect($kinds)->toBe(['Booked for next month', 'Done last week']);
     });
 
@@ -142,12 +116,6 @@ describe('the fleet list', function (): void {
             ->getJson('/api/v1/maintenance?from=2026-08-01&to=2026-08-31')->json('data'))
             ->pluck('kind')->all();
 
-        /**
-         * The August job was *booked* in July and is still August's money,
-         * because the day the work was done is the day it is charged to.
-         * Filtering on `due_at` alone would drop it out of the month the
-         * cheque was written in.
-         */
         expect($august)->toBe(['Done in August']);
     });
 });
@@ -172,9 +140,6 @@ describe('filing one from the office', function (): void {
     });
 
     it('lets whoever files the fleet spend file a garage bill', function (): void {
-        // An accountant holds `expenses.manage` and not `vehicles.manage`.
-        // Both open this route, and that is the whole point of the screen
-        // living beside Other Expenses.
         ($this->file)([], $this->accountant)->assertCreated();
         ($this->file)(['kind' => 'Coolant flush'], $this->admin)->assertCreated();
     });
@@ -186,12 +151,6 @@ describe('filing one from the office', function (): void {
     });
 
     it('lets them read the fleet, because the form has to ask which truck', function (): void {
-        /**
-         * The half of this that is easy to forget: a permission to file the
-         * work is worth nothing if the first field on the form comes back
-         * empty. An accountant holds no fleet permission at all, so reading
-         * the units — not writing them — had to widen with the screen.
-         */
         $plates = collect($this->actingAs($this->accountant)
             ->getJson('/api/v1/vehicles')->assertOk()->json('data'))
             ->pluck('plate');
@@ -220,14 +179,6 @@ describe('correcting one from the office', function (): void {
             ->patchJson("/api/v1/maintenance/{$id}", ['vehicle_id' => $this->spare->id])
             ->assertOk()->json('data');
 
-        /**
-         * The correction the unit's own screen cannot make — it resolves a job
-         * off the vehicle in its path, so there the truck is the one thing that
-         * can never be wrong.
-         *
-         * Both sheets have to move, and in full: the old unit carrying half a
-         * gearbox for ever is exactly the error this is fixing.
-         */
         expect($moved['vehicle_plate'])->toBe('XYZ 9999')
             ->and(($this->sheet)($this->truck, '2026-08-19'))->toBe(0)
             ->and(($this->sheet)($this->spare, '2026-08-19'))->toBe(320_000);

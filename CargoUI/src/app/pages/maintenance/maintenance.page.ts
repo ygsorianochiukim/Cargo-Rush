@@ -13,35 +13,6 @@ import { RecordDialog } from '../../shared/record-dialog';
 import { recordList } from '../../shared/record-list';
 import { ErrorState } from '../../shared/states';
 
-/**
- * Truck Maintenance — what keeping the fleet on the road costs.
- *
- * Beside Other Expenses rather than under Fleet, because the two answer the
- * same question from the same desk: what did the firm spend, and on what. What
- * separates them is where the money lands, and that is the whole reason this is
- * a screen of its own.
- *
- *   **A service belongs to one truck.** It lands in that unit's Maintenance
- *   column on the daily sheet, which Profitability and the Quarterly Summary
- *   have always counted per unit. A truck that ate a gearbox should read as the
- *   truck that ate a gearbox.
- *
- *   **An expense belongs to the period.** Rice, tarpaulins, tolls, the office
- *   rent. Charging those to a unit would make the truck that happened to be out
- *   that day look unprofitable for the office's electricity.
- *
- * Filing an oil change on Other Expenses used to do the second to the first: the
- * fleet's service history sat inside a list of meals, where neither could be
- * found, and the money never reached the truck.
- *
- * ## Two figures at the top, and they are not the same number
- *
- * **Spent** is what the fleet has actually been charged — the jobs with a
- * figure on them. **Awaiting a figure** counts the jobs done or booked that
- * nobody has costed yet, which is the work sitting in an unopened envelope from
- * the garage. A screen that showed only the first would say the fleet had spent
- * nothing in a month where three trucks were in the workshop.
- */
 @Component({
   selector: 'app-maintenance',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -98,14 +69,6 @@ export class MaintenancePage {
   private readonly dialog = inject(RecordDialog);
   private readonly spec = maintenanceSpec();
 
-  /**
-   * The costed total, as the API totalled it.
-   *
-   * Taken from the response's meta rather than summed from the rows: the sum
-   * belongs to the filter, and a client can only ever add up the page it was
-   * handed. Kept in a signal the list refresh updates, so it moves with the
-   * table rather than going stale behind it.
-   */
   private readonly costedTotal = signal<number | null>(null);
 
   protected readonly list = recordList<MaintenanceJob>(this.spec, () =>
@@ -115,18 +78,6 @@ export class MaintenancePage {
     ),
   );
 
-  /**
-   * Refetch after a save, which most list pages here deliberately do not.
-   *
-   * `recordList` patches the saved row into the table and skips the round trip,
-   * because the API already handed the row back. That is right for a list and
-   * wrong for a figure the list does not contain: the total above is the
-   * server's answer about the whole filter, and putting a ₱12,500 clutch job on
-   * the table without moving it would leave the two disagreeing on screen.
-   *
-   * It costs one request per save and does not flicker — `refresh()` replaces
-   * the rows on success rather than blanking them first.
-   */
   constructor() {
     merge(this.dialog.savedFor(this.spec), this.dialog.deletedFor(this.spec))
       .pipe(takeUntilDestroyed())
@@ -163,37 +114,17 @@ export class MaintenancePage {
       value: (job) => fmt.date(job.due_at),
     },
     {
-      /**
-       * The day the work was done, which is the day the money is charged to —
-       * not the day it was due. A service booked for the 12th and done on the
-       * 19th is the 19th's cost, and printing only the due date would leave
-       * somebody looking for it in the wrong week of the sheet.
-       */
       label: 'Done',
       kind: 'num',
       value: (job) => (job.completed_on === null ? null : fmt.date(job.completed_on)),
     },
     { label: 'Garage', value: (job) => job.supplier_name ?? null, sub: (job) => job.reference },
     {
-      /**
-       * Null prints as an em dash, and that is the point of keeping it null.
-       *
-       * "Not costed yet" and "cost nothing" are different facts — the second is
-       * a warranty job — and ₱0 for both would hide the envelope nobody has
-       * opened.
-       */
       label: 'Cost',
       kind: 'num',
       value: (job) => (job.cost_cents === null ? null : fmt.pesos(job.cost_cents)),
     },
     {
-      /**
-       * Whether the figure has reached the unit's sheet.
-       *
-       * A costed job with no date done is charged to nothing, because there is
-       * no day to charge it to. Saying so here is what stops somebody hunting
-       * through Profitability for a number that was never going to be there.
-       */
       label: 'On the sheet',
       kind: 'muted',
       value: (job) =>

@@ -1,7 +1,3 @@
-/**
- * Display formatting lives here, not in the API. The API sends ISO-8601 UTC and
- * integer minor units (DESIGN.md section 7.1); the client decides how to read them.
- */
 export const fmt = {
   dateTime(value: string | null | undefined): string {
     if (!value) return '—';
@@ -27,21 +23,11 @@ export const fmt = {
     });
   },
 
-  /** Integer minor units -> a readable amount. Never floats on the wire. */
   money(cents: number, currency = 'PHP'): string {
     const symbol = currency === 'PHP' ? '₱' : '';
     return `${symbol}${(cents / 100).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
   },
 
-  /**
-   * The same, to the centavo — for documents rather than dashboards.
-   *
-   * `money()` rounds to whole pesos, which is right on a tile where the figure
-   * is a size and the decimals are noise. It is wrong on a statement, a payslip
-   * or a trial balance: those are documents somebody adds up, and a column of
-   * rounded rows will not sum to a rounded total. Anything that has to
-   * reconcile uses this one.
-   */
   pesos(cents: number, currency = 'PHP'): string {
     const symbol = currency === 'PHP' ? '₱' : '';
 

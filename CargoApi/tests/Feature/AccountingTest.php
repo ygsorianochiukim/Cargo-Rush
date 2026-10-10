@@ -14,24 +14,6 @@ use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * The books: a chart of accounts, a general journal, a general ledger.
- *
- * Three things these tests are really about, and all three are the difference
- * between a ledger and a spreadsheet:
- *
- *   **An entry balances or it does not exist.** Not a warning, not a flag to
- *   fix later — a refusal, in the validator and again in the service, because
- *   an entry that cannot say where the money came from and where it went is
- *   missing half of what happened.
- *
- *   **A posted entry never changes.** It can be voided, which is kept and
- *   explained and stops counting. It cannot be edited, deleted or re-posted.
- *
- *   **The ledger is the journal, sorted differently.** Not a second set of
- *   rows: every balance here is a sum over the postings, so there is nothing
- *   that can drift and the trial balance agrees by construction.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -48,7 +30,6 @@ beforeEach(function (): void {
     $this->fuel = Account::query()->firstWhere('code', '5010');
     $this->payable = Account::query()->firstWhere('code', '2010');
 
-    /** A fuel purchase on credit: an expense, and a payable for it. */
     $this->fuelOnCredit = fn (array $overrides = []) => [
         'entry_date' => now()->toDateString(),
         'category' => JournalCategory::Fuel->value,
@@ -70,8 +51,6 @@ describe('the chart of accounts', function (): void {
             ->assertOk()
             ->json('data.*.code');
 
-        // The five daily-sheet columns each have an account, which is what will
-        // let a day's sheet post itself later without anybody deciding per row.
         expect($codes)->toContain('1010', '1100', '4010', '5010', '5020', '5030', '5040', '5050');
     });
 
@@ -79,8 +58,6 @@ describe('the chart of accounts', function (): void {
         $types = $this->actingAs($this->accountant)->getJson('/api/v1/accounting/accounts')
             ->json('data.*.type');
 
-        // Assets, liabilities, equity, income, expenses — not the alphabet,
-        // which would put equity above expenses.
         expect(array_values(array_unique($types)))->toBe([
             AccountType::Asset->value,
             AccountType::Liability->value,
@@ -94,8 +71,6 @@ describe('the chart of accounts', function (): void {
         $rows = collect($this->actingAs($this->accountant)->getJson('/api/v1/accounting/accounts')->json('data'))
             ->keyBy('code');
 
-        // The rule the whole ledger turns on, sent so no client keeps its own
-        // copy of it.
         expect($rows['1010']['normal_balance'])->toBe('debit')
             ->and($rows['2010']['normal_balance'])->toBe('credit')
             ->and($rows['4010']['normal_balance'])->toBe('credit')
@@ -122,9 +97,6 @@ describe('the chart of accounts', function (): void {
     it('will not change the kind of an account that has postings', function (): void {
         ($this->post)(($this->fuelOnCredit)(['status' => JournalEntry::POSTED]))->assertCreated();
 
-        // Flipping 5010 from expense to income would reverse the sign of every
-        // figure ever recorded against it, and no report would show that it had
-        // happened.
         $this->actingAs($this->accountant)
             ->patchJson("/api/v1/accounting/accounts/{$this->fuel->id}", [
                 'code' => $this->fuel->code,
@@ -144,7 +116,6 @@ describe('the chart of accounts', function (): void {
             ->assertOk()
             ->assertJsonPath('meta.retired', true);
 
-        // The postings are the history and the account is what they name.
         expect($this->fuel->refresh()->status)->toBe(StatusValue::Inactive)
             ->and(Account::query()->firstWhere('code', '5010'))->not->toBeNull();
     });
@@ -181,8 +152,6 @@ describe('writing to the general journal', function (): void {
             ->and($response->json('data.debit_cents'))->toBe(2400000)
             ->and($response->json('data.credit_cents'))->toBe(2400000)
             ->and($response->json('data.balanced'))->toBeTrue()
-            // The accounting category — what kind of transaction this is,
-            // which is the question somebody scrolling a month of entries asks.
             ->and($response->json('data.category'))->toBe(JournalCategory::Fuel->value)
             ->and($response->json('data.category_label'))->toBe('Fuel')
             ->and($response->json('data.lines'))->toHaveCount(2);
@@ -206,8 +175,6 @@ describe('writing to the general journal', function (): void {
         ]))
             ->assertStatus(422)
             ->assertJsonValidationErrors('lines')
-            // The number that finds a transposed figure is the difference, not
-            // the fact of it.
             ->assertJsonPath(
                 'errors.lines.0',
                 fn (string $message): bool => str_contains($message, '4,000.00'),
@@ -232,9 +199,6 @@ describe('writing to the general journal', function (): void {
             'type' => AccountType::Asset->value,
         ]));
 
-        // `exists:accounts,id` would have confirmed the id and posted into
-        // their books. The rule resolves it through the model, so the tenant
-        // scope applies and the answer is "not in your chart".
         ($this->post)(($this->fuelOnCredit)([
             'lines' => [
                 ['account_id' => $this->fuel->id, 'side' => 'debit', 'amount_cents' => 1000],
@@ -283,7 +247,6 @@ describe('posting and voiding', function (): void {
     it('posts straight away when the payload says so', function (): void {
         $response = ($this->post)(($this->fuelOnCredit)(['status' => JournalEntry::POSTED]))->assertCreated();
 
-        // The same row either way — one definition of what posted looks like.
         expect($response->json('data.status'))->toBe(JournalEntry::POSTED)
             ->and($response->json('data.posted_by_name'))->toBe($this->accountant->name);
     });
@@ -330,8 +293,6 @@ describe('posting and voiding', function (): void {
             ],
         ])->assertOk();
 
-        // Replaced wholesale rather than merged: the payable line is gone, not
-        // left behind beside its replacement.
         expect($response->json('data.lines'))->toHaveCount(2)
             ->and($response->json('data.debit_cents'))->toBe(1800000)
             ->and(collect($response->json('data.lines'))->pluck('account_code')->all())
@@ -348,7 +309,6 @@ describe('posting and voiding', function (): void {
         expect($response->json('data.status'))->toBe(JournalEntry::VOID)
             ->and($response->json('data.void_reason'))->toBe('Posted against the wrong pump')
             ->and($response->json('data.voided_at'))->not->toBeNull()
-            // The row and its lines stay exactly where they were.
             ->and($response->json('data.lines'))->toHaveCount(2)
             ->and($response->json('data.can_void'))->toBeFalse();
     });
@@ -365,7 +325,6 @@ describe('posting and voiding', function (): void {
     it('will not void a draft', function (): void {
         $id = ($this->post)(($this->fuelOnCredit)())->json('data.id');
 
-        // Nothing to withdraw: it was never in the books. Delete it instead.
         $this->actingAs($this->accountant)
             ->postJson("/api/v1/accounting/journal/{$id}/void", ['reason' => 'Changed my mind'])
             ->assertStatus(422);
@@ -374,8 +333,6 @@ describe('posting and voiding', function (): void {
 
 describe('the general ledger', function (): void {
     beforeEach(function (): void {
-        // A month of a small haulier's books, posted: a haul invoiced, the
-        // money collected, and the diesel that made it possible.
         $this->file = function (array $lines, string $memo, JournalCategory $category, string $date): void {
             ($this->post)([
                 'entry_date' => $date,
@@ -408,8 +365,6 @@ describe('the general ledger', function (): void {
             ->assertOk()
             ->json('data');
 
-        // ₱50,000 in, ₱24,000 out. Cash is debit-normal, so the balance runs up
-        // and then down.
         expect($ledger['debit_cents'])->toBe(5000000)
             ->and($ledger['credit_cents'])->toBe(2400000)
             ->and($ledger['closing_balance_cents'])->toBe(2600000)
@@ -421,8 +376,6 @@ describe('the general ledger', function (): void {
             ->getJson("/api/v1/accounting/ledger/accounts/{$this->revenue->id}")
             ->json('data');
 
-        // Revenue of ₱50,000 is fifty thousand pesos of income, not negative
-        // fifty thousand of something else.
         expect($ledger['closing_balance_cents'])->toBe(5000000)
             ->and($ledger['account']['normal_balance'])->toBe('credit');
     });
@@ -432,14 +385,11 @@ describe('the general ledger', function (): void {
             ->getJson("/api/v1/accounting/ledger/accounts/{$this->receivable->id}")
             ->json('data');
 
-        // Raised, then collected. A customer who has paid owes nothing, and the
-        // ledger says so without anybody adjusting a balance by hand.
         expect($ledger['closing_balance_cents'])->toBe(0)
             ->and($ledger['entry_count'])->toBe(2);
     });
 
     it('counts no draft and no voided entry', function (): void {
-        // A draft, and a posting withdrawn.
         ($this->post)(($this->fuelOnCredit)(['memo' => 'A draft nobody posted']))->assertCreated();
 
         $id = ($this->post)(($this->fuelOnCredit)([
@@ -455,8 +405,6 @@ describe('the general ledger', function (): void {
             ->getJson("/api/v1/accounting/ledger/accounts/{$this->fuel->id}")
             ->json('data');
 
-        // Only the one real fill-up. A draft has not happened and a void has
-        // been taken back.
         expect($ledger['closing_balance_cents'])->toBe(2400000)
             ->and($ledger['lines'])->toHaveCount(1);
     });
@@ -468,8 +416,6 @@ describe('the general ledger', function (): void {
             now()->subDays(2)->toDateString(),
         ))->json('data');
 
-        // The ₱50,000 collected a week ago is before the range, so it is the
-        // opening balance rather than a line — a cash account carries over.
         expect($ledger['opening_balance_cents'])->toBe(5000000)
             ->and($ledger['lines'])->toHaveCount(1)
             ->and($ledger['closing_balance_cents'])->toBe(2600000);
@@ -482,9 +428,6 @@ describe('the general ledger', function (): void {
             now()->toDateString(),
         ))->json('data');
 
-        // An expense account is the story of one period and starts again. An
-        // opening balance here would double-count the moment two months were
-        // added up.
         expect($ledger['opening_balance_cents'])->toBe(0)
             ->and($ledger['account']['permanent'] ?? null)->toBeNull();
     });
@@ -506,17 +449,11 @@ describe('the general ledger', function (): void {
             ->assertOk()
             ->json('data');
 
-        // The check that the books are whole. Every entry balances, so the two
-        // columns of the trial balance agree — and if they ever did not,
-        // something had written to `journal_lines` without going through the
-        // service.
         expect($trial['balanced'])->toBeTrue()
             ->and($trial['difference_cents'])->toBe(0)
             ->and($trial['debit_total_cents'])->toBe(5000000)
             ->and($trial['credit_total_cents'])->toBe(5000000);
 
-        // Accounts nobody has used are left off: a page of forty zeroes hides
-        // the three lines that matter.
         expect(collect($trial['rows'])->pluck('code')->all())->toBe(['1010', '4010', '5010']);
     });
 
@@ -526,8 +463,6 @@ describe('the general ledger', function (): void {
             ->assertOk()
             ->json('data.*.reference');
 
-        // Asked from the journal side — "everything that touched 1010" — which
-        // is a different question from the ledger's "show me 1010".
         expect($references)->toHaveCount(2);
     });
 
@@ -548,9 +483,6 @@ describe('who may open the books', function (): void {
     });
 
     it('separates reading the books from posting to them', function (): void {
-        // Treasury moves money and files spend, and reads the books to do it.
-        // What an entry says about it is the accountant's call — an install
-        // where both could post has nobody left to check the other.
         $treasurer = User::factory()->create(['role' => 'treasury']);
 
         $this->actingAs($treasurer)->getJson('/api/v1/accounting/journal')->assertOk();

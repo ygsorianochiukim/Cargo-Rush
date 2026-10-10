@@ -6,13 +6,6 @@ import { DriverService } from '../driver/driver.service';
 import { VehicleService } from '../vehicle/vehicle.service';
 import { FuelService } from './fuel.service';
 
-/**
- * Fuel Expense Monitoring — one fill-up.
- *
- * The amount is typed in pesos and sent as centavos: nobody is going to enter
- * 780000 for ₱7,800.00, and the API rejects a float outright rather than
- * rounding it somewhere out of sight.
- */
 export function fuelSpec(): RecordSpec<FuelRecord> {
   const fuel = inject(FuelService);
   const drivers = inject(DriverService);

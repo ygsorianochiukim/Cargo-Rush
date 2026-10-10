@@ -14,49 +14,13 @@ import { Field } from '../shared/field';
 import { Icon } from '../shared/icon';
 import { Modal } from '../shared/modal';
 
-/**
- * The account chip at the foot of the sidebar, and what it opens.
- *
- * It used to be a button whose only action was signing out — announced to a
- * screen reader as "Sign out Juan Dela Cruz" and to everybody else as a name, a
- * job title and a chevron pointing right. That is a profile menu by every
- * convention there is, so people clicked it expecting one; and because the
- * sign-out it actually ran was silently failing (see
- * `IdentityService::logout`), clicking it did nothing at all.
- *
- * So this is the menu the chevron was promising. Three things, which are the
- * three an account menu ever has:
- *
- *   **Who you are** — the name, the address the login is, and whose system this
- *   is. On a deployment serving many hauliers, the last one is the answer to
- *   "am I about to post this to the right company's books".
- *
- *   **Change password** — an endpoint that has existed since passwords could be
- *   reset and had no way in from the web at all. It asks for the current one,
- *   because a signed-in session on an unlocked laptop in a shared office is
- *   exactly how an account gets taken.
- *
- *   **Sign out** — labelled, in words, in the one place a person looks for it.
- *
- * The panel opens *upward*: the chip is pinned to the bottom of the sidebar, and
- * a menu dropping below it would open off the screen.
- */
 @Component({
   selector: 'app-account-menu',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Field, Icon, Modal, ReactiveFormsModule],
   template: `
-    <!-- The anchor, positioned so the panel can hang off it, and the whole
-         thing is the click target: a 28px avatar is a small thing to hit. -->
     <div class="relative">
       @if (open()) {
-        <!--
-          The panel, above the chip.
-
-          Closed by a click anywhere else, which is what the scrim is for — a
-          menu that stays open behind whatever you clicked next is a menu people
-          learn to close twice.
-        -->
         <div class="fixed inset-0 z-40" (click)="open.set(false)" aria-hidden="true"></div>
 
         <div
@@ -121,15 +85,6 @@ import { Modal } from '../shared/modal';
               <span class="block truncate text-[12px] font-semibold">{{ user.name }}</span>
               <span class="cr-meta block">{{ user.role_label }}</span>
             </span>
-            <!--
-              Pointing up, because that is where the menu opens — and down once
-              it is open, which is the direction closing it would go.
-
-              A rotated "chevron-right" rather than a new asset: the shared set
-              has no vertical chevron, and two more SVGs to keep in step with
-              the handset's copy of the same set is a poor trade for a 16px
-              arrow. The old chip pointed right, at nothing.
-            -->
             <app-icon
               name="chevron-right"
               [size]="16"
@@ -152,8 +107,6 @@ import { Modal } from '../shared/modal';
       }
     </div>
 
-    <!-- Changing a password is a dialog rather than a page: it is three fields
-         and a decision, and it belongs on top of wherever somebody was. -->
     <app-modal
       [open]="passwordOpen()"
       (openChange)="passwordOpen.set($event)"
@@ -227,7 +180,6 @@ export class AccountMenu {
   private readonly router = inject(Router);
   private readonly fb = inject(FormBuilder);
 
-  /** Icons-only rail: the chip is the avatar alone, and so is the anchor. */
   readonly collapsed = input(false);
 
   protected readonly me = this.identity.me;
@@ -251,10 +203,8 @@ export class AccountMenu {
     password_confirmation: ['', Validators.required],
   });
 
-  /** The field errors the API sent back, by field. */
   private readonly fieldErrors = signal<Record<string, string[]>>({});
 
-  /** Escape closes the menu, as it closes every other layer in this app. */
   @HostListener('document:keydown.escape')
   protected onEscape(): void {
     if (this.open()) this.open.set(false);
@@ -293,8 +243,6 @@ export class AccountMenu {
 
     const values = this.form.getRawValue();
 
-    // Checked here as well as by the API, so a typo in the confirmation is
-    // caught before a round trip that would answer the same thing.
     if (values.password !== values.password_confirmation) {
       this.passwordError.set('The two new passwords do not match.');
 
@@ -314,8 +262,6 @@ export class AccountMenu {
       },
       error: (failure: { error?: { message?: string; errors?: Record<string, string[]> } }) => {
         this.saving.set(false);
-        // Field by field where the API says which: "the current password is
-        // wrong" belongs against that box, not in a banner.
         this.fieldErrors.set(failure.error?.errors ?? {});
         this.passwordError.set(
           failure.error?.errors ? null : (failure.error?.message ?? 'That was not accepted.'),
@@ -324,14 +270,6 @@ export class AccountMenu {
     });
   }
 
-  /**
-   * Sign out.
-   *
-   * The redirect runs either way: a failed call still means the person asked to
-   * leave, and `IdentityService::logout` clears the local session on both
-   * paths — without which `guestGuard` turns them straight back round at
-   * `/login`, which is what made the old chip look broken.
-   */
   protected signOut(): void {
     if (this.signingOut()) return;
 

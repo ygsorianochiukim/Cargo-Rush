@@ -10,14 +10,6 @@ use App\Domain\Shared\Enums\Role;
 use Database\Seeders\ExpenseCategorySeeder;
 use Database\Seeders\NavigationSeeder;
 
-/**
- * Sales by day, week and month.
- *
- * One roll-up over three bucket sizes, read off the ledger so the figure agrees
- * with Profitability and the Quarterly Summary. The tests that matter are the
- * bucketing ones: a week that spans a month boundary, and a day of spend with
- * no takings on it — which is where a naive join drops the expense.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(ExpenseCategorySeeder::class);
@@ -74,8 +66,6 @@ describe('daily', function (): void {
 
         $response = ($this->sales)(['from' => '2026-08-01', 'to' => '2026-08-31'])->assertOk();
 
-        // Two buckets: the day that earned, and the day that only spent. The
-        // second one is the whole reason expenses are bucketed separately.
         expect($response->json('data.series'))->toHaveCount(2);
         expect($response->json('data.totals.expenses_cents'))->toBe(200_000);
         expect($response->json('data.totals.net_cents'))->toBe(300_000);
@@ -94,7 +84,6 @@ describe('daily', function (): void {
 
 describe('weekly', function (): void {
     it('collapses days in the same week into one bucket', function (): void {
-        // Monday, Wednesday, Saturday of the same week.
         ($this->day)('2026-08-17', 100_000);
         ($this->day)('2026-08-19', 200_000);
         ($this->day)('2026-08-22', 300_000);
@@ -111,7 +100,6 @@ describe('weekly', function (): void {
     });
 
     it('keeps a week whole across a month boundary', function (): void {
-        // 31 August 2026 is a Monday; 2 September is the Wednesday after it.
         ($this->day)('2026-08-31', 100_000);
         ($this->day)('2026-09-02', 200_000);
 
@@ -152,7 +140,6 @@ describe('the totals tile', function (): void {
 
         $response = ($this->sales)(['from' => '2026-08-01', 'to' => '2026-08-31'])->assertOk();
 
-        // 800,000 over two trading days, not over the 31 in the window.
         expect($response->json('data.totals.average_cents'))->toBe(400_000);
     });
 

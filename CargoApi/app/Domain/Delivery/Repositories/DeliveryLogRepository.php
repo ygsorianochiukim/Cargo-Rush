@@ -16,10 +16,6 @@ class DeliveryLogRepository extends Repository
         return DeliveryLog::class;
     }
 
-    /**
-     * A delivery row is read as "this trip, for this customer, by these
-     * people", so the trip and its three names come along every time.
-     */
     public function query(): Builder
     {
         return DeliveryLog::query()
@@ -51,7 +47,6 @@ class DeliveryLogRepository extends Repository
         return $this->all(['driver_id' => $driverId]);
     }
 
-    /** Deliveries closed out per day over a window, for the dashboard chart. */
     public function deliveredPerDay(int $days = 7): Collection
     {
         return DeliveryLog::query()

@@ -8,20 +8,16 @@ import { SupplierService } from '../../services/supplier/supplier.service';
 import { Card } from '../../shared/card';
 import { Icon } from '../../shared/icon';
 
-/** One row, whichever list it came from. */
 interface CategoryRow {
   id: string;
   name: string;
   active: boolean;
-  /** How many records are filed under it, when the API counted them. */
   used: number | null;
 }
 
-/** What each list needs to be edited from here. */
 interface CategoryList {
   key: 'supplier' | 'expense';
   label: string;
-  /** What a row of this list is filed against, for the count. */
   noun: string;
   placeholder: string;
   load: () => Observable<CategoryRow[]>;
@@ -30,19 +26,6 @@ interface CategoryList {
   remove: (id: string) => Observable<unknown>;
 }
 
-/**
- * The firm's own lists behind the dropdowns — supplier categories and expense
- * categories — in one place.
- *
- * A dropdown is only as clean as the list behind it. Both of these are words
- * the office chooses (GARAGE, MALL, FOODS; Food, Lodging, Repairs), so they
- * are edited here, on the administrator's screen, rather than typed free-hand
- * into each record.
- *
- * Deleting a category that has records under it switches it off instead: the
- * API decides, and this card says which happened. Off means it stops being
- * offered in the pickers while the records filed under it keep their label.
- */
 @Component({
   selector: 'app-categories-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -71,7 +54,6 @@ interface CategoryList {
           }
         </div>
 
-        <!-- Add -->
         <form class="mt-4 flex flex-wrap items-center gap-2" (submit)="add($event)">
           <label class="min-w-[220px] flex-1">
             <span class="sr-only">New category name</span>
@@ -101,7 +83,6 @@ interface CategoryList {
           </p>
         }
 
-        <!-- The list -->
         <ul class="mt-4 divide-y divide-cr-line rounded-control border border-cr-line">
           @for (row of rows(); track row.id) {
             <li class="flex flex-wrap items-center gap-3 px-4 py-2.5">
@@ -193,7 +174,6 @@ export class CategoriesCard {
   private readonly expenses = inject(ExpenseService);
   private readonly identity = inject(IdentityService);
 
-  /** Only the lists this person may change. */
   protected readonly lists: CategoryList[] = [
     ...(this.identity.has('suppliers.manage')
       ? [
@@ -314,8 +294,6 @@ export class CategoriesCard {
     list.remove(row.id).subscribe({
       next: () => {
         this.busy.set(false);
-        // The client drops the response body, so which happened is read off
-        // the list: a retired category is still in it, a deleted one is gone.
         this.reload((rows) =>
           this.say(
             rows.some((r) => r.id === row.id)
@@ -350,7 +328,6 @@ export class CategoriesCard {
 
     list.load().subscribe({
       next: (rows) => {
-        // Ignore a slow answer for the tab somebody has already left.
         if (list.key !== this.current().key) return;
 
         this.rows.set(rows);

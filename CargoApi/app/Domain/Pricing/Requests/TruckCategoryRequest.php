@@ -9,12 +9,6 @@ use App\Domain\Shared\Http\Requests\ApiFormRequest;
 use App\Domain\Tenancy\Support\Tenant;
 use Illuminate\Validation\Rule;
 
-/**
- * A kind of unit the firm runs — Dry Goods, Freezer, Flatbed.
- *
- * Per company, so two hauliers can both have a "Freezer" on entirely different
- * money and neither can see the other's.
- */
 class TruckCategoryRequest extends ApiFormRequest
 {
     public function rules(): array
@@ -43,9 +37,7 @@ class TruckCategoryRequest extends ApiFormRequest
         ];
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function toAttributes(): array
     {
         return $this->safe()->only(['name', 'description', 'position', 'status']);

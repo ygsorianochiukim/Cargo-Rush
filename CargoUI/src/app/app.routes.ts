@@ -3,17 +3,7 @@ import { Routes } from '@angular/router';
 import { Layout } from './layout/layout';
 import { authGuard, guestGuard } from './services/identity/auth.guard';
 
-/**
- * The web modules from DESIGN.md section 5.1, one lazy chunk each.
- *
- * Every page renders inside the layout (section 4); `data.title` feeds the
- * canvas header, which uppercases it. A route's path matches its module
- * folder under `pages/`, so the map in DESIGN.md and the directory listing
- * are the same list.
- */
 export const routes: Routes = [
-  // Outside the layout: there is no sidebar to render until somebody is
-  // signed in, because the nav and the user chip are both authenticated calls.
   {
     path: 'login',
     title: 'Sign in · Cargo Rush',
@@ -21,10 +11,6 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/auth/login.page').then((m) => m.LoginPage),
   },
 
-  // The way onto the platform. Behind `guestGuard` for the same reason sign-in
-  // is: somebody already signed in has a company, and offering them a form to
-  // create a second one from inside the first is a question with no good
-  // answer.
   {
     path: 'register',
     title: 'Register your company · Cargo Rush',
@@ -32,10 +18,6 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/auth/register.page').then((m) => m.RegisterPage),
   },
 
-  // Getting back in. Behind `guestGuard` like the other two: somebody already
-  // signed in has no use for a reset link, and changing a password from inside
-  // the app is a different screen with a different rule (it asks for the
-  // current one).
   {
     path: 'forgot-password',
     title: 'Forgotten password · Cargo Rush',
@@ -58,7 +40,6 @@ export const routes: Routes = [
     children: [
       { path: '', pathMatch: 'full', redirectTo: 'dashboard' },
 
-      // Operations
       {
         path: 'dashboard',
         title: 'Dashboard · Cargo Rush',
@@ -72,11 +53,6 @@ export const routes: Routes = [
         data: { title: 'GPS Dashboard' },
         loadComponent: () => import('./pages/gps/gps.page').then((m) => m.GpsPage),
       },
-      /**
-       * The paperwork a truck leaves with — the Official Trip Ticket and the
-       * dispatch checklist — as a page, for the print stylesheet to strip the
-       * shell off. Before `trips`, like `billing/:invoice` before `billing`.
-       */
       {
         path: 'trips/:trip/ticket',
         title: 'Trip ticket · Cargo Rush',
@@ -104,7 +80,6 @@ export const routes: Routes = [
           import('./pages/delivery-logs/delivery-logs.page').then((m) => m.DeliveryLogsPage),
       },
 
-      // Assets
       {
         path: 'vehicles',
         title: 'Vehicle Management · Cargo Rush',
@@ -117,18 +92,12 @@ export const routes: Routes = [
         data: { title: 'Drivers Management' },
         loadComponent: () => import('./pages/drivers/drivers.page').then((m) => m.DriversPage),
       },
-      // Beside the drivers rather than under Business, because it answers the
-      // same question they do: who can move this load. What differs is that a
-      // trucker is a contractor with their own truck and their own running
-      // account, not an employee — see the page.
       {
         path: 'truckers',
         title: 'Truckers · Cargo Rush',
         data: { title: 'Truckers' },
         loadComponent: () => import('./pages/truckers/truckers.page').then((m) => m.TruckersPage),
       },
-      // Everything the fleet owes, across four modules. Read-only: each line
-      // links to the screen that settles it — see the page.
       {
         path: 'payables',
         title: 'Payables · Cargo Rush',
@@ -142,7 +111,6 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/fuel/fuel.page').then((m) => m.FuelPage),
       },
 
-      // Finance — the "Master Dashboard" workbook
       {
         path: 'monitoring',
         title: 'Trip Monitoring · Cargo Rush',
@@ -169,36 +137,12 @@ export const routes: Routes = [
         data: { title: 'Other Expenses' },
         loadComponent: () => import('./pages/expenses/expenses.page').then((m) => m.ExpensesPage),
       },
-      /**
-       * The books, in the order they are worked in: entries are written in the
-       * journal, the ledger is read off them, and the chart is what both point
-       * at. Same order as the sidebar (`NavigationSeeder`), which is what the
-       * `accounting.view` permission gates — the routes are reachable by URL to
-       * anybody signed in, and the API refuses each one for an account that
-       * does not hold it.
-       */
-      /**
-       * One invoice as a document — the printable copy.
-       *
-       * A child of billing rather than a modal on it, because a document is a
-       * place: the URL is a link somebody can send to a colleague or keep in a
-       * tab, and printing needs a page of its own for the print stylesheet to
-       * strip the shell off. Declared before `billing` so the parameterised
-       * path is not shadowed by it.
-       */
       {
         path: 'billing/:invoice',
         title: 'Invoice · Cargo Rush',
         data: { title: 'Invoice' },
         loadComponent: () => import('./pages/invoice/invoice.page').then((m) => m.InvoicePage),
       },
-      /**
-       * The statements first, because they are what the books are *for*.
-       *
-       * The journal and the ledger below are how a figure here got to be what
-       * it is; this is the page somebody opens to find out whether the month
-       * paid. Same order as the sidebar (`NavigationSeeder`).
-       */
       {
         path: 'statements',
         title: 'Financial Statements · Cargo Rush',
@@ -231,7 +175,6 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/sales/sales.page').then((m) => m.SalesPage),
       },
 
-      // Business
       {
         path: 'customers',
         title: 'Customer Management · Cargo Rush',
@@ -245,14 +188,6 @@ export const routes: Routes = [
         data: { title: 'Billing & Invoice' },
         loadComponent: () => import('./pages/billing/billing.page').then((m) => m.BillingPage),
       },
-      /**
-       * Suppliers — who the fleet buys from.
-       *
-       * This was missing while the sidebar row for it was not, so clicking
-       * Suppliers fell through to the `**` wildcard and landed on the
-       * dashboard. A nav row is a promise that a route exists; the two are
-       * added together or neither is.
-       */
       {
         path: 'suppliers',
         title: 'Suppliers · Cargo Rush',
@@ -260,14 +195,6 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/suppliers/suppliers.page').then((m) => m.SuppliersPage),
       },
-      /**
-       * Truck Maintenance — the fleet's servicing, read as spend.
-       *
-       * Beside Other Expenses because it is filed by the same person at the
-       * same desk, and separate from it because a service belongs to one truck
-       * and lands on that unit's own sheet. The yard keeps its view of a single
-       * unit's servicing on the vehicle's screen; this is every unit at once.
-       */
       {
         path: 'maintenance',
         title: 'Truck Maintenance · Cargo Rush',
@@ -282,7 +209,6 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/pricing/pricing.page').then((m) => m.PricingPage),
       },
 
-      // HR
       {
         path: 'employees',
         title: 'Employees · Cargo Rush',
@@ -310,35 +236,12 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/performance/performance.page').then((m) => m.PerformancePage),
       },
-      /**
-       * Payroll sits with the people rather than with the money.
-       *
-       * It is read by whoever answers for the roster and run by whoever signs
-       * the cheque, which is why the API gates it on its own `payroll.*`
-       * permissions rather than on `hr.*` — a payslip is somebody's private
-       * business, and approving a run is the money side.
-       */
       {
         path: 'payroll',
         title: 'Payroll · Cargo Rush',
         data: { title: 'Payroll' },
         loadComponent: () => import('./pages/payroll/payroll.page').then((m) => m.PayrollPage),
       },
-      /*
-       * Salary Structure had a page here, and it is gone.
-       *
-       * It was a second pay system standing beside the first: a catalogue to
-       * learn, and an assignment to make, before an office could put ₱500 on
-       * one payslip. Most fleets pay a salary or a trip rate and a handful of
-       * one-off charges, and for those the page was a detour — it was never in
-       * the sidebar, so in practice nobody found it anyway.
-       *
-       * What replaced it is where the work actually happens. A recurring
-       * allowance is assigned on the employee (see `employee-pay-components`
-       * on the Employees screen), and a one-off deduction is added on the pay
-       * run itself, on the payslip it belongs to. The catalogue is still there
-       * and still reached by both.
-       */
       {
         path: 'access',
         title: 'Access Control · Cargo Rush',
@@ -346,7 +249,6 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/access/access.page').then((m) => m.AccessPage),
       },
 
-      // Support
       {
         path: 'incidents',
         title: 'Incident Management · Cargo Rush',

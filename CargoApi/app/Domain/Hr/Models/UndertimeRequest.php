@@ -14,7 +14,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
-/** Leaving before the shift is out — a slice of one day, not a day off. */
 class UndertimeRequest extends Model
 {
     use BelongsToCompany, HasUlids, SoftDeletes;
@@ -44,14 +43,6 @@ class UndertimeRequest extends Model
         return $this->belongsTo(User::class, 'decided_by');
     }
 
-    /**
-     * The hours between two times of day, to two decimals.
-     *
-     * Both times are on the same date by construction, so this cannot span
-     * midnight — which is exactly why the column is a `time` and not a
-     * timestamp. A request that appears to run backwards is a data-entry slip
-     * and is refused by the form rather than silently becoming a negative.
-     */
     public static function hoursBetween(string $from, string $to): float
     {
         $start = Carbon::createFromFormat('H:i', substr($from, 0, 5));

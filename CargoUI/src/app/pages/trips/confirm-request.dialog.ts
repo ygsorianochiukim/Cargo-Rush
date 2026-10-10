@@ -13,23 +13,6 @@ import { HelperPicker } from '../../shared/helper-picker';
 import { fmt } from '../../shared/format';
 import { Modal } from '../../shared/modal';
 
-/**
- * Confirming a delivery request — the tracking desk's one action on it.
- *
- * A customer's request arrives with the load and the two ends and nothing
- * else, so this form is exactly the four things only the office knows: who
- * drives it, who rides along, which unit, and when. The status is not on the
- * form, because `assigned` is what follows from naming those — a dropdown
- * beside them would let somebody write it without them, and produce a run a
- * driver is told to start and has no vehicle for.
- *
- * Not the create/edit dialog with fields hidden. That form asks for the route
- * and the cargo, which are the customer's to state and are already answered;
- * re-presenting them as editable invites the desk to quietly rewrite what was
- * asked for. The one thing it can correct is the weight, because the price is
- * re-quoted from it and an estimate off by a tonne would bill the wrong
- * amount.
- */
 @Component({
   selector: 'app-confirm-request',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -44,8 +27,6 @@ import { Modal } from '../../shared/modal';
       [locked]="saving()"
       (closed)="reset()">
       @if (trip(); as request) {
-        <!-- What was asked for. Read-only: this is the customer's statement of
-             the job, not a field for the desk to revise. -->
         <dl class="mb-4 grid grid-cols-2 gap-x-4 gap-y-2 rounded-card bg-cr-tint p-3">
           <div class="col-span-2">
             <dt class="cr-meta">Route</dt>
@@ -65,9 +46,6 @@ import { Modal } from '../../shared/modal';
             <dt class="cr-meta">Asked for</dt>
             <dd class="cr-num text-[13px]">{{ fmt.dateTime(request.scheduled_at) }}</dd>
           </div>
-          <!-- The distance, and how sure it is. It picked the zone the quote
-               came from, so an estimate is worth checking against the route
-               before the price is agreed. -->
           <div>
             <dt class="cr-meta">Distance</dt>
             <dd class="cr-num text-[13px]">
@@ -88,7 +66,6 @@ import { Modal } from '../../shared/modal';
             <dt class="cr-meta">Quoted</dt>
             <dd class="cr-num text-[13px] font-semibold">
               @if (request.price_cents === null) {
-                <!-- Confirming an unpriced run is refused; say why up front. -->
                 <span class="text-cr-warning">Needs a zone</span>
                 @if (request.pricing_note) {
                   <span class="block text-[12px] font-normal text-cr-ink-muted">{{ request.pricing_note }}</span>
@@ -177,10 +154,8 @@ export class ConfirmRequestDialog {
   private readonly fb = inject(FormBuilder);
 
   readonly open = model(false);
-  /** The request being confirmed. Null closes the form's meaning, not the modal. */
   readonly trip = input<Trip | null>(null);
 
-  /** Emitted with the assigned trip, so the page can merge it into its list. */
   readonly confirmed = output<Trip>();
 
   protected readonly saving = signal(false);
@@ -201,14 +176,12 @@ export class ConfirmRequestDialog {
     weight_kg: [0, [Validators.required, Validators.min(1)]],
   });
 
-  /** The helpers, as a list of ids beside the form — see `HelperPicker`. */
   protected readonly helpers = signal<string[]>([]);
 
   protected readonly driverId = toSignal(this.form.controls.driver_id.valueChanges, {
     initialValue: this.form.controls.driver_id.value,
   });
 
-  /** Rounded up, the way the rate card counts a run. */
   protected kilometres(metres: number): number {
     return Math.ceil(metres / 1000);
   }
@@ -236,9 +209,6 @@ export class ConfirmRequestDialog {
     this.vehiclesApi.list().subscribe((res) => this.vehicles.set(res.data));
     this.driversApi.list().subscribe((res) => this.drivers.set(res.data));
 
-    // Seeded from the request each time the dialog opens. The schedule starts
-    // at what the customer asked for, because agreeing to it is the common
-    // case and re-typing it would invite a different answer by accident.
     effect(() => {
       if (!this.open()) return;
 
@@ -289,8 +259,6 @@ export class ConfirmRequestDialog {
     this.tripApi
       .confirm(request.id, {
         driver_id: raw.driver_id,
-        // Always sent: a request confirmed without helpers has to end up with
-        // none, not with whatever was there before.
         helper_ids: this.helpers().filter((id) => id !== raw.driver_id),
         vehicle_id: raw.vehicle_id,
         scheduled_at: new Date(raw.scheduled_at).toISOString(),
@@ -304,8 +272,6 @@ export class ConfirmRequestDialog {
         },
         error: (failure: { error?: { message?: string } }) => {
           this.saving.set(false);
-          // The API's own wording — it knows why it refused, and this screen
-          // would only be guessing.
           this.error.set(failure.error?.message ?? 'That request could not be confirmed.');
         },
       });

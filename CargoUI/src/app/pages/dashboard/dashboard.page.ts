@@ -48,22 +48,6 @@ export class DashboardPage {
     initialValue: null,
   });
 
-  /**
-   * How much of what was billed in the window has actually come in.
-   *
-   * Drawn as a share bar rather than printed as a third figure: the question
-   * is "how are we doing at getting paid", and a proportion reads faster than
-   * two pesos amounts the reader has to divide.
-   *
-   * The API works it out (`collection.rate_pct`). It used to be divided here
-   * from the all-time outstanding and all-time collected totals, under a card
-   * that says "last 30 days" — so the bar described neither the window nor
-   * any one set of invoices. The server measures both halves on the same
-   * documents, over the window, net of withholding.
-   *
-   * Null is nothing billed — nothing to report, not a zero collection rate —
-   * so it renders as an empty bar and a dash.
-   */
   protected readonly collectedPct = computed<number | null>(() => {
     return this.receivables()?.collection?.rate_pct ?? null;
   });
@@ -72,12 +56,6 @@ export class DashboardPage {
     (this.fleet() ?? []).reduce((sum, s) => sum + s.count, 0),
   );
 
-  /**
-   * The delivery series as the chart wants it.
-   *
-   * The date rides in the tooltip because the axis only has room for "Mon" —
-   * and on the seventh of a month that is genuinely ambiguous.
-   */
   protected readonly deliveryBars = computed<Bar[]>(() => {
     const busiest = this.busiestDay();
 
@@ -101,16 +79,8 @@ export class DashboardPage {
     );
   });
 
-  /** The fleet segment under the pointer or holding focus. */
   protected readonly segment = signal<string | null>(null);
 
-  /**
-   * What a fleet segment says on hover.
-   *
-   * The count and share are already on the row; what is not visible is how
-   * many units the share is out of, which is the number that makes "13%"
-   * mean something.
-   */
   protected fleetRows(seg: { count: number }): TooltipRow[] {
     return [
       { label: 'Vehicles', value: String(seg.count) },
@@ -136,7 +106,6 @@ export class DashboardPage {
     return new Date(value).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  /** The window the income figure covers, once the API has said what it is. */
   protected readonly receivablesHint = computed(() => {
     const money = this.receivables();
 

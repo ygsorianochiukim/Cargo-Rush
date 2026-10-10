@@ -20,12 +20,6 @@ class NotificationService
         return $this->notifications->forUser($userId)->paginate($perPage);
     }
 
-    /**
-     * Put a row in the feed.
-     *
-     * `icon` is a name from the shared icon set — never a URL or an emoji
-     * (DESIGN.md section 7.3) — and a null `$userId` means the whole fleet.
-     */
     public function push(
         string $icon,
         string $title,
@@ -44,17 +38,7 @@ class NotificationService
     }
 
     /**
-     * Tell the people who can act on it.
-     *
-     * A fleet-wide row (a null `user_id`) is seen by everybody, which is wrong
-     * for anything only the office can do — a customer's delivery request
-     * would alert every driver on the roster about work none of them can
-     * confirm. This addresses the feed by role instead, which is the honest
-     * shape of "whoever is on the desk", since the desk is a set of accounts
-     * rather than one named person.
-     *
      * @param  Role[]  $roles
-     * @return int how many people were told
      */
     public function pushToRoles(
         array $roles,

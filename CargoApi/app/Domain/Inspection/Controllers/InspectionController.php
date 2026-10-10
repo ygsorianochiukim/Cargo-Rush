@@ -13,15 +13,10 @@ use App\Domain\Vehicle\Resources\MaintenanceJobResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * On-boarding trips inspection, and unit maintenance — the two mobile-only
- * capture modules (DESIGN.md section 5.4).
- */
 class InspectionController extends ApiController
 {
     public function __construct(private readonly InspectionService $inspections) {}
 
-    /** The checklist the driver app renders. */
     public function checklist(): JsonResponse
     {
         return $this->payload($this->inspections->checklist());
@@ -34,7 +29,6 @@ class InspectionController extends ApiController
         return $this->collection(InspectionResource::collection($page), $page);
     }
 
-    /** The API decides `good_to_go`, so the response is worth reading back. */
     public function store(InspectionRequest $request): JsonResponse
     {
         return $this->item(new InspectionResource($this->inspections->submit($request->toData())), status: 201);

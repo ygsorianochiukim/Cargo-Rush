@@ -10,7 +10,6 @@ import { recordList } from '../../shared/record-list';
 import { EmptyState, ErrorState, SkeletonRows } from '../../shared/states';
 import { StatusPill } from '../../shared/status-pill';
 
-/** Vehicle Management — DESIGN.md section 5.1. */
 @Component({
   selector: 'app-vehicles',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -25,15 +24,8 @@ export class VehiclesPage {
     this.vehiclesApi.list().pipe(map((res) => res.data)),
   );
 
-  /**
-   * A typical interval between services, used only to draw the progress bar.
-   *
-   * The due point itself is the vehicle's own `next_service_km`; this is just
-   * how far back the bar starts filling from.
-   */
   private readonly serviceIntervalKm = 20000;
 
-  /** How far through the current service interval a vehicle is. */
   protected servicePct(v: Vehicle): number {
     const remaining = v.next_service_km - v.odometer_km;
 
@@ -48,12 +40,6 @@ export class VehiclesPage {
   protected kg = fmt.kg;
   protected money = fmt.money;
 
-  /**
-   * Basis points as a percentage.
-   *
-   * 15, not 15.00 — a whole percentage is the ordinary case and the decimals
-   * are noise. A negotiated 7.5% still reads correctly.
-   */
   protected rate(bp: number): string {
     return `${(bp / 100).toFixed(bp % 100 === 0 ? 0 : 1)}%`;
   }

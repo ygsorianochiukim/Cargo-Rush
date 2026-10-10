@@ -15,19 +15,6 @@ import { fmt } from '../../shared/format';
 import { Field } from '../../shared/field';
 import { Modal } from '../../shared/modal';
 
-/**
- * Settling a payroll line from Payables — a confirmation, not a form.
- *
- * Two kinds of payroll debt reach Payables, and each is one fact to confirm:
- *
- *   **Take-home pay** on an approved run (`id` is the run) — the money has
- *   been released to the staff. This is the same "pay" the Payroll screen
- *   records, and it posts the run to the books.
- *
- *   **Contributions and tax** on a paid run (`id` is `<run>:statutory`) — SSS,
- *   PhilHealth, Pag-IBIG and the BIR have been paid. The date and the office's
- *   reference (a PRN, an eFPS confirmation) are recorded with it.
- */
 @Component({
   selector: 'app-payroll-settle-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -54,7 +41,6 @@ import { Modal } from '../../shared/modal';
           comes off Payables and is posted to the books on the date below.
         </p>
 
-        <!-- Our own number, assigned automatically; nothing to type. -->
         <div
           class="mt-4 flex items-center justify-between rounded-control border border-cr-line px-3 py-2"
         >
@@ -62,10 +48,6 @@ import { Modal } from '../../shared/modal';
           <span class="cr-num text-[14px] font-semibold">{{ number() ?? '…' }}</span>
         </div>
 
-        <!--
-          Stacked rather than side by side: at this dialog's width two
-          columns left each box too narrow for its label and its hint.
-        -->
         <div class="mt-4 space-y-3">
           <app-field label="DATE PAID" [required]="true">
             <input
@@ -127,7 +109,6 @@ export class PayrollSettleDialog {
 
   readonly line = input.required<PayableLine>();
 
-  /** Recorded — the page re-reads what is owed. */
   readonly settled = output<void>();
   readonly closed = output<void>();
 
@@ -138,18 +119,15 @@ export class PayrollSettleDialog {
   protected readonly busy = signal(false);
   protected readonly failure = signal<string | null>(null);
 
-  /** The contributions line carries the run id with a `:statutory` suffix. */
   protected readonly remittance = computed(() => this.line().id.endsWith(':statutory'));
   private readonly runId = computed(() => this.line().id.split(':')[0]);
 
-  /** The REM number this remittance will be given — shown, never typed. */
   protected readonly number = signal<string | null>(null);
 
   constructor() {
     this.preview(this.today);
   }
 
-  /** A remittance is numbered in the year it was sent, so a date can change it. */
   protected setDate(value: string): void {
     const year = this.on().slice(0, 4);
 
@@ -162,7 +140,6 @@ export class PayrollSettleDialog {
     this.number.set(null);
     this.payroll.nextRemittanceNo(on).subscribe({
       next: (no) => this.number.set(no),
-      // Only a preview: saving assigns the number regardless.
       error: () => this.number.set('Assigned on save'),
     });
   }

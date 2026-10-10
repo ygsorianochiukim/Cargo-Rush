@@ -13,21 +13,8 @@ import {
 } from './finance.math';
 import { fmt } from '../../shared/format';
 
-/**
- * The client's half of the workbook arithmetic — what the entry form shows
- * live while somebody types.
- *
- * The period roll-ups are the API's and are pinned there
- * (`CargoApi/tests/Feature/FinanceRollupTest.php`) against the figures the
- * workbook itself prints. What is tested here is that the two derivations this
- * client still performs agree with that same definition, so the preview a
- * person sanity-checks a row against cannot differ from what gets stored.
- */
-
-/** Compare in pesos — the unit the workbook shows — to two decimal places. */
 const pesos = (cents: number) => +(cents / 100).toFixed(2);
 
-/** The MAR1390 row for 28 March 2026, in centavos. */
 const row: LedgerEntryPayload = {
   truck_id: 'tr1',
   date: '2026-03-28',
@@ -58,7 +45,6 @@ describe('the two workbook formulas', () => {
   });
 
   it('keeps centavo precision on a figure with decimals', () => {
-    // The workbook's 31,540.68 has to land on exactly 3_154_068 centavos.
     expect(row.trip_income_cents).toBe(3_154_068);
     expect(pesos(row.trip_income_cents)).toBe(31540.68);
   });
@@ -100,19 +86,12 @@ describe('local aggregation', () => {
     net_income_cents: netIncome(e),
     currency: 'PHP',
     owner_share_cents: 0,
-    // Rows entered by hand carry neither a trip nor a single customer, which
-    // is the ordinary case for the transcribed workbook these figures come
-    // from.
     trip_id: null,
     trip_reference: null,
     customer_id: null,
     customer: null,
-    // And no crew either, for the same reason: the two salary columns are
-    // figures copied off the workbook, not a reference to an employee.
     driver_id: e.driver_id ?? null,
     driver_name: null,
-    // One unnamed line carrying the whole helper figure — how the workbook's
-    // single column reads once it is on the sheet.
     helpers: [{ driver_id: null, name: null, salary_cents: e.helper_salary_cents }],
   }));
 
@@ -149,8 +128,6 @@ describe('hasActivity', () => {
   });
 
   it('does not count a scheduled unit that moved no money', () => {
-    // Truck 6 carries nine dated rows with a route and nothing else. Counting
-    // those as activity would dilute the average and draw empty bars.
     expect(hasActivity(pnl(0, 0))).toBe(false);
   });
 
@@ -159,29 +136,15 @@ describe('hasActivity', () => {
   });
 });
 
-/**
- * The period pages are documents somebody adds up, and the formatter has to
- * let them.
- *
- * `fmt.money` rounds to whole pesos, which is right on a dashboard tile where
- * the figure is a size. On the Quarterly Summary it is a bug: a column of
- * rounded rows does not sum to a rounded total, and the reader is left hunting
- * for a peso that does not exist. These are the real Q1 2026 figures the
- * workbook prints, and they are the case that shows it.
- */
 describe('formatting figures that have to reconcile', () => {
-  /** Net income per unit, Q1 2026, in centavos. `FinanceRollupTest` pins these. */
   const netByTruck = [7_078_268, 4_899_604, -1_203_235, -719_092, 7_390_457];
   const total = netByTruck.reduce((sum, cents) => sum + cents, 0);
 
-  /** What is left of a formatted amount once the symbol and commas are gone. */
   const read = (formatted: string) => Number(formatted.replace(/[₱,]/g, ''));
 
   it('rounded to whole pesos, the column misses its own total', () => {
     const column = netByTruck.map((cents) => read(fmt.money(cents)));
 
-    // ₱174,461 printed down the page against ₱174,460 on the TOTAL row. This
-    // is the failure, asserted so nobody puts `money()` back on that table.
     expect(column.reduce((sum, pesos) => sum + pesos, 0)).toBe(174_461);
     expect(read(fmt.money(total))).toBe(174_460);
   });
@@ -190,8 +153,6 @@ describe('formatting figures that have to reconcile', () => {
     const column = netByTruck.map((cents) => read(fmt.pesos(cents)));
     const summed = column.reduce((sum, amount) => sum + amount, 0);
 
-    // Compared in centavos, because adding a column of floats is the other way
-    // to lose a peso: 0.1 + 0.2 is famously not 0.3.
     expect(Math.round(summed * 100)).toBe(total);
     expect(read(fmt.pesos(total))).toBe(174_460.02);
   });

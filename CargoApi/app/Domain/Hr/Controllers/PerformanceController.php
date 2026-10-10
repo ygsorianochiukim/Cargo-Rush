@@ -11,19 +11,10 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
-/**
- * Performance — trips completed, share on time, incidents, time away.
- *
- * Recomputed from the operational record on every call rather than stored.
- * A stored figure starts disagreeing with the trips underneath it the first
- * time a run is reassigned or a delivery is backdated, and then nobody can say
- * which number is right.
- */
 class PerformanceController extends ApiController
 {
     public function __construct(private readonly PerformanceService $performance) {}
 
-    /** The roster ranked by runs completed. */
     public function index(Request $request): JsonResponse
     {
         [$from, $to] = $this->range($request);
@@ -37,7 +28,6 @@ class PerformanceController extends ApiController
         ]);
     }
 
-    /** One person's figures for the same window. */
     public function show(Request $request, Employee $employee): JsonResponse
     {
         [$from, $to] = $this->range($request);
@@ -45,11 +35,7 @@ class PerformanceController extends ApiController
         return $this->payload($this->performance->forEmployee($employee, $from, $to));
     }
 
-    /**
-     * The window: the last 30 days unless the caller names one.
-     *
-     * @return array{0: Carbon, 1: Carbon}
-     */
+    /** @return array{0: Carbon, 1: Carbon} */
     private function range(Request $request): array
     {
         $to = $request->filled('to')

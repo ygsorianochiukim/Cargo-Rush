@@ -13,10 +13,6 @@ use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * Delivery Logs — the record, the proof, and the pending/active/complete
- * report DESIGN.md section 5.1 asks for.
- */
 class DeliveryController extends ApiController
 {
     public function __construct(private readonly DeliveryService $deliveries) {}
@@ -33,12 +29,6 @@ class DeliveryController extends ApiController
         return $this->item(new DeliveryLogResource($delivery));
     }
 
-    /**
-     * Proof of delivery, captured in the cab.
-     *
-     * Multipart, not JSON: the photograph is the substance of the write. The
-     * reference is not accepted — the model assigns it.
-     */
     public function proof(ProofOfDeliveryRequest $request, DeliveryLog $delivery): JsonResponse
     {
         $this->assertTheirs($request, $delivery);
@@ -53,19 +43,6 @@ class DeliveryController extends ApiController
         return $this->payload($this->deliveries->report());
     }
 
-    /**
-     * A driver or partner may only prove their own runs.
-     *
-     * `delivery.write` is held by everybody who signs a run off at the door,
-     * which is every driver — so without this, any of them could attach a
-     * photograph to somebody else's delivery, or close another crew's open run
-     * through it. The office is not restricted; completing a run on a driver's
-     * behalf is part of its job.
-     *
-     * A 404 rather than a 403, the way the partner endpoints answer: holding an
-     * id you were never given should read the same as holding one that does
-     * not exist.
-     */
     private function assertTheirs(Request $request, DeliveryLog $delivery): void
     {
         $user = $request->user();
@@ -75,8 +52,6 @@ class DeliveryController extends ApiController
             Role::Driver->value => $trip !== null && $trip->isCrewedBy($user->driver?->getKey()),
             Role::Trucker->value => $trip !== null && $trip->trucker_id !== null
                 && $trip->trucker_id === $user->trucker?->getKey(),
-            // Only the run their trucker handed them — never the owner's other
-            // runs, and never one of Cargo Rush's.
             Role::TruckerDriver->value => $trip !== null && $trip->trucker_driver_id !== null
                 && $trip->trucker_driver_id === $user->truckerDriver?->getKey(),
             default => true,

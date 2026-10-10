@@ -10,29 +10,6 @@ use App\Domain\Trip\Models\Trip;
 use App\Domain\Trip\Services\RoadDistance;
 use Illuminate\Console\Command;
 
-/**
- * Measure open trips on the road, and re-quote the ones the system priced.
- *
- * Every pinned trip booked before `RoadDistance` carries the straight line
- * between its pins, which is short by a band or more on most Mindanao routes —
- * CDO to Iligan sat in band B on 49 km when the truck drives about 90. Booking
- * forward is fixed; this is the same repair for what is already on the board.
- *
- * Conservative about what it touches, for the same reasons `cargo:trips-quote`
- * is:
- *
- *  - **Only unbilled trips.** A delivered run has put its figure on the sheet
- *    and raised an invoice; repricing it would disagree with the document the
- *    customer holds.
- *  - **Only distances the system worked out.** A distance the desk typed is
- *    theirs — they know the route better than any map.
- *  - **Only prices the system quoted.** A trip whose price still equals what
- *    the card said at its old distance was quoted, and is re-quoted. One that
- *    differs was negotiated, and keeps its price; only the distance moves.
- *
- * `--dry-run` lists what would change. Uses a routing call per distinct route,
- * so a large board is worth running with the dry run first to see the count.
- */
 class RemeasureTripsCommand extends Command
 {
     use RunsPerCompany;
@@ -67,9 +44,6 @@ class RemeasureTripsCommand extends Command
         $moved = 0;
 
         foreach ($trips as $trip) {
-            // Re-quoted only if the card priced it (or nothing has yet). A
-            // hand-typed figure is marked `manual`; an older row without the
-            // mark is judged the old way, by whether it still equals a quote.
             $wasQuoted = ! $trip->isManuallyPriced()
                 && ($trip->price_cents === null || $trip->price_cents === $pricing->quote($trip));
             $before = (int) round($trip->distance_total_m / 1000);
@@ -117,7 +91,6 @@ class RemeasureTripsCommand extends Command
             ."{$trips->count()} trip(s); {$moved} price(s) ".($dryRun ? 'would change.' : 'changed.'));
     }
 
-    /** "₱4,753.00", or "unpriced" for a run no zone line covers. */
     private function peso(?int $cents): string
     {
         return $cents === null ? 'unpriced' : '₱'.number_format($cents / 100, 2);

@@ -13,21 +13,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-/**
- * One person's pay on one run — the payslip, as a row.
- *
- * Every figure on it is **copied**, including the person's name and position.
- * That is not duplication for its own sake: a payslip is a statement about a
- * fortnight, and it has to keep saying what it said after the employee gets a
- * rise, changes department or leaves. A line that read those back through the
- * employee record would rewrite every payslip ever issued the moment HR edited
- * anything — the same class of bug as an invoice that re-quotes its own tax.
- *
- * `gross_cents`, `deductions_cents` and `net_cents` are stored too, which this
- * codebase otherwise refuses to do. Same argument, and it is the exception
- * worth making: those three are what somebody was handed on paper.
- * `PayrollService` is the only thing that writes them.
- */
 class PayRunLine extends Model
 {
     use BelongsToCompany, HasUlids;
@@ -49,15 +34,7 @@ class PayRunLine extends Model
     protected function casts(): array
     {
         return [
-            /**
-             * How this payslip was worked out — frozen, like the figures.
-             *
-             * A person moved from a day rate to a salary must not have last
-             * March's payslip start describing itself as a monthly one.
-             */
             'pay_basis' => PayBasis::class,
-            // A driver's or helper's payslip — a cost of services, posted apart
-            // from the office's. Frozen at build like the rest.
             'crew' => 'boolean',
             'days_worked' => 'integer',
             'sheet_days' => 'integer',
@@ -72,16 +49,12 @@ class PayRunLine extends Model
             'philhealth_cents' => 'integer',
             'pagibig_cents' => 'integer',
             'withholding_tax_cents' => 'integer',
-            // The firm's share, on top of the payslip rather than off it.
             'employer_sss_cents' => 'integer',
             'employer_ec_cents' => 'integer',
             'employer_philhealth_cents' => 'integer',
             'employer_pagibig_cents' => 'integer',
             'other_deductions_cents' => 'integer',
             'store_deduction_cents' => 'integer',
-            // Which contributions this payslip was subject to, as it was on
-            // the day. A person enrolled in SSS next month must not have this
-            // month's payslip start claiming they were.
             'sss_enrolled' => 'boolean',
             'philhealth_enrolled' => 'boolean',
             'pagibig_enrolled' => 'boolean',
@@ -96,46 +69,21 @@ class PayRunLine extends Model
         return $this->belongsTo(PayRun::class);
     }
 
-    /**
-     * The firm's own allowances and deductions, itemised.
-     *
-     * What the payslip actually *says* — `component_earnings_cents` and
-     * `component_deductions_cents` are only what it adds up. Frozen copies, so
-     * this relation is safe to read years later; see `PayRunLineComponent`.
-     */
     public function components(): HasMany
     {
         return $this->hasMany(PayRunLineComponent::class, 'pay_run_line_id');
     }
 
-    /**
-     * The hauls this payslip counted — the `trips` figure, itemised, and the
-     * record that stops a trip being paid on two of them. See `PayRunLineTrip`.
-     */
     public function tripLinks(): HasMany
     {
         return $this->hasMany(PayRunLineTrip::class, 'pay_run_line_id');
     }
 
-    /**
-     * The person this pays.
-     *
-     * Kept for the link — a payslip should open the employee, and next period's
-     * run reads their salary from here — but nothing on this row is read
-     * through it. See the note at the top.
-     */
     public function employee(): BelongsTo
     {
         return $this->belongsTo(Employee::class);
     }
 
-    /**
-     * Earnings, before anything comes off.
-     *
-     * Adjustments are inside the gross because that is where a bonus belongs:
-     * it is pay. A deduction dressed up as a negative adjustment lands here
-     * too, which is why the note beside it is worth filling in.
-     */
     public function computedGrossCents(): int
     {
         return $this->basic_cents
@@ -145,7 +93,6 @@ class PayRunLine extends Model
             + $this->component_earnings_cents;
     }
 
-    /** Everything coming off, whoever it goes to. */
     public function computedDeductionsCents(): int
     {
         return $this->sss_cents
@@ -157,21 +104,6 @@ class PayRunLine extends Model
             + $this->store_deduction_cents;
     }
 
-    /**
-     * Why is this payslip zero?
-     *
-     * Null when it is not, and a sentence when it is. Worth stating rather
-     * than leaving somebody to work out, because a ₱0.00 line on a run is
-     * almost always one of three things and they need different fixing:
-     *
-     *   nothing in the period names this person — no sheet rows, no trips,
-     *   the period found their work but their contract carries no rate,
-     *   they have no contract with a figure on it at all.
-     *
-     * Read entirely off the frozen columns, so an old payslip keeps explaining
-     * itself the way it did on the day — the same rule as every other figure
-     * on this row.
-     */
     public function zeroExplanation(): ?string
     {
         if ($this->gross_cents > 0) {
@@ -204,13 +136,6 @@ class PayRunLine extends Model
             .'zero. Write them a contract with a rate and work the run out again.';
     }
 
-    /**
-     * What the firm pays the agencies on top of this payslip.
-     *
-     * Deliberately outside the gross, the deductions and the net: none of it is
-     * the person's money or comes out of it. It is the rest of what employing
-     * them cost.
-     */
     public function employerContributionsCents(): int
     {
         return (int) $this->employer_sss_cents
@@ -219,19 +144,11 @@ class PayRunLine extends Model
             + (int) $this->employer_pagibig_cents;
     }
 
-    /** What the person is actually handed. */
     public function computedNetCents(): int
     {
         return $this->computedGrossCents() - $this->computedDeductionsCents();
     }
 
-    /**
-     * Do the stored totals still match their parts?
-     *
-     * They always should — `PayrollService` writes all three together — and a
-     * mismatch means something wrote to this table directly. Worth being able
-     * to ask, because the three stored figures are the ones on the paper.
-     */
     public function isConsistent(): bool
     {
         return $this->gross_cents === $this->computedGrossCents()
@@ -239,18 +156,6 @@ class PayRunLine extends Model
             && $this->net_cents === $this->computedNetCents();
     }
 
-    /**
-     * Do the two component totals match the rows they claim to add up?
-     *
-     * A separate question from `isConsistent()`, because it is a different kind
-     * of wrong: that one asks whether the payslip's totals match its own
-     * columns, and this asks whether the columns match the itemised lines the
-     * payslip prints beside them. A payslip listing a ₱1,000 rice allowance and
-     * adding ₱2,000 to the gross is arithmetically fine and still indefensible
-     * to the person holding it.
-     *
-     * Requires the relation to be loaded; an unloaded one loads it.
-     */
     public function componentTotalsAgree(): bool
     {
         $rows = $this->components;

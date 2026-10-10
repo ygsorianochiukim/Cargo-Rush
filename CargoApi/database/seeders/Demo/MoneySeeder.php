@@ -15,7 +15,6 @@ use Database\Seeders\Concerns\SeedsIntoACompany;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
 
-/** Fuel and billing. Every figure is integer centavos. */
 class MoneySeeder extends Seeder
 {
     use AdoptsTrashedRows, SeedsIntoACompany;
@@ -66,10 +65,6 @@ class MoneySeeder extends Seeder
     {
         $customers = Customer::query()->pluck('id', 'name');
 
-        // number, customer or null, payee or null, issued, due, cents, direction, status.
-        // `paid` is a settled document — it used to be written as `delivered`,
-        // which is the word for a closed-out haul and made collected money
-        // impossible to count separately from delivered trips.
         $rows = [
             ['INV-2026-0441', 'Batangas Hardware Co.', null, -13, 17, 12_500_000, 'receivable', 'pending'],
             ['INV-2026-0440', 'Highland Retail', null, -36, -6, 28_900_000, 'receivable', 'overdue'],
@@ -89,8 +84,6 @@ class MoneySeeder extends Seeder
                 'currency' => 'PHP',
                 'direction' => $direction,
                 'status' => $status,
-                // A settled document records when the money arrived; deriving
-                // it from `updated_at` would move on any later correction.
                 'paid_at' => $status === 'paid' ? Carbon::today()->addDays($due) : null,
             ]);
         }

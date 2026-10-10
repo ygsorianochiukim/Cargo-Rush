@@ -20,18 +20,6 @@ use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * Everything the fleet owes, in one list.
- *
- * The money going out had grown into four places that never met — a partner's
- * wallet, a hired truck's rent, a supplier's bill, and whatever else was filed
- * as spend. Each screen was right about its own corner and nobody could answer
- * "what do we owe this week" without opening all four and adding up.
- *
- * What these tests mostly hold is the **total**, because that is the figure the
- * page exists for and the one way of being wrong that matters: counting
- * something twice, or leaving something out.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -43,7 +31,6 @@ beforeEach(function (): void {
     $this->payables = fn () => $this->actingAs($this->admin)
         ->getJson('/api/v1/finance/payables');
 
-    /** A partner the fleet owes, by crediting their wallet directly. */
     $this->owed = function (string $name, int $cents): Trucker {
         $trucker = Trucker::factory()->approved()->create([
             'name' => $name,
@@ -68,7 +55,6 @@ describe('what it gathers', function (): void {
     it('adds up across all four places money goes out', function (): void {
         ($this->owed)('Boyet', 880_000);
 
-        // A rented truck, billed for the month.
         $rented = Vehicle::create([
             'plate' => 'RENT-1', 'model' => 'Hino', 'registration_no' => 'R1',
             'capacity_kg' => 15_000, 'status' => StatusValue::Available->value,
@@ -77,9 +63,6 @@ describe('what it gathers', function (): void {
         ]);
         app(TruckRentService::class)->chargeMonth(now());
 
-        // And an ordinary unpaid expense. The category is made here rather
-        // than seeded: these rows are the office's once they exist, so the
-        // suite does not lay down a catalogue it then has to keep in step.
         $repairs = ExpenseCategory::create([
             'key' => 'repairs',
             'name' => 'Repairs',
@@ -98,14 +81,10 @@ describe('what it gathers', function (): void {
 
         $body = ($this->payables)()->assertOk()->json('data');
 
-        // ₱8,800 + ₱50,000 + ₱2,500.
         expect($body['total_cents'])->toBe(880_000 + 5_000_000 + 250_000);
     });
 
     it('does not count a rented truck rent twice', function (): void {
-        // Rent is an expense, and it has a group of its own. Counted in both
-        // the total would be wrong in the one figure this page exists to get
-        // right.
         Vehicle::create([
             'plate' => 'RENT-2', 'model' => 'Hino', 'registration_no' => 'R2',
             'capacity_kg' => 15_000, 'status' => StatusValue::Available->value,
@@ -131,8 +110,6 @@ describe('what it gathers', function (): void {
             'occurred_on' => now()->toDateString(),
         ]);
 
-        // A negative balance is the other direction. Showing it here as a
-        // negative payable would quietly reduce what the week costs.
         $body = ($this->payables)()->assertOk()->json('data');
 
         expect($body['total_cents'])->toBe(0)
@@ -146,8 +123,6 @@ describe('what it gathers', function (): void {
             'kind' => WalletEntryKind::Payout->value,
         ])->assertCreated();
 
-        // A transfer in flight has paid nobody. The line stays, and says how
-        // much of it is already out of the door.
         $body = ($this->payables)()->assertOk()->json('data');
 
         expect($body['total_cents'])->toBe(880_000)
@@ -179,8 +154,6 @@ describe('what each line says', function (): void {
             'share_bp' => 1200, 'owner_trucker_id' => $operator->getKey(),
         ]);
 
-        // "Trucker" covers more than one arrangement, and somebody writing a
-        // cheque is choosing between them.
         expect(($this->group)(($this->payables)()->assertOk()->json('data'), 'truckers')['lines'][0]['detail'])
             ->toBe('Sub-contractor · SUB-1');
     });
@@ -197,20 +170,10 @@ describe('what each line says', function (): void {
 
         $line = ($this->group)(($this->payables)()->assertOk()->json('data'), 'truckers')['lines'][0];
 
-        // The page is a roll-up: it tells you where to go rather than
-        // growing three settle forms of its own.
         expect($line['settle_at'])->toBe('/truckers');
     });
 });
 
-/**
- * Hired trucks, on both sets of terms, in one group.
- *
- * A flat rent is owed by the month whether the truck worked or not; a revenue
- * share is owed only for runs it actually did. Both are "what the hired trucks
- * cost us", so both are listed under Rented trucks — and a share owner is not
- * also listed under Truckers, or the total would count them twice.
- */
 describe('rented trucks', function (): void {
     beforeEach(function (): void {
         $this->customer = Customer::query()->firstOrFail();
@@ -229,7 +192,6 @@ describe('rented trucks', function (): void {
             'owner_name' => 'Delfin Uy', 'owner_trucker_id' => $this->shareOwner->getKey(),
         ]);
 
-        /** Book a run on the truck and deliver it, the way the office does. */
         $this->haul = function (Vehicle $vehicle, int $priceCents): void {
             $trip = Trip::create([
                 'customer_id' => $this->customer->getKey(),
@@ -254,7 +216,6 @@ describe('rented trucks', function (): void {
     });
 
     it('owes a share truck nothing until it does a run', function (): void {
-        // No runs, no share. The owner carries the risk of a quiet month.
         $body = ($this->payables)()->assertOk()->json('data');
 
         expect($body['total_cents'])->toBe(0)
@@ -268,7 +229,6 @@ describe('rented trucks', function (): void {
         $body = ($this->payables)()->assertOk()->json('data');
         $rented = ($this->group)($body, 'rented_trucks');
 
-        // ₱10,000 and ₱6,000 billed, fleet keeps 15%: ₱8,500 + ₱5,100 owed.
         expect($rented['count'])->toBe(1)
             ->and($rented['total_cents'])->toBe(1_360_000)
             ->and($rented['lines'][0]['name'])->toBe('TEN-1')
@@ -276,7 +236,6 @@ describe('rented trucks', function (): void {
             ->and($rented['lines'][0]['settle_at'])->toBe('/truckers')
             ->and($rented['lines'][0]['id'])->toBe($this->shareOwner->getKey());
 
-        // And not a second time under Truckers.
         expect(($this->group)($body, 'truckers')['count'])->toBe(0)
             ->and($body['total_cents'])->toBe(1_360_000);
     });
@@ -294,7 +253,6 @@ describe('rented trucks', function (): void {
 
         $rented = ($this->group)(($this->payables)()->assertOk()->json('data'), 'rented_trucks');
 
-        // ₱50,000 for the month, whether it worked or not, plus ₱8,500 share.
         expect($rented['count'])->toBe(2)
             ->and($rented['total_cents'])->toBe(5_000_000 + 850_000)
             ->and(collect($rented['lines'])->pluck('settle_at')->all())->toBe(['/expenses', '/truckers']);
@@ -321,8 +279,6 @@ describe('who may read it', function (): void {
     });
 
     it('shows a figure without granting the right to pay it', function (): void {
-        // The point of putting this on `finance.view`: a manager can see what
-        // the week costs without being able to move any of it.
         $accountant = User::factory()->create(['role' => 'accountant']);
 
         $this->actingAs($accountant)->getJson('/api/v1/finance/payables')->assertOk();

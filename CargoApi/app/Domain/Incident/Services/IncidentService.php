@@ -12,13 +12,6 @@ use App\Domain\Shared\Enums\Tone;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Incident Management, and the Notification Management module it feeds.
- *
- * DESIGN.md section 5.1 calls Notifications "incident notification" — raising
- * one is what puts a row in the feed, so the two are wired together here
- * rather than left to whoever remembers.
- */
 class IncidentService
 {
     public function __construct(
@@ -26,20 +19,12 @@ class IncidentService
         private readonly NotificationService $notifications,
     ) {}
 
-    /**
-     * @param  array<string, mixed>  $filters
-     */
+    /** @param array<string, mixed> $filters */
     public function paginate(array $filters, int $perPage = 25): LengthAwarePaginator
     {
         return $this->incidents->paginate($filters, $perPage);
     }
 
-    /**
-     * What one driver has reported — the handset's own list.
-     *
-     * Scoped in the repository by a `where` that cannot be dropped, rather
-     * than by a filter, because "only yours" is the whole point of it.
-     */
     public function forDriver(string $driverId, int $perPage = 20): LengthAwarePaginator
     {
         return $this->incidents->paginateForDriver($driverId, $perPage);

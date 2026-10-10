@@ -8,28 +8,6 @@ use App\Domain\Tenancy\Services\CompanyProvisioner;
 use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 
-/**
- * The statement of account: how a balance got to be what it is.
- *
- * The billing page already lists invoices. A statement is the other thing an
- * accounts department asks for — a **running account**, with an opening
- * balance, every document and every payment in the order they happened, and a
- * closing balance that follows from them line by line.
- *
- * Three properties are worth defending here, and each of them is the difference
- * between a statement and a total:
- *
- *   **The opening balance.** A statement for March that opens at zero closes
- *   short by whatever February left owing. That single omission makes the
- *   document worth less than the invoices it was built from.
- *
- *   **The order.** A receipt printed above the invoice it settled reads as a
- *   credit out of nowhere, and a customer disputing a line cannot follow it.
- *
- *   **Symmetry.** One party's receivable is the other's payable, so the same
- *   report serves a supplier — with the words on the page turned round, because
- *   the closing figure is the same number with the opposite meaning.
- */
 beforeEach(function (): void {
     $this->seed(PermissionSeeder::class);
     $this->seed(NavigationSeeder::class);
@@ -48,7 +26,6 @@ beforeEach(function (): void {
         'tin' => '123-456-789-0000',
     ]);
 
-    /** A ₱10,000 haul, billed at ₱11,200 with VAT. */
     $this->raise = fn (array $overrides = []) => $this->actingAs($this->admin)
         ->postJson('/api/v1/billing', [
             'customer_id' => $this->customer->id,
@@ -87,8 +64,6 @@ describe('the running account', function (): void {
             ->and($statement['credits_cents'])->toBe(400_000)
             ->and($statement['closing_balance_cents'])->toBe(1_840_000);
 
-        // And the closing figure is the last running balance, not a total
-        // computed some other way — which is what makes the page checkable.
         $lines = $statement['lines'];
 
         expect(end($lines)['balance_cents'])->toBe($statement['closing_balance_cents'])
@@ -102,15 +77,12 @@ describe('the running account', function (): void {
         $invoice = ($this->raise)();
         ($this->settle)($invoice['id'], 1_120_000);
 
-        // Both dated today, so the tie-break is what decides the order — and a
-        // receipt above its own invoice would read as a credit out of nowhere.
         $kinds = collect(($this->statement)()['lines'])->pluck('kind')->all();
 
         expect($kinds)->toBe(['invoice', 'payment']);
     });
 
     it('opens a period with what the one before it left owing', function (): void {
-        // Last month: billed and part paid.
         $this->travelTo(now()->subMonth(), function (): void {
             $invoice = ($this->raise)();
             ($this->settle)($invoice['id'], 120_000);
@@ -120,12 +92,9 @@ describe('the running account', function (): void {
 
         $statement = ($this->statement)(['from' => now()->startOfMonth()->toDateString()]);
 
-        // ₱11,200 billed less ₱1,200 received, before the range opens.
         expect($statement['opening_balance_cents'])->toBe(1_000_000)
-            // Only this month's document is on the page.
             ->and($statement['lines'])->toHaveCount(1)
             ->and($statement['lines'][0]['reference'])->toBe($thisMonth['number'])
-            // And the closing balance is the opening plus what happened since.
             ->and($statement['closing_balance_cents'])->toBe(2_120_000);
     });
 
@@ -151,12 +120,10 @@ describe('the running account', function (): void {
 
 describe('the aging', function (): void {
     it('counts a document from its own due date, not from when it was raised', function (): void {
-        // Raised 100 days ago on 30-day terms: 70 days past due.
         ($this->raise)([
             'issued_at' => now()->subDays(100)->toDateString(),
             'due_at' => now()->subDays(70)->toDateString(),
         ]);
-        // Raised on the same day but not yet due.
         ($this->raise)([
             'issued_at' => now()->subDays(100)->toDateString(),
             'due_at' => now()->addDays(5)->toDateString(),
@@ -187,8 +154,6 @@ describe('the aging', function (): void {
         $aging = ($this->statement)()['aging'];
 
         expect($aging['total_cents'])->toBe(0)
-            // The document is still on the account, though — a statement that
-            // hid a paid invoice would not show the customer they paid it.
             ->and(($this->statement)()['lines'])->toHaveCount(2);
     });
 });
@@ -213,20 +178,14 @@ describe('the page itself', function (): void {
     });
 
     it('reads the other way round for a supplier', function (): void {
-        // A subcontracted carrier that is also a row in customers: billed as a
-        // payable, named as a payee, and still the same account.
         ($this->raise)(['direction' => 'payable', 'payee' => 'Metro Grocers Haulage']);
 
         $statement = ($this->statement)(['direction' => 'payable']);
 
         expect($statement['title'])->toBe('Supplier Statement')
             ->and($statement['balance_label'])->toBe('Amount we owe this account')
-            // The bill's own face value: a payable is not grossed up with our
-            // output VAT, it arrives with whatever the supplier charged.
             ->and($statement['closing_balance_cents'])->toBe(1_000_000);
 
-        // And the receivable statement for the same account is empty, because a
-        // payable is not money anybody owes us.
         expect(($this->statement)()['closing_balance_cents'])->toBe(0);
     });
 

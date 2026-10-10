@@ -78,15 +78,6 @@
       </div>
     </div>
 
-    <!--
-      Who the two salary figures above belong to.
-
-      The sheet has recorded what the crew was paid since the workbook was
-      first modelled and never who they were, which was survivable while the
-      figure only fed Profitability — and stops being so the moment somebody is
-      paid from it. A driver on per-trip pay is paid from exactly these rows,
-      and a day nobody named is counted toward nobody's payslip.
-    -->
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <app-field
         label="Driver"
@@ -102,14 +93,6 @@
 
     </div>
 
-    <!--
-      The day's helpers, one line each: who, and what they were paid.
-
-      A line per person because two helpers on one day are two people on two
-      rates. The helper salary is the sum and is shown, never typed — the same
-      rule as the totals below. Not wrapped in app-field: that is a label, and
-      a label holding a remove button hands a click on its text to it.
-    -->
     <div class="sm:col-span-2" formArrayName="helpers">
       <div class="flex items-baseline justify-between">
         <p class="cr-meta">Helpers</p>
@@ -196,7 +179,6 @@
     </app-field>
   </form>
 
-  <!-- Derived, never entered -->
   <div class="mt-5 grid grid-cols-2 gap-3 rounded-card bg-cr-tint/60 p-4">
     <div>
       <p class="cr-meta">Total expenses</p>

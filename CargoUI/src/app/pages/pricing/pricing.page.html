@@ -1,8 +1,3 @@
-<!--
-  The old distance card, shown only while an install still has lines on it.
-  It no longer prices anything — the bands below are the whole rate card, and
-  a run none of them covers is saved unpriced for the office.
--->
 <app-distance-card />
 
 <app-list-toolbar
@@ -13,9 +8,6 @@
   (add)="startNew()"
 />
 
-<!-- The pump price sits above the cards because it is what makes them stale.
-     The preview sits beside it because the only way to know a card is right is
-     to ask it what a real run costs. -->
 <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
   <app-card heading="Diesel today" icon="fuel">
     @if (diesel(); as d) {
@@ -137,8 +129,6 @@
     @if (quote(); as q) {
       <div class="mt-4 border-t border-cr-line pt-3">
         @if (q.needs_zone || q.cents === null) {
-          <!-- No zone line covers this run. There is no fallback price any
-               more, so say so plainly and say what would fix it. -->
           <p class="inline-flex items-center gap-1.5 rounded-full bg-cr-warning-bg px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] text-cr-warning uppercase">
             <span class="h-1.5 w-1.5 rounded-full bg-cr-warning"></span>
             Needs a zone
@@ -183,12 +173,6 @@
         </dl>
         }
 
-        <!--
-          The bands that also cover this distance. A table holds A1 beside A2
-          over the same kilometres at different money, and nothing about the
-          distance chooses between them — so the screen has to offer, or half
-          the card is unreachable from the only place it gets checked.
-        -->
         @if (q.zone_alternatives.length > 0) {
           <div class="mt-3 border-t border-cr-line pt-3">
             <p class="cr-meta">Also covers {{ fmt.km(q.km) }}</p>
@@ -221,7 +205,6 @@
 </div>
 
 <div class="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
-  <!-- The bands themselves -->
   <app-card heading="Bands" icon="map-pin" [padded]="false">
     @if (loadError(); as message) {
       <app-error-state [message]="message" (retry)="refresh()" />
@@ -263,7 +246,6 @@
     }
   </app-card>
 
-  <!-- The rates for whichever band is open -->
   @if (selected() || creating()) {
     <app-card
       [heading]="
@@ -301,11 +283,6 @@
         </p>
       }
 
-      <!--
-        A duplicate, said before the save rather than after it. The API refuses
-        one too — that is what actually guarantees it — but a refusal arriving
-        after somebody has typed a band's worth of rates costs them the typing.
-      -->
       @if (blocked()) {
         <p
           role="alert"
@@ -320,13 +297,6 @@
         </p>
       }
 
-      <!--
-        Overlapping bands are a warning and never a refusal: A1 and A2 are both
-        1–40 km at different money, and so are E1 and E2. But a second band over
-        the same kilometres is far more often a row typed twice, and it is
-        invisible once saved — the list is ordered by band, so two entries for
-        0–40 km look like they belong together.
-      -->
       @if (!blocked() && overlapping().length > 0) {
         <p class="mb-4 rounded-control bg-cr-warning-bg px-3 py-2 text-[13px] text-cr-ink">
           <span class="font-semibold">Already covered.</span>
@@ -392,7 +362,6 @@
         </app-field>
       </form>
 
-      <!-- The card itself -->
       <div class="mt-6">
         <div class="mb-2 flex items-center justify-between">
           <h3 class="text-[14px] font-semibold">Rates in this band</h3>
@@ -431,16 +400,6 @@
                       <input type="text" formControlName="label" [class]="inputClass" />
                     </td>
                     <td class="px-2 py-2">
-                      <!-- Blank is the fleet as it stands: the table's own
-                           `Current Price` column, and what a booking that asks
-                           for nothing in particular is charged. -->
-                      <!--
-                        A class already priced on another row is offered
-                        disabled rather than hidden, so a row that holds one
-                        still shows what it holds. The API refuses a band that
-                        prices the same class twice; this is what stops
-                        somebody reaching that refusal.
-                      -->
                       <select formControlName="truck_category_id" [class]="inputClass">
                         <option value="" [disabled]="classTakenElsewhere($index, '')">
                           Current fleet
@@ -465,8 +424,6 @@
                       />
                     </td>
                     <td class="px-2 py-2">
-                      <!-- The rightmost column of a printed subsidy table.
-                           Zero leaves this rate on the percentage model. -->
                       <input
                         type="number"
                         step="0.01"

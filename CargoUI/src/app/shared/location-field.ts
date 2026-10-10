@@ -14,25 +14,9 @@ import { Icon } from './icon';
 import { MapPicker } from './map-picker';
 import { Modal } from './modal';
 
-/**
- * A place on a form: type the name, or pin it on a map.
- *
- * Typing is kept as the primary path deliberately. Most trips are booked over
- * the phone against a town somebody already knows, and making them open a map
- * to write "Ozamis" would be slower than the spreadsheet this replaces. The
- * map is there for the cases typing cannot answer — a depot gate with no
- * address, or two towns of the same name.
- *
- * Pinning fills the name in as well, so the two never drift apart. Editing the
- * name afterwards keeps the pin: renaming "Poblacion" to "Ozamis depot" is
- * labelling the same point, not moving it.
- */
 @Component({
   selector: 'app-location-field',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  // `MapPicker` is used only inside the `@defer` block below, which is what
-  // lets Angular turn this static import into a dynamic one and keep Leaflet
-  // out of the initial bundle.
   imports: [Field, Icon, MapPicker, Modal],
   template: `
     <app-field [label]="label()" [required]="required()" [error]="error()" [hint]="hint()">
@@ -72,11 +56,6 @@ import { Modal } from './modal';
       subtitle="Search for the place, or click the map to drop a pin."
       icon="map-pin"
       size="lg">
-      <!-- Deferred, not just hidden. Leaflet is 64kB and most trips are
-           booked without opening a map, so it has no business in the chunk
-           every page load pays for. Building only while open also matters
-           in its own right: Leaflet measures its container on creation,
-           and a hidden one measures zero. -->
       @defer (when open()) {
         <app-map-picker [value]="asPoint()" (changed)="onPinned($event)" />
       } @placeholder {
@@ -99,7 +78,6 @@ import { Modal } from './modal';
 export class LocationField {
   readonly label = input.required<string>();
   readonly value = input.required<TripLocation>();
-  /** Transformed so a bare `required` attribute works, as on `app-field`. */
   readonly required = input(false, { transform: booleanAttribute });
   readonly error = input<string | null>(null);
   readonly hint = input('');
@@ -114,7 +92,6 @@ export class LocationField {
     () => this.value().lat !== null && this.value().lng !== null,
   );
 
-  /** The map wants a whole point or nothing; a name with no pin is nothing. */
   protected readonly asPoint = computed<GeoPoint | null>(() => {
     const location = this.value();
 
@@ -124,8 +101,6 @@ export class LocationField {
   });
 
   protected onName(place: string): void {
-    // Coordinates are kept: renaming a pinned place is labelling the point,
-    // not moving it.
     this.changed.emit({ ...this.value(), place });
   }
 
@@ -136,8 +111,6 @@ export class LocationField {
       return;
     }
 
-    // The looked-up name fills an empty field, but never overwrites one
-    // somebody has already written — "Ozamis depot" beats "Poblacion".
     const place = this.value().place.trim() || point.place;
 
     this.changed.emit({ place, lat: point.lat, lng: point.lng });

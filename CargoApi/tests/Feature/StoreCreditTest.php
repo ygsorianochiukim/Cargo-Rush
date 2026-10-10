@@ -12,31 +12,6 @@ use Database\Seeders\PermissionSeeder;
 use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * The mini-mart tab — *pautang* — and the statutory switches beside it.
- *
- * Two features that arrive together because they are the same complaint: the
- * office could not say "not this person" or "not this much" about what comes
- * off a payslip, and had to retype a correction every cutoff instead.
- *
- * What these are defending:
- *
- *   **A tab is a balance, not an instalment plan.** It changes every time
- *   somebody buys a sack of rice, and the cutoff takes what is there. A pay
- *   component cannot express that, which is why this is not one.
- *
- *   **A draft can be rebuilt.** The repayment is written on *approve*, never on
- *   build — otherwise pressing "work out again" twice would settle the tab
- *   twice and hand the person the difference. This is the test that matters
- *   most, because the bug it prevents is money.
- *
- *   **The payslip is floored at zero.** A recovery that takes more than the
- *   payslip holds has stopped being a recovery.
- *
- *   **A contribution somebody is not enrolled for is not taken** — and the
- *   payslip says which, because "SSS ₱0.00" has two explanations and only one
- *   of them is for the office to fix.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -56,10 +31,12 @@ beforeEach(function (): void {
             'contact' => '0917 555 0199',
             'hired_on' => '2026-01-05',
             'amount_cents' => 3_000_000,
+            'sss_enrolled' => true,
+            'philhealth_enrolled' => true,
+            'pagibig_enrolled' => true,
             ...$overrides,
         ])->assertCreated()->json('data');
 
-    /** Put a line on somebody's tab. */
     $this->charge = fn (string $employeeId, array $overrides = []) => $this->actingAs($this->admin)
         ->postJson("/api/v1/employees/{$employeeId}/store-credits", [
             'kind' => 'charge',
@@ -113,9 +90,6 @@ describe('keeping the tab', function (): void {
         ($this->charge)($employee['id'], ['kind' => 'payment', 'amount_cents' => 25_000])
             ->assertCreated();
 
-        // An overpaid tab is a credit the *store* owes, and handing it back
-        // through a negative payroll deduction would be an addition to a
-        // payslip dressed as a recovery.
         expect(($this->tab)($employee['id'])->json('meta.balance_cents'))->toBe(0);
     });
 
@@ -147,25 +121,22 @@ describe('what a payslip takes off the tab', function (): void {
         $line = ($this->open)()->assertCreated()->json('data.lines.0');
 
         expect($line['store_deduction_cents'])->toBe(120_000);
-        // And it is in the deductions, so the net is short by exactly that.
         expect($line['deductions_cents'] - 120_000)
             ->toBe($line['sss_cents'] + $line['philhealth_cents'] + $line['pagibig_cents']
                 + $line['withholding_tax_cents']);
     });
 
-    it('takes only the cap where the person has one', function (): void {
+    it('has no per-person cap: a stray one in the payload is ignored', function (): void {
         $employee = ($this->hire)(['store_deduction_cap_cents' => 50_000]);
         ($this->charge)($employee['id'], ['amount_cents' => 120_000])->assertCreated();
 
-        expect(($this->open)()->json('data.lines.0.store_deduction_cents'))->toBe(50_000);
+        expect(($this->open)()->json('data.lines.0.store_deduction_cents'))->toBe(120_000);
+        expect(($this->tab)($employee['id'])->json('meta'))->not->toHaveKey('cap_cents');
     });
 
     it('ignores a charge dated after the period it is paying', function (): void {
         $employee = ($this->hire)();
 
-        // The run covers 1–15 Sep. A charge on the 18th belongs to the next
-        // payslip, and a rebuild on the 20th must not reach back for it — that
-        // would move a figure the office had already checked.
         ($this->charge)($employee['id'], ['charged_on' => '2026-09-18', 'amount_cents' => 90_000])
             ->assertCreated();
 
@@ -173,7 +144,6 @@ describe('what a payslip takes off the tab', function (): void {
     });
 
     it('never takes more than the payslip can bear', function (): void {
-        // A day-rate hand with a small payslip and a large tab.
         $employee = ($this->hire)([
             'first_name' => 'Nita',
             'pay_basis' => 'monthly',
@@ -185,8 +155,6 @@ describe('what a payslip takes off the tab', function (): void {
         $line = ($this->open)()->assertCreated()->json('data.lines');
         $hers = collect($line)->firstWhere('employee_id', $employee['id']);
 
-        // Floored at what is left, so nobody is handed a negative payslip —
-        // the rest stays on the tab for the next one.
         expect($hers['net_cents'])->toBe(0);
         expect($hers['store_deduction_cents'])->toBeLessThan(5_000_000);
     });
@@ -199,8 +167,6 @@ describe('settling the tab', function (): void {
 
         ($this->open)()->assertCreated();
 
-        // Still owed: a draft is a proposal, and a tab settled by a proposal
-        // would be settled again by the next one.
         expect(($this->tab)($employee['id'])->json('meta.balance_cents'))->toBe(120_000);
     });
 
@@ -210,9 +176,6 @@ describe('settling the tab', function (): void {
 
         $run = ($this->open)()->assertCreated()->json('data');
 
-        // The bug this prevents is money: a repayment written at build time
-        // would be off the balance the rebuild reads, so the second pass would
-        // deduct nothing and the person would keep the difference.
         $again = $this->actingAs($this->admin)
             ->postJson("/api/v1/payroll/{$run['id']}/rebuild")
             ->assertOk()->json('data');
@@ -233,7 +196,6 @@ describe('settling the tab', function (): void {
         $tab = ($this->tab)($employee['id'])->assertOk();
 
         expect($tab->json('meta.balance_cents'))->toBe(0);
-        // And the repayment says which payslip took it.
         $payment = collect($tab->json('data'))->firstWhere('kind', 'payment');
         expect($payment['from_payroll'])->toBeTrue();
         expect($payment['amount_cents'])->toBe(120_000);
@@ -248,29 +210,64 @@ describe('settling the tab', function (): void {
 
         $payment = StoreCredit::query()->whereNotNull('pay_run_line_id')->firstOrFail();
 
-        // It is on a payslip somebody has been handed. Removing it here would
-        // leave the tab and the payslip disagreeing with nothing to say which
-        // is right; the way to undo one is a correcting charge.
         $this->actingAs($this->admin)
             ->deleteJson("/api/v1/store-credits/{$payment->id}")
             ->assertStatus(422);
     });
 
-    it('leaves the rest on the tab when a cap only took part of it', function (): void {
-        $employee = ($this->hire)(['store_deduction_cap_cents' => 50_000]);
+    it('squares the tab once the payslip that took it is approved', function (): void {
+        $employee = ($this->hire)();
         ($this->charge)($employee['id'], ['amount_cents' => 120_000])->assertCreated();
 
         $run = ($this->open)()->assertCreated()->json('data');
         $this->actingAs($this->admin)->postJson("/api/v1/payroll/{$run['id']}/approve")->assertOk();
 
-        // A tab settles itself over as many payslips as it takes, with no
-        // schedule for anybody to maintain.
-        expect(($this->tab)($employee['id'])->json('meta.balance_cents'))->toBe(70_000);
+        expect(($this->tab)($employee['id'])->json('meta.balance_cents'))->toBe(0);
     });
 });
 
 describe('leaving somebody out of a contribution', function (): void {
-    it('deducts all three by default, as it always did', function (): void {
+    it('deducts none of the three from a new hire until they are ticked', function (): void {
+        $employee = $this->actingAs($this->admin)->postJson('/api/v1/employees', [
+            'first_name' => 'Elena',
+            'last_name' => 'Bautista',
+            'position' => 'Office Staff',
+            'contact' => '0917 555 0199',
+            'hired_on' => '2026-01-05',
+            'amount_cents' => 3_000_000,
+        ])->assertCreated()->json('data');
+
+        expect($employee['sss_enrolled'])->toBeFalse()
+            ->and($employee['philhealth_enrolled'])->toBeFalse()
+            ->and($employee['pagibig_enrolled'])->toBeFalse();
+
+        $line = ($this->open)()->assertCreated()->json('data.lines.0');
+
+        expect($line['sss_cents'])->toBe(0);
+        expect($line['philhealth_cents'])->toBe(0);
+        expect($line['pagibig_cents'])->toBe(0);
+    });
+
+    it('picks up a contribution ticked after the run was opened, on working it out again', function (): void {
+        $employee = ($this->hire)(['sss_enrolled' => false]);
+
+        $run = ($this->open)()->assertCreated()->json('data');
+        expect($run['lines'][0]['sss_cents'])->toBe(0);
+
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/employees/{$employee['id']}", ['sss_enrolled' => true])
+            ->assertOk();
+
+        $line = $this->actingAs($this->admin)
+            ->postJson("/api/v1/payroll/{$run['id']}/rebuild")
+            ->assertOk()
+            ->json('data.lines.0');
+
+        expect($line['sss_enrolled'])->toBeTrue()
+            ->and($line['sss_cents'])->toBeGreaterThan(0);
+    });
+
+    it('deducts all three once they are ticked', function (): void {
         ($this->hire)();
 
         $line = ($this->open)()->assertCreated()->json('data.lines.0');
@@ -287,7 +284,6 @@ describe('leaving somebody out of a contribution', function (): void {
         $line = ($this->open)()->assertCreated()->json('data.lines.0');
 
         expect($line['sss_cents'])->toBe(0);
-        // The others are untouched — this is per agency, not a blanket switch.
         expect($line['philhealth_cents'])->toBeGreaterThan(0);
         expect($line['pagibig_cents'])->toBeGreaterThan(0);
     });
@@ -298,8 +294,6 @@ describe('leaving somebody out of a contribution', function (): void {
         $line = ($this->open)()->assertCreated()->json('data.lines.0');
         expect($line['pagibig_enrolled'])->toBeFalse();
 
-        // Enrol them afterwards. Last fortnight's payslip must not start
-        // claiming they were enrolled then.
         $this->actingAs($this->admin)
             ->patchJson("/api/v1/employees/{$employee['id']}", ['pagibig_enrolled' => true])
             ->assertOk();
@@ -309,8 +303,6 @@ describe('leaving somebody out of a contribution', function (): void {
     });
 
     it('has no switch for withholding tax', function (): void {
-        // Whether somebody is taxed is not the firm's to choose. The module
-        // answers it from the BIR's exemption threshold instead.
         $employee = ($this->hire)();
 
         $this->actingAs($this->admin)
@@ -330,26 +322,11 @@ describe('putting a run with recoveries into the books', function (): void {
         $run = ($this->open)()->assertCreated()->json('data');
         $this->actingAs($this->admin)->postJson("/api/v1/payroll/{$run['id']}/approve")->assertOk();
 
-        /**
-         * The journal debits the whole gross and credits the agencies, what the
-         * firm recovered, and the net. It only balances if every deduction that
-         * is not a contribution or the tax reaches the recovery bucket.
-         *
-         * `PayRun::statutoryCents()['other']` used to be `other_deductions_cents`
-         * alone, so a run carrying a **pay component deduction** came out short
-         * by that amount and `JournalService` refused to post it — with a
-         * balance error naming no cause. Nothing tested paying a run that had
-         * one. This covers the store deduction and the test below covers the
-         * component that exposed it.
-         */
         $paid = $this->actingAs($this->admin)
             ->postJson("/api/v1/payroll/{$run['id']}/pay")
             ->assertOk();
 
         expect($paid->json('data.status'))->toBe('paid');
-        // Posted, which is the half that was at risk: an unbalanced entry is
-        // refused outright, so a journal reference here is the proof that the
-        // recovery reached the credit side.
         expect($paid->json('data.journal_entry_id'))->not->toBeNull();
         expect($paid->json('data.journal_reference'))->not->toBeNull();
     });

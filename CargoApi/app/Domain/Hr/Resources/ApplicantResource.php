@@ -9,9 +9,7 @@ use App\Domain\Hr\Services\PhotoStore;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use Illuminate\Http\Request;
 
-/**
- * @mixin Applicant
- */
+/** @mixin Applicant */
 class ApplicantResource extends ApiResource
 {
     public function toArray(Request $request): array
@@ -31,8 +29,6 @@ class ApplicantResource extends ApiResource
             'applied_on' => $this->applied_on?->toDateString(),
             'stage' => $this->stage->value,
             'stage_label' => $this->stage->label(),
-            // The tone, not a colour. A hex value never crosses the wire
-            // (DESIGN.md section 7.1).
             'tone' => $this->stage->tone()->value,
             'open' => $this->stage->isOpen(),
             'photo_url' => $files->url($this->photo_path),

@@ -19,8 +19,6 @@ class FuelRecordRequest extends ApiFormRequest
             'vehicle_id' => [$required, 'string', 'exists:vehicles,id'],
             'driver_id' => ['nullable', 'string', 'exists:drivers,id'],
             'litres' => [$required, 'numeric', 'min:0.01', 'max:2000'],
-            // Integer centavos. A float peso amount is rejected here, not
-            // silently rounded somewhere downstream.
             'amount_cents' => [$required, 'integer', 'min:0'],
             'currency' => ['sometimes', 'string', 'size:3'],
             'odometer_km' => [$required, 'integer', 'min:0'],

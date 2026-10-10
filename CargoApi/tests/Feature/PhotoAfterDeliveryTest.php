@@ -19,16 +19,7 @@ use Database\Seeders\RoleSeeder;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
-/**
- * The photograph that could not go up at the gate.
- *
- * A run is closed with a typed name and, where the signal allows, a picture.
- * Where it does not, the run still closes — and the picture has to be sendable
- * afterwards, from the phone, by whoever handed the load over and nobody else.
- */
 beforeEach(function (): void {
-    // Pricing is zone-only, and an unpriced run cannot go out or be billed.
-    // One card at the old tariff's figures, so every run here is priced.
     zoneCard();
 
     Storage::fake('public');
@@ -45,7 +36,6 @@ beforeEach(function (): void {
 
     $this->photo = fn () => UploadedFile::fake()->create('pod.jpg', 400, 'image/jpeg');
 
-    /** One of Marco's runs, delivered with no photograph. */
     $this->deliveredBare = function (): DeliveryLog {
         $id = $this->actingAs($this->admin)->postJson('/api/v1/trips', [
             'origin' => 'Manila',
@@ -188,7 +178,6 @@ describe('a partner trucker', function (): void {
             ], ['Accept' => 'application/json'])
             ->assertNotFound();
 
-        // Nor through the delivery-log route, which is the other door in.
         $this->actingAs($this->other)
             ->post("/api/v1/delivery-logs/{$this->trip->deliveryLog->id}/proof", [
                 'receiver_name' => 'Nobody',

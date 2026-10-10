@@ -14,18 +14,8 @@ final class SupplierData extends Data
         public readonly ?string $category_id = null,
         public readonly ?string $contact = null,
         public readonly ?string $address = null,
-        /**
-         * What they sell, in the office's own words.
-         *
-         * Deliberately a sentence rather than a category. A garage that also
-         * sells tyres and lends a flatbed is three categories, and making
-         * somebody pick one would file the record wrong in a way nobody could
-         * correct later. What is actually needed is enough to recognise who to
-         * ring, and that is a sentence.
-         */
         public readonly ?string $supplies = null,
         public readonly ?string $note = null,
-        /** `inactive` is somebody the office has stopped buying from. */
         public readonly ?StatusValue $status = null,
     ) {}
 

@@ -6,7 +6,6 @@
   (add)="list.create()" />
 
 <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
-  <!-- Daily budget meter -->
   <app-card heading="Daily fuel budget" icon="fuel">
     @if (budget(); as b) {
       <p class="cr-num text-[28px] leading-none font-semibold">
@@ -42,7 +41,6 @@
     }
   </app-card>
 
-  <!-- Projection -->
   <app-card heading="Consumption projection" icon="clock" hint="This month">
     @if (budget(); as b) {
       <p class="cr-num text-[28px] leading-none font-semibold">
@@ -58,7 +56,6 @@
     }
   </app-card>
 
-  <!-- Open requests -->
   <app-card heading="Budget requests" icon="plus">
     @if (budget(); as b) {
       <p class="cr-num text-[28px] leading-none font-semibold">{{ b.open_requests }}</p>

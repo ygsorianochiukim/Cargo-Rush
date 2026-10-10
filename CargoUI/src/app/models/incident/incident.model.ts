@@ -1,7 +1,6 @@
 import { StatusValue } from '../shared/status.model';
 import { Timestamped } from '../shared/envelope.model';
 
-/** Incident Management — records with a time and a place. */
 export interface Incident extends Timestamped {
   id: string;
   reference: string;

@@ -1,30 +1,9 @@
-<!--
-  The firm's deduction catalogue, offered to every "add a deduction" box on the
-  page.
-
-  A datalist rather than a select, because both answers are real: picking
-  "Uniform" from the list points the charge at the catalogue component, so it
-  spells itself the same way on every payslip, and typing something the list has
-  never heard of is the one-off this feature mostly exists for. A select would
-  have made the second impossible.
-
-  Rendered once for the page rather than per payslip — it is the same twenty
-  words under every row.
--->
 <datalist id="cr-deductions">
   @for (component of catalogue(); track component.id) {
     <option [value]="component.name"></option>
   }
 </datalist>
 
-<!--
-  Payroll: a plain-language view for checking the figures, and a register for
-  the file.
-
-  On paper this is whichever of the two is on screen, or one payslip. The
-  toolbar, the run list and the step rail are `cr-no-print` — they are how you
-  work, not what you file.
--->
 <style>
   @media print {
     .cr-sheet {
@@ -48,12 +27,6 @@
   }
 </style>
 
-<!-- Opening a run is a month and a half of it, not three typed dates.
-
-     The period is one of the firm's own one or two per month, and the two come
-     from the API — which is why this page can never offer a fortnight the API
-     would refuse, get the end of February wrong, or keep showing a fortnight
-     to an office that has moved its cutoff. -->
 <div class="cr-no-print mb-4 rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
   <div class="flex flex-wrap items-end gap-3">
     <app-field label="Month">
@@ -66,32 +39,11 @@
     </app-field>
 
     <app-field label="Cutoff">
-      <!--
-        The firm's own calendar, on hover rather than under the chips.
-
-        Spelled out, it was a third line of hint text under a toolbar whose
-        chips already show every period the firm has — and it had to come from
-        the API either way: the sentence used to be hardcoded to "cut off on
-        the 1st and the 16th", so a firm cutting off on the 5th, the 15th and
-        the 25th read three correct chips above two days it had never chosen.
-      -->
       <div
         class="flex h-10 items-center gap-1 rounded-control bg-cr-tint p-1"
         role="radiogroup"
         [title]="cutoffHint()"
       >
-        <!--
-          Tracked and selected by `index`, not by `half`.
-
-          `half` is "first", "second" or "month" — three words, which was enough
-          while a month had at most two periods. A firm cutting off three times
-          has two periods both calling themselves "second", so the lookup behind
-          this found the wrong one and clicking 16–25 selected 6–15. The
-          duplicate key broke `@for` tracking at the same time.
-
-          `index` is the period's position in the month and is unique by
-          construction.
-        -->
         @for (option of periods(); track option.index) {
           <button
             type="button"
@@ -147,13 +99,6 @@
     <p class="mt-3 text-[13px] text-cr-ink-muted">{{ summary }}</p>
   }
 
-  <!-- Which cutoff the monthly contributions come off.
-
-       A company setting rather than a payroll one: all three answers remit the
-       same amount to the same agency at the end of the month, and what changes
-       is which payslip is lighter. That makes it the firm's policy, so it is
-       only editable by somebody who can change company settings — everybody
-       else reads the sentence. -->
   @if (run(); as current) {
     <div class="mt-3 flex flex-wrap items-center gap-3 border-t border-cr-line/70 pt-3">
       <span class="cr-meta">SSS, PhilHealth and Pag-IBIG come off</span>
@@ -205,8 +150,6 @@
   <app-error-state [message]="message" (retry)="load()" />
 } @else {
   <div class="grid grid-cols-1 gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-    <!-- The runs, newest first. Its own column rather than a picker, because
-         payroll is read as a series: this fortnight against the last one. -->
     <app-card class="cr-no-print" heading="Pay runs" icon="wallet" [padded]="false">
       @if (runs(); as list) {
         @if (list.length === 0) {
@@ -228,7 +171,6 @@
               >
                 <span class="flex flex-wrap items-center gap-2">
                   <span class="cr-num text-[13px] font-semibold">{{ candidate.reference }}</span>
-                  <!-- Payroll's own three words. See `stateLabel`. -->
                   <span
                     class="rounded-full px-2 py-[2px] text-[10px] font-semibold tracking-[0.06em] uppercase"
                     [class]="stateClass(candidate)"
@@ -256,7 +198,6 @@
 
     @if (run(); as current) {
       @if (payslip(); as slip) {
-        <!-- ------------------------------------------------------- A payslip -->
         <article class="cr-sheet rounded-card bg-cr-surface p-8 shadow-card ring-1 ring-cr-line/60">
           <div class="cr-no-print mb-4">
             <button
@@ -289,23 +230,10 @@
             </div>
           </header>
 
-          <!-- Earnings on the left, deductions on the right: the shape every
-               payslip uses, because the question a person has is why the
-               second column is as big as it is. -->
           <section class="grid grid-cols-1 gap-8 py-6 sm:grid-cols-2">
             <div>
               <h2 class="cr-meta">What you earned</h2>
               <dl class="mt-2 grid grid-cols-2 gap-y-1.5 text-[13px]">
-                <!--
-                  The basic, and — where it is not a salary — what it is a
-                  figure *of*.
-
-                  "₱12,400" of per-trip pay with nothing beside it is a number
-                  the person holding the payslip has no way to check, and
-                  per-trip pay is precisely the kind that gets queried. The
-                  day count comes frozen off the line, so it still says this
-                  next year.
-                -->
                 <dt>
                   @switch (slip.pay_basis) {
                     @case ('per_trip') {
@@ -330,16 +258,6 @@
                 </dt>
                 <dd class="cr-num text-right">{{ fmt.pesos(slip.basic_cents) }}</dd>
 
-                <!--
-                  The firm's own allowances, named one by one rather than
-                  summed.
-
-                  A payslip that showed a lump "allowances ₱3,000" is one the
-                  person holding it cannot check, which is the whole complaint
-                  a payslip exists to answer. These are frozen copies taken on
-                  the day, so they keep saying this after the office renames or
-                  reprices the component.
-                -->
                 @for (component of slip.components; track component.id) {
                   @if (component.kind === 'earning') {
                     <dt>{{ component.name }}</dt>
@@ -386,15 +304,9 @@
                 <dt>Pag-IBIG</dt>
                 <dd class="cr-num text-right">{{ fmt.pesos(slip.pagibig_cents) }}</dd>
 
-                <!-- Charged on the pay left after the three funds, which is the
-                     order the BIR computes it in. -->
                 <dt>Withholding tax</dt>
                 <dd class="cr-num text-right">{{ fmt.pesos(slip.withholding_tax_cents) }}</dd>
 
-                <!-- The firm's own deductions, named. Same argument as the
-                     allowances on the other side: a loan repayment somebody
-                     cannot see the name of is the line they come and ask
-                     about. -->
                 @for (component of slip.components; track component.id) {
                   @if (component.kind === 'deduction') {
                     <dt>{{ component.name }}</dt>
@@ -429,9 +341,6 @@
                 {{ fmt.pesos(slip.net_cents, current.currency) }}
               </p>
             </div>
-            <!-- What the company paid on this person's behalf, on top — shown
-                 so the payslip matches the agency's records, and said plainly
-                 not to have come out of the pay above. -->
             @if (slip.employer_contributions_cents) {
               <p class="mt-3 text-[12px] text-cr-ink-muted">
                 Employer contributions (not deducted from pay):
@@ -444,8 +353,6 @@
             }
           </section>
 
-          <!-- Signed for on receipt, which is what a payroll file needs to
-               show. -->
           <section class="mt-auto grid grid-cols-2 gap-8 pt-12">
             <div class="border-t border-cr-ink/40 pt-1.5 text-[12px] text-cr-ink-muted">
               Received by — {{ slip.name }}
@@ -456,7 +363,6 @@
           </section>
         </article>
       } @else {
-        <!-- ------------------------------------------------------- The run -->
         <div class="flex flex-col gap-4">
           <article
             class="cr-sheet rounded-card bg-cr-surface p-6 shadow-card ring-1 ring-cr-line/60"
@@ -483,7 +389,6 @@
                     {{ fmt.dateTime(current.approved_at) }}
                   </p>
                 }
-                <!-- The link that says payroll reached the accounts. -->
                 @if (current.journal_reference) {
                   <p class="cr-num text-[12px] text-cr-ink-muted">
                     In the accounts as {{ current.journal_reference }}
@@ -491,8 +396,6 @@
                 }
               </div>
 
-              <!-- Only what the run actually allows, from the API's own flags.
-                   An approved run offers paying and nothing else. -->
               <div class="cr-no-print flex flex-wrap items-center gap-2">
                 @if (current.can_edit) {
                   <button
@@ -540,8 +443,6 @@
               </div>
             </header>
 
-            <!-- What to do next, in one sentence. The first thing somebody who
-                 has just landed on this page needs. -->
             @if (nextStep(); as next) {
               <p
                 class="mt-4 flex items-start gap-2 rounded-control bg-cr-tint px-3 py-2.5 text-[13px]"
@@ -551,9 +452,44 @@
               </p>
             }
 
-            <!-- Three steps rather than a status word: the reader's question is
-                 "what happens if I press the button", and none of it can be
-                 undone. -->
+            @if (missingContributions(); as missing) {
+              <div
+                role="status"
+                class="cr-no-print mt-4 flex items-start gap-2 rounded-control bg-cr-warning-bg px-3 py-2.5 text-[13px]"
+              >
+                <app-icon name="bell" [size]="16" class="mt-0.5 flex-none text-cr-warning" />
+                <div class="min-w-0 flex-1">
+                  @if (missing.everybody) {
+                    <p class="font-semibold">
+                      Nobody on this run has SSS, PhilHealth or Pag-IBIG deducted.
+                    </p>
+                    <p class="mt-0.5 text-cr-ink-muted">
+                      Expected if the company has benefits switched off. Otherwise, tick each
+                      person on the Benefits card in Access Control, then work this run out again.
+                    </p>
+                  } @else {
+                    <p class="font-semibold">
+                      {{ missing.people.length }}
+                      {{ missing.people.length === 1 ? 'person is' : 'people are' }}
+                      going out without every contribution.
+                    </p>
+                    <ul class="mt-1 space-y-0.5">
+                      @for (person of missing.people; track person.name) {
+                        <li>
+                          {{ person.name }}
+                          <span class="text-cr-ink-muted">· no {{ person.missing.join(', ') }}</span>
+                        </li>
+                      }
+                    </ul>
+                    <p class="mt-1 text-cr-ink-muted">
+                      If they are registered, tick them on the Benefits card in Access Control, then
+                      work this run out again.
+                    </p>
+                  }
+                </div>
+              </div>
+            }
+
             <ol class="cr-no-print mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
               @for (step of steps(); track step.n) {
                 <li
@@ -591,8 +527,6 @@
               }
             </ol>
 
-            <!-- The whole run in four figures, labelled the way somebody would
-                 say them out loud rather than the way a ledger would. -->
             <section
               class="mt-4 grid grid-cols-2 gap-4 border-t border-cr-ink/10 pt-4 sm:grid-cols-4"
             >
@@ -625,7 +559,6 @@
               </div>
             </section>
 
-            <!-- Two readings of the same run, for two readers. -->
             <div class="cr-no-print mt-5 flex flex-wrap items-center gap-3">
               <div
                 class="flex h-9 items-center gap-1 rounded-control bg-cr-tint p-1"
@@ -670,12 +603,9 @@
             </div>
 
             @if (view() === 'simple') {
-              <!-- --------------------------------------- One person at a time -->
               <section class="mt-4 flex flex-col gap-3">
                 @for (line of current.lines; track line.id) {
                   <div class="cr-person rounded-card ring-1 ring-cr-line/60">
-                    <!-- The arithmetic, as a sentence in numbers: earned, less
-                         held back, equals take-home. -->
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-3 p-4">
                       <div class="min-w-[160px] flex-1">
                         <p class="text-[14px] font-semibold">{{ line.name }}</p>
@@ -736,16 +666,6 @@
                     </div>
 
                     @if (isOpen(line.id)) {
-                      <!--
-                        A zero payslip, explained before anything else.
-
-                        It is almost always one of three things — the truck
-                        sheet names nobody, it names them with no salary against
-                        the day, or a daily rate was never set — and each needs
-                        different fixing. The API composes the sentence from the
-                        payslip's own frozen columns, so an old one goes on
-                        explaining itself the way it did.
-                      -->
                       @if (line.zero_explanation; as why) {
                         <div class="border-t border-cr-line/70 px-4 pt-4">
                           <p
@@ -756,11 +676,6 @@
                         </div>
                       }
 
-                      <!-- Every line explained in words, and — while the run is
-                           a draft — editable in the same place. That pairing is
-                           the point: an office that knows the right SSS figure
-                           reads what SSS is and types the right figure without
-                           leaving the row. -->
                       <div
                         class="grid grid-cols-1 gap-6 border-t border-cr-line/70 p-4 sm:grid-cols-2"
                       >
@@ -841,20 +756,6 @@
                               </div>
                             }
 
-                            <!--
-                              The firm's own deductions, named one at a time.
-
-                              A payslip that said "₱3,450 other" is one the
-                              person holding it cannot ask a question about, and
-                              "which ₱450 was the uniform" is exactly the
-                              question they come and ask. The ones an assignment
-                              put here and the ones somebody typed on this run
-                              sit in the same list, because the reader does not
-                              care where a charge came from — only what it was
-                              for. Only the typed ones can be taken back off:
-                              removing an assigned one here would be a
-                              correction the next rebuild silently undoes.
-                            -->
                             @for (charge of charges(line); track charge.id) {
                               <div class="flex items-start gap-3">
                                 <div class="min-w-0 flex-1">
@@ -886,16 +787,6 @@
                               </div>
                             }
 
-                            <!--
-                              One more, on this payslip only.
-
-                              The charge no assignment exists for: a uniform
-                              issued this fortnight, a breakage, a cash advance.
-                              Typing a name that matches the catalogue points it
-                              at the same component, so the same charge spells
-                              itself the same way on every payslip; a name
-                              nothing matches goes on as the one-off it is.
-                            -->
                             @if (current.can_edit) {
                               <div class="cr-no-print flex items-end gap-2 pt-1">
                                 <label class="min-w-0 flex-1">
@@ -977,7 +868,6 @@
                 }
               </section>
             } @else {
-              <!-- --------------------------------------------- Full register -->
               @if (current.can_edit) {
                 <p
                   class="cr-no-print mt-4 rounded-control bg-cr-tint px-3 py-2 text-[12px] text-cr-ink-muted"
@@ -1046,7 +936,6 @@
                               "
                             />
                           </td>
-                          <!-- Signed: a bonus and a docked half-day are both real. -->
                           <td class="py-2 text-right">
                             <input
                               type="number"
@@ -1220,10 +1109,6 @@
             }
           </article>
 
-          <!-- Kept apart rather than as one deduction, because each part is
-               remitted to its own agency on its own form — and the month's
-               remittance is the sum of these across runs, which a single total
-               could not answer. -->
           <app-card
             class="cr-remittances"
             heading="Held back from the payslips — and who it goes to"
@@ -1248,8 +1133,6 @@
               balance.
             </p>
 
-            <!-- The three funds at zero is the case worth explaining rather
-                 than leaving somebody to wonder about. -->
             @if (!current.carries_contributions) {
               <p
                 class="mt-2 flex items-start gap-2 rounded-control bg-cr-tint px-3 py-2 text-[12px]"
@@ -1264,8 +1147,6 @@
             }
           </app-card>
 
-          <!-- The company's own share: a cost on top of the run, owed to the
-               same agencies, and never taken from anybody's pay. -->
           <app-card
             class="cr-remittances"
             heading="Employer contributions — paid by the company on top"

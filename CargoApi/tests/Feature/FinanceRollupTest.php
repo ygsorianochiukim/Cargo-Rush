@@ -7,13 +7,6 @@ use Database\Seeders\Demo\FleetSeeder;
 use Database\Seeders\Demo\LedgerSeeder;
 use Illuminate\Support\Carbon;
 
-/**
- * These lock the transcribed ledger to the figures the source workbook prints
- * ("v3 Cargorush Master Dashboard 2026.xlsx").
- *
- * If someone re-keys a row in `LedgerSeeder`, the aggregate it feeds fails
- * here rather than quietly showing a wrong dashboard.
- */
 beforeEach(function (): void {
     $this->seed(FleetSeeder::class);
     $this->seed(LedgerSeeder::class);
@@ -21,7 +14,6 @@ beforeEach(function (): void {
     $this->finance = app(FinanceService::class);
 });
 
-/** Compare in pesos — the unit the workbook shows — to two decimal places. */
 function pesos(int $cents): float
 {
     return round($cents / 100, 2);
@@ -92,7 +84,6 @@ describe('DashBoard sheet — 10-day window, 5 to 15 Apr 2026', function (): voi
     });
 
     it('averages profit over the units that traded, not the idle ones', function (): void {
-        // Five units carry rows in this window, but only three moved money.
         $avg = $this->finance->averageProfitPerTruck($this->rows);
 
         expect($avg['trucks'])->toBe(3)

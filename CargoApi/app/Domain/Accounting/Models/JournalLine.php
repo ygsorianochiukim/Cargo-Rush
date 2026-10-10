@@ -13,21 +13,6 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/**
- * One side of one transaction: an account, and an amount on one side of it.
- *
- * Never both sides. A line carries a debit or a credit and the other column is
- * zero, because "a debit of 500 and a credit of 200" is not one line an
- * accountant would ever write — it is a line of 300 in whichever direction, and
- * writing it the long way makes every total in the system ambiguous.
- * `JournalLineData` enforces that on the way in.
- *
- * No soft deletes, unlike almost everything else here. A line has no life of
- * its own: it exists as part of an entry, it is deleted only when a *draft*
- * entry is deleted (cascading), and a posted entry cannot be deleted at all.
- * Keeping a trashed line would mean a balance that depends on remembering to
- * exclude it.
- */
 class JournalLine extends Model
 {
     use BelongsToCompany, HasUlids;
@@ -57,7 +42,6 @@ class JournalLine extends Model
         return $this->belongsTo(Account::class);
     }
 
-    /** What this side was about, where there is something to point at. */
     public function truck(): BelongsTo
     {
         return $this->belongsTo(Truck::class);
@@ -73,27 +57,16 @@ class JournalLine extends Model
         return $this->belongsTo(Customer::class);
     }
 
-    /** Which side this line is on. A line is always on exactly one. */
     public function side(): BalanceSide
     {
         return $this->debit_cents !== 0 ? BalanceSide::Debit : BalanceSide::Credit;
     }
 
-    /** The amount, whichever side it is on. */
     public function amountCents(): int
     {
         return $this->debit_cents !== 0 ? $this->debit_cents : $this->credit_cents;
     }
 
-    /**
-     * What this line does to its account's balance, in that account's own
-     * direction.
-     *
-     * A debit on an asset raises it; a debit on a liability lowers it. The rule
-     * lives in `AccountType::normalBalance()` and `BalanceSide::sign()`, and
-     * this is the one place that applies it to a row — so a report that wants a
-     * balance adds these up and does not have to know the rule at all.
-     */
     public function effectOnAccount(): int
     {
         $normal = $this->account->normalBalance();

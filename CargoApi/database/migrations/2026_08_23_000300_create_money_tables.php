@@ -6,12 +6,6 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-/**
- * Everything with a peso in it — fuel, billing, and the trip ledger.
- *
- * Money is integer minor units plus a currency string (DESIGN.md section 7.1).
- * There is no float column anywhere in this file.
- */
 return new class extends Migration
 {
     public function up(): void
@@ -20,7 +14,6 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('vehicle_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignUlid('driver_id')->nullable()->constrained()->nullOnDelete();
-            // Litres is a measurement, not money, so two decimals is honest here.
             $table->decimal('litres', 8, 2);
             $table->unsignedBigInteger('amount_cents');
             $table->string('currency', 3)->default('PHP');
@@ -32,8 +25,6 @@ return new class extends Migration
             $table->softDeletes();
         });
 
-        // One row per day. The Fuel module reads today; the projection is
-        // computed from the history, never stored as a guess.
         Schema::create('fuel_budgets', function (Blueprint $table): void {
             $table->ulid('id')->primary();
             $table->date('date')->unique();
@@ -46,7 +37,6 @@ return new class extends Migration
         Schema::create('invoices', function (Blueprint $table): void {
             $table->ulid('id')->primary();
             $table->string('number')->unique();
-            // Receivables point at a customer; payables name an outside payee.
             $table->foreignUlid('customer_id')->nullable()->constrained()->nullOnDelete();
             $table->string('payee')->nullable();
             $table->date('issued_at');
@@ -61,12 +51,9 @@ return new class extends Migration
             $table->index(['direction', 'status']);
         });
 
-        // Finance — the workbook. One sheet per truck becomes one row here.
         Schema::create('trucks', function (Blueprint $table): void {
             $table->ulid('id')->primary();
-            // "Truck 1" — the workbook TRUCK NO. column.
             $table->string('label');
-            // Units 7 and 8 exist with no plate and must still render.
             $table->string('plate')->nullable();
             $table->foreignUlid('vehicle_id')->nullable()->constrained()->nullOnDelete();
             $table->unsignedSmallInteger('position')->default(0);
@@ -76,7 +63,6 @@ return new class extends Migration
         Schema::create('ledger_entries', function (Blueprint $table): void {
             $table->ulid('id')->primary();
             $table->foreignUlid('truck_id')->constrained()->cascadeOnDelete();
-            // The ledger is daily, so this is a date with no time.
             $table->date('date');
             $table->bigInteger('trip_income_cents')->default(0);
             $table->bigInteger('fuel_cents')->default(0);
@@ -86,7 +72,6 @@ return new class extends Migration
             $table->bigInteger('allowance_cents')->default(0);
             $table->string('route')->nullable();
             $table->string('remarks')->nullable();
-            // Set when the driver recorded it from the cab rather than the office.
             $table->foreignId('recorded_by')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
             $table->softDeletes();

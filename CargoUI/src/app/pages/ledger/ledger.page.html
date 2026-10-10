@@ -1,7 +1,4 @@
 <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
-  <!-- Three views, as a segmented control rather than three pages: they are the
-       same postings answered three ways, and switching between them keeps the
-       dates and the chosen account. -->
   <div class="flex h-10 items-center gap-1 rounded-control bg-cr-tint p-1" role="tablist">
     <button
       type="button"
@@ -74,9 +71,6 @@
 @if (error(); as message) {
   <app-error-state [message]="message" />
 } @else if (view() === 'chart') {
-  <!-- Every account and what it stands at, grouped by kind in the order a chart
-       is read. The subtotal per kind is the point: "what are my expenses" is
-       the question a list of forty accounts cannot answer on its own. -->
   @if (summary(); as chart) {
     <div class="flex flex-col gap-4">
       @for (type of chart.types; track type.type) {
@@ -135,8 +129,6 @@
       </div>
     </app-card>
   } @else if (account(); as page) {
-    <!-- The four figures a ledger page is read for, before the postings
-         themselves: where it started, what moved each way, and where it ended. -->
     <div class="mb-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
       <app-card heading="Opening" icon="calendar">
         <p class="cr-num text-[22px] leading-none font-semibold">
@@ -196,9 +188,6 @@
     </app-card>
 
     @if (!page.account.type || page.account.type === 'income' || page.account.type === 'expense') {
-      <!-- Said where it matters rather than in a manual: an income or expense
-           account is the story of one period and starts again, which is why its
-           opening balance is zero however far back the range goes. -->
       <p class="mt-3 text-[12px] text-cr-ink-muted">
         {{ page.account.type_label }} accounts start each period at nothing — that is what closing
         the books means, so there is no balance carried in from before this range.
@@ -211,9 +200,6 @@
   }
 } @else {
   @if (trial(); as tb) {
-    <!-- The whole report is the last line: do the two columns agree? Stated
-         first, in words, because a person should not have to add up two columns
-         of figures to find out. -->
     <app-card
       [heading]="tb.balanced ? 'The books balance' : 'The books do not balance'"
       [icon]="tb.balanced ? 'check' : 'incident'"

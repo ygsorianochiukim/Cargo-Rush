@@ -15,31 +15,6 @@ use Database\Seeders\PermissionSeeder;
 use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * Salary structure: the allowances and deductions a firm pays every period.
- *
- * What these tests are defending:
- *
- *   **The office stops retyping.** Before this, a rice allowance was typed onto
- *   every payslip of every employee every fortnight. Assigning it once has to
- *   put it on every run afterwards, at the right amount, with no further
- *   action — that is the whole feature and the first two tests are it.
- *
- *   **A payslip stays a payslip.** The itemised lines are frozen copies, so
- *   renaming a component, changing its amount, or deleting it outright must not
- *   touch a run that has already been built. This is the same rule the employee
- *   name and the basic already follow, and it is the one most worth a test
- *   because a join would have been shorter to write.
- *
- *   **The hand-typed figures survive a rebuild.** Components total into their
- *   own columns beside `allowance_cents`, never into it. A rebuild recomputes
- *   the components and must leave somebody's typed correction alone.
- *
- *   **The tax follows a taxable allowance and not a de minimis one.** The BIR's
- *   order is contributions first, then tax on what is left — and the
- *   contributions themselves come off the monthly basic, which an allowance
- *   does not move.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -62,7 +37,6 @@ beforeEach(function (): void {
             ...$overrides,
         ])->assertCreated()->json('data');
 
-    /** Add a component to the firm's catalogue. */
     $this->component = fn (array $overrides = []) => $this->actingAs($this->admin)
         ->postJson('/api/v1/payroll/components', [
             'name' => 'Rice allowance',
@@ -73,7 +47,6 @@ beforeEach(function (): void {
             ...$overrides,
         ]);
 
-    /** Put somebody on one. */
     $this->assign = fn (string $employeeId, string $componentId, array $overrides = []) => $this->actingAs($this->admin)
         ->postJson('/api/v1/payroll/assignments', [
             'employee_id' => $employeeId,
@@ -99,13 +72,11 @@ describe('paying an allowance without retyping it', function (): void {
 
         $line = ($this->open)()->assertCreated()->json('data.lines.0');
 
-        // A ₱2,000 monthly allowance, split across the month's two payslips.
         expect($line['component_earnings_cents'])->toBe(100_000)
             ->and($line['components'])->toHaveCount(1)
             ->and($line['components'][0]['name'])->toBe('Rice allowance')
             ->and($line['components'][0]['kind'])->toBe('earning')
             ->and($line['components'][0]['amount_cents'])->toBe(100_000)
-            // And it is in the gross, on top of half the monthly basic.
             ->and($line['basic_cents'])->toBe(1_500_000)
             ->and($line['gross_cents'])->toBe(1_600_000);
     });
@@ -115,7 +86,6 @@ describe('paying an allowance without retyping it', function (): void {
         $component = ($this->component)()->assertCreated()->json('data');
         ($this->assign)($employee['id'], $component['id'])->assertCreated();
 
-        // Three consecutive fortnights, and nobody typed anything.
         foreach ([
             ['2026-09-01', '2026-09-15'],
             ['2026-09-16', '2026-09-30'],
@@ -143,7 +113,6 @@ describe('paying an allowance without retyping it', function (): void {
 
         expect($line['component_deductions_cents'])->toBe(50_000)
             ->and($line['component_earnings_cents'])->toBe(0)
-            // On the deductions side of the payslip, not netted off the gross.
             ->and($line['gross_cents'])->toBe(1_500_000)
             ->and($line['net_cents'])->toBe($line['gross_cents'] - $line['deductions_cents']);
     });
@@ -154,18 +123,15 @@ describe('paying an allowance without retyping it', function (): void {
             'name' => 'COLA',
             'basis' => 'percent_of_basic',
             'amount_cents' => 0,
-            // 10% of the monthly basic.
             'rate_bp' => 1000,
             'schedule' => 'monthly_split',
         ])->assertCreated()->json('data');
 
         ($this->assign)($employee['id'], $cola['id'])->assertCreated();
 
-        // 10% of ₱30,000 is ₱3,000 a month, ₱1,500 on this payslip.
         expect(($this->open)()->assertCreated()->json('data.lines.0.component_earnings_cents'))
             ->toBe(150_000);
 
-        // A rise, and nothing about the component or the assignment changes.
         $this->actingAs($this->admin)
             ->patchJson("/api/v1/employees/{$employee['id']}", ['amount_cents' => 4_000_000])
             ->assertOk();
@@ -189,7 +155,6 @@ describe('which payslip carries it', function (): void {
     });
 
     it('splits a monthly figure, odd centavo on the second', function (): void {
-        // ₱1,000.01 a month — where a careless halving loses a centavo.
         $component = ($this->component)(['amount_cents' => 100_001, 'schedule' => 'monthly_split'])
             ->assertCreated()->json('data');
         ($this->assign)($this->employee['id'], $component['id'])->assertCreated();
@@ -208,8 +173,6 @@ describe('which payslip carries it', function (): void {
     });
 
     it('pays a per-payslip figure in full on both', function (): void {
-        // The case the statutory schedule has no equivalent of: ₱2,000 a
-        // payslip is ₱4,000 a month, and that is what the office meant.
         $component = ($this->component)(['schedule' => 'each_run'])->assertCreated()->json('data');
         ($this->assign)($this->employee['id'], $component['id'])->assertCreated();
 
@@ -222,7 +185,6 @@ describe('which payslip carries it', function (): void {
         $component = ($this->component)(['schedule' => 'monthly_split'])->assertCreated()->json('data');
         ($this->assign)($this->employee['id'], $component['id'])->assertCreated();
 
-        // No second payslip for the other half to land on.
         expect(($this->open)(['period_start' => '2026-09-01', 'period_end' => '2026-09-30', 'pay_date' => '2026-09-30'])
             ->assertCreated()->json('data.lines.0.component_earnings_cents'))
             ->toBe(200_000);
@@ -255,9 +217,6 @@ describe('when an assignment applies', function (): void {
         $employee = ($this->hire)();
         $component = ($this->component)(['schedule' => 'each_run'])->assertCreated()->json('data');
 
-        // Granted on the 10th, mid-period. The person had it for part of the
-        // fortnight and is paid the allowance for that fortnight — an office
-        // pays it, it does not divide it by days.
         ($this->assign)($employee['id'], $component['id'], ['effective_from' => '2026-09-10'])
             ->assertCreated();
 
@@ -304,14 +263,10 @@ describe('what the tax does', function (): void {
         $rice = ($this->component)(['schedule' => 'each_run'])->assertCreated()->json('data');
         ($this->assign)($employee['id'], $rice['id'])->assertCreated();
 
-        // Worked out again rather than opened twice — one run per period.
         $withAllowance = $this->actingAs($this->admin)
             ->postJson("/api/v1/payroll/{$plainRun['id']}/rebuild")
             ->assertOk()->json('data.lines.0');
 
-        // Non-taxable by default, which is the honest default: rice, uniform
-        // and medical allowances are de minimis benefits up to the BIR's
-        // ceilings, and that is most of what a fleet pays on top of a basic.
         expect($withAllowance['withholding_tax_cents'])->toBe($plain['withholding_tax_cents'])
             ->and($withAllowance['component_earnings_cents'])->toBe(200_000);
     });
@@ -326,15 +281,11 @@ describe('what the tax does', function (): void {
         ])->assertCreated()->json('data');
         ($this->assign)($employee['id'], $taxable['id'])->assertCreated();
 
-        // Worked out again rather than opened twice — one run per period.
         $withAllowance = $this->actingAs($this->admin)
             ->postJson("/api/v1/payroll/{$plainRun['id']}/rebuild")
             ->assertOk()->json('data.lines.0');
 
         expect($withAllowance['withholding_tax_cents'])->toBeGreaterThan($plain['withholding_tax_cents'])
-            // SSS, PhilHealth and Pag-IBIG come off the monthly *basic*, which
-            // an allowance does not move — that is what the agencies' own
-            // schedules read.
             ->and($withAllowance['sss_cents'])->toBe($plain['sss_cents'])
             ->and($withAllowance['philhealth_cents'])->toBe($plain['philhealth_cents'])
             ->and($withAllowance['pagibig_cents'])->toBe($plain['pagibig_cents']);
@@ -346,8 +297,6 @@ describe('what the tax does', function (): void {
             'name' => 'Canteen', 'kind' => 'deduction', 'taxable' => true, 'schedule' => 'each_run',
         ])->assertCreated()->json('data');
 
-        // The flag is meaningless on a deduction and is reported as false
-        // rather than forbidden, so a form switching kind need not hide it.
         expect($component['taxable'])->toBeFalse();
 
         ($this->assign)($employee['id'], $component['id'])->assertCreated();
@@ -358,9 +307,6 @@ describe('what the tax does', function (): void {
     });
 });
 
-/**
- * The reason the itemised rows are a table and not a join.
- */
 describe('a payslip keeps saying what it said', function (): void {
     it('is untouched when the component is renamed, repriced or deleted', function (): void {
         $employee = ($this->hire)();
@@ -370,7 +316,6 @@ describe('a payslip keeps saying what it said', function (): void {
         $run = ($this->open)()->assertCreated()->json('data');
         $this->actingAs($this->admin)->postJson("/api/v1/payroll/{$run['id']}/approve")->assertOk();
 
-        // The office tidies its catalogue afterwards.
         $this->actingAs($this->admin)
             ->patchJson("/api/v1/payroll/components/{$component['id']}", [
                 'name' => 'Rice subsidy', 'amount_cents' => 500_000,
@@ -392,7 +337,6 @@ describe('a payslip keeps saying what it said', function (): void {
         $run = ($this->open)()->assertCreated()->json('data');
         $this->actingAs($this->admin)->postJson("/api/v1/payroll/{$run['id']}/approve")->assertOk();
 
-        // Unassign first so the component is genuinely deletable.
         $this->actingAs($this->admin)
             ->deleteJson("/api/v1/payroll/assignments/{$assignment['id']}")->assertNoContent();
         $this->actingAs($this->admin)
@@ -406,13 +350,7 @@ describe('a payslip keeps saying what it said', function (): void {
             ->and($after['components'][0]['amount_cents'])->toBe(200_000)
             ->and($after['component_earnings_cents'])->toBe(200_000);
 
-        // Gone from the catalogue, which is what the office asked for...
         expect(PayComponent::query()->find($component['id']))->toBeNull()
-            // ...and the payslip does not read anything through it anyway. The
-            // delete is a *soft* one, like every other delete in this codebase,
-            // so the row is still there behind the scope and the foreign key
-            // never fires — which is precisely why the payslip carries its own
-            // copy rather than relying on the key's `nullOnDelete`.
             ->and(PayRunLineComponent::query()
                 ->where('pay_run_line_id', $after['id'])->first()?->component)
             ->toBeNull();
@@ -427,23 +365,16 @@ describe('rebuilding a run', function (): void {
 
         $run = ($this->open)()->assertCreated()->json('data');
 
-        // Somebody types a one-off allowance onto this payslip by hand.
         $this->actingAs($this->admin)
             ->patchJson("/api/v1/payroll/{$run['id']}/lines/{$run['lines'][0]['id']}", [
                 'allowance_cents' => 75_000,
                 'adjustment_note' => 'Typhoon assistance',
             ])->assertOk();
 
-        // A rebuild throws the lines away and works them out again — and the
-        // components land in their own columns, so this is not the collision
-        // it would have been had they shared `allowance_cents`.
         $rebuilt = $this->actingAs($this->admin)
             ->postJson("/api/v1/payroll/{$run['id']}/rebuild")->assertOk()->json('data.lines.0');
 
         expect($rebuilt['component_earnings_cents'])->toBe(200_000)
-            // A rebuild is documented as replacing the lines wholesale, so the
-            // hand-typed figure goes with them — what matters is that it was
-            // never *merged into* or *doubled by* the component total.
             ->and($rebuilt['allowance_cents'])->toBe(0)
             ->and($rebuilt['gross_cents'])->toBe(1_500_000 + 200_000);
     });
@@ -460,8 +391,6 @@ describe('rebuilding a run', function (): void {
         $line = $this->actingAs($this->admin)
             ->getJson("/api/v1/payroll/{$run['id']}")->assertOk()->json('data.lines.0');
 
-        // One row, not three. The lines are deleted wholesale on a rebuild and
-        // the itemised rows cascade with them.
         expect($line['components'])->toHaveCount(1)
             ->and($line['component_earnings_cents'])->toBe(200_000);
     });
@@ -512,7 +441,6 @@ describe('keeping the catalogue', function (): void {
 
         $rival = $this->makeCompany('Rival Freight');
 
-        // The index is on the pair, so "Rice allowance" is one firm's to name.
         $theirs = $this->asCompany($rival, fn () => PayComponent::create([
             'name' => 'Rice allowance', 'kind' => 'earning', 'amount_cents' => 100_000,
         ]));
@@ -532,8 +460,6 @@ describe('keeping the catalogue', function (): void {
 
         expect($response->json('meta.retired'))->toBeTrue()
             ->and($response->json('data.status'))->toBe(StatusValue::Inactive->value)
-            // Still there, and so is the assignment — which is the point: a
-            // delete that cascaded would have taken the assignment with it.
             ->and(PayComponent::query()->find($component['id']))->not->toBeNull()
             ->and(EmployeePayComponent::query()->count())->toBe(1);
     });
@@ -565,8 +491,6 @@ describe('keeping the catalogue', function (): void {
             'name' => 'Their allowance', 'kind' => 'earning', 'amount_cents' => 100_000,
         ]));
 
-        // `exists` queries the table outside the tenant scope, so without the
-        // company clause on the rule this would create a dangling assignment.
         ($this->assign)($employee['id'], $theirs->id)
             ->assertStatus(422)
             ->assertJsonPath('errors.pay_component_id.0', 'That is not a component on this firm’s list.');
@@ -599,8 +523,6 @@ describe('reading what somebody is paid', function (): void {
             ->getJson("/api/v1/employees/{$employee['id']}/pay-components")
             ->assertOk()->json('data.0');
 
-        // Null rather than zero: there is no peso answer without a salary, and
-        // ₱0.00 would read as a component that pays nothing.
         expect($row['effective_amount_cents'])->toBeNull()
             ->and($row['effective_rate_bp'])->toBe(1000);
     });

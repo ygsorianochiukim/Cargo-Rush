@@ -1,7 +1,6 @@
 import { StatusValue } from '../shared/status.model';
 import { Timestamped } from '../shared/envelope.model';
 
-/** Dispatch Monitoring — when and where a unit left, and when it arrived. */
 export interface DispatchRecord extends Timestamped {
   id: string;
   trip_id: string;

@@ -1,13 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-/**
- * A single ratio as a small ring — net margin, beside the net income figure.
- *
- * One value, so no legend: the number in the middle says it, and the ring is
- * only its shape. Green for a profit and red for a loss are the status
- * colours, and never carry the meaning alone — the percentage and the word
- * under it do.
- */
 @Component({
   selector: 'app-margin-ring',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -39,7 +31,6 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
   `,
 })
 export class MarginRing {
-  /** The ratio, 0–1 (negative for a loss). Null when there is nothing to divide by. */
   readonly ratio = input<number | null>(null);
   readonly label = input('margin');
 

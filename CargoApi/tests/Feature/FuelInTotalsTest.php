@@ -12,14 +12,6 @@ use Database\Seeders\ExpenseCategorySeeder;
 use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 
-/**
- * Fills logged in Fuel Expense Monitoring, in the period's Total expenses.
- *
- * They used to be in no total at all: logging a fill at `/fuel` moved that
- * page's budget tile and nothing else, so Profitability, the Summary and Sales
- * all read lower than the receipts. Only an active fill counts — a pending one
- * is a request nobody has approved, and a cancelled one never happened.
- */
 beforeEach(function (): void {
     $this->seed(PermissionSeeder::class);
     $this->seed(NavigationSeeder::class);

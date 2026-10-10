@@ -19,20 +19,6 @@ use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\Demo\DemoSeeder;
 use Illuminate\Support\Carbon;
 
-/**
- * The walkthrough data, checked against what it promises.
- *
- * A seeder is the one piece of code whose entire job is to be looked at, so a
- * test that only counts rows proves the wrong thing. What matters is that the
- * figures on screen are arithmetic somebody can follow — a partner owed
- * ₱105,600 on a ₱120,000 run at twelve per cent — and that the states each
- * screen exists to tell apart are all actually present.
- *
- * The second thing it proves is that running it twice is safe. The natural
- * thing to do after a confusing demo is to seed again, and a wallet that paid
- * somebody a second time for the same run would be the worst possible way to
- * find out it was not idempotent.
- */
 beforeEach(function (): void {
     $this->seed(DatabaseSeeder::class);
     $this->seed(DemoSeeder::class);
@@ -44,22 +30,16 @@ describe('the sub-contracted partners', function (): void {
 
         expect($partners)->toHaveCount(8);
 
-        // Vetted and switched on — the only combination that may be given work.
         expect($partners['Dennis Abella']->canTakeWork())->toBeTrue();
 
-        // Vetted, switch off. Trusted and not working today, which is a
-        // different fact from not being trusted.
         expect($partners['Ronel Pacaldo']->isVetted())->toBeTrue()
             ->and($partners['Ronel Pacaldo']->canTakeWork())->toBeFalse();
 
-        // A registration nobody has read yet: the row the sidebar badge counts.
         expect($partners['Joel Mendez']->status)->toBe(StatusValue::Pending)
             ->and($partners['Joel Mendez']->canTakeWork())->toBeFalse();
 
         expect($partners['Fely Dagondon']->status)->toBe(StatusValue::Inactive);
 
-        // Two trucks, one in the shop, so "the first that is not" has something
-        // to choose between.
         expect($partners['Dennis Abella']->vehicles)->toHaveCount(2)
             ->and($partners['Dennis Abella']->activeVehicle()?->plate)->toBe('CDO 8821');
     });
@@ -82,25 +62,14 @@ describe('the sub-contracted partners', function (): void {
             ->get()
             ->keyBy(fn (WalletEntry $entry): string => $entry->trip?->reference ?? $entry->kind->value);
 
-        /**
-         * ₱120,000 the haulier invoiced and will collect, at twelve per cent.
-         * It keeps ₱14,400 and owes the partner ₱105,600 — positive, because
-         * the money is in the haulier's hands.
-         */
         expect($entries['CR-24901']->kind)->toBe(WalletEntryKind::Earning)
             ->and($entries['CR-24901']->amount_cents)->toBe(10_560_000)
             ->and($entries['CR-24901']->gross_cents)->toBe(12_000_000)
             ->and($entries['CR-24901']->rate_bp)->toBe(1200);
 
-        /**
-         * ₱45,000 the partner billed and collected themselves. Only the
-         * haulier's cut is owed, and it runs the other way — negative.
-         */
         expect($entries['CR-24902']->kind)->toBe(WalletEntryKind::Commission)
             ->and($entries['CR-24902']->amount_cents)->toBe(-540_000);
 
-        // The rate is frozen onto the run as well, which is what the office
-        // reads when a partner queries a figure months later.
         expect(Trip::query()->where('reference', 'CR-24901')->value('commission_bp'))->toBe(1200);
     });
 
@@ -111,9 +80,6 @@ describe('the sub-contracted partners', function (): void {
         expect($cleared->status)->toBe(StatusValue::Paid)
             ->and($inFlight->isInFlight())->toBeTrue();
 
-        // The runs each one covers are settled by it — a payout is a set of
-        // runs rather than an amount, and this is the column that answers
-        // "have you paid me for CR-24901?".
         $settled = WalletEntry::query()->where('settled_by', $cleared->getKey())->get();
 
         expect($settled)->not->toBeEmpty()
@@ -140,19 +106,12 @@ describe('the hired trucks', function (): void {
     it('owes the owner a share of a run and says so on the truck sheet', function (): void {
         $trip = Trip::query()->where('reference', 'CR-24911')->firstOrFail();
 
-        // ₱100,000 at fifteen per cent: ₱15,000 to the fleet, ₱85,000 to the
-        // owner of the ten-wheeler.
         $share = WalletEntry::query()->where('trip_id', $trip->getKey())->firstOrFail();
 
         expect($share->amount_cents)->toBe(8_500_000)
             ->and($share->rate_bp)->toBe(1500)
             ->and($share->trucker->name)->toBe('Teresita Bacus');
 
-        /**
-         * The same figure on the day's sheet, not a second calculation. Without
-         * it a share truck shows its full income against almost no costs and
-         * reads as the best performer on the fleet.
-         */
         $sheet = LedgerEntry::query()->where('trip_id', $trip->getKey())->firstOrFail();
 
         expect($sheet->trip_income_cents)->toBe(10_000_000)
@@ -162,8 +121,6 @@ describe('the hired trucks', function (): void {
     it('leaves a flat-rented truck keeping every peso, and bills its rent monthly', function (): void {
         $trip = Trip::query()->where('reference', 'CR-24915')->firstOrFail();
 
-        // Nobody outside the fleet is owed a share of a run on a truck that was
-        // already paid for by the month.
         expect(WalletEntry::query()->where('trip_id', $trip->getKey())->exists())->toBeFalse();
 
         $rent = Expense::query()->where('reference', 'like', 'RENT RNT 1001%')->get();
@@ -249,17 +206,6 @@ it('can be run twice without paying anybody twice', function (): void {
         'maintenance' => (int) DB::table('ledger_entries')->sum('maintenance_cents'),
     ];
 
-    /*
-     * A day later, because a second run is never the same afternoon and dates
-     * derived from `today` are exactly where a seeder tends to double up.
-     *
-     * Unless tomorrow closes a pay period or a month. The seeder writes the
-     * payroll sheet into the period that has just closed and bills rent for
-     * the months that have ended, so a run on the 1st rightly adds the period
-     * and the month that closed overnight — new work, not the old work paid
-     * again, and not what this test measures. On those days the second run is
-     * later the same day instead.
-     */
     $calendar = PayrollCalendar::for(Company::query()->oldest()->first());
     $later = now()->addDay();
 

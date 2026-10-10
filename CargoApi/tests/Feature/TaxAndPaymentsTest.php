@@ -11,20 +11,6 @@ use App\Domain\Tenancy\Services\CompanyProvisioner;
 use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 
-/**
- * What an invoice says, and what actually arrives.
- *
- * These were the same number until now, and in Philippine freight they never
- * are. A ₱10,000 haul is billed at ₱11,200 with VAT; a customer who is a
- * withholding agent keeps back ₱200 — 2% of the net — for the BIR; ₱11,000 lands in
- * the bank. The system knew only the ₱10,000, so the document it printed was
- * not one a VAT-registered customer could accept and the figure it expected
- * never matched the payment.
- *
- * The second half is money arriving. Settling used to be a status flip, which
- * models being paid in full, once, from nowhere in particular — and customers
- * pay in instalments, and settle four invoices with one cheque.
- */
 beforeEach(function (): void {
     $this->seed(PermissionSeeder::class);
     $this->seed(NavigationSeeder::class);
@@ -38,7 +24,6 @@ beforeEach(function (): void {
 
     $this->customer = Customer::create(['name' => 'Metro Grocers', 'contact' => '0917 000 0001']);
 
-    // ₱10,000 net. Every figure below is worked from this one.
     $this->raise = fn (array $overrides = []) => $this->actingAs($this->admin)
         ->postJson('/api/v1/billing', [
             'customer_id' => $this->customer->id,
@@ -56,20 +41,11 @@ describe('VAT', function (): void {
 
         expect($body['net_amount_cents'])->toBe(1_000_000)
             ->and($body['vat_cents'])->toBe(120_000)
-            // What the document says.
             ->and($body['amount_cents'])->toBe(1_120_000)
-            // And what the customer remits, since this one does not withhold.
             ->and($body['due_cents'])->toBe(1_120_000)
             ->and($body['vat_rate_bp'])->toBe(1200);
     });
 
-    /**
-     * Where the desk quotes an all-in figure, the VAT is inside it.
-     *
-     * The customer was promised ₱10,000 and must be billed ₱10,000 — so the
-     * net is worked backwards rather than the VAT being added on top of a
-     * number that already contained it.
-     */
     it('works the VAT backwards when prices are quoted inclusive', function (): void {
         config(['cargo.tax.prices_include_vat' => true]);
 
@@ -77,15 +53,9 @@ describe('VAT', function (): void {
 
         expect($body['amount_cents'])->toBe(1_000_000)
             ->and($body['net_amount_cents'])->toBe(892_857)
-            // Net plus VAT is exactly the figure quoted — the rounding
-            // remainder goes to VAT rather than being lost.
             ->and($body['net_amount_cents'] + $body['vat_cents'])->toBe(1_000_000);
     });
 
-    /**
-     * Zero-rated and exempt both put ₱0 on the invoice and are not the same
-     * thing to the filing, which is why the treatment is carried on the row.
-     */
     it('charges nothing to a zero-rated customer, and says which kind', function (): void {
         $this->customer->update(['vat_treatment' => 'zero_rated']);
 
@@ -97,11 +67,6 @@ describe('VAT', function (): void {
             ->and($body['vat_label'])->toBe('Zero-rated');
     });
 
-    /**
-     * A haulier below the registration threshold files percentage tax instead.
-     * Putting a VAT line on its invoices would be charging a tax it has no
-     * authority to collect.
-     */
     it('charges nothing at all when the company is not VAT-registered', function (): void {
         $this->company->update(['vat_registered' => false]);
 
@@ -111,7 +76,6 @@ describe('VAT', function (): void {
             ->and($body['amount_cents'])->toBe(1_000_000);
     });
 
-    /** A supplier's bill arrives with its own tax already on it. */
     it('leaves a payable alone', function (): void {
         $body = ($this->raise)(['direction' => 'payable', 'customer_id' => null, 'payee' => 'Petron'])
             ->assertCreated()->json('data');
@@ -126,31 +90,14 @@ describe('withholding tax', function (): void {
         $this->customer->update(['withholds_tax' => true]);
     });
 
-    /**
-     * The detail most worth getting right.
-     *
-     * Creditable withholding is a percentage of the income payment **exclusive
-     * of VAT** — the VAT is the government's, passing through us, not income
-     * of ours to withhold on. Taking 2% of the gross over-withholds on every
-     * invoice, and the customer's 2307 never agrees with our figure.
-     */
     it('is taken from the net, not the gross', function (): void {
         $body = ($this->raise)()->assertCreated()->json('data');
 
         expect($body['amount_cents'])->toBe(1_120_000)
-            // 2% of 1,000,000, not of 1,120,000.
             ->and($body['withholding_cents'])->toBe(20_000)
             ->and($body['due_cents'])->toBe(1_100_000);
     });
 
-    /**
-     * A short payment is not a shortfall.
-     *
-     * The withheld portion is remitted to the BIR on our behalf, so an invoice
-     * paid at its `due` figure is settled in full even though less arrived
-     * than the document asked for. Reading that gap as an outstanding balance
-     * was the reconciliation error this removes.
-     */
     it('settles in full when the customer pays the due figure', function (): void {
         $id = ($this->raise)()->json('data.id');
 
@@ -180,7 +127,6 @@ describe('payments', function (): void {
 
         $this->actingAs($this->admin)->getJson("/api/v1/billing/$id")
             ->assertOk()
-            // The state the old model could not hold: not pending, not paid.
             ->assertJsonPath('data.status', 'partial')
             ->assertJsonPath('data.paid_cents', 400_000)
             ->assertJsonPath('data.balance_cents', 720_000);
@@ -204,12 +150,6 @@ describe('payments', function (): void {
             ->assertJsonPath('data.balance_cents', 0);
     });
 
-    /**
-     * One cheque, four invoices — how a customer actually settles a month.
-     *
-     * Impossible while payment was a column on the invoice: the cheque had to
-     * be split by hand into four fictions.
-     */
     it('spreads one payment across several invoices', function (): void {
         $first = ($this->raise)()->json('data.id');
         $second = ($this->raise)()->json('data.id');
@@ -232,12 +172,6 @@ describe('payments', function (): void {
         }
     });
 
-    /**
-     * Money on account, before there is anything to put it against.
-     *
-     * Refusing to record it until an invoice exists means the bank statement
-     * and the system disagree for a fortnight.
-     */
     it('accepts a payment with nothing allocated yet', function (): void {
         $this->actingAs($this->admin)->postJson('/api/v1/payments', [
             'customer_id' => $this->customer->id,
@@ -262,10 +196,6 @@ describe('payments', function (): void {
             ->assertJsonValidationErrors('allocations');
     });
 
-    /**
-     * Overpaying a document does not make it more paid — it hides money that
-     * belongs against the customer's next invoice.
-     */
     it('refuses to put more against an invoice than it owes', function (): void {
         $id = ($this->raise)()->json('data.id');
 
@@ -287,11 +217,6 @@ describe('payments', function (): void {
         ])->assertStatus(422)->assertJsonValidationErrors('paid_on');
     });
 
-    /**
-     * Money entered against the wrong customer is the ordinary reason to
-     * un-record one. Leaving the documents marked paid would be the worse
-     * half of the mistake.
-     */
     it('puts the invoice back when a payment is removed', function (): void {
         $id = ($this->raise)()->json('data.id');
 
@@ -325,9 +250,6 @@ describe('payments', function (): void {
             'allocations' => [['invoice_id' => $id, 'amount_cents' => 1_120_000]],
         ])->assertCreated();
 
-        // Not the moment somebody typed it in — every collections figure is
-        // dated from this, and a cheque entered on Friday for money that
-        // cleared on Tuesday belongs to Tuesday.
         expect(Invoice::findOrFail($id)->paid_at->toDateString())->toBe($cleared);
     });
 });
@@ -345,15 +267,11 @@ describe('what is owed, and how late', function (): void {
 
         $this->actingAs($this->admin)->getJson('/api/v1/billing/totals')
             ->assertOk()
-            // A half-paid invoice is half a receivable. Summing the face value
-            // would keep counting money that has already arrived.
             ->assertJsonPath('data.receivable_cents', 720_000)
             ->assertJsonPath('data.collected_cents', 400_000);
     });
 
     it('buckets what is outstanding by how late it is', function (): void {
-        // Due seventy-five days ago, and due next month. Issued earlier still,
-        // because a due date cannot precede the day the document was raised.
         $late = ($this->raise)([
             'issued_at' => now()->subDays(105)->toDateString(),
             'due_at' => now()->subDays(75)->toDateString(),
@@ -370,15 +288,10 @@ describe('what is owed, and how late', function (): void {
         expect($body['buckets']['61_90'])->toBe(1_120_000)
             ->and($body['buckets']['current'])->toBe(1_120_000)
             ->and($body['total_cents'])->toBe(2_240_000)
-            // Worst first: whoever owes the most is the call to make.
             ->and($body['by_counterparty'][0]['counterparty'])->toBe('Metro Grocers')
             ->and($body['by_counterparty'][0]['total_cents'])->toBe(2_240_000);
     });
 
-    /**
-     * A part-paid document that has gone past its due date is still late on
-     * the rest — and is exactly the invoice most worth chasing.
-     */
     it('takes a part-paid invoice overdue too', function (): void {
         $id = ($this->raise)([
             'issued_at' => now()->subDays(40)->toDateString(),
@@ -400,13 +313,6 @@ describe('what is owed, and how late', function (): void {
     });
 });
 
-/**
- * A document already issued is not reopened by a rate change.
- *
- * The rates are frozen on the row for the same reason a trip's price is
- * frozen: an invoice is a promise made on a date, and somebody is holding a
- * copy of it.
- */
 it('keeps the rates that applied on the day', function (): void {
     $id = ($this->raise)()->json('data.id');
 

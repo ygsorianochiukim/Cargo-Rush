@@ -19,8 +19,6 @@ class ExpenseCategoryRequest extends ApiFormRequest
 
         return [
             'name' => [$required, 'string', 'max:60'],
-            // Optional: the service slugs the name on create. Sent explicitly
-            // it has to be unique, because it is what seeded rows are found by.
             'key' => [
                 'sometimes', 'string', 'max:40', 'alpha_dash',
                 Rule::unique('expense_categories', 'key')->ignore($category?->id)->whereNull('deleted_at'),
@@ -29,7 +27,6 @@ class ExpenseCategoryRequest extends ApiFormRequest
             'icon' => ['nullable', 'string', 'max:40'],
             'position' => ['sometimes', 'integer', 'min:0', 'max:999'],
             'status' => ['sometimes', Rule::in([StatusValue::Active->value, StatusValue::Inactive->value])],
-            // An account in this company's chart, or nothing for the default.
             'account_code' => [
                 'nullable', 'string', 'max:20',
                 Rule::exists('accounts', 'code')

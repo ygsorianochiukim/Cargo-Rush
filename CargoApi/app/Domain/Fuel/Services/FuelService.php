@@ -19,19 +19,12 @@ class FuelService
         private readonly FuelPostingService $posting,
     ) {}
 
-    /**
-     * @param  array<string, mixed>  $filters
-     */
+    /** @param array<string, mixed> $filters */
     public function paginate(array $filters, int $perPage = 25): LengthAwarePaginator
     {
         return $this->fuel->paginate($filters, $perPage);
     }
 
-    /**
-     * Logging a fill also moves the vehicle's odometer forward — the receipt
-     * carries the reading, and the Fuel module is where it actually gets seen.
-     * Only forward: a mis-keyed low reading must not rewind the unit.
-     */
     public function log(FuelRecordData $data): FuelRecord
     {
         return DB::transaction(function () use ($data): FuelRecord {
@@ -44,16 +37,10 @@ class FuelService
                     ->update(['odometer_km' => $data->odometer_km]);
             }
 
-            // An active fill is on its truck's sheet from the moment it exists
-            // — see `FuelPostingService`.
             return $this->posting->sync($record)->refresh();
         });
     }
 
-    /**
-     * A corrected amount, day, vehicle or status moves the sheet with it: the
-     * old posting comes off in full and the fill posts again as it now stands.
-     */
     public function update(FuelRecord $record, FuelRecordData $data): FuelRecord
     {
         return DB::transaction(fn (): FuelRecord => $this->posting
@@ -61,7 +48,6 @@ class FuelService
             ->refresh());
     }
 
-    /** Off the sheet first, so a deleted fill leaves nothing behind. */
     public function delete(FuelRecord $record): void
     {
         DB::transaction(function () use ($record): void {
@@ -70,15 +56,7 @@ class FuelService
         });
     }
 
-    /**
-     * The budget tile.
-     *
-     * Only `daily_budget_cents` and `open_requests` are stored. Spend and the
-     * month projection are summed from the records themselves, so the tile
-     * cannot disagree with the table printed underneath it.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function budget(?Carbon $on = null): array
     {
         $day = $on ?? now();
@@ -89,9 +67,7 @@ class FuelService
         return [
             'date' => $day->toDateString(),
             'daily_budget_cents' => $budget?->daily_budget_cents ?? 0,
-            // Active fills only, as Finance counts them.
             'spent_today_cents' => $spentToday,
-            // Requests waiting on approval — beside the spend, not in it.
             'pending_today_cents' => $this->fuel->pendingBetween($day->copy()->startOfDay(), $day->copy()->endOfDay()),
             'currency' => $budget?->currency ?? 'PHP',
             'projection_cents' => $this->monthProjection($day),
@@ -99,13 +75,6 @@ class FuelService
         ];
     }
 
-    /**
-     * Month-end spend, projected from the daily rate so far.
-     *
-     * Straight-line on purpose: the run rate is the number a controller can
-     * actually argue with, and anything cleverer would need a forecast model
-     * this business does not have.
-     */
     private function monthProjection(Carbon $day): int
     {
         $start = $day->copy()->startOfMonth();

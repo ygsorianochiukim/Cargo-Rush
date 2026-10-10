@@ -6,14 +6,6 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-/**
- * The Safety, LTO and Warehouse Compliance Checklist, as the driver answered it.
- *
- * Ticked on the phone before the trip — YES, NO or N/A per line, keyed by the
- * line's key in `TripTicketService::CHECKLIST` — and printed on the dispatch
- * sheet with those boxes ticked. Separate from the pre-trip inspection, which
- * is the pass/fail gate on Start; this is the firm's paper form, answered.
- */
 return new class extends Migration
 {
     public function up(): void

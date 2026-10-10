@@ -5,7 +5,6 @@ import { ApiService } from '../shared/api.service';
 import { Incident, IncidentPayload } from '../../models/incident/incident.model';
 import { Envelope, ListQuery } from '../../models/shared/envelope.model';
 
-/** Incident Management. Reporting one also raises a notification, API-side. */
 @Injectable({ providedIn: 'root' })
 export class IncidentService {
   private readonly api = inject(ApiService);

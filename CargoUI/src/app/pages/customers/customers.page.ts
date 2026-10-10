@@ -14,7 +14,6 @@ import { RecordDialog } from '../../shared/record-dialog';
 import { recordList } from '../../shared/record-list';
 import { ErrorState } from '../../shared/states';
 
-/** Customer Management — DESIGN.md section 5.1. */
 @Component({
   selector: 'app-customers',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -27,9 +26,6 @@ import { ErrorState } from '../../shared/states';
       actionLabel="New customer"
       (add)="list.create()" />
 
-    <!-- The starting password, once. The API says it in the reply to the form
-         and never again, so if this is dismissed unread the desk has to look it
-         up in the install's configuration. -->
     @if (created(); as login) {
       <div
         class="mb-4 flex items-start gap-3 rounded-card bg-cr-surface p-4 shadow-card
@@ -85,12 +81,9 @@ export class CustomersPage {
     this.customersApi.list().pipe(map((res) => res.data)),
   );
 
-  /** The customer whose login was just created, while the notice is up. */
   protected readonly created = signal<Customer | null>(null);
 
   constructor() {
-    // Only a save that actually made an account carries a password, so this
-    // stays quiet for an edit, and for a customer the office gave no address.
     this.dialog
       .savedFor(this.spec)
       .pipe(takeUntilDestroyed())
@@ -110,8 +103,6 @@ export class CustomersPage {
       value: (c) =>
         c.outstanding_cents === 0 ? 'Settled' : fmt.money(c.outstanding_cents, c.currency),
     },
-    // Whether the firm can file its own requests. Invisible from the office
-    // otherwise, and the first thing to check when one says it cannot get in.
     { label: 'Portal login', value: (c) => c.login_email ?? 'None' },
     { label: 'Feedback', kind: 'num', value: (c) => `${c.rating.toFixed(1)} / 5` },
     { label: 'Status', kind: 'status', status: (c) => c.status },

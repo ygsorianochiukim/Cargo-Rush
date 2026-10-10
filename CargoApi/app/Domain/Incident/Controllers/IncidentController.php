@@ -12,7 +12,6 @@ use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/** Incident Management — records with a time and a place. */
 class IncidentController extends ApiController
 {
     public function __construct(private readonly IncidentService $incidents) {}
@@ -29,7 +28,6 @@ class IncidentController extends ApiController
         return $this->item(new IncidentResource($incident));
     }
 
-    /** Reporting one also raises the notification the Support group reads. */
     public function store(IncidentRequest $request): JsonResponse
     {
         return $this->item(new IncidentResource($this->incidents->report($request->toData())), status: 201);

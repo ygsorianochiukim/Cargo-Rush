@@ -13,20 +13,6 @@ import { IdentityService } from '../../services/identity/identity.service';
 import { Field } from '../../shared/field';
 import { Wordmark } from '../../shared/wordmark';
 
-/**
- * Where the link in the reset email lands.
- *
- * The token and the address arrive in the query string, because the person
- * following this link has not signed in — there is no session to read them
- * from. Neither is shown as an editable field: the address is displayed so
- * somebody can see *which* account they are about to change, and the token is
- * never displayed at all, because it is not something anybody types.
- *
- * A link that has lost its token — copied badly out of an email client, which
- * happens constantly — is caught here rather than being posted and refused, so
- * the answer is "that link is incomplete" instead of a validation error on a
- * field the person cannot see.
- */
 @Component({
   selector: 'app-reset-password',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -42,7 +28,6 @@ export class ResetPasswordPage {
   private readonly token = this.route.snapshot.queryParamMap.get('token') ?? '';
 
   protected readonly email = this.route.snapshot.queryParamMap.get('email') ?? '';
-  /** A link missing either half cannot be acted on, so say so up front. */
   protected readonly linkBroken = this.token === '' || this.email === '';
 
   protected readonly submitting = signal(false);
@@ -108,14 +93,6 @@ export class ResetPasswordPage {
       });
   }
 
-  /**
-   * The token's failures are the interesting ones.
-   *
-   * An expired or already-used link is the common case here, and the API puts
-   * that error on `token` — a field this form does not show. Surfacing it as a
-   * banner with the fix in it ("ask for a new one") beats a silent no-op on a
-   * control the person cannot see.
-   */
   private messageFor(error: HttpErrorResponse): string {
     if (error.status === 422) {
       const errors = error.error?.errors as Record<string, string[]> | undefined;

@@ -8,34 +8,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
-/**
- * A run can carry more than one helper, and each is paid their own figure.
- *
- * `trips.helper_id` and `ledger_entries.helper_id` held one person, which was
- * the workbook's shape and not the yard's: a heavy load goes out with two or
- * three people to lift it. With one column, the second helper was either left
- * off the record — and so off the payslip — or typed into the remarks.
- *
- * Two child tables replace the columns:
- *
- *   `trip_helpers`, who rode on a run, in the order the desk named them;
- *   `ledger_entry_helpers`, what each helper on a day's sheet was paid.
- *
- * The sheet's line carries its own salary because the helpers on one day are
- * not paid the same — the one who has been doing it for five years is not on
- * the new one's rate. `ledger_entries.helper_salary_cents` stays, as the sum
- * of the lines, written in the same transaction: every roll-up, Profitability
- * and the Quarterly Summary among them, reads that one column, and making
- * each of them sum a child table would be a dozen changes for no difference in
- * the answer.
- *
- * A line's `driver_id` is nullable, like the column it replaces. A day's
- * helper pay entered without saying whose it was is still a real cost of the
- * day; it is counted toward nobody's payslip, which is the safe direction.
- *
- * No `company_id` on either table. A row is only ever reached through its trip
- * or its sheet day, and both of those are scoped to the company already.
- */
 return new class extends Migration
 {
     public function up(): void
@@ -47,8 +19,6 @@ return new class extends Migration
             $table->unsignedSmallInteger('position')->default(0);
             $table->timestamps();
 
-            // Once each. The same person twice on one run is a typing error,
-            // and would be paid for the run twice.
             $table->unique(['trip_id', 'driver_id']);
             $table->index('driver_id');
         });
@@ -76,9 +46,6 @@ return new class extends Migration
             ])->all());
         });
 
-        // A line for every day that named a helper or paid one — including the
-        // ones that paid somebody without saying who, so the day's total is
-        // carried over to the centavo.
         DB::table('ledger_entries')
             ->where(static fn ($q) => $q->whereNotNull('helper_id')->orWhere('helper_salary_cents', '>', 0))
             ->orderBy('id')
@@ -104,13 +71,6 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Back to one helper per run: the first one named.
-     *
-     * Lossy by nature — the second and third helpers have nowhere to go — but
-     * the sheet's total stays right, because `helper_salary_cents` was never
-     * dropped.
-     */
     public function down(): void
     {
         Schema::table('trips', function (Blueprint $table): void {

@@ -10,18 +10,6 @@ use App\Domain\Tenancy\Console\Concerns\RunsPerCompany;
 use App\Domain\Trip\Models\Trip;
 use Illuminate\Console\Command;
 
-/**
- * Open the monitoring sheet for runs that were delivered before deliveries
- * started opening it themselves.
- *
- * Without this, the link only works forward: a business that has been running
- * trips would see an empty Trip Monitoring until its next delivery, which
- * reads exactly like the bug the link was added to fix.
- *
- * Idempotent, because it goes through the same `openDailyRow` the delivery
- * does — a day already on the sheet is found rather than opened again, and no
- * figure anybody has entered is touched.
- */
 class BackfillLedgerRowsCommand extends Command
 {
     use RunsPerCompany;
@@ -35,7 +23,6 @@ class BackfillLedgerRowsCommand extends Command
         return $this->eachCompany(fn () => $this->backfill($finance));
     }
 
-    /** One company's delivered runs, opened onto its own sheet. */
     private function backfill(FinanceService $finance): void
     {
         $delivered = Trip::query()
@@ -55,8 +42,6 @@ class BackfillLedgerRowsCommand extends Command
         $opened = 0;
 
         foreach ($delivered as $trip) {
-            // The day the run finished, not today — backfilling a month of
-            // history onto this morning's row would be worse than no history.
             $date = $trip->deliveryLog?->delivered_at ?? $trip->updated_at;
 
             if ($dryRun) {
@@ -72,8 +57,6 @@ class BackfillLedgerRowsCommand extends Command
                 tripId: $trip->id,
                 route: "{$trip->origin} → {$trip->destination}",
                 date: $date,
-                // The crew too, so a backfilled row can be read by payroll
-                // exactly as a live one is.
                 driverId: $trip->driver_id,
                 helperIds: $trip->helperIds(),
             );

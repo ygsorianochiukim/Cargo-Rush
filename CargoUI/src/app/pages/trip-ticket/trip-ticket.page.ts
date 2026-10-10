@@ -7,23 +7,6 @@ import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 import { ErrorState, SkeletonRows } from '../../shared/states';
 
-/**
- * The paperwork a truck leaves the yard with, filled in and ready to print.
- *
- * Two sheets, laid out as the office's paper forms are:
- *
- *   **Official Trip Ticket** — the crew, the truck, the load, and the route,
- *   mileage and fuel log the crew fills in on the road.
- *
- *   **Allowance Disbursement & Safety, LTO and Warehouse Compliance
- *   Checklist** — the allowance being released, how, and the checks done at
- *   dispatch, with the approvals under them.
- *
- * Everything the system knows is printed; everything only known on the road —
- * times, odometer, receipts, the ticks and the signatures — is left blank to
- * be written in by hand, as the paper always was. The print dialog doubles as
- * "save as PDF".
- */
 @Component({
   selector: 'app-trip-ticket',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -37,7 +20,6 @@ export class TripTicketPage {
   protected readonly ticket = signal<TripTicket | null>(null);
   protected readonly failure = signal<string | null>(null);
 
-  /** The firm's own logo when it has uploaded one, else the brand mark. */
   protected readonly logo = computed(() => this.ticket()?.issuer.logo_url ?? 'brand/logo-mark.png');
 
   protected readonly route = computed(() => {
@@ -59,7 +41,6 @@ export class TripTicketPage {
       .join(' · ');
   });
 
-  /** The legs of the mileage log. Only the origin is known before the trip. */
   protected readonly legs = computed(() => {
     const t = this.ticket()?.trip;
 
@@ -107,12 +88,10 @@ export class TripTicketPage {
     });
   }
 
-  /** "1,000.00" — the form prints the figure without the peso sign. */
   protected amount(cents: number | null): string {
     return cents ? fmt.pesos(cents).replace('₱', '') : '';
   }
 
-  /** "Sep 18, 2026, 6:05 AM" — when the checklist was answered. */
   protected stamp(value: string): string {
     return new Date(value).toLocaleString('en-US', {
       month: 'short',

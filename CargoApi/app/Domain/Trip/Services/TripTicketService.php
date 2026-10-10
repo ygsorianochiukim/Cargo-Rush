@@ -10,29 +10,8 @@ use App\Domain\Tenancy\Services\LogoStore;
 use App\Domain\Tenancy\Support\Tenant;
 use App\Domain\Trip\Models\Trip;
 
-/**
- * The paperwork a truck leaves the yard with — the Official Trip Ticket and
- * the Allowance Disbursement & Safety, LTO and Warehouse Compliance Checklist.
- *
- * Two printed sheets the office used to fill in by hand from the trip. This
- * fills in everything the system already knows — who, which truck, for whom,
- * where to, what is loaded, the allowance — and leaves blank what can only be
- * written on the road: the times, the odometer, the fuel receipts, the ticks
- * and the signatures.
- *
- * A partner (trucker) run prints the partner's driver and truck, because that
- * is who is driving; the fleet's own crew fields are empty on such a run.
- */
 class TripTicketService
 {
-    /**
-     * The checklist on the second sheet, in the order the paper has it.
-     *
-     * Fixed text rather than configuration: it is the firm's own dispatch
-     * form, and a line added to it is a change to that form. Each line has a
-     * key the driver's answers are stored under, so rewording a line keeps
-     * the answers already given to it.
-     */
     public const CHECKLIST = [
         'LTO driver and vehicle compliance' => [
             'licence' => "Valid driver's license with appropriate classification",
@@ -114,7 +93,6 @@ class TripTicketService
                     : $trip->driver?->licence_no,
                 'helper_1' => $helpers[0] ?? null,
                 'helper_2' => $helpers[1] ?? null,
-                // Beyond two, the paper has no box; they are listed under it.
                 'more_helpers' => array_slice($helpers, 2),
                 'partner' => $partner ? ($trip->trucker?->business_name ?: $trip->trucker?->name) : null,
             ],
@@ -131,11 +109,6 @@ class TripTicketService
                 'name' => $trip->customer?->name,
                 'contact' => $trip->customer?->contact,
             ],
-            /*
-             * The allowance the office has put against this trip on the daily
-             * sheet, if any. Blank on the paper otherwise, for the amount to
-             * be written in when it is released.
-             */
             'allowance_cents' => (int) LedgerEntry::query()->where('trip_id', $trip->getKey())->sum('allowance_cents') ?: null,
             'checklist' => $this->answered($trip),
             'checked' => [
@@ -146,11 +119,7 @@ class TripTicketService
         ];
     }
 
-    /**
-     * The checklist as the app asks it: sections, each line with its key.
-     *
-     * @return list<array{section: string, items: list<array{key: string, label: string}>}>
-     */
+    /** @return list<array{section: string, items: list<array{key: string, label: string}>}> */
     public static function checklist(): array
     {
         return collect(self::CHECKLIST)
@@ -165,18 +134,12 @@ class TripTicketService
             ->all();
     }
 
-    /** Every line's key, for validating an answer sheet. @return list<string> */
     public static function keys(): array
     {
         return collect(self::CHECKLIST)->flatMap(fn (array $items): array => array_keys($items))->values()->all();
     }
 
-    /**
-     * The checklist with this trip's answers — `yes`, `no`, `na`, or null for
-     * a line nobody has answered, which prints as three empty boxes.
-     *
-     * @return list<array<string, mixed>>
-     */
+    /** @return list<array<string, mixed>> */
     private function answered(Trip $trip): array
     {
         $answers = (array) ($trip->dispatch_checklist ?? []);
@@ -190,7 +153,6 @@ class TripTicketService
         ], self::checklist());
     }
 
-    /** "6 wheelers / 15,000 kg" — the Type line, from whatever the system has. */
     private function type(?string $category, ?int $wheels, ?int $capacityKg): ?string
     {
         $parts = array_filter([

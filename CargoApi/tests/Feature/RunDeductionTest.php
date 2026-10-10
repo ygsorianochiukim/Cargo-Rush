@@ -11,41 +11,6 @@ use Database\Seeders\PermissionSeeder;
 use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * Deductions added to one payslip, on the run itself.
- *
- * The charge nobody is going to set up an assignment for: a uniform issued this
- * fortnight, a breakage, a cash advance against this payslip and no other. The
- * salary structure answers the recurring case — assign it once, it lands every
- * period — and it is the wrong shape entirely for a one-off.
- *
- * Before this there was exactly one place to put such a thing: a single
- * `other_deductions_cents` figure with one free-text note. Two charges in the
- * same fortnight had to be added up in somebody's head, and the payslip said
- * "₱3,450 other", which is a number the person holding it cannot ask a question
- * about.
- *
- * What these tests are defending:
- *
- *   **It is named on the payslip.** Itemised beside the assigned ones, in the
- *   same list, because the person reading it does not care where a deduction
- *   came from — only what it was for.
- *
- *   **It survives a rebuild.** This is the one that matters. Rebuilding throws
- *   every line away and works them out again, and a hand-added row has nothing
- *   to recompute it from. An office that loses a ₱2,000 uniform by pressing
- *   *Work it out again* stops trusting the screen — worse than the missing
- *   figure. So they are carried across, and carried across **into the same
- *   arithmetic**, not stapled on after the totals are settled.
- *
- *   **Deductions only.** A taxable earning belongs in the tax base, and the
- *   withholding on this line was worked out when the run was built. Adding one
- *   here would leave the tax saying something the gross no longer supports.
- *
- *   **An assigned row cannot be picked off here.** Removing it on one payslip
- *   would be a correction the next rebuild silently undoes. The office ends the
- *   assignment instead, which is the change that lasts.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -114,10 +79,8 @@ describe('putting one on a payslip', function (): void {
             ->and($row['kind'])->toBe('deduction')
             ->and($row['amount_cents'])->toBe(200_000)
             ->and($row['added_by_hand'])->toBeTrue()
-            // The figure it adds up into, and the net that follows from it.
             ->and($after['component_deductions_cents'])->toBe(200_000)
             ->and($after['net_cents'])->toBe($before['net_cents'] - 200_000)
-            // The gross is untouched: a deduction is not pay.
             ->and($after['gross_cents'])->toBe($before['gross_cents']);
     });
 
@@ -126,8 +89,6 @@ describe('putting one on a payslip', function (): void {
         $uniform = ($this->component)();
         $run = ($this->open)()->assertCreated()->json('data');
 
-        // The amount is this payslip's, whatever the catalogue says the
-        // component is normally worth — ₱500 there, ₱2,000 charged here.
         $line = ($this->charge)($run, [
             'pay_component_id' => $uniform['id'],
             'amount_cents' => 200_000,
@@ -147,7 +108,6 @@ describe('putting one on a payslip', function (): void {
         $line = ($this->charge)($run, ['name' => 'Breakage', 'amount_cents' => 145_000])
             ->assertCreated()->json('data.lines.0');
 
-        // Two rows, not "₱3,450 other" — which is the entire point.
         expect(collect($line['components'])->pluck('name')->all())
             ->toBe(['Uniform', 'Breakage'])
             ->and($line['component_deductions_cents'])->toBe(345_000);
@@ -165,9 +125,6 @@ describe('putting one on a payslip', function (): void {
         $bonus = ($this->component)(['name' => 'Bonus', 'kind' => 'earning']);
         $run = ($this->open)()->assertCreated()->json('data');
 
-        // The tax on this line was worked out when the run was built. An
-        // earning added afterwards would leave it saying something the gross no
-        // longer supports.
         ($this->charge)($run, ['pay_component_id' => $bonus['id'], 'amount_cents' => 100_000])
             ->assertStatus(422);
     });
@@ -184,8 +141,6 @@ describe('working the run out again', function (): void {
         $line = $rebuilt['lines'][0];
         $row = collect($line['components'])->firstWhere('name', 'Uniform');
 
-        // The row that has nothing behind it to recompute from is exactly the
-        // row a rebuild would otherwise drop, silently.
         expect($row)->not->toBeNull()
             ->and($row['amount_cents'])->toBe(200_000)
             ->and($row['added_by_hand'])->toBeTrue()
@@ -201,10 +156,6 @@ describe('working the run out again', function (): void {
 
         $line = ($this->rebuild)($run)['lines'][0];
 
-        // The totals on a rebuilt payslip are written once, at insert, from the
-        // same list the catalogue's components arrive in. A carried-over row
-        // stapled on afterwards would show here as a net that does not follow
-        // from its own parts.
         expect($line['net_cents'])->toBe($line['gross_cents'] - $line['deductions_cents'])
             ->and($line['net_cents'])->toBe($before['net_cents'] - 200_000);
     });
@@ -218,8 +169,6 @@ describe('working the run out again', function (): void {
         ($this->rebuild)($run);
         $line = ($this->rebuild)($run)['lines'][0];
 
-        // Carried across, not accumulated. The obvious way to write this
-        // feature doubles the charge every time somebody presses the button.
         expect(collect($line['components'])->where('name', 'Uniform'))->toHaveCount(1)
             ->and($line['component_deductions_cents'])->toBe(200_000);
     });
@@ -232,7 +181,6 @@ describe('working the run out again', function (): void {
         $run = ($this->open)()->assertCreated()->json('data');
         ($this->charge)($run, ['name' => 'Breakage', 'amount_cents' => 50_000])->assertCreated();
 
-        // The catalogue's amount moves, which is what a rebuild is *for*.
         $this->actingAs($this->admin)
             ->patchJson("/api/v1/payroll/components/{$uniform['id']}", ['amount_cents' => 400_000])
             ->assertOk();
@@ -241,7 +189,6 @@ describe('working the run out again', function (): void {
 
         expect(collect($line['components'])->firstWhere('name', 'Rice allowance')['amount_cents'])
             ->toBe(200_000)
-            // And the hand-added one is untouched beside it.
             ->and(collect($line['components'])->firstWhere('name', 'Breakage')['amount_cents'])
             ->toBe(50_000);
     });
@@ -278,8 +225,6 @@ describe('taking one back off', function (): void {
 
         expect($row['added_by_hand'])->toBeFalse();
 
-        // Removing it here would be a correction the next rebuild silently
-        // undoes. The office ends the assignment instead.
         $this->actingAs($this->admin)
             ->deleteJson("/api/v1/payroll/{$run['id']}/lines/{$line['id']}/deductions/{$row['id']}")
             ->assertStatus(422);
@@ -296,8 +241,6 @@ describe('once the run is closed', function (): void {
         $this->actingAs($this->admin)
             ->postJson("/api/v1/payroll/{$run['id']}/approve")->assertOk();
 
-        // Payslips may already be out. The figures on an approved run are
-        // frozen, and this is one more way of editing them.
         ($this->charge)($run, ['name' => 'Uniform', 'amount_cents' => 200_000])
             ->assertStatus(422);
     });

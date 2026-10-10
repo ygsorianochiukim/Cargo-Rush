@@ -22,11 +22,6 @@ class InvoiceRepository extends Repository
 
     public function query(): Builder
     {
-        // The trip rides along because the list prints its reference; without
-        // it, a page of invoices raised by deliveries is a page of queries.
-        // The trip rides along because the list prints its reference; the
-        // allocation sum rides along because every row prints a balance, and
-        // without it a page of invoices is a page of extra queries.
         return Invoice::query()
             ->with(['customer:id,name', 'trip:id,reference'])
             ->withSum('allocations', 'amount_cents')
@@ -53,16 +48,7 @@ class InvoiceRepository extends Repository
         return $query;
     }
 
-    /**
-     * The statuses that mean "still owed something".
-     *
-     * `partial` joins the other two now that an invoice can be paid in part.
-     * Leaving it out would have made a half-paid document vanish from every
-     * receivables figure the moment the first instalment landed — the money
-     * still owed would simply stop being counted.
-     *
-     * @return string[]
-     */
+    /** @return string[] */
     private function unsettled(): array
     {
         return [
@@ -72,32 +58,12 @@ class InvoiceRepository extends Repository
         ];
     }
 
-    /**
-     * Unsettled money in one direction, in centavos.
-     *
-     * The **balance**, not the face value. Two things now sit between the
-     * figure on a document and the figure still owed: anything already paid
-     * against it, and the withholding tax the customer keeps back and remits
-     * on our behalf. Summing `amount_cents` counted both as receivable, which
-     * overstated what was coming — a half-paid invoice looked entirely unpaid.
-     *
-     * The unsettled rows are loaded rather than aggregated in SQL, because the
-     * balance is arithmetic across two tables and the expression that does it
-     * in one statement differs by engine. This set is bounded by what the
-     * business is owed, which is a number it is trying to keep small.
-     */
     public function outstanding(InvoiceDirection $direction): int
     {
         return $this->outstandingInvoices($direction)
             ->sum(static fn (Invoice $invoice): int => $invoice->balanceCents());
     }
 
-    /**
-     * The unsettled documents themselves, with what has been paid on each.
-     *
-     * `withSum` makes the allocation total one correlated subquery instead of
-     * one query per invoice, which is what `Invoice::paidCents()` reads.
-     */
     public function outstandingInvoices(InvoiceDirection $direction): Collection
     {
         return Invoice::query()
@@ -109,20 +75,6 @@ class InvoiceRepository extends Repository
             ->get();
     }
 
-    /**
-     * Money actually received in one direction, in centavos.
-     *
-     * Summed from the **allocations**, not from invoices marked paid. The old
-     * version added up the face value of settled documents, which was the only
-     * thing available when settling was a status flip — and it counted a
-     * document as fully collected the instant somebody pressed the button,
-     * including the withholding tax that never arrives.
-     *
-     * Allocations are the money against documents. A payment received and not
-     * yet applied is real money, but it is a credit on the customer's account
-     * rather than something collected against a bill, and it is counted when
-     * it is applied.
-     */
     public function collected(InvoiceDirection $direction): int
     {
         return (int) PaymentAllocation::query()
@@ -130,34 +82,12 @@ class InvoiceRepository extends Repository
             ->sum('amount_cents');
     }
 
-    /**
-     * Money that actually moved in one direction over a window, in centavos.
-     *
-     * `collected()` for a period, and dated by **when the payment was made**
-     * rather than by when the document was raised. That is the whole point of
-     * it: a bill dated June and settled in July is July's money leaving the
-     * bank, and a quarter that claimed it in June would be describing a
-     * payment that had not happened yet.
-     *
-     * Summed from the allocations, so a part-paid document contributes only
-     * the part paid — which is the honest figure for "what did we actually
-     * hand over", and the reason this is not `where status = paid`.
-     */
     public function settledBetween(InvoiceDirection $direction, CarbonInterface $from, CarbonInterface $to): int
     {
         return (int) $this->settlementsBetween($direction, $from, $to)->sum('amount_cents');
     }
 
-    /**
-     * The same money, payment by payment, each with the day it moved.
-     *
-     * For a report that buckets by date rather than taking one total — Sales
-     * does, and a figure dropped into the wrong week there is worse than no
-     * figure at all. Built from the same query as `settledBetween()` so the
-     * total and the series cannot disagree about what counts.
-     *
-     * @return Collection<int, PaymentAllocation>
-     */
+    /** @return Collection<int, PaymentAllocation> */
     public function settlementsBetween(InvoiceDirection $direction, CarbonInterface $from, CarbonInterface $to): Collection
     {
         return PaymentAllocation::query()
@@ -169,13 +99,6 @@ class InvoiceRepository extends Repository
             ->get();
     }
 
-    /**
-     * VAT charged to customers on invoices raised in the window.
-     *
-     * Never income: it is the government's, collected on its behalf. Carried
-     * beside the income so a reader sees what of the money coming in is not
-     * the fleet's to keep. Cancelled invoices charged nobody anything.
-     */
     public function vatRaisedBetween(CarbonInterface $from, CarbonInterface $to): int
     {
         return (int) Invoice::query()
@@ -186,19 +109,6 @@ class InvoiceRepository extends Repository
             ->sum('vat_cents');
     }
 
-    /**
-     * The part of what is outstanding that is already late, in centavos.
-     *
-     * A subset of `outstanding`, not a fourth bucket — which is why the
-     * dashboard carries it alongside rather than deducting it. Chasing money
-     * is a different job from expecting it.
-     *
-     * Read from the **due date**, not the stored `overdue` status. The status
-     * is only as fresh as the last run of the overdue sweep, so a day the
-     * scheduler missed showed nothing late at all; and a part-paid document
-     * keeps `partial` however late it is. Late means unsettled and due before
-     * today — the same line `BillingService::aging()` draws.
-     */
     public function overdueTotal(InvoiceDirection $direction): int
     {
         return $this->outstandingInvoices($direction)
@@ -207,23 +117,7 @@ class InvoiceRepository extends Repository
             ->sum(static fn (Invoice $invoice): int => $invoice->balanceCents());
     }
 
-    /**
-     * How much of what was billed in a window has been collected — both
-     * halves on the same footing.
-     *
-     * The dashboard's collection rate used to divide everything ever collected
-     * by that plus everything outstanding: two all-time figures under a card
-     * that said "last 30 days". Here both come from the **same documents** —
-     * receivables raised in the window, cancelled ones aside — and both are
-     * measured **net of withholding**, because the part a customer keeps back
-     * for the BIR was never going to arrive and must not count as uncollected.
-     *
-     * Collected is what was paid against those documents within the window,
-     * capped at each one's due so an overpayment cannot lift the rate past
-     * the money that was actually owed.
-     *
-     * @return array{billed_cents: int, collected_cents: int}
-     */
+    /** @return array{billed_cents: int, collected_cents: int} */
     public function collectionBetween(CarbonInterface $from, CarbonInterface $to): array
     {
         $invoices = Invoice::query()
@@ -249,7 +143,6 @@ class InvoiceRepository extends Repository
         ];
     }
 
-    /** How many documents sit in each status, for the dashboard counts. */
     public function countsByStatus(InvoiceDirection $direction): array
     {
         return Invoice::query()
@@ -261,16 +154,6 @@ class InvoiceRepository extends Repository
             ->all();
     }
 
-    /**
-     * Unsettled invoices whose due date has passed.
-     *
-     * Overdue is derived from the date, so the flip to `overdue` is a
-     * reconciliation the service runs, not a status a client can post.
-     *
-     * Part-paid documents are included. A customer who sent half in March and
-     * nothing since is late on the rest, and leaving `partial` out of this
-     * sweep would quietly exempt exactly the invoices most worth chasing.
-     */
     public function pendingPastDue(): Collection
     {
         return Invoice::query()

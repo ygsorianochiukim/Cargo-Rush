@@ -16,33 +16,10 @@ use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/**
- * The firm's salary structure: what it pays and deducts, and who gets it.
- *
- * Two resources behind one controller, because they are one screen and one
- * decision. A catalogue nobody is assigned pays nothing, and an assignment
- * needs something to point at — splitting them across two controllers would put
- * a route boundary through the middle of a single job.
- *
- * ## Why there is no pagination here
- *
- * A firm's list of allowances and deductions is a dozen rows and stays a dozen
- * rows; so is one person's. Paginating either would mean a client had to page
- * through a payslip's worth of information to render one form. The endpoints
- * that *are* paginated in this system are the ones that grow without limit —
- * trips, invoices, pay runs — and this is not one of them.
- */
 class PayComponentController extends ApiController
 {
     public function __construct(private readonly PayComponentService $components) {}
 
-    /**
-     * `GET payroll/components` — the catalogue.
-     *
-     * The assignment count comes with each row, because it is what decides
-     * whether a delete is a delete: a component somebody is on is retired
-     * instead, and a screen that cannot see the count cannot warn about it.
-     */
     public function index(Request $request): JsonResponse
     {
         $components = PayComponent::query()
@@ -69,19 +46,6 @@ class PayComponentController extends ApiController
         );
     }
 
-    /**
-     * `DELETE payroll/components/{component}` — remove it, or retire it.
-     *
-     * A component nobody is assigned is deleted; one in use is retired, because
-     * deleting it would cascade away the assignments and a firm that removed a
-     * COLA by mistake could not put it back. Both stop it appearing on future
-     * payslips, which is what was asked.
-     *
-     * Answers 200 with the retired component rather than 204 in that case — the
-     * client has to be able to tell the two apart, and the difference is
-     * something the office should see rather than infer from a row that did not
-     * disappear.
-     */
     public function destroy(PayComponent $component): JsonResponse
     {
         if ($this->components->delete($component)) {
@@ -94,13 +58,6 @@ class PayComponentController extends ApiController
         );
     }
 
-    /**
-     * `GET employees/{employee}/pay-components` — what one person is paid.
-     *
-     * Under the employee rather than under payroll, because that is the screen
-     * it belongs to: somebody opening a staff record wants to see the salary
-     * beside the allowances that go with it.
-     */
     public function forEmployee(Employee $employee): JsonResponse
     {
         $assignments = $this->components->assignmentsFor($employee);

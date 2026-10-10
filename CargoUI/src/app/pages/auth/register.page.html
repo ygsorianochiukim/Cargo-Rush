@@ -1,6 +1,4 @@
 <div class="flex h-full items-center justify-center overflow-y-auto bg-cr-tint p-4">
-  <!-- Wider than the sign-in card: this form carries a map, and a 280px map in
-       a 420px column is a map nobody can pick a depot on. -->
   <div class="w-full max-w-[520px] py-6">
     <div class="mb-6 flex justify-center">
       <app-wordmark [size]="28" />
@@ -57,18 +55,6 @@
             placeholder="Km 9, Sasa, Davao City" />
         </app-field>
 
-        <!--
-          Where the yard is, on a map.
-
-          The one field on this form that does something the company cannot
-          easily do for itself later: customers pick a haulier from the carriers
-          near their load, and that list is sorted by this pin. A company with
-          no pin is invisible to every shipper who does not already have its
-          phone number.
-
-          Optional, because whoever fills this in may be sitting nowhere near
-          the depot, and movable afterwards on the company card.
-        -->
         <div class="flex flex-col gap-2">
           <div class="flex flex-wrap items-baseline justify-between gap-2">
             <h3 class="text-[13px] font-semibold">Where is your yard?</h3>

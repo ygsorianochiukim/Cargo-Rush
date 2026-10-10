@@ -16,55 +16,24 @@ import { Field } from './field';
 import { fmt } from './format';
 import { Modal } from './modal';
 
-/**
- * Recording money that has arrived — and the only way an invoice becomes paid.
- *
- * ## Why this exists
- *
- * It did not, and that was a hole with a bad shape. `paid` is derived from the
- * payments against a document, so the office was left marking invoices paid
- * with a status dropdown — which wrote the word and no money, and told one
- * customer ₱21,482 had been collected when the bank had seen none of it. The
- * status option is gone now; this is what replaces it, and it leaves a payment
- * behind: an amount, a date, a method and a reference that can be matched
- * against a bank statement.
- *
- * ## One dialog, two ways in
- *
- * From an invoice — the balance is what is owed on it, filled in and editable.
- * From the Billing page — pick the document the money is against. The same form
- * either way, because "settle this" and "money came in" end in the same record,
- * and two forms would be two chances for one of them to write a payment the
- * other cannot read.
- *
- * The amount defaults to the **balance**, not the invoice total: what a payer
- * owes is the total less any withholding tax and less anything already
- * received, and defaulting to the document's face value is how an invoice ends
- * up over-settled.
- */
 @Injectable({ providedIn: 'root' })
 export class PaymentDialog {
   readonly open = signal(false);
 
-  /** The invoice the money is against, when the caller knows. */
   readonly invoice = signal<Invoice | null>(null);
 
-  /** What the picker offers when it does not. Unsettled receivables only. */
   readonly choices = signal<Invoice[]>([]);
 
   private readonly recordedSubject = new Subject<void>();
 
-  /** Fires after a payment is recorded, so a page can re-read its figures. */
   readonly recorded = this.recordedSubject.asObservable();
 
-  /** Open against one document. */
   forInvoice(invoice: Invoice): void {
     this.invoice.set(invoice);
     this.choices.set([]);
     this.open.set(true);
   }
 
-  /** Open with a list to choose from — the "money arrived" way in. */
   forAny(choices: Invoice[]): void {
     this.invoice.set(null);
     this.choices.set(choices);
@@ -76,7 +45,6 @@ export class PaymentDialog {
   }
 }
 
-/** Mounted once in the shell, like the other dialogs. */
 @Component({
   selector: 'app-payment-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -204,17 +172,8 @@ export class PaymentForm {
     reference: [''],
   });
 
-  /**
-   * Which invoice the picker is on.
-   *
-   * A signal beside the form control rather than read out of the form: a
-   * reactive form's value is not a signal, so a `computed` over it would be
-   * cached at whatever it was when the dialog opened — and the hint under the
-   * amount would keep naming the first invoice in the list.
-   */
   private readonly pickedId = signal('');
 
-  /** The document being paid, however it was chosen. */
   private readonly target = computed(() => {
     const fixed = this.dialog.invoice();
     if (fixed !== null) return fixed;
@@ -224,7 +183,6 @@ export class PaymentForm {
     return this.dialog.choices().find((choice) => choice.id === id) ?? null;
   });
 
-  /** Money going out on a supplier bill, rather than coming in on an invoice. */
   protected readonly paying = computed(() => this.dialog.invoice()?.direction === 'payable');
 
   protected readonly subtitle = computed(() => {
@@ -244,21 +202,11 @@ export class PaymentForm {
   });
 
   constructor() {
-    // Reset each time it opens, with the amount filled in from what is owed:
-    // the common case is somebody settling exactly the balance, and asking them
-    // to type a figure the system already knows is a chance to mistype it.
     effect(() => {
       if (this.dialog.open()) this.reset();
     });
   }
 
-  /**
-   * The picker moved: the amount follows what that invoice owes.
-   *
-   * Overwriting a figure somebody has typed is the right trade here — changing
-   * the invoice changes what the payment is for, and a stale amount from the
-   * previous one is the mistake worth preventing.
-   */
   protected pick(id: string): void {
     this.pickedId.set(id);
 
@@ -270,8 +218,6 @@ export class PaymentForm {
   }
 
   protected errorFor(field: string): string | null {
-    // The API names its fields differently for the allocation, so the two most
-    // likely rejections are mapped onto the boxes a person can see.
     const fromApi =
       this.fieldErrors()[field]?.[0] ??
       (field === 'amount' ? this.fieldErrors()['amount_cents']?.[0] : undefined) ??
@@ -320,9 +266,6 @@ export class PaymentForm {
         paid_on: values.paid_on,
         method: values.method,
         reference: values.reference || null,
-        // Allocated to this document in full. A payment that settles three
-        // invoices is a real case and the API takes it; splitting one across
-        // several is a screen of its own, and this is the one people need.
         allocations: [{ invoice_id: invoice.id, amount_cents: cents }],
       })
       .subscribe({
@@ -350,8 +293,6 @@ export class PaymentForm {
     this.form.reset({
       invoice_id: invoice?.id ?? '',
       amount: invoice ? invoice.balance_cents / 100 : 0,
-      // Today. Money that arrived last week is a date somebody changes; money
-      // that arrived in the future is not a payment, and the API refuses it.
       paid_on: new Date().toISOString().slice(0, 10),
       method: 'bank_transfer',
       reference: '',

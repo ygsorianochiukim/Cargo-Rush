@@ -16,10 +16,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
-/**
- * Other Expenses — the categorised spend that the workbook's five columns
- * never had a place for.
- */
 class ExpenseController extends ApiController
 {
     public function __construct(private readonly ExpenseService $expenses) {}
@@ -58,15 +54,12 @@ class ExpenseController extends ApiController
         return $this->noContent();
     }
 
-    /** Where the money went over a window, biggest category first. */
     public function report(Request $request): JsonResponse
     {
         [$from, $to] = $this->range($request);
 
         return $this->payload($this->expenses->report($from, $to));
     }
-
-    /* --------------------------------------------------------- Categories */
 
     public function categories(Request $request): JsonResponse
     {
@@ -90,13 +83,6 @@ class ExpenseController extends ApiController
         );
     }
 
-    /**
-     * Deleting a category that has spend against it retires it instead.
-     *
-     * A 200 with the retired row rather than a 204, so the client can say what
-     * actually happened — a category that vanishes from the list on some
-     * presses and greys out on others, with no explanation, reads as a bug.
-     */
     public function destroyCategory(ExpenseCategory $category): JsonResponse
     {
         if ($this->expenses->deleteCategory($category)) {
@@ -109,14 +95,6 @@ class ExpenseController extends ApiController
         );
     }
 
-    /**
-     * The window a report covers: this month unless the caller says otherwise.
-     *
-     * Either end can be given alone and the other keeps this month's. An
-     * unreadable date falls back to that default rather than a 500, and ends
-     * given the wrong way round are swapped: somebody who picked the 30th and
-     * then the 1st meant the days in between, not an empty report.
-     */
     private function range(Request $request): array
     {
         $from = $this->date($request, 'from') ?? now()->startOfMonth();
@@ -125,7 +103,6 @@ class ExpenseController extends ApiController
         return $from->greaterThan($to) ? [$to, $from] : [$from, $to];
     }
 
-    /** A date off the query string, or null when it is missing or unreadable. */
     private function date(Request $request, string $key): ?Carbon
     {
         $value = trim((string) $request->query($key, ''));

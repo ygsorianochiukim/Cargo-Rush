@@ -21,10 +21,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * A person who drives, or rides along as a helper. Both are the same record —
- * the difference is which column of a trip they sit in.
- */
 class Driver extends Model
 {
     /** @use HasFactory<DriverFactory> */
@@ -51,7 +47,6 @@ class Driver extends Model
         return $this->belongsTo(User::class);
     }
 
-    /** The unit they currently hold the keys to, if any. */
     public function vehicle(): HasOne
     {
         return $this->hasOne(Vehicle::class);
@@ -62,7 +57,6 @@ class Driver extends Model
         return $this->hasMany(Trip::class);
     }
 
-    /** Trips they rode as the helper rather than the driver. */
     public function helperTrips(): BelongsToMany
     {
         return $this->belongsToMany(Trip::class, 'trip_helpers')->withTimestamps();
@@ -78,10 +72,6 @@ class Driver extends Model
         return $this->hasMany(Incident::class);
     }
 
-    /**
-     * A licence inside the warning window is the one thing the Drivers module
-     * flags before anything has actually gone wrong.
-     */
     public function licenceExpiresWithin(int $days = 60): bool
     {
         return $this->licence_expiry !== null

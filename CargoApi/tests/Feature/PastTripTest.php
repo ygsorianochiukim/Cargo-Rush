@@ -14,14 +14,6 @@ use App\Domain\Vehicle\Models\Vehicle;
 use Database\Seeders\Demo\FleetSeeder;
 use Database\Seeders\NavigationSeeder;
 
-/**
- * Entering a trip that already happened, as Delivered.
- *
- * The office catching up on old work: the trip goes through the same delivery
- * a driver's hand-off does — the delivery log, the day's sheet income, the
- * customer's invoice — dated the day it was delivered, not the day it was
- * typed in. Only for the past; a future trip is delivered by driving it.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(FleetSeeder::class);
@@ -95,7 +87,6 @@ it('marks an existing trip that already happened as delivered, once', function (
         ->assertOk()
         ->assertJsonPath('data.status', StatusValue::Delivered->value);
 
-    // Saving it again is an edit, not a second delivery: one invoice, one row.
     $this->actingAs($this->admin)
         ->patchJson("/api/v1/trips/{$id}", ['status' => StatusValue::Delivered->value, 'cargo' => 'Retail goods'])
         ->assertOk();

@@ -8,30 +8,12 @@ use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
 use Illuminate\Validation\Rule;
 
-/**
- * Booking a service, and recording what it came to.
- *
- * One form for both, because they are one record seen at two moments: a job is
- * booked with a date and a kind, and costed later when the invoice comes back
- * from the garage. Splitting them into "schedule" and "close out" would make
- * the ordinary correction — a figure mistyped — into a decision about which
- * form to open.
- */
 class MaintenanceJobRequest extends ApiFormRequest
 {
     public function rules(): array
     {
         $required = $this->requiredOnCreate();
 
-        /**
-         * Which truck — asked for only when the route did not already say.
-         *
-         * The nested route carries the unit in its path (`vehicles/{vehicle}/
-         * maintenance`), so there it is neither needed nor honoured. Truck
-         * Maintenance posts to a flat route from a screen that lists the whole
-         * fleet, and there the unit is the first thing the form asks: a service
-         * with no truck on it is a cost with nowhere to land.
-         */
         $onAUnit = $this->route('vehicle') !== null;
 
         return [
@@ -49,37 +31,12 @@ class MaintenanceJobRequest extends ApiFormRequest
                 ]),
             ],
 
-            /**
-             * What it cost, in centavos.
-             *
-             * Nullable and it matters: null is "nobody has told us yet" and
-             * zero is a warranty job nobody was charged for. Clearing a figure
-             * back to null takes it off the unit's sheet again, which is what
-             * somebody correcting a mistake means by clearing it.
-             *
-             * Ten million is ₱100,000 — an engine rebuild, and past what any
-             * single line should be without somebody looking at it twice.
-             */
             'cost_cents' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:10000000'],
 
-            /**
-             * The day the work was done, which is the day it is charged to.
-             *
-             * Not `due_at`: a service booked for the 12th and done on the 19th
-             * is the 19th's money. A cost with no completed date is charged to
-             * nothing, because there is no day to charge it to.
-             */
             'completed_on' => ['sometimes', 'nullable', 'date'],
 
             'supplier_id' => ['sometimes', 'nullable', 'string', 'exists:suppliers,id'],
 
-            /**
-             * The garage's bill for this work, when it was raised in Billing.
-             *
-             * The job already posts its cost to the sheet; naming the bill is
-             * what stops its payment being counted a second time as a
-             * supplier bill. Payables only — a receivable is somebody paying us.
-             */
             'invoice_id' => [
                 'sometimes', 'nullable', 'string',
                 Rule::exists('invoices', 'id')->where('direction', 'payable'),
@@ -98,15 +55,7 @@ class MaintenanceJobRequest extends ApiFormRequest
         ];
     }
 
-    /**
-     * The fields to write.
-     *
-     * `only` on the *validated* payload rather than the raw input, so a client
-     * that sent `posted_cents` cannot reach the column that keeps the job and
-     * the daily sheet in agreement. See `MaintenanceService`.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function toAttributes(): array
     {
         return $this->safe()->only([

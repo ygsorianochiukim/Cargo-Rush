@@ -1,22 +1,11 @@
 import { StatusValue } from '../shared/status.model';
 import { Timestamped } from '../shared/envelope.model';
 
-/**
- * Other Expenses — the categorised spend the workbook's five columns had no
- * place for. Money is integer centavos (DESIGN.md section 7.1).
- *
- * Note what "additive" means here: a line and a ledger column are not
- * reconciled against each other. Logging a fill as a Fuel line *and* keying it
- * into the day's `fuel_cents` counts it twice, because nothing can tell that
- * apart from a second fill on the same day.
- */
 export interface ExpenseCategory extends Timestamped {
   id: string;
-  /** The stable handle. Renaming the category keeps this, so its rows survive. */
   key: string;
   name: string;
   description: string | null;
-  /** An icon name from the shared set, never a colour. */
   icon: string | null;
   position: number;
   status: StatusValue;
@@ -28,44 +17,24 @@ export interface Expense extends Timestamped {
   category_name: string | null;
   category_key: string | null;
   category_icon: string | null;
-  /** Null is fleet overhead — real spend belonging to no single unit. */
   truck_id: string | null;
   truck_label: string | null;
   trip_id: string | null;
   vehicle_id: string | null;
   driver_id: string | null;
-  /**
-   * Who it was bought from, where the office keeps a record of them.
-   *
-   * `payee` below is still here and still written: it holds what was already
-   * typed, and a one-off — a tyre bought in Tagum on a Sunday — does not
-   * deserve a supplier record of its own.
-   */
   supplier_id: string | null;
   supplier_name?: string | null;
   driver_name: string | null;
-  /** The day sheet this attached itself to, where it names a truck. */
   ledger_entry_id: string | null;
-  /** ISO date, no time — it rolls into a daily ledger. */
   date: string;
   amount_cents: number;
   currency: string;
   payee: string | null;
   reference: string | null;
   note: string | null;
-  /** Only `active` counts as spend; pending is unapproved, cancelled refused. */
   status: StatusValue;
 }
 
-/**
- * What may be filed.
- *
- * Narrower than what comes back, and deliberately: no truck and no driver. A
- * unit's costs are a maintenance job on the unit, a crew's are payroll, and
- * this form is the supplies and the sundries in between. The API ignores both
- * rather than refusing them, so an old client keeps working — see
- * `ExpenseRequest`.
- */
 export interface ExpensePayload {
   category_id: string;
   trip_id?: string | null;
@@ -85,13 +54,10 @@ export interface CategoryTotal {
   entry_count: number;
 }
 
-/** Where the money went over a window. */
 export interface ExpenseReport {
   range: { from: string; to: string };
-  /** Biggest first, and categories with no spend in the window are omitted. */
   categories: CategoryTotal[];
   total_cents: number;
-  /** Spend belonging to no truck. Counts against the period, against no unit. */
   overhead_cents: number;
   attributed_cents: number;
   entry_count: number;

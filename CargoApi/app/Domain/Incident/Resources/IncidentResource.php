@@ -8,9 +8,7 @@ use App\Domain\Incident\Models\Incident;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use Illuminate\Http\Request;
 
-/**
- * @mixin Incident
- */
+/** @mixin Incident */
 class IncidentResource extends ApiResource
 {
     public function toArray(Request $request): array

@@ -6,13 +6,6 @@ namespace App\Domain\Finance\DTO;
 
 use App\Domain\Shared\DTO\Data;
 
-/**
- * A unit the ledger keeps a sheet for.
- *
- * `plate` is nullable on purpose: a unit can be on the books before it has a
- * registered plate, and it must still appear rather than be filtered away
- * (DESIGN.md section 5.1).
- */
 final class TruckData extends Data
 {
     public function __construct(

@@ -11,14 +11,6 @@ use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/**
- * One haul on one payslip.
- *
- * On a draft it is a reservation, rewritten on every rebuild. On an approved or
- * paid run it is the record that this person has been paid for this trip —
- * which is what the next run reads to find the ones still owed, and what stops
- * a trip being paid twice. See the migration that adds the table.
- */
 class PayRunLineTrip extends Model
 {
     use BelongsToCompany, HasUlids;
@@ -35,10 +27,6 @@ class PayRunLineTrip extends Model
         return $this->belongsTo(Trip::class);
     }
 
-    /**
-     * Rows on a run whose figures are frozen — approved or paid, and not a
-     * deleted draft. These are the trips that have been paid.
-     */
     public function scopeSettled(Builder $query): Builder
     {
         return $query->whereHas('line.payRun', static fn (Builder $run) => $run

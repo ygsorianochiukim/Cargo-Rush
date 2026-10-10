@@ -11,17 +11,7 @@ use App\Domain\Vehicle\Models\Vehicle;
 use Database\Seeders\Demo\FleetSeeder;
 use Database\Seeders\NavigationSeeder;
 
-/**
- * A customer's history is three different questions: what was hauled, what was
- * billed for it, and what the work earned and cost.
- *
- * It answered only the first two, so the money recorded against a unit never
- * reached the customer it was earned from — a customer could have a month of
- * hauling behind them and show nothing but trips.
- */
 beforeEach(function (): void {
-    // Pricing is zone-only, and an unpriced run cannot go out or be billed.
-    // One card at the old tariff's figures, so every run here is priced.
     zoneCard();
 
     $this->seed(NavigationSeeder::class);
@@ -33,7 +23,6 @@ beforeEach(function (): void {
     $this->vehicle = Vehicle::where('plate', 'NCR 4412')->firstOrFail();
     $this->customer = Customer::firstOrFail();
 
-    /** Book a run for a customer, take it out, and hand it over. */
     $this->haul = function (array $overrides = [], string $receiver = 'R. Uy'): string {
         $id = $this->actingAs($this->admin)->postJson('/api/v1/trips', [
             'origin' => 'Cagayan de Oro',
@@ -44,14 +33,10 @@ beforeEach(function (): void {
             'driver_id' => $this->driver->id,
             'vehicle_id' => $this->vehicle->id,
             'scheduled_at' => now()->toIso8601String(),
-            // `assigned` is what a driver can leave on: confirmed work with a
-            // crew and a unit. `pending` now means a request nobody has
-            // looked at, and `start` refuses one.
             'status' => StatusValue::Assigned->value,
             ...$overrides,
         ])->json('data.id');
 
-        // A unit does not roll without a passing pre-trip check.
         $this->passPreTripCheck($id);
         $this->actingAs($this->marco)->postJson("/api/v1/trips/{$id}/start", [])->assertOk();
         $this->actingAs($this->marco)
@@ -63,7 +48,6 @@ beforeEach(function (): void {
 });
 
 it('carries the customer from the trip onto the day it opens', function (): void {
-    // Nobody types this: the run already knows whose load it was.
     ($this->haul)();
 
     expect(LedgerEntry::firstOrFail()->customer_id)->toBe($this->customer->id);
@@ -113,8 +97,6 @@ it('keeps a day off the history of a customer it was not earned from', function 
 });
 
 it('files a day with no customer against nobody', function (): void {
-    // A run booked without a customer — the company's own freight. The day is
-    // still recorded; it just belongs to no history.
     ($this->haul)(['customer_id' => null]);
 
     $row = LedgerEntry::firstOrFail();
@@ -124,8 +106,6 @@ it('files a day with no customer against nobody', function (): void {
 });
 
 it('lets the office name the customer on a day it keys in by hand', function (): void {
-    // The transcribed workbook has rows with no trip behind them, and the
-    // office still knows whose work the day was.
     $truck = $this->actingAs($this->admin)->postJson('/api/v1/finance/trucks', [
         'label' => 'Truck 1',
         'plate' => 'NCR 4412',
@@ -161,7 +141,6 @@ it('refuses a customer that does not exist', function (): void {
 });
 
 it('keeps the day when the customer is deleted', function (): void {
-    // Removing a customer must not take a day of income and expenses with it.
     ($this->haul)();
 
     $this->actingAs($this->admin)

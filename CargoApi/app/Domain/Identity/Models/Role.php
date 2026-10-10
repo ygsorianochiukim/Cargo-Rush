@@ -13,15 +13,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * A named bundle of permissions.
- *
- * Shares a name with `App\Domain\Shared\Enums\Role`, and the two are not the
- * same thing. The enum names the five roles the app ships with and is what
- * code refers to when it means one of them specifically — "notify the
- * administrators". This is the editable record, and there can be any number of
- * them. Files needing both alias the enum.
- */
 class Role extends Model
 {
     use BelongsToCompany, HasUlids, SoftDeletes;
@@ -45,21 +36,12 @@ class Role extends Model
         return $this->belongsToMany(Permission::class);
     }
 
-    /** Accounts holding this role. Matched on the key, not on an id. */
     public function users(): HasMany
     {
         return $this->hasMany(User::class, 'role', 'key');
     }
 
-    /**
-     * The permission keys this role grants.
-     *
-     * `*` for a role marked `all_permissions`, which is how the administrator
-     * keeps reaching permissions added in a later release rather than silently
-     * losing them until somebody notices an unticked box.
-     *
-     * @return string[]
-     */
+    /** @return string[] */
     public function permissionKeys(): array
     {
         if ($this->all_permissions) {

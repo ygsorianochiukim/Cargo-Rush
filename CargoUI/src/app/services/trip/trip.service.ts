@@ -6,17 +6,10 @@ import { Envelope, ListQuery } from '../../models/shared/envelope.model';
 import { Trip, TripConfirmPayload, TripPayload } from '../../models/trip/trip.model';
 import { TripTicket } from '../../models/trip/trip-ticket.model';
 
-/**
- * Trip Management — DESIGN.md section 5.1.
- *
- * Dispatch and complete are their own calls rather than status patches,
- * because each writes more than the trip row.
- */
 @Injectable({ providedIn: 'root' })
 export class TripService {
   private readonly api = inject(ApiService);
 
-  /** The envelope, so a list view can read `meta.total` for its pager. */
   list(query?: ListQuery): Observable<Envelope<Trip[]>> {
     return this.api.envelope<Trip[]>('trips', query);
   }
@@ -25,12 +18,10 @@ export class TripService {
     return this.api.get<Trip>(`trips/${id}`);
   }
 
-  /** The trip ticket and dispatch checklist, filled in for printing. */
   ticket(id: string): Observable<TripTicket> {
     return this.api.get<TripTicket>(`trips/${id}/ticket`);
   }
 
-  /** The API assigns the id and the reference, so read the row back. */
   create(payload: TripPayload): Observable<Trip> {
     return this.api.post<Trip>('trips', payload);
   }
@@ -43,28 +34,14 @@ export class TripService {
     return this.api.delete(`trips/${id}`);
   }
 
-  /**
-   * Confirm a customer's request: name the crew, the unit and the time.
-   *
-   * A verb rather than a status patch, because `assigned` is what follows from
-   * those fields being filled in. This is the desk's one action on a request.
-   */
   confirm(id: string, payload: TripConfirmPayload): Observable<Trip> {
     return this.api.post<Trip>(`trips/${id}/confirm`, payload);
   }
 
-  /** Sends the unit out and opens its dispatch record. */
   dispatch(id: string, location: string): Observable<Trip> {
     return this.api.post<Trip>(`trips/${id}/dispatch`, { location });
   }
 
-  /**
-   * Closes the trip, its dispatch record, its delivery log, the day's income
-   * and the customer's invoice — together.
-   *
-   * `receiver_name` is the signature and is required; the proof-of-delivery
-   * reference is assigned by the API, never sent.
-   */
   complete(id: string, receiver: string): Observable<Trip> {
     return this.api.post<Trip>(`trips/${id}/complete`, { receiver_name: receiver });
   }

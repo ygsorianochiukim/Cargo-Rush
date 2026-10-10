@@ -31,10 +31,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * The centre of the operations side. GPS, dispatch, delivery and incidents all
- * hang off a trip; the reference is the only id a human reads.
- */
 class Trip extends Model
 {
     /** @use HasFactory<TripFactory> */
@@ -49,10 +45,6 @@ class Trip extends Model
         'price_cents', 'currency', 'billed_at', 'requested_by',
         'pricing_zone_id', 'pricing_bracket_id', 'fuel_adjustment_bp', 'fuel_surcharge_cents',
         'pricing_source', 'pricing_note',
-        // The partner half. `booking_source` is fillable because the desk
-        // assigning a run writes it; the two commission columns are not, and
-        // are force-filled once at delivery — see `Trip::isBilled()` for the
-        // rule about what may only happen once.
         'trucker_id', 'trucker_vehicle_id', 'trucker_driver_id', 'booking_source',
     ];
 
@@ -71,8 +63,6 @@ class Trip extends Model
             'fuel_surcharge_cents' => 'integer',
             'billed_at' => 'datetime',
             'scheduled_at' => 'datetime',
-            // The dispatch checklist as the driver answered it — see
-            // `DispatchChecklistService`. Written by that service only.
             'dispatch_checklist' => 'array',
             'dispatch_checked_at' => 'datetime',
             'eta' => 'datetime',
@@ -93,11 +83,6 @@ class Trip extends Model
         return $this->belongsTo(Driver::class);
     }
 
-    /**
-     * Who rode on the run to load and unload it, in the order the desk named
-     * them. Any number, including none — see the migration that replaced the
-     * single `helper_id` for why one was never enough.
-     */
     public function helpers(): BelongsToMany
     {
         return $this->belongsToMany(Driver::class, 'trip_helpers')
@@ -106,14 +91,7 @@ class Trip extends Model
             ->orderByPivot('position');
     }
 
-    /**
-     * Put these people on the run as its helpers, in this order.
-     *
-     * A sync rather than an attach, so naming the crew again replaces it: the
-     * desk editing a trip is stating who is on it, not adding to a list.
-     *
-     * @param  string[]  $driverIds
-     */
+    /** @param string[] $driverIds */
     public function setHelpers(array $driverIds): void
     {
         $this->helpers()->sync(collect(array_values(array_unique($driverIds)))
@@ -134,25 +112,13 @@ class Trip extends Model
         return $this->belongsTo(Vehicle::class);
     }
 
-    /**
-     * The partner hauling this, when it is not the haulier's own crew.
-     *
-     * A run has a driver or a trucker, never both: one is an employee in a
-     * company truck and the other is an owner-operator in their own, and a row
-     * naming both would be two people claiming the same load. Nothing in the
-     * schema forbids it — a foreign key cannot express "exactly one of these
-     * two" — so `hauledByPartner()` is what the rest of the system asks rather
-     * than testing columns itself.
-     */
     public function trucker(): BelongsTo
     {
         return $this->belongsTo(Trucker::class);
     }
 
-    /** Which of the trucker's own drivers is running it, if not the owner. */
     public function truckerDriver(): BelongsTo
     {
-        // Trashed too: a removed driver still drove the runs they finished.
         return $this->belongsTo(TruckerDriver::class)->withTrashed();
     }
 
@@ -161,33 +127,16 @@ class Trip extends Model
         return $this->belongsTo(TruckerVehicle::class, 'trucker_vehicle_id');
     }
 
-    /**
-     * The kind of unit this load asks for, when it asks for one.
-     *
-     * Already on the row — the rate card prices against it — and given a
-     * relation here because the job board has to say "freezer" on a card rather
-     * than a ULID.
-     */
     public function truckCategory(): BelongsTo
     {
         return $this->belongsTo(TruckCategory::class, 'truck_category_id');
     }
 
-    /** Is a partner carrying this rather than the company's own crew? */
     public function hauledByPartner(): bool
     {
         return $this->trucker_id !== null;
     }
 
-    /**
-     * Does the haulier collect this run's money?
-     *
-     * Yes for everything it booked itself, including a partner run the desk
-     * assigned; no for one a customer gave straight to a partner, where the money
-     * is between them and the customer. The invoice step reads this and raises
-     * nothing when it is false — billing a customer for a haul somebody has
-     * already been paid for would charge them twice.
-     */
     public function collectedByCarrier(): bool
     {
         return ($this->booking_source ?? BookingSource::CargoRush)->collectedByCarrier();
@@ -198,30 +147,11 @@ class Trip extends Model
         return $this->hasMany(GpsPing::class);
     }
 
-    /** The position the GPS Dashboard draws. */
     public function latestPing(): HasOne
     {
         return $this->hasOne(GpsPing::class)->latestOfMany('recorded_at');
     }
 
-    /**
-     * The pre-trip check that cleared this run — or the last attempt at one.
-     *
-     * A run cannot be started without a passing check (see
-     * `TripService::startForDriver`), so on anything in transit or delivered
-     * this is the record of the truck being looked over before it rolled. On a
-     * confirmed run it is null until the driver does it, or it is a failed
-     * attempt sitting there with the reason on it.
-     *
-     * The *latest* of them, because a held unit gets checked again once the
-     * fault is fixed and what matters is where it stands now.
-     *
-     * The id is the tiebreak, and it is not decoration: a fault found and fixed
-     * inside the same second — which is every test and the occasional real
-     * re-check at the gate — leaves two rows with identical timestamps, and
-     * "whichever the database returns first" would sometimes be the failed one.
-     * A ULID sorts by the moment it was minted, so the highest is the newest.
-     */
     public function latestInspection(): HasOne
     {
         return $this->hasOne(Inspection::class)->ofMany([
@@ -240,59 +170,32 @@ class Trip extends Model
         return $this->hasOne(DeliveryLog::class);
     }
 
-    /** Was this person on the run — driving it, or as a helper on it? */
     public function isCrewedBy(?string $driverId): bool
     {
         return $driverId !== null
             && ($this->driver_id === $driverId || $this->helpers()->whereKey($driverId)->exists());
     }
 
-    /**
-     * The receivable this haul raised, once it was delivered.
-     *
-     * A trip has at most one, and it is created by the delivery rather than by
-     * anybody filling in the billing form — which is what makes `billed_at`
-     * and this relation two views of the same fact.
-     */
     public function invoice(): HasOne
     {
         return $this->hasOne(Invoice::class);
     }
 
-    /**
-     * Has this run already been put on the books?
-     *
-     * The one guard that keeps the money honest. Delivering credits the day's
-     * ledger row and raises the customer's invoice, and both are additive —
-     * so a second hand-off (a re-press on a bad signal, or the office closing
-     * a run the driver already closed) would charge for the haul twice. This
-     * is what makes that impossible without either side having to know about
-     * the other.
-     */
     public function isBilled(): bool
     {
         return $this->billed_at !== null;
     }
 
-    /**
-     * Is there a price on this run at all?
-     *
-     * Null is "not priced yet" — no zone line covers it and nobody has typed a
-     * figure — and it is not zero, which is a real price. See `PricingService`
-     * for what an unpriced run may and may not do.
-     */
     public function isPriced(): bool
     {
         return $this->price_cents !== null;
     }
 
-    /** Was the figure typed by somebody who manages the card? */
     public function isManuallyPriced(): bool
     {
         return $this->pricing_source === 'manual';
     }
 
-    /** The statuses that mean a unit is out on the road right now. */
     public function scopeOnTheRoad(Builder $query): Builder
     {
         return $query->whereIn('status', [
@@ -302,10 +205,6 @@ class Trip extends Model
         ]);
     }
 
-    /**
-     * Late is a derived fact, not a column: past its ETA and not yet closed.
-     * Storing it would need a cron to stay true.
-     */
     public function isLate(): bool
     {
         return $this->eta !== null
@@ -313,13 +212,6 @@ class Trip extends Model
             && ! in_array($this->status, [StatusValue::Delivered, StatusValue::Cancelled], true);
     }
 
-    /**
-     * A trip is never inserted without its reference.
-     *
-     * Assigning it in a service left a window where a row existed with a null
-     * reference — which the column forbids, and which would be a trip a human
-     * could not name. Doing it here means no code path can skip it.
-     */
     protected static function booted(): void
     {
         static::creating(function (self $trip): void {
@@ -327,7 +219,6 @@ class Trip extends Model
         });
     }
 
-    /** Has this trip been pinned at both ends? */
     public function isMapped(): bool
     {
         return $this->origin_lat !== null
@@ -336,13 +227,6 @@ class Trip extends Model
             && $this->destination_lng !== null;
     }
 
-    /**
-     * Great-circle distance between the two points, in metres.
-     *
-     * Straight-line, and **not** what prices a trip — a truck drives the road,
-     * which in Northern Mindanao is 1.15 to 1.8 times longer. `RoadDistance`
-     * measures the run for the quote; this is what it falls back on.
-     */
     public function straightLineDistanceM(): ?int
     {
         if (! $this->isMapped()) {
@@ -357,7 +241,6 @@ class Trip extends Model
         ));
     }
 
-    /** The next reference in the CR-##### series. */
     public static function nextReference(): string
     {
         $last = static::withTrashed()

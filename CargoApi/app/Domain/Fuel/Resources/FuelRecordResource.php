@@ -8,9 +8,7 @@ use App\Domain\Fuel\Models\FuelRecord;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use Illuminate\Http\Request;
 
-/**
- * @mixin FuelRecord
- */
+/** @mixin FuelRecord */
 class FuelRecordResource extends ApiResource
 {
     public function toArray(Request $request): array

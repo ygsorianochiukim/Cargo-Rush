@@ -1,4 +1,3 @@
-<!-- KPI row -->
 <section aria-label="Key metrics" class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
   @if (kpis(); as list) {
     @for (kpi of list; track kpi.key) {
@@ -16,7 +15,6 @@
 </section>
 
 <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
-  <!-- Live trips -->
   <div class="flex flex-col gap-4 xl:col-span-2">
     <app-card heading="Live trips" icon="route" hint="Updated just now" [padded]="false">
       @if (shipments(); as rows) {
@@ -63,7 +61,6 @@
       }
     </app-card>
 
-    <!-- Deliveries: single series, so no legend — the heading names it -->
     <app-card heading="Deliveries" icon="clock" hint="Last 7 days">
       @if (deliveries()) {
         <app-bar-chart [bars]="deliveryBars()" unit="deliveries" [height]="96" />
@@ -77,17 +74,9 @@
     </app-card>
   </div>
 
-  <!-- Side column -->
   <div class="flex flex-col gap-4">
-    <!-- Receivables: what is owed against what has come in.
-         Two amounts and the proportion between them, because "we billed a lot"
-         and "we were paid" are different pieces of news and the dashboard used
-         to be unable to tell them apart at all. -->
     <app-card heading="Receivables" icon="billing" [hint]="receivablesHint()">
       @if (receivables(); as money) {
-        <!-- Customer invoices only. Finance's receivables also count what
-             partner truckers owe on runs they billed themselves, so this is
-             named for what it is rather than "Receivables". -->
         <p class="cr-meta">Invoices awaiting payment</p>
         <p class="cr-num mt-1 text-[28px] leading-none font-semibold">
           {{ fmt.money(money.pending_payment_cents, money.currency) }}
@@ -101,8 +90,6 @@
           }
         </p>
 
-        <!-- Share of the window's billing that has arrived. Labelled as well
-             as coloured, so the bar is never the only cue. -->
         <div
           class="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-cr-line"
           role="img"
@@ -160,14 +147,11 @@
       }
     </app-card>
 
-    <!-- Fleet status: share bar + direct labels, never colour alone -->
     <app-card heading="Fleet status" icon="fleet">
       @if (fleet(); as list) {
         <p class="cr-num text-[28px] leading-none font-semibold">{{ fleetTotal() }}</p>
         <p class="cr-meta mt-1">Vehicles tracked</p>
 
-        <!-- Segments fade when another is picked out, so the one being read
-             is unambiguous even where two tones sit next to each other. -->
         <div class="mt-4 flex h-2.5 w-full gap-[2px] overflow-hidden rounded-full">
           @for (seg of list; track seg.status) {
             <span
@@ -220,7 +204,6 @@
       }
     </app-card>
 
-    <!-- Activity feed -->
     <app-card heading="Recent activity" icon="bell" [padded]="false">
       @if (activity(); as entries) {
         <ul class="flex flex-col">

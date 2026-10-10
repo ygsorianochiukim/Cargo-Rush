@@ -13,15 +13,6 @@ use App\Domain\Tenancy\Support\Tenant;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
-/**
- * A component of the firm's salary structure.
- *
- * The amount fields are both `sometimes` and neither is `required`, which looks
- * lax and is not: which one matters depends on the basis, so the rule that
- * actually enforces it is in `withValidator()` below, where it can say the
- * useful thing — "a percentage component needs a rate" rather than "rate_bp is
- * required" on a form where the rate field is hidden.
- */
 class PayComponentRequest extends ApiFormRequest
 {
     public function rules(): array
@@ -32,9 +23,6 @@ class PayComponentRequest extends ApiFormRequest
         return [
             'name' => [
                 $required, 'string', 'max:60',
-                // Per company, unlike most of this codebase's uniqueness rules:
-                // "Rice allowance" is a name two hauliers will both use, and
-                // the index on the table is on the pair.
                 Rule::unique('pay_components', 'name')
                     ->where('company_id', app(Tenant::class)->id())
                     ->ignore($component?->id)
@@ -44,13 +32,7 @@ class PayComponentRequest extends ApiFormRequest
             'kind' => [$required, Rule::enum(PayComponentKind::class)],
             'basis' => ['sometimes', Rule::enum(PayComponentBasis::class)],
 
-            // Unsigned, both of them. A deduction is a positive number that
-            // comes off — see `PayComponentKind` — so there is no such thing
-            // here as a negative amount, and allowing one would produce a
-            // deduction that paid somebody.
             'amount_cents' => ['sometimes', 'integer', 'min:0'],
-            // 10,000 basis points is 100% of the basic. More than that is not a
-            // component, it is a typo with a payroll run behind it.
             'rate_bp' => ['sometimes', 'integer', 'min:0', 'max:10000'],
 
             'schedule' => ['sometimes', Rule::enum(PayComponentSchedule::class)],
@@ -61,15 +43,6 @@ class PayComponentRequest extends ApiFormRequest
         ];
     }
 
-    /**
-     * The amount has to match the basis.
-     *
-     * A fixed component with no amount and a percentage one with no rate are
-     * both saveable rows that pay nothing, and neither reports itself: they
-     * simply resolve to zero, get dropped from every payslip as an empty line,
-     * and look for all the world like a component nobody was assigned. Caught
-     * here, where the message can name the field the form is actually showing.
-     */
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {
@@ -85,9 +58,7 @@ class PayComponentRequest extends ApiFormRequest
         });
     }
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function toAttributes(): array
     {
         $attributes = $this->safe()->only([
@@ -102,13 +73,6 @@ class PayComponentRequest extends ApiFormRequest
         return $attributes;
     }
 
-    /**
-     * The basis this save will end up with — the one sent, or the one the row
-     * already has.
-     *
-     * A PATCH that changes only the rate has to be checked against the basis
-     * already stored, or every such edit would be judged against the default.
-     */
     private function basisInForce(): PayComponentBasis
     {
         if ($this->has('basis')) {

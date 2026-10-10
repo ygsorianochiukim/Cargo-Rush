@@ -1,35 +1,14 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 
-/** One line of a tooltip: a label and the value against it. */
 export interface TooltipRow {
   label: string;
   value: string;
-  /** Renders the value in red — used for a loss. */
   negative?: boolean;
 }
 
-/**
- * The tooltip every chart uses.
- *
- * Positioned by the marker it belongs to rather than by the pointer, so it
- * appears in the same place whether it was opened by hover or by keyboard —
- * a tooltip that only tracks the mouse is invisible to a keyboard user, which
- * is the whole point of DESIGN.md section 9.
- *
- * `aria-hidden` because the accessible name already carries this text: a
- * screen reader reads the marker's own label and would otherwise hear it twice.
- */
 @Component({
   selector: 'app-chart-tooltip',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  /**
-   * `display: contents`, so the element itself takes no space.
-   *
-   * The tooltip is absolutely positioned, but its host element was still a
-   * box in the layout — inside a flex column with a gap, every hover added a
-   * gap's worth of height and pushed the chart down, then snapped it back on
-   * mouse-out. That was the "graph keeps moving when I hover".
-   */
   host: { class: 'contents' },
   template: `
     <div
@@ -45,7 +24,6 @@ export interface TooltipRow {
           </span>
         </p>
       }
-      <!-- The pointer, drawn as a rotated square so it inherits the same colour. -->
       <span
         class="absolute top-full left-1/2 -mt-1 h-2 w-2 -translate-x-1/2 rotate-45 bg-cr-shell"></span>
     </div>
@@ -55,7 +33,6 @@ export class ChartTooltip {
   readonly title = input.required<string>();
   readonly rows = input<TooltipRow[]>([]);
 
-  /** The same text a screen reader gets, so the two can never disagree. */
   readonly spoken = computed(
     () => `${this.title()}. ${this.rows().map((r) => `${r.label} ${r.value}`).join(', ')}`,
   );

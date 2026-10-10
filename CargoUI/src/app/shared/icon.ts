@@ -2,10 +2,6 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import { ICON_PATHS, IconName } from './icon-paths';
 
-/**
- * The one `icon name -> shape` map for the web client (DESIGN.md section 7.3).
- * Strokes use `currentColor`, so an icon inherits the colour of its container.
- */
 @Component({
   selector: 'app-icon',
   changeDetection: ChangeDetectionStrategy.OnPush,

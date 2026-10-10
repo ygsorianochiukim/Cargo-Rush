@@ -2,26 +2,13 @@ import { ChangeDetectionStrategy, Component, computed, input, signal } from '@an
 
 import { ChartTooltip } from './chart-tooltip';
 
-/** One part of a whole — a segment of the bar and a row of its legend. */
 export interface SplitPart {
   key: string;
   label: string;
-  /** Integer centavos. Zero parts are dropped. */
   cents: number;
-  /** Already formatted, e.g. "₱5,772.36". */
   value: string;
 }
 
-/**
- * What a total is made of: one stacked bar, and a legend that says it in words.
- *
- * Colours by position, in a fixed order — the brand blue, then the charting
- * palette's orange and aqua, validated together for colour-blind separation.
- * The legend carries every label and amount, so no segment relies on its
- * colour alone (the aqua is under 3:1 on white, which is why that matters).
- * A 2px gap separates segments; each is a button with the shared tooltip, so
- * hover and keyboard read the same.
- */
 export const SPLIT_COLORS = ['#15589c', '#eb6834', '#1baf7a'] as const;
 
 @Component({

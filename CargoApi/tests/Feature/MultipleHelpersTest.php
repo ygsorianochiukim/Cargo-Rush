@@ -18,18 +18,7 @@ use Database\Seeders\PermissionSeeder;
 use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * A run with more than one helper on it.
- *
- * A heavy load goes out with two or three people to lift it, and a single
- * `helper_id` could only name one of them — the others were left off the
- * record, and so off the sheet and the payslip. These pin the list end to end:
- * the desk names the crew, the delivery carries it onto the day's sheet, each
- * helper's pay is its own line, and payroll counts every one of them.
- */
 beforeEach(function (): void {
-    // Pricing is zone-only, and an unpriced run cannot go out or be billed.
-    // One card at the old tariff's figures, so every run here is priced.
     zoneCard();
 
     $this->seed(NavigationSeeder::class);
@@ -83,13 +72,11 @@ describe('the desk naming the crew', function (): void {
             ->assertOk()
             ->assertJsonPath('data.helper_ids', [$this->cai->id]);
 
-        // A PATCH about something else keeps whoever is on it.
         $this->actingAs($this->admin)
             ->patchJson("/api/v1/trips/{$id}", ['cargo' => 'Cement, 180 bags'])
             ->assertOk()
             ->assertJsonPath('data.helper_ids', [$this->cai->id]);
 
-        // And an empty list takes everyone off.
         $this->actingAs($this->admin)
             ->patchJson("/api/v1/trips/{$id}", ['helper_ids' => []])
             ->assertOk()
@@ -132,7 +119,6 @@ describe('the delivery carrying the crew onto the sheet', function (): void {
             ->and($row->helpers->pluck('salary_cents')->all())->toBe([0, 0])
             ->and($row->helper_salary_cents)->toBe(0);
 
-        // Its delivery log names the whole crew.
         $this->actingAs($this->admin)
             ->getJson('/api/v1/delivery-logs/'.DeliveryLog::where('trip_id', $id)->value('id'))
             ->assertJsonPath('data.helper_names', ['Ana Lim', 'Ben Cruz']);

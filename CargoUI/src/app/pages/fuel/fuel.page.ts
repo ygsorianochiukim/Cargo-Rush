@@ -12,7 +12,6 @@ import { ListToolbar } from '../../shared/list-toolbar';
 import { recordList } from '../../shared/record-list';
 import { ErrorState } from '../../shared/states';
 
-/** Fuel Expense Monitoring — DESIGN.md section 5.1. */
 @Component({
   selector: 'app-fuel',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -50,7 +49,6 @@ export class FuelPage {
     return Math.max(0, b.daily_budget_cents - b.spent_today_cents);
   });
 
-  /** Litres per 100 km across the logged records — the consumption headline. */
   protected readonly totalLitres = computed(() =>
     (this.rows() ?? []).reduce((sum, r) => sum + r.litres, 0),
   );

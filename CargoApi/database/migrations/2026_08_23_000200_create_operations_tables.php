@@ -6,12 +6,6 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-/**
- * Operations — the trip and the four records that hang off it.
- *
- * A trip reference (CR-24817) is the only id a human ever reads
- * (DESIGN.md section 5.3), so it is unique and indexed.
- */
 return new class extends Migration
 {
     public function up(): void
@@ -27,7 +21,6 @@ return new class extends Migration
             $table->unsignedSmallInteger('pieces')->default(1);
             $table->string('handling')->nullable();
             $table->foreignUlid('driver_id')->nullable()->constrained()->nullOnDelete();
-            // The helper rides along; they are a driver record without the keys.
             $table->foreignUlid('helper_id')->nullable()->constrained('drivers')->nullOnDelete();
             $table->foreignUlid('vehicle_id')->nullable()->constrained()->nullOnDelete();
             $table->string('status')->default('pending');
@@ -42,8 +35,6 @@ return new class extends Migration
             $table->index(['status', 'scheduled_at']);
         });
 
-        // One row per position report. The GPS Dashboard reads the latest per
-        // trip; the history is what makes average speed real rather than a guess.
         Schema::create('gps_pings', function (Blueprint $table): void {
             $table->ulid('id')->primary();
             $table->foreignUlid('trip_id')->constrained()->cascadeOnDelete();
@@ -74,7 +65,6 @@ return new class extends Migration
             $table->ulid('id')->primary();
             $table->foreignUlid('trip_id')->constrained()->cascadeOnDelete();
             $table->timestamp('delivered_at')->nullable();
-            // Proof of delivery, captured in the cab.
             $table->string('pod_ref')->nullable();
             $table->string('receiver_name')->nullable();
             $table->string('status')->default('pending');

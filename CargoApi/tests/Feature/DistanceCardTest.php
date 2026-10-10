@@ -12,30 +12,6 @@ use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
 use Database\Seeders\TruckCategorySeeder;
 
-/**
- * The old plain distance card, and the rule that replaced it.
- *
- * A haulier used to be able to say "450 km is ₱5,000" in lines that carried
- * their own kilometres and belonged to no zone, and those lines priced any run
- * the zones did not cover. They no longer price anything: pricing is zone-only,
- * and a run the zones miss is saved unpriced for the office (`PricingService`).
- *
- * What these tests are defending now:
- *
- *   **No new zoneless line.** The card endpoint refuses a line without an id,
- *   so nobody can rebuild the fallback by hand. The rows an install already
- *   has can still be corrected or removed — they are not deleted behind the
- *   office's back.
- *
- *   **Those rows never price a trip.** Not inside a zone's band, not past it.
- *
- *   **A freezer is not a flatbed, inside a zone.** The class of truck picks
- *   the zone's line, most specific first; a class the zone has no line for is
- *   unpriced, with the reason naming the class.
- *
- * The bands and their published figures are `RateCardTest` and
- * `SubsidyRateCardTest`; the unpriced trip itself is `ZoneOnlyPricingTest`.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -49,11 +25,9 @@ beforeEach(function (): void {
     $this->freezer = TruckCategory::where('key', 'freezer')->firstOrFail();
     $this->dry = TruckCategory::where('key', 'dry-goods')->firstOrFail();
 
-    /** Save the old zoneless card, whole. */
     $this->saveCard = fn (array $brackets) => $this->actingAs($this->admin)
         ->putJson('/api/v1/pricing/card', ['brackets' => $brackets]);
 
-    /** A zoneless line as an older install would hold it. */
     $this->legacyLine = fn (array $attributes = []) => PricingBracket::create([
         'zone_id' => null,
         'label' => '100–500 km',
@@ -64,7 +38,6 @@ beforeEach(function (): void {
         ...$attributes,
     ]);
 
-    /** One band, 0–500 km, with the lines given. */
     $this->zone = fn (array $brackets) => $this->actingAs($this->admin)->postJson('/api/v1/pricing/zones', [
         'name' => 'Zone Z',
         'code' => 'Z',
@@ -73,7 +46,6 @@ beforeEach(function (): void {
         'brackets' => $brackets,
     ])->assertCreated();
 
-    /** What a run would be quoted. */
     $this->quote = fn (array $payload = []) => $this->actingAs($this->admin)
         ->postJson('/api/v1/pricing/quote', [
             'distance_m' => 450_000,
@@ -145,8 +117,6 @@ describe('an old zoneless line never prices a run', function (): void {
             'label' => '500 km and beyond', 'min_km' => 500, 'max_km' => null, 'base_cents' => 1_100_000,
         ]);
 
-        // Inside the band, the band's line. Past it, nothing — not the
-        // zoneless "500 km and beyond" line that used to catch it.
         expect(($this->quote)()->json('data.cents'))->toBe(600_000);
 
         ($this->quote)(['distance_m' => 700_000])->assertOk()
@@ -221,8 +191,6 @@ describe('keeping the categories', function (): void {
             ->deleteJson("/api/v1/pricing/truck-categories/{$this->freezer->id}")
             ->assertOk();
 
-        // Deleting it would have widened that line to "any truck" and silently
-        // changed what a dry run is quoted.
         expect($response->json('meta.retired'))->toBeTrue()
             ->and(TruckCategory::query()->find($this->freezer->id))->not->toBeNull();
     });

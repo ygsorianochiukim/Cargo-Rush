@@ -8,17 +8,12 @@ use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Trucker\Models\Trucker;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
-/**
- * @extends Factory<Trucker>
- */
+/** @extends Factory<Trucker> */
 class TruckerFactory extends Factory
 {
-    /** Declared because the model lives under `app/Domain`, not `App\`. */
     protected $model = Trucker::class;
 
-    /**
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function definition(): array
     {
         return [
@@ -27,21 +22,11 @@ class TruckerFactory extends Factory
             'licence_no' => strtoupper($this->faker->bothify('??##-##-######')),
             'licence_expiry' => now()->addYears(2)->toDateString(),
 
-            /**
-             * `pending`, exactly as a real registration lands.
-             *
-             * The default is the unvetted state rather than the convenient one,
-             * so a test that forgets to approve somebody fails the way
-             * production would — which is the whole point of the column. Tests
-             * that want a working partner say `->approved()`, and say it
-             * visibly.
-             */
             'status' => StatusValue::Pending->value,
             'is_online' => false,
         ];
     }
 
-    /** Vetted by the office and taking work. */
     public function approved(): self
     {
         return $this->state(fn (): array => [
@@ -50,7 +35,6 @@ class TruckerFactory extends Factory
         ]);
     }
 
-    /** Somewhere, recently — so the job board can measure from them. */
     public function at(float $lat, float $lng): self
     {
         return $this->state(fn (): array => [

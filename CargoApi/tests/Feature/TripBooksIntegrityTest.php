@@ -18,15 +18,6 @@ use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
 
-/**
- * What a delivered run puts on the books, and that it stays put.
- *
- * Three ways the books drifted from the truth. A trucker's ₱10,000 run with a
- * fleet unit left on it was booked as ₱10,000 of company income beside the
- * ₱1,200 commission, when ₱1,200 is all the company keeps. An all-in price put
- * its VAT inside income. And a billed run could be re-priced, moved to another
- * unit, cancelled or deleted with nothing reversing what delivery wrote.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -44,7 +35,6 @@ beforeEach(function (): void {
 
     $this->travelTo(now()->setDate(2026, 8, 12)->setTime(10, 0));
 
-    /** A ₱10,000 run with a fleet unit pencilled in and nobody driving it. */
     $this->pencilled = fn (array $overrides = []): Trip => Trip::create([
         'customer_id' => $this->customer->getKey(), 'origin' => 'Malanang', 'destination' => 'Mambuaya',
         'cargo' => 'Goods', 'weight_kg' => 1_800, 'status' => StatusValue::Pending->value,
@@ -53,7 +43,6 @@ beforeEach(function (): void {
         ...$overrides,
     ]);
 
-    /** The trucker's side of the run: roll out, hand over. */
     $this->partnerDelivers = function (Trip $trip): void {
         $this->actingAs($this->user)->postJson("/api/v1/partner/trips/{$trip->id}/start")->assertOk();
         $this->actingAs($this->user)
@@ -61,7 +50,6 @@ beforeEach(function (): void {
             ->assertOk();
     };
 
-    /** A fleet run, entered after the fact as delivered — so it is billed at once. */
     $this->fleetDelivered = fn (array $overrides = []): string => $this->actingAs($this->admin)
         ->postJson('/api/v1/trips', [
             'customer_id' => $this->customer->getKey(),
@@ -89,7 +77,6 @@ describe('a trucker run', function (): void {
             ->postJson("/api/v1/trips/{$trip->id}/assign-trucker", ['trucker_id' => $this->trucker->id])
             ->assertOk();
 
-        // The fleet unit came off when the trucker went on.
         expect($trip->refresh()->vehicle_id)->toBeNull();
 
         ($this->partnerDelivers)($trip);
@@ -153,7 +140,6 @@ describe('VAT', function (): void {
 
         expect($income)->toBe(892_857)
             ->and($income)->toBe((int) $invoice->net_amount_cents)
-            // Income and VAT together are exactly the price quoted.
             ->and($income + (int) $invoice->vat_cents)->toBe(1_000_000);
     });
 

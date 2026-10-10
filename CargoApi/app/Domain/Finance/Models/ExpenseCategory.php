@@ -11,21 +11,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/** What a peso went on: food, fuel, tolls, permits. */
 class ExpenseCategory extends Model
 {
     use BelongsToCompany, HasUlids, SoftDeletes;
 
     protected $fillable = ['key', 'name', 'description', 'icon', 'position', 'status', 'account_code'];
 
-    /**
-     * Where each seeded kind of spend lands in the chart, by key.
-     *
-     * The fallback for a category with no `account_code` of its own — one an
-     * office added before the column existed, or the one `TruckRentService`
-     * creates on first use. Meals and lodging on the road are the crew's
-     * allowance in all but name, so they post beside it.
-     */
     public const DEFAULT_ACCOUNTS = [
         'food' => '5040',
         'lodging' => '5040',
@@ -39,7 +30,6 @@ class ExpenseCategory extends Model
         'other' => '5900',
     ];
 
-    /** Where nothing more specific is known: "Other operating expenses". */
     public const FALLBACK_ACCOUNT = '5900';
 
     protected function casts(): array
@@ -55,7 +45,6 @@ class ExpenseCategory extends Model
         return $this->hasMany(Expense::class, 'category_id');
     }
 
-    /** The account this category's lines post to, by code. */
     public function accountCode(): string
     {
         $code = trim((string) $this->account_code);

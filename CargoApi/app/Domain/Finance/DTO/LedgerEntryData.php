@@ -6,39 +6,18 @@ namespace App\Domain\Finance\DTO;
 
 use App\Domain\Shared\DTO\Data;
 
-/**
- * One day of trip income and expenses.
- *
- * There are no `total_expenses_cents` or `net_income_cents` fields, and there
- * never will be: both are derived (DESIGN.md section 5.1). Accepting them
- * would let a client post a total that disagrees with its own parts.
- */
 final class LedgerEntryData extends Data
 {
     public function __construct(
         public readonly ?string $truck_id = null,
         public readonly ?string $customer_id = null,
-        /** Who the day's driver salary belonged to. */
         public readonly ?string $driver_id = null,
-        /**
-         * The day's helpers and what each was paid, in order.
-         *
-         * Null when the caller did not mention them. Written to
-         * `ledger_entry_helpers` by `FinanceService`, so not in `toArray()`.
-         *
-         * @var array<int, array{driver_id: ?string, salary_cents: int}>|null
-         */
+        /** @var array<int, array{driver_id: ?string, salary_cents: int}>|null */
         public readonly ?array $helpers = null,
         public readonly ?string $date = null,
         public readonly ?int $trip_income_cents = null,
         public readonly ?int $fuel_cents = null,
         public readonly ?int $driver_salary_cents = null,
-        /**
-         * One figure for all the day's helpers — what a client that predates
-         * the per-helper lines still sends. Never written straight to the
-         * column: `FinanceService` turns it into a line, and the column is
-         * always the sum of the lines.
-         */
         public readonly ?int $helper_salary_cents = null,
         public readonly ?int $maintenance_cents = null,
         public readonly ?int $allowance_cents = null,
@@ -94,11 +73,6 @@ final class LedgerEntryData extends Data
         ];
     }
 
-    /**
-     * Who recorded it is set by the service from the token, never by the
-     * client — so `recorded_by` joins the provided keys here rather than
-     * arriving in the payload.
-     */
     public function recordedBy(?int $userId): self
     {
         $clone = clone $this;

@@ -15,7 +15,6 @@ use App\Domain\Vehicle\Resources\MaintenanceJobResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/** Suppliers — who the fleet buys from, and what it has spent there. */
 class SupplierController extends ApiController
 {
     public function __construct(private readonly SupplierService $suppliers) {}
@@ -45,14 +44,6 @@ class SupplierController extends ApiController
         return $this->item(new SupplierResource($this->suppliers->update($supplier, $request->toData())));
     }
 
-    /**
-     * Remove one.
-     *
-     * A soft delete, so the expenses, services and bills already filed against
-     * it keep pointing at a row that still resolves. An office that has stopped
-     * buying from somebody usually wants `status: inactive` instead — it takes
-     * them out of the picker and leaves them in the history.
-     */
     public function destroy(Supplier $supplier): JsonResponse
     {
         $this->suppliers->delete($supplier);
@@ -60,7 +51,6 @@ class SupplierController extends ApiController
         return $this->noContent();
     }
 
-    /** What has been bought from one — the three places its money shows up. */
     public function history(Supplier $supplier): JsonResponse
     {
         $history = $this->suppliers->history($supplier);

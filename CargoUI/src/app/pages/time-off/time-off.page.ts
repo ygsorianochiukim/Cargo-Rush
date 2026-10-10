@@ -16,7 +16,6 @@ import { Modal } from '../../shared/modal';
 import { TONE_CLASS } from '../../shared/status';
 import { ErrorState, SkeletonRows } from '../../shared/states';
 
-/** Leave & Undertime — one queue, two kinds of request. */
 @Component({
   selector: 'app-time-off',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -35,10 +34,8 @@ export class TimeOffPage {
   protected readonly inputClass =
     'h-10 w-full rounded-control border border-cr-line bg-cr-surface px-3 text-[14px] text-cr-ink placeholder:text-cr-ink-muted focus:border-cr-blue focus:outline-none';
 
-  /** Which table is on screen. The desk works one queue but files two things. */
   protected readonly tab = signal<'leave' | 'undertime'>('leave');
 
-  /** Null while loading — the four list states depend on telling that apart. */
   protected readonly leave = signal<LeaveRequest[] | null>(null);
   protected readonly undertime = signal<UndertimeRequest[] | null>(null);
   protected readonly overview = signal<TimeOffOverview | null>(null);
@@ -112,7 +109,6 @@ export class TimeOffPage {
 
   protected readonly isEmpty = computed(() => (this.rows() ?? []).length === 0);
 
-  /* --------------------------------------------------------------- Asking */
 
   protected openForm(): void {
     this.formOpen.set(true);
@@ -149,8 +145,6 @@ export class TimeOffPage {
     this.busy.set(true);
     this.formError.set(null);
 
-    // Typed as unknown: the two calls return different request shapes, and
-    // nothing here reads the result — the list is refetched either way.
     const request: Observable<unknown> = this.showingLeave()
       ? this.timeOffApi.requestLeave(this.leaveForm.getRawValue() as never)
       : this.timeOffApi.requestUndertime(this.undertimeForm.getRawValue() as never);
@@ -168,7 +162,6 @@ export class TimeOffPage {
     });
   }
 
-  /* ------------------------------------------------------------- Deciding */
 
   protected decide(id: string, decision: 'approved' | 'rejected', note?: string): void {
     const request: Observable<unknown> = this.showingLeave()
@@ -212,7 +205,6 @@ export class TimeOffPage {
     });
   }
 
-  /** The API's own words. A 422 here is a real rule, not a form slip. */
   private messageFor(error: HttpErrorResponse): string {
     const errors = error.error?.errors as Record<string, string[]> | undefined;
 

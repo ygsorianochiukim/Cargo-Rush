@@ -13,7 +13,6 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-/** One row of the in-app feed. A null `user_id` means fleet-wide. */
 class NotificationItem extends Model
 {
     /** @use HasFactory<NotificationItemFactory> */

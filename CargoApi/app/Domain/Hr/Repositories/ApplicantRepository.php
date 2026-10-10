@@ -15,7 +15,6 @@ class ApplicantRepository extends Repository
         return Applicant::class;
     }
 
-    /** Newest application first — the list is a queue, not an archive. */
     public function query(): Builder
     {
         return Applicant::query()
@@ -31,11 +30,6 @@ class ApplicantRepository extends Repository
 
     protected function applyFilters(Builder $query, array $filters): Builder
     {
-        // Dropped before the base class sees it. Every list endpoint accepts
-        // `?status=`, and the base honours it by filtering a `status` column —
-        // which this table does not have, so a client sending the shared
-        // vocabulary here would get a SQL error rather than an empty page.
-        // Applications have a `stage`, and that is the filter below.
         unset($filters['status']);
 
         $query = parent::applyFilters($query, $filters);
@@ -55,13 +49,12 @@ class ApplicantRepository extends Repository
         return $query;
     }
 
-    /** Applications still waiting on somebody. Drives the nav badge. */
     public function openCount(): int
     {
         return Applicant::query()->open()->count();
     }
 
-    /** @return array<string, int> stage => count, for the pipeline strip. */
+    /** @return array<string, int> */
     public function countsByStage(): array
     {
         return Applicant::query()

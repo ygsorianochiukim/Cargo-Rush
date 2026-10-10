@@ -7,24 +7,6 @@ import { Card } from '../../shared/card';
 import { Icon } from '../../shared/icon';
 import { MapPicker } from '../../shared/map-picker';
 
-/**
- * Where this company's yard is — the pin customers find it by.
- *
- * The registration form asks for it, which covers every company that signs up
- * from now on. This is for the ones that did not: without a pin a haulier does
- * not appear on the carrier list shippers choose from in the app, and there
- * would be no way at all to get on it.
- *
- * It sits beside the company's mark on Access Control for the same reason that
- * card does — this is already the administrator's screen, and `company.manage`
- * is already the permission gating it.
- *
- * **The pin is not the address.** The address is what a letter needs and is
- * edited as text; this is what a distance is measured to and a marker drawn at.
- * Saving moves both, because somebody correcting where they are usually means
- * both — and the address box is filled from the lookup only when it is empty, so
- * a hand-written "Km 9, Sasa" is never replaced by a geocoder's guess.
- */
 @Component({
   selector: 'app-yard-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -92,10 +74,6 @@ import { MapPicker } from '../../shared/map-picker';
             </button>
 
             @if (pin()) {
-              <!--
-                Taking the pin down is the only way off the list, and it is
-                deliberately an act rather than a switch to find.
-              -->
               <button
                 type="button"
                 class="h-10 rounded-control border border-cr-line px-4 text-[14px] font-semibold text-cr-ink-muted transition-colors hover:bg-cr-tint disabled:opacity-60"
@@ -119,20 +97,11 @@ export class YardCard {
   protected readonly saved = signal(false);
   protected readonly failure = signal<string | null>(null);
 
-  /**
-   * The pin, as one value.
-   *
-   * Two coordinates that only mean anything together — the same shape the trip
-   * form holds a location in, and for the same reason: a latitude that outlived
-   * a change of place is the bug this cannot have.
-   */
   protected readonly pin = signal<GeoPoint | null>(null);
 
   protected readonly address = signal('');
 
   constructor() {
-    // Fetched rather than read off `me`: the coordinates are not on the account
-    // resource, because a driver's handset has no use for them.
     this.companyApi.show().subscribe({
       next: (company) => {
         this.address.set(company.address ?? '');
@@ -154,12 +123,6 @@ export class YardCard {
     });
   }
 
-  /**
-   * The map reporting a pin, or the pin being cleared.
-   *
-   * The looked-up name fills the address box only when it is empty. Somebody
-   * who wrote "Km 9, Sasa" knows their own yard better than a geocoder does.
-   */
   protected pinned(point: GeoPoint | null): void {
     this.pin.set(point);
     this.saved.set(false);
@@ -174,14 +137,11 @@ export class YardCard {
 
     this.write({
       address: this.address().trim() || null,
-      // A pair or neither. The API refuses half a coordinate, and there is no
-      // half a place to send it.
       latitude: pin?.lat ?? null,
       longitude: pin?.lng ?? null,
     });
   }
 
-  /** Off the list: the pin goes, the address stays. */
   protected clear(): void {
     this.pin.set(null);
     this.write({ latitude: null, longitude: null });
@@ -211,11 +171,6 @@ export class YardCard {
     });
   }
 
-  /**
-   * The server's own words for a 422 — it owns the rules about what a
-   * coordinate may be, and restating them here would be two rules to keep in
-   * step.
-   */
   private messageFor(error: HttpErrorResponse): string {
     if (error.status === 422) {
       const errors = error.error?.errors as Record<string, string[]> | undefined;

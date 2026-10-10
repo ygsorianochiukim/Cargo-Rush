@@ -1,11 +1,13 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { map } from 'rxjs';
 
 import { Applicant, ApplicantStage, Pipeline } from '../../models/hr/hr.model';
 import { applicantSpec } from '../../services/hr/applicant.form';
 import { ApplicantService } from '../../services/hr/applicant.service';
+import { AccessService } from '../../services/identity/access.service';
 import { Card } from '../../shared/card';
 import { Confirm } from '../../shared/confirm';
 import { Field } from '../../shared/field';
@@ -17,19 +19,6 @@ import { recordList } from '../../shared/record-list';
 import { TONE_CLASS } from '../../shared/status';
 import { ErrorState, SkeletonRows } from '../../shared/states';
 
-/**
- * Applicants — the hiring pipeline in front of the roster.
- *
- * The stage strip at the top shows every stage including the empty ones, which
- * is deliberate: a pipeline drawn only from what exists has gaps in it, and a
- * gap reads as a broken screen rather than as "nobody is at interview" — which
- * is exactly the thing worth seeing.
- *
- * Hiring is a separate action from a stage change, and refused as one by the
- * API. It builds the employee record from the application rather than making
- * somebody retype a name, a number and an address already on the screen —
- * retyping is where the two records start to disagree.
- */
 @Component({
   selector: 'app-applicants',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -41,6 +30,13 @@ export class ApplicantsPage {
   private readonly confirm = inject(Confirm);
   private readonly fb = inject(FormBuilder);
 
+  protected readonly positions = toSignal(
+    inject(AccessService)
+      .positions(true)
+      .pipe(map((res) => res.data)),
+    { initialValue: [] },
+  );
+
   protected readonly fmt = fmt;
   protected readonly toneClass = TONE_CLASS;
 
@@ -49,7 +45,6 @@ export class ApplicantsPage {
 
   private readonly spec = applicantSpec();
 
-  /** Null means the whole pipeline; a stage narrows it. */
   protected readonly filter = signal<ApplicantStage | null>(null);
 
   protected readonly list = recordList<Applicant>(this.spec, () =>
@@ -67,7 +62,6 @@ export class ApplicantsPage {
     return stage === null ? all : all.filter((a) => a.stage === stage);
   });
 
-  /* --------------------------------------------------------------- Hire */
 
   protected readonly hireOpen = signal(false);
   protected readonly candidate = signal<Applicant | null>(null);
@@ -77,10 +71,8 @@ export class ApplicantsPage {
 
   protected readonly hireForm = this.fb.group({
     hired_on: ['', Validators.required],
-    position: ['', Validators.required],
-    department: [''],
+    position_id: ['', Validators.required],
     employment_type: ['probationary'],
-    amount: [0],
   });
 
   constructor() {
@@ -98,7 +90,6 @@ export class ApplicantsPage {
     this.filter.set(this.filter() === stage ? null : stage);
   }
 
-  /* -------------------------------------------------------------- Stage */
 
   protected move(applicant: Applicant, stage: ApplicantStage): void {
     this.applicantsApi.moveTo(applicant.id, stage).subscribe({
@@ -121,7 +112,6 @@ export class ApplicantsPage {
     if (ok) this.move(applicant, 'rejected');
   }
 
-  /** The next step in the pipeline, or null once a decision has been made. */
   protected readonly nextStage = (applicant: Applicant): ApplicantStage | null => {
     const order: ApplicantStage[] = ['applied', 'screening', 'interview', 'offered'];
     const at = order.indexOf(applicant.stage);
@@ -135,7 +125,6 @@ export class ApplicantsPage {
     return next === null ? '' : `Move to ${next}`;
   };
 
-  /* --------------------------------------------------------------- Hire */
 
   protected openHire(applicant: Applicant): void {
     this.candidate.set(applicant);
@@ -143,14 +132,13 @@ export class ApplicantsPage {
     this.hireError.set(null);
     this.hired.set(null);
 
-    // Prefilled from the application, because everything here except the start
-    // date and the salary is already known.
+    const applied = applicant.position_applied.trim().toLowerCase();
+    const match = this.positions().find((p) => p.name.trim().toLowerCase() === applied);
+
     this.hireForm.reset({
       hired_on: new Date().toISOString().slice(0, 10),
-      position: applicant.position_applied,
-      department: '',
+      position_id: match?.id ?? '',
       employment_type: 'probationary',
-      amount: 0,
     });
   }
 
@@ -166,18 +154,13 @@ export class ApplicantsPage {
     this.busy.set(true);
     this.hireError.set(null);
 
-    const { hired_on, position, department, employment_type, amount } =
-      this.hireForm.getRawValue();
+    const { hired_on, position_id, employment_type } = this.hireForm.getRawValue();
 
     this.applicantsApi
       .hire(applicant.id, {
         hired_on: String(hired_on),
-        position: String(position),
-        department: department || null,
+        position_id: String(position_id),
         employment_type: String(employment_type),
-        // Zero means "take the job's rate card". A figure here is this
-        // person's own, and opens their contract on it instead.
-        amount_cents: Math.round(Number(amount ?? 0) * 100),
       })
       .subscribe({
         next: (employee) => {

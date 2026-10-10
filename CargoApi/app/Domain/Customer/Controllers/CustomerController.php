@@ -15,7 +15,6 @@ use App\Domain\Trip\Resources\TripResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-/** Customer Management — records, transaction history, feedback. */
 class CustomerController extends ApiController
 {
     public function __construct(private readonly CustomerService $customers) {}
@@ -49,12 +48,6 @@ class CustomerController extends ApiController
         return $this->noContent();
     }
 
-    /**
-     * What one customer has behind them — the "history" tab.
-     *
-     * Trips are what was hauled, invoices what was billed, and the ledger rows
-     * what the work earned and cost.
-     */
     public function history(Customer $customer): JsonResponse
     {
         $history = $this->customers->history($customer);

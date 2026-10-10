@@ -21,19 +21,10 @@ class InspectionRepository extends Repository
     {
         return Inspection::query()
             ->with(['vehicle:id,plate', 'driver:id,name', 'trip:id,reference'])
-            // The id breaks a tie on the timestamp. Two checks in the same
-            // second is what a re-check at the gate looks like, and "the
-            // latest" has to mean the second one rather than whichever the
-            // database happens to return — a ULID sorts by when it was minted.
             ->orderByDesc('inspected_at')
             ->orderByDesc('id');
     }
 
-    /**
-     * The fleet's inspection log is the fleet's: a trucker's driver checking
-     * the trucker's truck is theirs, and is left out of every list. It still
-     * clears its own run — `latestForTrip()` does not come through here.
-     */
     protected function applyFilters(Builder $query, array $filters): Builder
     {
         return parent::applyFilters($query, $filters)->whereNull('trucker_driver_id');
@@ -44,7 +35,6 @@ class InspectionRepository extends Repository
         return $this->query()->where('trip_id', $tripId)->first();
     }
 
-    /** The maintenance jobs assigned to a driver's current unit. */
     public function maintenanceForVehicle(string $vehicleId): Collection
     {
         return MaintenanceJob::query()

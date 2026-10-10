@@ -17,7 +17,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
-/** Vehicle Management — registration, capacity, status, maintenance. */
 class VehicleController extends ApiController
 {
     public function __construct(
@@ -54,7 +53,6 @@ class VehicleController extends ApiController
         return $this->noContent();
     }
 
-    /** Taking a unit off the road also releases its driver, so it is a verb. */
     public function status(Request $request, Vehicle $vehicle): JsonResponse
     {
         $validated = $request->validate([
@@ -66,7 +64,6 @@ class VehicleController extends ApiController
         ));
     }
 
-    /** The maintenance jobs booked against one unit, and what each cost. */
     public function maintenance(Vehicle $vehicle): JsonResponse
     {
         $jobs = $vehicle->maintenanceJobs()
@@ -78,13 +75,6 @@ class VehicleController extends ApiController
         return $this->collection(MaintenanceJobResource::collection($jobs), $jobs);
     }
 
-    /**
-     * Book a service against this unit.
-     *
-     * Through `MaintenanceService` rather than straight onto the relation,
-     * because a job that carries a cost is money: the figure has to reach the
-     * unit's daily sheet, exactly once, however many times the row is saved.
-     */
     public function storeMaintenance(MaintenanceJobRequest $request, Vehicle $vehicle): JsonResponse
     {
         $job = $this->maintenance->save($vehicle, $request->toAttributes());
@@ -95,12 +85,6 @@ class VehicleController extends ApiController
         );
     }
 
-    /**
-     * Correct one — most often to put the garage's figure on it.
-     *
-     * Scoped to the unit in the path rather than resolved on its own, so a job
-     * id from another vehicle cannot be edited through this route.
-     */
     public function updateMaintenance(
         MaintenanceJobRequest $request,
         Vehicle $vehicle,
@@ -115,11 +99,6 @@ class VehicleController extends ApiController
         );
     }
 
-    /**
-     * Take a job off the unit.
-     *
-     * The daily sheet is credited back first — see `MaintenanceService::remove`.
-     */
     public function destroyMaintenance(Vehicle $vehicle, string $jobId): JsonResponse
     {
         $this->maintenance->remove($vehicle->maintenanceJobs()->findOrFail($jobId));

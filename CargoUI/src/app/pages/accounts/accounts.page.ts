@@ -12,29 +12,6 @@ import { ListToolbar } from '../../shared/list-toolbar';
 import { recordList } from '../../shared/record-list';
 import { ErrorState } from '../../shared/states';
 
-/**
- * Chart of Accounts — what every posting in the books points at.
- *
- * The page a fleet rarely opens and cannot do without. It arrives seeded with a
- * chart a haulier can post to on day one, numbered the way an accountant, an
- * auditor and a BIR examiner all expect: 1000s assets, 2000s liabilities,
- * 3000s equity, 4000s income, 5000s expenses.
- *
- * Two things about it are not obvious from the table.
- *
- * The **kind** of an account is not a label. It decides which side increases
- * the account, which statement it appears on and which column of a trial
- * balance it lands in — so it is shown as its own grouped section rather than
- * as one more column, and the API refuses to change it once anything has been
- * posted. Flipping 5010 from expense to income would reverse the sign of every
- * figure ever recorded against it, and no report would show that it had
- * happened.
- *
- * And an account is **retired rather than deleted** once it has history: the
- * postings are the record and the account is what they name. That is why the
- * form has a status field and the rows have no delete button — see
- * `accountSpec`.
- */
 @Component({
   selector: 'app-accounts',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -54,16 +31,8 @@ export class AccountsPage {
 
   protected readonly rows = this.list.rows;
 
-  /** Which section is expanded. All of them, until somebody collapses one. */
   private readonly collapsed = signal<Record<string, boolean>>({});
 
-  /**
-   * The chart, grouped by kind and in the order a chart is read.
-   *
-   * The API already returns it in that order, so this only cuts the list at the
-   * boundaries rather than sorting it again — one place decides what "chart
-   * order" means, and it is the one that also knows an account's position.
-   */
   protected readonly sections = computed(() => {
     const rows = this.rows();
 
@@ -98,13 +67,6 @@ export class AccountsPage {
     { label: 'Number', kind: 'strong', value: (a) => a.code },
     { label: 'Name', value: (a) => a.name, sub: (a) => a.description },
     { label: 'Group', kind: 'muted', value: (a) => a.group },
-    /**
-     * Which side increases it, in words.
-     *
-     * From the API's `normal_balance` rather than worked out here: the rule
-     * belongs to the server, and a client with its own copy is the second place
-     * that has to be right about it.
-     */
     {
       label: 'Increases on',
       kind: 'muted',

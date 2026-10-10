@@ -13,76 +13,21 @@ import { Icon } from './icon';
 import { SkeletonRows } from './states';
 import { StatusPill } from './status-pill';
 
-/**
- * Column definition for `app-data-table`.
- * `value` keeps the accessor in TypeScript rather than in template string keys,
- * so a renamed field is a compile error instead of a blank cell.
- */
 export interface Column<T = any> {
   label: string;
-  /** `num` right-aligns and uses tabular figures; `status` renders a StatusPill. */
   kind?: 'text' | 'num' | 'strong' | 'muted' | 'status';
-  /**
-   * Null is a real answer, not a mistake: a trip may have no helper and a
-   * delivery may have no proof yet. The table prints an em dash for it, so
-   * no page has to spell out its own placeholder.
-   */
   value?: (row: T) => string | number | null;
   status?: (row: T) => StatusValue;
-  /** Second line under the main value. */
   sub?: (row: T) => string | null;
-  /**
-   * A warning pill printed *instead of* the value, where this returns text.
-   *
-   * For a cell whose ordinary figure does not exist yet — a trip no zone line
-   * has priced reads "Needs a zone" rather than an em dash or, worse, ₱0. The
-   * pill carries its text, so it is never colour alone; `sub` still prints
-   * under it, which is where the reason goes.
-   */
   badge?: (row: T) => string | null;
 }
 
-/**
- * The shared table used by every list module (DESIGN.md section 8). Handles all
- * four required states so no page has to reimplement them — and, since every
- * one of those modules grows past a screenful eventually, the searching and
- * paging too.
- *
- * ## Both are done here, on rows already in hand
- *
- * No request is made and no parameter is sent. The lists this renders are a
- * fleet's own — a few hundred vehicles, a year of expenses — and they are
- * already loaded by the time a table exists to show them. Filtering them in
- * the browser answers instantly and keeps working offline; asking the server
- * to do it would add a round trip per keystroke to make a list of eighty rows
- * shorter.
- *
- * The day one of these lists really is too big to hold, the fix is a paged
- * endpoint behind the same inputs, and no page that uses this has to change.
- *
- * ## What it searches
- *
- * Whatever the columns print. A column already knows how to turn a row into
- * the text somebody is reading, so searching that text is searching exactly
- * what is on screen — no page has to name its searchable fields, and a column
- * added later is searchable the moment it renders. The sub-line counts too,
- * because a plate under a truck's name is the thing people type.
- */
 @Component({
   selector: 'app-data-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [Icon, StatusPill, SkeletonRows],
   template: `
     @if (rows(); as loaded) {
-      <!--
-        The toolbar, and only when it earns its place.
-
-        There was a threshold here — five rows before a search box appeared —
-        and it was wrong. A module with four rows in it today has forty next
-        quarter, and a control that only shows up once somebody already has a
-        problem is a control they never learn is there. It appears whenever
-        there is anything to search.
-      -->
       @if (searchable() && loaded.length > 0) {
         <div class="flex flex-wrap items-center gap-2 px-4 py-3">
           <label class="relative min-w-[200px] flex-1">
@@ -110,14 +55,6 @@ export interface Column<T = any> {
       }
 
       @if (matched().length === 0) {
-        <!--
-          Two different empties, and telling them apart is the point.
-
-          "Nothing here yet" is a module nobody has used. "Nothing matched" is a
-          list full of rows and a search that excluded them, and offering the
-          first message for the second sends somebody off to add a record they
-          already have.
-        -->
         @if (term()) {
           <div class="flex flex-col items-center gap-2 px-6 py-12 text-center">
             <app-icon name="search" [size]="32" class="text-cr-ink-muted" />
@@ -143,9 +80,6 @@ export interface Column<T = any> {
         }
       } @else {
         <div class="overflow-x-auto">
-          <!-- Nowrap so a narrow window scrolls the table rather than wrapping
-               every heading and cell onto two lines. Set on the table because
-               white-space inherits, which keeps it off every single cell. -->
           <table
             class="w-full border-collapse text-left whitespace-nowrap"
             [style.min-width.px]="minWidth()"
@@ -229,15 +163,6 @@ export interface Column<T = any> {
           </table>
         </div>
 
-        <!--
-          The pager, and it hides itself on a list that fits.
-
-          Shown whenever there are rows, for the reason the search box is. The
-          count under a short list answers "is that all of them", which is worth
-          having before the list is long rather than after — and the arrows
-          disable on a single page rather than vanishing, so the control does
-          not move about as a module fills up.
-        -->
         @if (paginated() && matched().length > 0) {
           <div
             class="flex flex-wrap items-center justify-between gap-3 border-t border-cr-line px-4 py-3"
@@ -292,7 +217,6 @@ export interface Column<T = any> {
 })
 export class DataTable {
   readonly columns = input.required<Column[]>();
-  /** `null` means still loading. */
   readonly rows = input.required<any[] | null>();
   readonly minWidth = input(720);
   readonly skeletonCount = input(6);
@@ -301,35 +225,17 @@ export class DataTable {
   readonly emptyTitle = input('Nothing here yet');
   readonly emptyBody = input('When there is data to show, it will appear here.');
 
-  /** Shows a destructive action next to the row action. */
   readonly deletable = input(false);
-  /** Names the row for the delete button's accessible label. */
   readonly rowLabel = input<((row: any) => string) | null>(null);
 
   readonly open = output<any>();
   readonly remove = output<any>();
 
-  /**
-   * Whether this table searches and pages itself.
-   *
-   * On by default, because "most tables" was the honest answer to which ones
-   * want it and an opt-in would have meant editing fifteen pages to get there.
-   * A table that has its own filter bar above it can turn the search off and
-   * keep the paging.
-   */
   readonly searchable = input(true);
   readonly paginated = input(true);
 
-  /** Named for what the rows are, so the box does not say "Search…" everywhere. */
   readonly searchPlaceholder = input('Search…');
 
-  /**
-   * Rows per page, and the choices offered.
-   *
-   * Ten to start with, and five, ten, fifteen or twenty on the control. Five
-   * is the smallest page worth turning; past twenty a page is a scroll, which
-   * is the thing paging exists to stop.
-   */
   readonly pageSize = input(10);
 
   protected readonly sizes = [5, 10, 15, 20] as const;
@@ -338,17 +244,8 @@ export class DataTable {
   protected readonly pageIndex = signal(0);
   private readonly chosenSize = signal<number | null>(null);
 
-  /** The page size in force: whatever was picked, else what the page asked for. */
   protected readonly size = computed(() => this.chosenSize() ?? this.pageSize());
 
-  /**
-   * The rows the search left, matched against what the columns actually print.
-   *
-   * Every column's `value` and `sub` are rendered to text and joined, so the
-   * haystack is the row as the reader sees it. A status column is skipped: it
-   * renders a pill from an enum, and matching "act" against "inactive" would
-   * surprise somebody more than it helps them.
-   */
   protected readonly matched = computed(() => {
     const loaded = this.rows() ?? [];
     const needle = this.term().trim().toLowerCase();
@@ -362,7 +259,6 @@ export class DataTable {
     Math.max(1, Math.ceil(this.matched().length / this.size())),
   );
 
-  /** The slice on screen. The whole list when paging is off. */
   protected readonly page = computed(() => {
     if (!this.paginated()) return this.matched();
 
@@ -380,15 +276,6 @@ export class DataTable {
   );
 
   constructor() {
-    /**
-     * Never strand the reader past the end of the list.
-     *
-     * Searching on page four of six, or deleting the last row of the last page,
-     * leaves an index that no longer has rows under it — and an empty table
-     * with "5 / 2" beneath it reads as a broken screen rather than as a stale
-     * page number. Clamping is cheaper than remembering every way the list can
-     * get shorter.
-     */
     effect(() => {
       const last = this.pageCount() - 1;
 
@@ -398,8 +285,6 @@ export class DataTable {
 
   protected setTerm(event: Event): void {
     this.term.set((event.target as HTMLInputElement).value);
-    // Back to the top: the matches are a new list, and page three of the old
-    // one has nothing to do with page three of this one.
     this.pageIndex.set(0);
   }
 
@@ -421,7 +306,6 @@ export class DataTable {
     this.pageIndex.update((index) => Math.min(this.pageCount() - 1, index + 1));
   }
 
-  /** One row, as the text it renders to. */
   private haystack(row: any): string {
     return this.columns()
       .filter((col) => col.kind !== 'status')
@@ -430,6 +314,5 @@ export class DataTable {
       .toLowerCase();
   }
 
-  /** What an absent value prints as, in one place rather than per column. */
   protected readonly dash = '—';
 }

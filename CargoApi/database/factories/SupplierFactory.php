@@ -8,9 +8,7 @@ use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Supplier\Models\Supplier;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
-/**
- * @extends Factory<Supplier>
- */
+/** @extends Factory<Supplier> */
 class SupplierFactory extends Factory
 {
     protected $model = Supplier::class;
@@ -18,9 +16,6 @@ class SupplierFactory extends Factory
     public function definition(): array
     {
         return [
-            // Unique, because the table is: two suppliers sharing a name inside
-            // one company is a 422 in the app and would be a confusing failure
-            // in a test that only wanted two rows.
             'name' => fake()->unique()->company(),
             'contact' => fake()->numerify('09## ### ####'),
             'address' => fake()->city(),
@@ -34,7 +29,6 @@ class SupplierFactory extends Factory
         ];
     }
 
-    /** Somebody the office has stopped buying from. */
     public function inactive(): self
     {
         return $this->state(fn (): array => ['status' => StatusValue::Inactive->value]);

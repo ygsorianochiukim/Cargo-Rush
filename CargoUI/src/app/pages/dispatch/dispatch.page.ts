@@ -8,7 +8,6 @@ import { Card } from '../../shared/card';
 import { Column, DataTable } from '../../shared/data-table';
 import { fmt } from '../../shared/format';
 
-/** Dispatch Monitoring — DESIGN.md section 5.1. */
 @Component({
   selector: 'app-dispatch',
   changeDetection: ChangeDetectionStrategy.OnPush,

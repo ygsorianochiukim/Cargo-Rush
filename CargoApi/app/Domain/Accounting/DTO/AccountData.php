@@ -8,14 +8,6 @@ use App\Domain\Shared\DTO\Data;
 use App\Domain\Shared\Enums\AccountType;
 use App\Domain\Shared\Enums\StatusValue;
 
-/**
- * One line of the chart of accounts, on its way in.
- *
- * `is_system` is deliberately absent. It marks the accounts a fresh install is
- * seeded with — the ones the rest of the system will post to automatically —
- * and an office that could set the flag on its own account could also make an
- * account it can never delete. The seeder sets it; nothing else does.
- */
 final class AccountData extends Data
 {
     public function __construct(

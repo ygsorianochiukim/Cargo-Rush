@@ -17,15 +17,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * One categorised outgoing.
- *
- * A truck of null is not a missing value — it is fleet overhead, the office
- * rent and the annual permits, which belong in a period's total without being
- * charged to any one unit's profitability. Every roll-up has to decide what to
- * do with those, and `scopeOverhead` is what makes the decision visible rather
- * than an accidental property of a `groupBy`.
- */
 class Expense extends Model
 {
     use BelongsToCompany, HasUlids, SoftDeletes;
@@ -70,7 +61,6 @@ class Expense extends Model
         return $this->belongsTo(Driver::class);
     }
 
-    /** Who it was bought from, where the office keeps a record of them. */
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);
@@ -81,20 +71,11 @@ class Expense extends Model
         return $this->belongsTo(User::class, 'recorded_by');
     }
 
-    /**
-     * Spend that actually counts.
-     *
-     * A pending claim has not been approved and a cancelled one was refused.
-     * Counting either would put money against a quarter that the business
-     * never paid out, so every roll-up goes through this and none of them
-     * re-states the rule.
-     */
     public function scopeCounted(Builder $query): Builder
     {
         return $query->where('status', StatusValue::Active->value);
     }
 
-    /** Fleet overhead: real spend that belongs to no single unit. */
     public function scopeOverhead(Builder $query): Builder
     {
         return $query->whereNull('truck_id');

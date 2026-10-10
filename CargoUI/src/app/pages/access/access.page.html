@@ -1,27 +1,4 @@
-<!--
-  The company's yard, pay cutoffs and rates, above the roles.
-
-  They sit here rather than on a settings page of their own: this is already the
-  administrator's screen, and a page holding one card is a menu item somebody
-  has to go looking for. The rates card below is the same argument — what the
-  firm charges, what it keeps of a partner's run, and what its invoices carry,
-  all of it settled in one place instead of an environment file.
-
-  Hidden from anybody without `company.manage` — a general manager holds it, an
-  HR officer who can see roles does not.
--->
 @if (canManageCompany()) {
-  <!--
-    Where the company is, and when it pays.
-
-    Two columns: the cutoff card beside the yard card, which holds a map and
-    is the taller of the two. `items-start` keeps the short card its own
-    height rather than stretched to match.
-
-    The yard card is what puts the firm on the carrier list customers pick from
-    in the app, and for any company that registered before that list existed it
-    is the only way onto it.
-  -->
   <div class="mb-4 grid items-start gap-4 lg:grid-cols-2">
     <div class="flex flex-col gap-4">
       <app-payroll-cutoff-card />
@@ -29,23 +6,10 @@
     <app-yard-card />
   </div>
 
-  <!--
-    The rates, full width and under the rest.
-
-    Its own row rather than a third cell, because its tax and terms fields sit
-    side by side and a card holding them at half the width wraps into a column
-    of stacked inputs that reads as a questionnaire.
-
-    It is the only screen in the system where what the firm charges can be
-    changed. The commission on it used to be a field on each partner's own
-    detail page; it is one standing rate now, and this is where it lives.
-  -->
   <app-rates-card class="mb-4 block" />
 
-  <!-- Full width: the staff list needs the room for its columns and pager. -->
   <app-benefits-card class="mb-4 block" />
 
-  <!-- The lists behind the dropdowns: supplier and expense categories. -->
   <app-categories-card class="mb-4 block" />
 }
 
@@ -221,20 +185,6 @@
   </div>
 } @else {
   <app-card heading="Positions" icon="badge" hint="The job, and what it pays">
-    <!--
-      A position is the job, and what the job pays.
-
-      One line rather than a paragraph. The thing an office has to know is that
-      editing a figure here does not move anybody already on the job, and that
-      fits in a sentence — the rest was explaining a design decision to somebody
-      who only wants to set a rate.
-
-      It no longer suggests a role, either. What somebody *is* and what they can
-      *open* are different questions, and conflating them means you cannot have
-      two drivers where one also keeps the books — a person who exists in every
-      small fleet. Access is chosen on the account, and this screen no longer
-      mentions it at all.
-    -->
     <p class="mb-2 text-[12px] text-cr-ink-muted">
       Hiring into a job opens that person a contract on the figure for their tier. Changing a rate
       here moves what the <em>next</em> hire is offered, and nobody already on it.
@@ -267,19 +217,6 @@
           <tbody>
             @for (position of list; track position.id) {
               <tr class="border-b border-cr-line last:border-0 hover:bg-cr-tint/40">
-                <!--
-                  The wide column, doing some work.
-
-                  What the job comes to on one payslip used to be a second list
-                  under the table, repeating every priced job by name — the same
-                  figures twice, and a block of height that grew with the roster.
-                  It belongs on the row it describes, in the one column with room
-                  for a sentence.
-
-                  The API composes it from the firm's own pay calendar: ₱15,000 a
-                  month is ₱7,500 twice, and whether it is twice depends on a
-                  cutoff set on another card on this very screen.
-                -->
                 <th scope="row" class="py-1.5 pr-3 text-left font-semibold">
                   <span class="flex items-center gap-2">
                     {{ position.name }}
@@ -299,12 +236,6 @@
                   </span>
                 </th>
 
-                <!--
-                  What the amounts beside it mean — a month, a day, a haul.
-                  Saved on change rather than behind the dialog: a rate card is
-                  a table, and a table you have to open a form to change one
-                  cell of is a table somebody keeps a spreadsheet beside.
-                -->
                 <td class="py-2 pr-3">
                   <select
                     [value]="position.pay_basis"
@@ -422,14 +353,6 @@
       </label>
     </app-field>
 
-    <!--
-      The rate card.
-
-      A default at the moment of hire, not a salary — hiring into this job opens
-      that person a contract on the figure for their tier, and they carry it
-      from then on. Saying so on the form matters: an office that thinks this is
-      a live link will expect a rise here to reach everybody, and it does not.
-    -->
     <hr class="border-cr-line" />
 
     <app-field

@@ -20,32 +20,6 @@ import { ListToolbar } from '../../shared/list-toolbar';
 import { ErrorState, SkeletonRows } from '../../shared/states';
 import { StatusPill } from '../../shared/status-pill';
 
-/**
- * Rate Card — the band editor.
- *
- * A band is a row of a subsidy table: a code, a range of kilometres, and a rate
- * per class of truck. `A1` is 1–40 km at ₱4,165 for the fleet and ₱4,916 for a
- * brand new unit, plus ₱14 for every ₱1/L diesel sits above the card's
- * baseline.
- *
- * Not built on `recordList`/`RecordSpec` like the other list modules, and
- * deliberately so: those render a flat record in a dialog, and a band is a
- * header plus a variable number of rate rows edited together. The same
- * reasoning already keeps the trip form and the ledger form out of the generic
- * renderer.
- *
- * The layout follows what somebody actually does here. The pump price and the
- * swing it is causing sit at the top, because that is the number that makes
- * every band on the page stale. The preview sits beside them, because a card
- * typed from a printed table has to be checked against that table band by
- * band, and a customer should not be the one who finds a figure typed wrong.
- *
- * The preview also has to be able to ask for a *particular* band, not just the
- * one the distance lands in. A table holds A1 beside A2 over the same
- * kilometres at different money, so the quote comes back naming the bands it
- * did not use and the screen offers them — otherwise half of every table is
- * unreachable from the only screen that checks it.
- */
 @Component({
   selector: 'app-pricing',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -73,7 +47,6 @@ export class PricingPage {
   protected readonly inputClass =
     'h-10 w-full rounded-control border border-cr-line bg-cr-surface px-3 text-[14px] text-cr-ink placeholder:text-cr-ink-muted focus:border-cr-blue focus:outline-none';
 
-  /** Null means still loading — the four list states depend on telling that apart. */
   protected readonly zones = signal<PricingZone[] | null>(null);
   protected readonly loadError = signal<string | null>(null);
   protected readonly selectedId = signal<string | null>(null);
@@ -84,38 +57,16 @@ export class PricingPage {
   protected readonly quote = signal<QuoteBreakdown | null>(null);
   protected readonly quoting = signal(false);
 
-  /**
-   * The classes of unit, for the rate rows and the preview.
-   *
-   * Active only: a retired class is one the office has stopped running, and
-   * offering it would put new prices back onto it.
-   */
   protected readonly categories = signal<TruckCategory[]>([]);
 
-  /**
-   * The band the preview is pinned to, or null to let the distance decide.
-   *
-   * Held outside the form because it is set by clicking an alternative on the
-   * last answer rather than typed, and because it has to be cleared the moment
-   * the distance changes — a band pinned at 30 km is not an answer about a
-   * 200 km run.
-   */
   protected readonly previewZoneId = signal<string | null>(null);
 
   protected readonly selected = computed(
     () => this.zones()?.find((zone) => zone.id === this.selectedId()) ?? null,
   );
 
-  /** True while a zone that has never been saved is being filled in. */
   protected readonly creating = signal(false);
 
-  /**
-   * What is currently typed in the header fields, as a signal.
-   *
-   * A reactive form is not a signal, so the duplicate checks below cannot see
-   * it without this. Written on every change rather than polled, so the
-   * warnings appear as somebody types rather than after they press save.
-   */
   private readonly typed = signal<{ code: string; name: string; from: number; to: number | null }>({
     code: '',
     name: '',
@@ -123,17 +74,6 @@ export class PricingPage {
     to: null,
   });
 
-  /**
-   * A band already using this code or name.
-   *
-   * The whole of "prevent a duplicate entry", caught on the form rather than
-   * left to the API's 422. Both are refused server-side too — that is what
-   * actually guarantees it — but a refusal arriving after somebody has typed a
-   * band's worth of rates is a refusal that costs them the typing.
-   *
-   * The band being edited is excluded, or editing anything would report itself
-   * as its own duplicate.
-   */
   protected readonly duplicate = computed(() => {
     const { code, name } = this.typed();
     const mine = this.selectedId();
@@ -151,20 +91,6 @@ export class PricingPage {
     return sameName ? { field: 'name' as const, zone: sameName } : null;
   });
 
-  /**
-   * The bands this one's kilometres already overlap.
-   *
-   * A **warning**, not a refusal, and the distinction is the table's own: A1
-   * and A2 are both 1–40 km at different money, as are E1 and E2, so a system
-   * that blocked an overlapping band could not express half of a subsidy card.
-   *
-   * But a second band over the same kilometres is far more often a mistake
-   * than an A2 — somebody retyping a row they already entered — and it is
-   * invisible once saved, because the list is ordered by band and two entries
-   * for 0–40 km look like they belong together. So it is said out loud before
-   * the save rather than discovered from a quote that came back at the wrong
-   * money.
-   */
   protected readonly overlapping = computed(() => {
     const { from, to } = this.typed();
     const mine = this.selectedId();
@@ -179,14 +105,6 @@ export class PricingPage {
     });
   });
 
-  /**
-   * A class of truck priced twice in this band.
-   *
-   * The API refuses it — a band prices each class once, or a quote would
-   * depend on row order — and this is what stops somebody reaching that
-   * refusal. The select offers the taken ones as disabled rather than hiding
-   * them, so a row that already holds one still shows what it holds.
-   */
   protected readonly duplicateClasses = computed(() => {
     const seen = new Set<string>();
     const twice = new Set<string>();
@@ -198,15 +116,12 @@ export class PricingPage {
     return twice;
   });
 
-  /** The class of truck on each rate row, as a signal the checks can read. */
   protected readonly rateClassIds = signal<string[]>([]);
 
-  /** Is this card safe to send? */
   protected readonly blocked = computed(
     () => this.duplicate() !== null || this.duplicateClasses().size > 0,
   );
 
-  /** Why it is not, in the words the office needs. */
   protected blockedReason(): string {
     const clash = this.duplicate();
 
@@ -250,17 +165,11 @@ export class PricingPage {
       error: () => this.categories.set([]),
     });
 
-    // A band pinned on the last answer is an answer about that distance. Let
-    // it survive a change of distance and the screen quietly shows A1's money
-    // against a 200 km run.
     this.previewForm.get('distance_km')?.valueChanges.subscribe(() => this.previewZoneId.set(null));
 
-    // Mirror the header fields and the rate rows into signals, so the
-    // duplicate checks run as somebody types rather than on save.
     this.form.valueChanges.subscribe(() => this.readForm());
   }
 
-  /** Copy what is typed into the signals the duplicate checks read. */
   private readForm(): void {
     const values = this.form.getRawValue() as Record<string, unknown>;
     const to = values['max_km'];
@@ -272,14 +181,6 @@ export class PricingPage {
       to: to === null || to === '' ? null : Number(to),
     });
 
-    /**
-     * `*` for the row that names no class — the fleet as it stands.
-     *
-     * Kept in the list rather than filtered out, because two rows both left on
-     * "Current fleet" is precisely the clash the API refuses: a band prices
-     * each class once, and "no class" is one of them. Dropping the blanks
-     * would let the commonest duplicate of all through to a 422.
-     */
     this.rateClassIds.set(
       this.brackets.controls.map(
         (group) => String(group.get('truck_category_id')?.value ?? '') || '*',
@@ -297,8 +198,6 @@ export class PricingPage {
         this.zones.set(response.data);
         this.loadError.set(null);
 
-        // Keep whatever was open, or open the first card so the editor is
-        // never an empty panel beside a populated list.
         if (this.selectedId() === null || !response.data.some((z) => z.id === this.selectedId())) {
           const first = response.data[0] ?? null;
           first ? this.select(first) : this.selectedId.set(null);
@@ -323,7 +222,6 @@ export class PricingPage {
     });
   }
 
-  /* ------------------------------------------------------------ The card */
 
   protected select(zone: PricingZone): void {
     this.creating.set(false);
@@ -334,9 +232,6 @@ export class PricingPage {
       name: zone.name,
       code: zone.code,
       min_km: zone.min_km,
-      // Shown inclusive, the way the printed table writes it, and converted
-      // back on save. A field reading 41 beside a document that says 40 is a
-      // discrepancy to the only people who check.
       max_km: zone.max_km === null ? null : zone.max_km - 1,
       status: zone.status,
       diesel_baseline_cents: zone.diesel_baseline_cents ? zone.diesel_baseline_cents / 100 : null,
@@ -353,8 +248,6 @@ export class PricingPage {
     this.selectedId.set(null);
     this.saveError.set(null);
 
-    // The band after the last one, so typing a table down from A1 does not
-    // mean retyping the boundary each time.
     const last = this.zones()?.reduce((furthest, zone) => Math.max(furthest, zone.max_km ?? 0), 0);
 
     this.form.reset({
@@ -368,21 +261,10 @@ export class PricingPage {
     });
 
     this.brackets.clear();
-    // A band with no rate prices nothing, so a new one starts with the line
-    // every table has: the rate for the fleet as it stands.
     this.brackets.push(this.bracketGroup({ label: 'Current fleet', base_cents: 0 }));
     this.readForm();
   }
 
-  /**
-   * One rate row. Pesos in the form, centavos on the wire — nobody types
-   * 416500 for ₱4,165.
-   *
-   * No kilometres: the band belongs to the zone above, and a row carrying its
-   * own copy would be a second place for 1–40 km to be wrong. They are struck
-   * off the parameter type too, so a row cannot acquire one by accident on the
-   * way through here.
-   */
   private bracketGroup(bracket: Partial<Omit<BracketPayload, 'min_km' | 'max_km'>>): FormGroup {
     return this.fb.group({
       id: [bracket.id ?? null],
@@ -396,13 +278,6 @@ export class PricingPage {
     });
   }
 
-  /**
-   * Another rate row, for the next class of unit not yet priced.
-   *
-   * Picked rather than left blank because the API refuses two rows for the same
-   * class — a band prices each of them once — and a row defaulting to the one
-   * already there would be refused on save with a message about row order.
-   */
   protected addBracket(): void {
     const taken = new Set(
       this.brackets.controls.map((group) => String(group.get('truck_category_id')?.value ?? '')),
@@ -415,8 +290,6 @@ export class PricingPage {
       this.bracketGroup({
         label: next?.name ?? 'Rate',
         truck_category_id: next?.id ?? null,
-        // The band's own step, since every class in a table shares it — the
-        // bases differ, the pesos per litre of diesel do not.
         diesel_step_cents: Math.round(Number(last?.get('diesel_step')?.value ?? 0) * 100),
       }),
     );
@@ -430,7 +303,6 @@ export class PricingPage {
     this.readForm();
   }
 
-  /** Is this class of truck already priced on another row of this band? */
   protected classTakenElsewhere(index: number, categoryId: string): boolean {
     return this.brackets.controls.some(
       (group, at) =>
@@ -445,14 +317,6 @@ export class PricingPage {
       return;
     }
 
-    /**
-     * A duplicate is refused here as well as by the API.
-     *
-     * Not belt and braces for its own sake: the button is disabled while
-     * `blocked()` holds, and this catches the path that does not go through
-     * the button — a form submitted on Enter, or a list that refreshed under
-     * somebody and made their code a duplicate while they were typing.
-     */
     if (this.blocked()) {
       this.saveError.set(this.blockedReason());
 
@@ -470,14 +334,6 @@ export class PricingPage {
       name: String(values['name']),
       code: String(values['code']),
       min_km: Number(values['min_km'] ?? 0),
-      /**
-       * Typed inclusive, sent exclusive.
-       *
-       * The field says 40 because the document says "1 to 40"; the column
-       * holds 41 because ranges are half-open and 41 km has to belong to the
-       * next band rather than to both or to neither. Converted in one place,
-       * here, with `select()` converting back.
-       */
       max_km: to === null || to === '' ? null : Number(to) + 1,
       status: values['status'] as PricingZone['status'],
       diesel_baseline_cents: values['diesel_baseline_cents']
@@ -490,8 +346,6 @@ export class PricingPage {
         return {
           id: (bracket['id'] as string | null) ?? null,
           label: String(bracket['label']),
-          // Blank is "the fleet as it stands" — the table's own column — not a
-          // missing answer.
           truck_category_id: (bracket['truck_category_id'] as string) || null,
           base_cents: Math.round(Number(bracket['base'] ?? 0) * 100),
           diesel_step_cents: Math.round(Number(bracket['diesel_step'] ?? 0) * 100),
@@ -522,13 +376,6 @@ export class PricingPage {
     });
   }
 
-  /**
-   * The API's own validation, readable.
-   *
-   * Rate errors arrive keyed by index (`brackets.1.base_cents`), and the useful
-   * half of those is the message — it already says what clashes with what,
-   * which is more use than highlighting a number field.
-   */
   private messageFor(error: HttpErrorResponse): string {
     const errors = error.error?.errors as Record<string, string[]> | undefined;
 
@@ -560,7 +407,6 @@ export class PricingPage {
     });
   }
 
-  /* ---------------------------------------------------------- Pump price */
 
   protected recordDiesel(): void {
     if (this.dieselForm.invalid) {
@@ -579,14 +425,12 @@ export class PricingPage {
       .subscribe({
         next: () => {
           this.refreshDiesel();
-          // Every card's quote just moved, so a preview on screen is stale.
           this.preview();
         },
         error: () => this.saveError.set('Could not record that pump price.'),
       });
   }
 
-  /** The adjustment as a percentage, signed, for reading rather than arithmetic. */
   protected readonly adjustmentPct = computed(() => {
     const bp = this.diesel()?.adjustment_bp ?? 0;
 
@@ -596,7 +440,6 @@ export class PricingPage {
   protected readonly surcharging = computed(() => (this.diesel()?.adjustment_bp ?? 0) > 0);
   protected readonly discounting = computed(() => (this.diesel()?.adjustment_bp ?? 0) < 0);
 
-  /* ------------------------------------------------------------- Preview */
 
   protected preview(): void {
     const { distance_km, weight_kg, truck_category_id } = this.previewForm.getRawValue();
@@ -622,18 +465,11 @@ export class PricingPage {
       });
   }
 
-  /**
-   * Re-quote in one of the bands the distance also falls in.
-   *
-   * The only way to see A2's money on this screen, since nothing about a
-   * distance of 30 km distinguishes A2 from A1.
-   */
   protected previewIn(zoneId: string): void {
     this.previewZoneId.set(zoneId);
     this.preview();
   }
 
-  /** Back to letting the distance choose. */
   protected previewUnpinned(): void {
     this.previewZoneId.set(null);
     this.preview();

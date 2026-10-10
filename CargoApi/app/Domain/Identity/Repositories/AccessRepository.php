@@ -10,14 +10,6 @@ use App\Domain\Identity\Models\Role;
 use App\Domain\Identity\Models\User;
 use Illuminate\Database\Eloquent\Collection;
 
-/**
- * Roles, positions and the permission vocabulary.
- *
- * One repository for the three because they are only ever read together: the
- * access screen needs every role with its permissions, the whole vocabulary to
- * draw the matrix, and the positions that point at those roles. Three
- * repositories would mean the controller doing the joining.
- */
 class AccessRepository
 {
     /** @return Collection<int, Role> */
@@ -25,8 +17,6 @@ class AccessRepository
     {
         return Role::query()
             ->with('permissions:id,key,name,group')
-            // The number of accounts holding each role, which is what makes
-            // "can I delete this?" answerable without a second query per row.
             ->withCount('users')
             ->when($activeOnly, fn ($query) => $query->active())
             ->orderBy('position')
@@ -45,11 +35,7 @@ class AccessRepository
         return Permission::query()->orderBy('position')->get();
     }
 
-    /**
-     * The vocabulary, grouped by module, for the permission matrix.
-     *
-     * @return array<int, array<string, mixed>>
-     */
+    /** @return array<int, array<string, mixed>> */
     public function permissionGroups(): array
     {
         return $this->permissions()
@@ -78,7 +64,6 @@ class AccessRepository
             ->get();
     }
 
-    /** How many accounts hold a role. Nobody may be left without one. */
     public function usersHolding(string $roleKey): int
     {
         return User::where('role', $roleKey)->count();

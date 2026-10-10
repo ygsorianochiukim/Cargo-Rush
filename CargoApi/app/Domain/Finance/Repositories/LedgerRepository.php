@@ -12,13 +12,6 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 
-/**
- * The workbook, as queries.
- *
- * This layer only ever fetches rows — the two formulas that turn them into
- * money live in the service, so Profitability and Quarterly Summary cannot
- * drift apart by each adding things up their own way.
- */
 class LedgerRepository extends Repository
 {
     protected function model(): string
@@ -28,9 +21,6 @@ class LedgerRepository extends Repository
 
     public function query(): Builder
     {
-        // `trip` travels with the row because the resource prints its
-        // reference, and a ledger page is a list — one query apiece would be
-        // an N+1 the moment a sheet has a month on it.
         return LedgerEntry::query()
             ->with(['truck', 'trip:id,reference', 'customer:id,name', 'driver:id,name', 'helpers.driver:id,name'])
             ->orderByDesc('date');
@@ -43,7 +33,6 @@ class LedgerRepository extends Repository
 
     protected function applyFilters(Builder $query, array $filters): Builder
     {
-        // `status` means nothing on a ledger row, so the base filter is skipped.
         if (! empty($filters['truck_id'])) {
             $query->where('truck_id', $filters['truck_id']);
         }
@@ -66,7 +55,6 @@ class LedgerRepository extends Repository
         return $query;
     }
 
-    /** Every unit, including the two with no plate yet. */
     public function trucks(): Collection
     {
         return Truck::query()->orderBy('position')->get();
@@ -81,8 +69,6 @@ class LedgerRepository extends Repository
     {
         $attributes = $data->persistable();
 
-        // Appended rather than inserted, so adding a unit does not renumber
-        // the sheets somebody already knows the order of.
         $attributes['position'] ??= (int) Truck::query()->max('position') + 1;
 
         return Truck::create($attributes)->refresh();
@@ -95,7 +81,6 @@ class LedgerRepository extends Repository
         return $truck->refresh();
     }
 
-    /** The rows a period roll-up is computed from. */
     public function entriesBetween(Carbon $from, Carbon $to): Collection
     {
         return LedgerEntry::query()
@@ -105,7 +90,6 @@ class LedgerRepository extends Repository
             ->get();
     }
 
-    /** Routes already used, to suggest in the entry form. */
     public function knownRoutes(): array
     {
         return LedgerEntry::query()

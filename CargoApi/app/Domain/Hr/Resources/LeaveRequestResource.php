@@ -9,9 +9,7 @@ use App\Domain\Hr\Services\PhotoStore;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use Illuminate\Http\Request;
 
-/**
- * @mixin LeaveRequest
- */
+/** @mixin LeaveRequest */
 class LeaveRequestResource extends ApiResource
 {
     public function toArray(Request $request): array
@@ -32,11 +30,8 @@ class LeaveRequestResource extends ApiResource
             'reason' => $this->reason,
             'status' => $this->status->value,
             'status_label' => $this->status->label(),
-            // The tone, not a colour (DESIGN.md section 7.1).
             'tone' => $this->status->tone()->value,
             'open' => $this->status->isOpen(),
-            // Who decided and when, not just the outcome — "who approved it?"
-            // is half of what this module is asked.
             'decided_by' => $this->decided_by,
             'decided_by_name' => $this->decider?->name,
             'decided_at' => $this->iso($this->decided_at),

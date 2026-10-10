@@ -6,16 +6,6 @@ namespace App\Domain\Gps\DTO;
 
 use App\Domain\Shared\DTO\Data;
 
-/**
- * What the handset posts while it is moving.
- *
- * `location` and the coordinates are both here and they are not the same
- * thing. `location` is what a person reads — a place name where there is one,
- * and the formatted pair where there is not. `lat`/`lng` are what a map draws
- * and a bounding box filters on. The phone used to send only the first, having
- * stringified the second on the way out, which is why nothing in the system
- * could plot a route it had every point of.
- */
 final class GpsPingData extends Data
 {
     public function __construct(

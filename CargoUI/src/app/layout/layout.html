@@ -5,10 +5,7 @@
   Skip to content
 </a>
 
-<!-- The frame is the same tint as the canvas, so the sidebar is the only
-     panel that lifts off it (DESIGN.md section 4). -->
 <div class="flex h-full gap-4 bg-cr-tint p-4">
-  <!-- Sidebar: inline at >=1024px, overlay drawer below -->
   @if (!overlay()) {
     <div
       class="flex-none transition-[width] duration-200"
@@ -25,7 +22,6 @@
     </div>
   }
 
-  <!-- Content canvas -->
   <main id="cr-main" class="flex min-w-0 flex-1 flex-col overflow-hidden">
     <header class="flex flex-none items-center gap-3 px-2 pt-1 pb-5">
       @if (overlay()) {
@@ -91,12 +87,8 @@
   </main>
 </div>
 
-<!-- Centralised modal hosts: mounted once, used from anywhere (DESIGN.md section 8) -->
 <app-trip-form />
 <app-ledger-form />
 <app-record-form />
-<!-- Recording money that has arrived — and the only way an invoice becomes
-     paid. Mounted here like the other dialogs, because both Billing and one
-     invoice's own page open it. -->
 <app-payment-form />
 <app-confirm-host />

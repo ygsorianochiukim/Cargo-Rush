@@ -12,26 +12,6 @@ use App\Domain\Shared\Enums\JournalCategory;
 use App\Domain\Vehicle\Models\MaintenanceJob;
 use Illuminate\Database\Eloquent\Model;
 
-/**
- * Money that moved against invoices, on the day it moved (`paid_on`).
- *
- * One entry per payment rather than per allocation, because the payment is the
- * one movement of cash and the allocations are only where it went.
- *
- * **Received:** Dr 1020 the amount; Cr 1100 what was applied to each invoice;
- * Cr 2250 Customer advances for any of it not applied yet — real money, owed
- * back or owed work, until somebody applies it.
- *
- * **Paid out:** Cr 1020 the amount; Dr 2010 what was applied to each bill;
- * Dr 1200 for any of it not applied yet. And, for each bill, the expense —
- * Dr 5900 / Cr 1270 — because Finance counts a supplier bill on the day it is
- * paid (`FinanceService::supplierBillSettlements()`), at what was paid.
- *
- * **Except a bill a maintenance job carries.** Finance leaves those payments
- * out: the job's cost is already on the sheet, and `SheetDayRule` put it there
- * against 1270. Paying the bill settles 2010 and adds no expense, or one oil
- * change would be two.
- */
 class PaymentRule extends PostingRule
 {
     public function postings(Model $source): array
@@ -46,8 +26,6 @@ class PaymentRule extends PostingRule
         $direction = $payment->direction ?? InvoiceDirection::Receivable;
         $outgoing = $direction === InvoiceDirection::Payable;
 
-        // Only allocations to a live invoice going the same way: an allocation
-        // to a deleted one is, to every report, money not applied to anything.
         $allocations = PaymentAllocation::query()
             ->with('invoice:id,number,direction,customer_id,trip_id')
             ->where('payment_id', $payment->getKey())

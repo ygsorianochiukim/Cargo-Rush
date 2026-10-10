@@ -8,9 +8,7 @@ use App\Domain\Billing\Models\Payment;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use Illuminate\Http\Request;
 
-/**
- * @mixin Payment
- */
+/** @mixin Payment */
 class PaymentResource extends ApiResource
 {
     public function toArray(Request $request): array
@@ -23,22 +21,11 @@ class PaymentResource extends ApiResource
             'amount_cents' => $this->amount_cents,
             'currency' => $this->currency,
 
-            // The day the money moved, not the day somebody typed it in. Every
-            // collections figure is dated from this.
             'paid_on' => $this->paid_on?->toDateString(),
             'method' => $this->method,
-            // What a bank statement is matched against.
             'reference' => $this->reference,
             'notes' => $this->notes,
 
-            /**
-             * Where it went, and what is left over.
-             *
-             * A payment larger than the invoices it was applied to is not an
-             * error — a customer paying a round ₱100,000 against ₱97,340 of
-             * bills has ₱2,660 of credit, which goes against whatever they are
-             * billed next. Showing the gap is what lets somebody notice it.
-             */
             'allocated_cents' => $this->allocatedCents(),
             'unallocated_cents' => $this->unallocatedCents(),
             'allocations' => $this->whenLoaded('allocations', fn () => $this->allocations->map(

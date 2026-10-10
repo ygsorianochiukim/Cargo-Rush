@@ -13,36 +13,6 @@ import { EmptyState, ErrorState, SkeletonRows } from '../../shared/states';
 import { StatusPill } from '../../shared/status-pill';
 import { WalletPanel } from '../../shared/wallet-panel';
 
-/**
- * Truckers — the partner roster.
- *
- * The office's side of the third operator this system knows about. A driver is
- * an employee and appears in Drivers Management; a trucker owns their truck,
- * chooses which work to take, and is paid a share of what each run billed
- * rather than a wage. The two rosters are separate screens because almost
- * nothing on one is a question you would ask about the other.
- *
- * ## Three things happen here, and only one of them is routine
- *
- * **Vetting.** A registration lands `pending` and the partner's job board is
- * empty until somebody at this desk has read their licence and approved them.
- * That queue is the sidebar badge, and it is the reason this page opens on
- * `pending` first: somebody is sitting in a waiting room.
- *
- * **The rate.** What the fleet keeps of a partner's runs. It is a commercial
- * term and it is negotiable, so it is editable here — and changing it touches
- * nothing already earned, because every settled run froze its own rate at
- * delivery.
- *
- * **The money.** Each partner has one running account that nets both
- * directions: what the fleet owes them for work it billed, less what they owe
- * the fleet on runs they billed themselves. The drawer shows the balance, the
- * arithmetic behind it, and the settle form.
- *
- * Everything on this page is behind `truckers.manage` except the reading, which
- * is `truckers.view` — the split the drivers module already uses, and for
- * firmer reasons here, since two of the three verbs move money.
- */
 type Tab = 'pending' | 'trucks' | 'active' | 'inactive' | 'all';
 
 @Component({
@@ -59,24 +29,13 @@ export class TruckersPage {
 
   protected readonly fmt = fmt;
 
-  /** Null while loading — the four list states depend on telling that apart. */
   protected readonly truckers = signal<Trucker[] | null>(null);
   protected readonly loadError = signal<string | null>(null);
 
-  /**
-   * Which standing is on screen.
-   *
-   * Opens on `pending`, deliberately. A registration nobody has read is
-   * somebody waiting on this desk with an empty app, and it is the one thing
-   * here with a person on the other end of it.
-   */
   protected readonly tab = signal<Tab>('pending');
-
-  /* ------------------------------------------------------------ The drawer */
 
   protected readonly openTrucker = signal<Trucker | null>(null);
 
-  /** A refusal from approving or suspending, shown in the drawer. */
   protected readonly formError = signal<string | null>(null);
 
   constructor() {
@@ -87,43 +46,12 @@ export class TruckersPage {
     if (settle !== null) this.openById(settle);
   }
 
-  /**
-   * Open one partner's wallet because a link asked for it.
-   *
-   * Payables sends people here with a figure in mind — "Yvert Soriano,
-   * ₱33,123.20" — and landing them on the roster made them find that name
-   * again by eye, on a tab that opens on `pending` and therefore does not
-   * contain an approved partner at all. The link now names the row and this
-   * opens it.
-   *
-   * Fetched by id rather than looked up in `refresh()`'s page of 100: the
-   * roster is paginated and the partner who is owed the most is not
-   * necessarily on the first page. It is also one less race — the drawer does
-   * not have to wait for the list.
-   *
-   * The tab goes to `all` so the roster behind the drawer contains the person
-   * in front of it. Following their own standing would be more precise and
-   * more fragile: a partner on hold is a status the tabs do not each have a
-   * home for, and being shown an empty list on close is worse than being shown
-   * everyone.
-   */
   private openById(id: string): void {
     this.truckersApi.find(id).subscribe({
       next: (trucker) => {
         this.tab.set('all');
         this.open(trucker);
       },
-      /**
-       * Said plainly rather than silently.
-       *
-       * Somebody followed a link to a figure they are trying to pay, and a
-       * roster that just sits there reads as "nothing owed". The two ways
-       * this fails need different words: the partner is gone, or the reader
-       * can see what the week costs without being allowed to open a wallet —
-       * Payables is `finance.view` and this is `truckers.view`, so that
-       * combination is a real one and the server's own wording is the honest
-       * answer to it.
-       */
       error: (error: HttpErrorResponse) =>
         this.loadError.set(
           error.status === 404
@@ -158,7 +86,6 @@ export class TruckersPage {
     return (this.truckers() ?? []).filter((t) => this.inTab(t, tab)).length;
   }
 
-  /** `trucks` is anybody with a truck sent in for checking, whatever their standing. */
   private inTab(trucker: Trucker, tab: Tab): boolean {
     if (tab === 'all') return true;
     if (tab === 'trucks') return this.trucksToCheck(trucker) > 0;
@@ -170,28 +97,15 @@ export class TruckersPage {
     return (trucker.vehicles ?? []).filter((v) => v.verification === 'pending').length;
   }
 
-  /* ------------------------------------------------ Checking their trucks */
-
   protected readonly photoSlots = TRUCK_PHOTO_SLOTS;
 
-  /**
-   * The one truck being checked, in its own modal.
-   *
-   * Separate from the trucker's drawer on purpose: the decision is about this
-   * truck and its photographs, and the other trucks, the drivers and the
-   * wallet are nothing to do with it. The drawer hides while this is open and
-   * comes back when it closes, if it was open to begin with.
-   */
   protected readonly checking = signal<{ trucker: Trucker; vehicle: TruckerVehicle } | null>(null);
 
-  /** The photo shown full size inside the check, or null for the grid. */
   protected readonly enlarged = signal<{ url: string; label: string } | null>(null);
 
-  /** The truck whose rejection reason is being typed, and what has been typed. */
   protected readonly rejecting = signal<string | null>(null);
   protected readonly reason = signal('');
 
-  /** Every truck waiting for a check, oldest first, for the "Trucks to check" tab. */
   protected readonly truckQueue = computed(() =>
     (this.truckers() ?? [])
       .flatMap((trucker) =>
@@ -254,7 +168,6 @@ export class TruckersPage {
     });
   }
 
-  /** Refresh the roster and the open drawer, so the decision shows under the hand that made it. */
   private reopen(id: string): void {
     this.refresh();
     this.truckersApi.find(id).subscribe({
@@ -264,20 +177,6 @@ export class TruckersPage {
     });
   }
 
-  /* ------------------------------------------------------------- Deciding */
-
-  /**
-   * Approve a registration, from the roster or from inside the drawer.
-   *
-   * Both, because vetting is a review followed by a decision and the two
-   * happen in different places: a desk that already knows the person approves
-   * off the list, and one that does not opens them first to read the licence
-   * and the truck. Making them close the drawer to find the button would be
-   * asking somebody to stop reviewing in order to decide.
-   *
-   * The open drawer is refreshed rather than closed, so whoever just approved
-   * somebody sees the standing change under their hand.
-   */
   protected approve(trucker: Trucker): void {
     this.truckersApi.approve(trucker.id).subscribe({
       next: (updated) => {
@@ -292,9 +191,6 @@ export class TruckersPage {
   protected async suspend(trucker: Trucker): Promise<void> {
     const ok = await this.confirm.ask({
       title: `Put ${trucker.name} on hold?`,
-      // Said plainly, because both halves surprise people. Work already on
-      // them is left alone — a run in transit has a customer waiting at the far
-      // end, and cancelling it from here would strand a pallet.
       body: 'They stop seeing jobs straight away. Runs they are already on are left alone, and their wallet is untouched.',
       confirmLabel: 'Put on hold',
       danger: true,
@@ -312,13 +208,6 @@ export class TruckersPage {
     });
   }
 
-  /**
-   * Put a failure where the person is looking.
-   *
-   * A refusal raised from inside the drawer belongs in the drawer: the banner
-   * at the top of the page is behind a scrim the person cannot see past, so
-   * reporting it there is reporting it to nobody.
-   */
   private fail(error: HttpErrorResponse): void {
     const message = this.messageFor(error);
 
@@ -331,8 +220,6 @@ export class TruckersPage {
     this.loadError.set(message);
   }
 
-  /* --------------------------------------------------------- The partner */
-
   protected open(trucker: Trucker): void {
     this.openTrucker.set(trucker);
     this.formError.set(null);
@@ -342,34 +229,15 @@ export class TruckersPage {
   protected close(): void {
     this.openTrucker.set(null);
 
-    /**
-     * Drop the deep link on the way out.
-     *
-     * Otherwise `?settle=` outlives the drawer it opened: a refresh, or a
-     * bookmark taken while reading, reopens a wallet somebody deliberately
-     * closed — and after the payment has gone through, reopens it showing
-     * nothing owed. `replaceUrl` keeps Back pointing at Payables rather than
-     * at this same page with the parameter still on it.
-     */
     if (this.route.snapshot.queryParamMap.has('settle')) {
       void this.router.navigate([], { relativeTo: this.route, queryParams: {}, replaceUrl: true });
     }
   }
 
-  /* ---------------------------------------------------------------- Bits */
-
   protected rate(bp: number): string {
-    // 12, not 12.00 — a whole percentage is the ordinary case. A fleet rate of
-    // 7.5% still reads correctly.
     return `${(bp / 100).toFixed(bp % 100 === 0 ? 0 : 1)}%`;
   }
 
-  /**
-   * The roster's one-line summary of a partner's trucks.
-   *
-   * The first in full and a count of the rest: a partner may run several, and
-   * the drawer lists every one, but a table cell only has room for a hint.
-   */
   protected plate(trucker: Trucker): string {
     const units = trucker.vehicles ?? [];
     const unit = units[0];
@@ -390,7 +258,6 @@ export class TruckersPage {
       .join('');
   }
 
-  /** The API's own words. A 422 here is a real rule, not a form slip. */
   private messageFor(error: HttpErrorResponse): string {
     const errors = error.error?.errors as Record<string, string[]> | undefined;
 

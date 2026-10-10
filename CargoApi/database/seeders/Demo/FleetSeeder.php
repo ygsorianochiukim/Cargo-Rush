@@ -16,13 +16,6 @@ use Database\Seeders\UserSeeder;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 
-/**
- * The people, the units and the customers.
- *
- * Everything here matches the fixtures the two clients were built against, so
- * pointing them at the real API changes where the data comes from and nothing
- * about what appears on screen.
- */
 class FleetSeeder extends Seeder
 {
     use AdoptsTrashedRows, SeedsIntoACompany;
@@ -30,8 +23,6 @@ class FleetSeeder extends Seeder
     public function run(): void
     {
         $this->intoCompany(function (): void {
-            // The accounts are not demo data — they are how anyone signs in.
-            // Called rather than duplicated, so there is one definition of them.
             $this->call(UserSeeder::class);
 
             $this->drivers();
@@ -52,7 +43,6 @@ class FleetSeeder extends Seeder
             ['Ana Villar', 'N02-77-330188', '2028-01-24', 0, 'active', 502, 93.7, null],
             ['Rico Santos', 'I06-45-902117', '2027-07-11', 2, 'active', 219, 95.0, null],
             ['Grace Lim', 'P04-31-556602', '2026-08-29', 0, 'inactive', 64, 88.9, null],
-            // Helpers ride the same table — they are drivers without the keys.
             ['Jun Abad', 'H01-10-110011', '2027-02-14', 0, 'available', 0, 0.0, null],
             ['Nico Diaz', 'H01-10-220022', '2027-05-20', 0, 'available', 0, 0.0, null],
             ['Rey Cruz', 'H01-10-330033', '2026-12-01', 1, 'available', 0, 0.0, null],
@@ -60,9 +50,6 @@ class FleetSeeder extends Seeder
         ];
 
         foreach ($rows as [$name, $licence, $expiry, $violations, $status, $trips, $rate, $userId]) {
-            // Matched on the account where there is one, so this fills in the
-            // driver row UserSeeder already made rather than adding a second
-            // Marco alongside it. Everyone else is matched on their licence.
             $key = $userId === null ? ['licence_no' => $licence] : ['user_id' => $userId];
 
             $this->restoreOrCreate(Driver::class, $key, [
@@ -89,7 +76,6 @@ class FleetSeeder extends Seeder
             ['NCR 9032', 'Isuzu NQR', 'LTO-2024-90320', 5500, 'active', 'Ana Villar', 133540, 140000],
             ['ILO 2204', 'Hyundai Mighty', 'LTO-2025-22040', 3000, 'active', 'Rico Santos', 58230, 60000],
             ['PMP 6650', 'Hino 500', 'LTO-2021-66500', 8000, 'inactive', null, 310990, 312000],
-            // The six units the workbook keeps a sheet for.
             ['MAR1390', 'Isuzu Forward', 'LTO-2023-13900', 8000, 'active', 'Marco Reyes', 184320, 186000],
             ['CBS8862', 'Hino Ranger', 'LTO-2022-88620', 7500, 'active', 'Liza Tan', 152410, 158000],
             ['LAQ8325', 'Fuso Fighter', 'LTO-2021-83250', 7000, 'maintenance', null, 288730, 290000],
@@ -152,16 +138,6 @@ class FleetSeeder extends Seeder
         }
     }
 
-    /**
-     * A login for one of those firms, so the customer half of `cargoApp` can
-     * actually be opened in a walkthrough.
-     *
-     * Demo data, and only here — `UserSeeder` seeds accounts a fresh install
-     * needs, and a customer account is not one of them: it would drag a
-     * `customers` row in with it, and a fresh install is deliberately empty of
-     * business data. Real customer logins are made with
-     * `php artisan cargo:user --role=customer`.
-     */
     private function customerAccount(): void
     {
         $firm = Customer::where('name', 'Negros Fresh Mart')->first();

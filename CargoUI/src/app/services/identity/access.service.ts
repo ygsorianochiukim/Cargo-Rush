@@ -11,7 +11,6 @@ import {
 } from '../../models/identity/access.model';
 import { Envelope } from '../../models/shared/envelope.model';
 
-/** Roles, positions and the permission vocabulary. */
 @Injectable({ providedIn: 'root' })
 export class AccessService {
   private readonly api = inject(ApiService);
@@ -32,12 +31,6 @@ export class AccessService {
     return this.api.delete(`access/roles/${id}`);
   }
 
-  /**
-   * The vocabulary the matrix is drawn from.
-   *
-   * Read-only: a permission is only real if the API checks for it, so one
-   * invented here would gate nothing.
-   */
   permissions(): Observable<PermissionGroup[]> {
     return this.api.get<PermissionGroup[]>('access/permissions');
   }
@@ -57,13 +50,6 @@ export class AccessService {
     return this.api.patch<Position>(`access/positions/${id}`, payload);
   }
 
-  /**
-   * Delete a position, or hear that it was retired.
-   *
-   * Two outcomes the caller has to tell apart: one nobody holds is deleted, one
-   * with employees on it is switched off instead. The page re-reads the list
-   * and says which happened.
-   */
   removePosition(id: string): Observable<void> {
     return this.api.delete(`access/positions/${id}`);
   }

@@ -39,6 +39,8 @@ use App\Domain\Payroll\Models\StoreCredit;
 use App\Domain\Pricing\Console\LoadSubsidyCardCommand;
 use App\Domain\Pricing\Models\PricingZone;
 use App\Domain\Pricing\Models\TruckCategory;
+use App\Domain\Shared\Console\PrefixTablesCommand;
+use App\Domain\Shared\Support\ChangeLog;
 use App\Domain\Supplier\Models\SupplierCategory;
 use App\Domain\Tenancy\Models\Company;
 use App\Domain\Tenancy\Support\Tenant;
@@ -55,27 +57,16 @@ use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 
-/**
- * Wires the domain modules into the framework.
- *
- * Models live under `app/Domain/<Module>/Models` rather than `app/Models`, so
- * the two conventions Laravel infers from a default layout — route-model
- * binding and factory discovery — have to be declared once, here, instead of
- * being re-stated on every model.
- */
 class DomainServiceProvider extends ServiceProvider
 {
-    /**
-     * Route parameter name => model. `{trip}` resolves a Trip, and so on.
-     *
-     * @var array<string, class-string<Model>>
-     */
+    /** @var array<string, class-string<Model>> */
     private const BINDINGS = [
         'trip' => Trip::class,
         'driver' => Driver::class,
@@ -91,17 +82,7 @@ class DomainServiceProvider extends ServiceProvider
         'truck' => Truck::class,
         'expense' => Expense::class,
         'category' => ExpenseCategory::class,
-        // Not `category` either — see `truckCategory` just below.
         'supplierCategory' => SupplierCategory::class,
-        /**
-         * Not `category`, which is taken.
-         *
-         * These bindings are global by parameter *name*, so two modules using
-         * `{category}` would both resolve to whichever model is listed here —
-         * and the second one 404s on every id, which reads as a missing record
-         * rather than as a wiring mistake. The route says `{truckCategory}` for
-         * that reason and not as a style preference.
-         */
         'truckCategory' => TruckCategory::class,
         'user' => User::class,
         'zone' => PricingZone::class,
@@ -113,44 +94,17 @@ class DomainServiceProvider extends ServiceProvider
         'position' => Position::class,
         'company' => Company::class,
         'payment' => Payment::class,
-        // Not `credit`, for the reason `truckCategory` is not `category`:
-        // these bind by parameter *name* across every module at once.
         'storeCredit' => StoreCredit::class,
-        /**
-         * The partner, on the office's routes only.
-         *
-         * Note what is *not* bound: the partner's own endpoints take no id for
-         * themselves, and their `{tripId}` and `{vehicleId}` are deliberately
-         * unbound strings. A bound model there would resolve under the caller's
-         * company and hand over any row in it — which is the whole thing
-         * `PartnerController` is scoped to prevent. Same reason the customer
-         * portal spells its parameter `{tripId}`.
-         */
         'trucker' => Trucker::class,
     ];
 
     public function register(): void
     {
-        /**
-         * Which company the code currently running belongs to.
-         *
-         * A singleton because it has to be *the same object* everywhere: the
-         * middleware sets it, and the global scope on twenty-eight models reads
-         * it on every query. A fresh instance per resolution would mean the
-         * scope reading an empty one and filtering nothing, which is the one
-         * failure mode this whole design exists to prevent.
-         *
-         * Scoped to the request, so nothing survives into the next one. Under
-         * Octane or a queue worker the process is reused, and a company left
-         * behind by the last request would silently answer the next.
-         */
         $this->app->scoped(Tenant::class);
     }
 
     public function boot(): void
     {
-        // Commands live with their module rather than in `app/Console`, so
-        // they are not auto-discovered and have to be named here.
         if ($this->app->runningInConsole()) {
             $this->commands([
                 CreateUserCommand::class,
@@ -158,32 +112,20 @@ class DomainServiceProvider extends ServiceProvider
                 ReleaseDueTripsCommand::class,
                 ReconcileOverdueTripsCommand::class,
                 ReconcileOverdueInvoicesCommand::class,
-                // A one-off repair rather than a sweep: nothing schedules it.
                 RequoteInvoicesCommand::class,
                 QuoteUnpricedTripsCommand::class,
-                // The same one-off repair for distances: open trips measured on
-                // the straight line, measured again on the road.
                 RemeasureTripsCommand::class,
-                // A published rate table, loaded into one named company on
-                // purpose. Never scheduled, and never across every company:
-                // prices are one haulier's business with its principal.
                 LoadSubsidyCardCommand::class,
-                // The month's rent on every truck the fleet hires at a flat
-                // fee. Scheduled monthly, and safe to run by hand — the charge
-                // is keyed to the unit and the month.
                 ChargeTruckRentCommand::class,
-                // One-off: puts fills logged before /fuel became the only fuel
-                // source onto their sheet rows. Idempotent; try --dry-run first.
                 PostFuelFillsCommand::class,
-                // Demo data, run on purpose and never as part of a deploy.
                 DemoPayrollCommand::class,
-                // Posts every record's history to the journal. Idempotent;
-                // mind --from where the accountant has journalised by hand.
                 BackfillAutoPostingsCommand::class,
+                PrefixTablesCommand::class,
             ]);
         }
 
         $this->autoPosting();
+        $this->changeLog();
 
         foreach (self::BINDINGS as $parameter => $model) {
             Route::model($parameter, $model);
@@ -191,28 +133,27 @@ class DomainServiceProvider extends ServiceProvider
 
         $this->rateLimits();
 
-        // Permissions are role-derived strings, not policy classes, so one
-        // `before` hook answers every `can()` in the app. Returning null on a
-        // miss lets a real policy still have its say later.
         Gate::before(static function (User $user, string $ability): ?bool {
             return $user->hasPermission($ability) ? true : null;
         });
 
-        // Factories are named for the model, not for its namespace, so one
-        // resolver covers every module.
         Factory::guessFactoryNamesUsing(
             static fn (string $modelName): string => sprintf('Database\Factories\%sFactory', class_basename($modelName))
         );
     }
 
-    /**
-     * The records the books follow.
-     *
-     * Every model that posts itself to the journal, and the few that change
-     * what another one posts — see `AutoPostingObserver` for which is which.
-     * Registered here rather than with `#[ObservedBy]` on each model so the
-     * list of what reaches the general ledger is one list, in one place.
-     */
+    private function changeLog(): void
+    {
+        Event::listen(
+            array_map(static fn (string $action): string => "eloquent.{$action}: *", ChangeLog::ACTIONS),
+            static function (string $event, array $payload): void {
+                if ($payload[0] instanceof Model) {
+                    ChangeLog::record(Str::between($event, 'eloquent.', ':'), $payload[0]);
+                }
+            },
+        );
+    }
+
     private function autoPosting(): void
     {
         foreach ([
@@ -232,79 +173,16 @@ class DomainServiceProvider extends ServiceProvider
         }
     }
 
-    /**
-     * How often a caller may knock.
-     *
-     * Laravel does not throttle the API group for you — `withRouting` builds it
-     * without a limiter — so until this existed `POST /login` and
-     * `POST /register` were unmetered. On a single-tenant install behind an
-     * office firewall that was survivable. With a public registration endpoint
-     * it is not: an unmetered login is an invitation to work through a list of
-     * leaked passwords, and an unmetered register is unlimited companies.
-     *
-     * Three limits, because the three things being protected fail differently.
-     */
     private function rateLimits(): void
     {
-        /**
-         * Everything behind `auth:sanctum`.
-         *
-         * Keyed on the account rather than the address it came from: a fleet
-         * office is a dozen people behind one NAT, and an IP limit would have
-         * them throttling each other. Generous, because the dashboard alone
-         * fires five calls and a driver's handset reports position every
-         * minute — this is a runaway-client guard, not a usage policy.
-         */
         RateLimiter::for('api', static fn (Request $request) => Limit::perMinute(300)
             ->by($request->user()?->getAuthIdentifier() ?? $request->ip()));
 
-        /**
-         * Signing in.
-         *
-         * Keyed on **the address being tried plus the caller's IP**. Keying on
-         * the IP alone lets one host work through a thousand accounts at five
-         * a minute each; keying on the email alone lets anybody lock a known
-         * user out of their own account by failing their login on purpose. The
-         * pair costs an attacker a fresh IP for every account they want to
-         * try, and cannot be used as a denial of service against one person.
-         */
         RateLimiter::for('login', static fn (Request $request) => Limit::perMinute(5)
             ->by(Str::lower((string) $request->input('email')).'|'.$request->ip()));
 
-        /**
-         * Registering — a company on the web, a customer in the app.
-         *
-         * Per hour, per IP, because this is the one endpoint where a
-         * *successful* request costs the platform real storage: a company, a
-         * set of roles and a permanent row. So unlike login, where only
-         * failures are worth counting, the successes are metered too.
-         *
-         * Twenty rather than five, and the reason is the arithmetic of a form
-         * that is being filled in wrong. The middleware counts every attempt,
-         * including the ones the validator rejects — a mistyped address, a
-         * password on the breached list, a mismatched confirmation — so a tight
-         * cap does not meter *registrations*, it locks somebody out of the
-         * sign-up form for an hour while they are still trying to use it. Which
-         * is exactly what it did. Twenty is still bounded, and twenty companies
-         * an hour from one address is not a threat anybody needs a smaller
-         * number to survive.
-         *
-         * Both clients say what a 429 means rather than printing the status,
-         * because "the server refused that request (429)" reads as a broken
-         * form and somebody who believes the form is broken keeps pressing.
-         */
         RateLimiter::for('register', static fn (Request $request) => Limit::perHour(20)->by($request->ip()));
 
-        /**
-         * The public carrier list.
-         *
-         * The one read anybody can make without an account, because a shipper
-         * has to see who is near them *before* they have somewhere to sign in
-         * to. Per minute and per IP, generously — the sign-up screen refetches
-         * as somebody drags the map — but metered, because it is a query over
-         * every company on the platform and the only unauthenticated read there
-         * is.
-         */
         RateLimiter::for('carriers', static fn (Request $request) => Limit::perMinute(60)->by($request->ip()));
     }
 }

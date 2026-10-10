@@ -15,7 +15,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/** When and where a unit left, and when it got there. */
 class DispatchRecord extends Model
 {
     /** @use HasFactory<DispatchRecordFactory> */

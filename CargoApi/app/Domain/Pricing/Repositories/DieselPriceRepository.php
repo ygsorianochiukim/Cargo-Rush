@@ -17,19 +17,11 @@ class DieselPriceRepository extends Repository
         return DieselPrice::class;
     }
 
-    /** Newest first — every view of this table is "what is it now". */
     public function query(): Builder
     {
         return DieselPrice::query()->orderByDesc('effective_on');
     }
 
-    /**
-     * The price in force, which is the most recent reading not in the future.
-     *
-     * Not simply the newest row: the office can record tomorrow's announced
-     * price today, and quoting from it before it takes effect would charge a
-     * surcharge for a rise that has not happened yet.
-     */
     public function current(?Carbon $on = null): ?DieselPrice
     {
         return $this->query()
@@ -37,11 +29,7 @@ class DieselPriceRepository extends Repository
             ->first();
     }
 
-    /**
-     * Readings over a window, oldest first, for the trend line.
-     *
-     * @return Collection<int, DieselPrice>
-     */
+    /** @return Collection<int, DieselPrice> */
     public function history(int $days = 60): Collection
     {
         return $this->query()
@@ -50,20 +38,6 @@ class DieselPriceRepository extends Repository
             ->get();
     }
 
-    /**
-     * Record a day's price, correcting it if the day already has one.
-     *
-     * An update rather than a second insert: the table is one row per day by
-     * constraint, and the office keying today's price twice means they are
-     * fixing a typo, not asking for a second reading.
-     *
-     * The lookup is `whereDate` and not a plain `updateOrCreate` on the column.
-     * `effective_on` is a date-cast attribute, which Eloquent still writes
-     * through the model's `Y-m-d H:i:s` format, so the stored value carries a
-     * midnight time — matching it against a bare `Y-m-d` misses, and the miss
-     * becomes an insert that hits the unique index as a 500. The ledger has the
-     * same trap for the same reason (`FinanceService::openDailyRow`).
-     */
     public function record(string $date, int $centsPerLitre, ?string $source, ?int $userId): DieselPrice
     {
         $attributes = [

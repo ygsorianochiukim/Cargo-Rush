@@ -29,13 +29,6 @@ class DriverService extends CrudService
         return $this->drivers->findByUser($userId);
     }
 
-    /**
-     * Availability, as the driver app's switch sets it.
-     *
-     * Only the two idle states are reachable this way: a driver mid-trip is
-     * `active`, and letting them flip that from a toggle would contradict the
-     * trip they are demonstrably on.
-     */
     public function setAvailability(Driver $driver, bool $available): Driver
     {
         if ($driver->status === StatusValue::Active) {
@@ -49,11 +42,6 @@ class DriverService extends CrudService
         return $driver->refresh();
     }
 
-    /**
-     * Raise a notification for every licence inside the warning window.
-     * Scheduled work — DESIGN.md section 5.1 lists licence tracking under
-     * Drivers Management, and an expiry nobody is told about tracks nothing.
-     */
     public function flagExpiringLicences(int $days = 60): int
     {
         $drivers = $this->drivers->licencesExpiringWithin($days);

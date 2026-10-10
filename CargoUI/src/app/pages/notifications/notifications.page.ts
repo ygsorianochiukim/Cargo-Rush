@@ -8,7 +8,6 @@ import { Card } from '../../shared/card';
 import { Icon } from '../../shared/icon';
 import { EmptyState, SkeletonRows } from '../../shared/states';
 
-/** Notification Management — DESIGN.md section 5.1. */
 @Component({
   selector: 'app-notifications',
   changeDetection: ChangeDetectionStrategy.OnPush,

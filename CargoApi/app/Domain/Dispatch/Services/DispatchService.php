@@ -20,11 +20,6 @@ class DispatchService extends CrudService
         return $this->records;
     }
 
-    /**
-     * Mark a unit arrived. The trip moves with it — a dispatch record that
-     * says "arrived" against a trip still marked in transit is the kind of
-     * disagreement the Dispatch Monitoring page exists to surface.
-     */
     public function markArrived(DispatchRecord $record): DispatchRecord
     {
         return DB::transaction(function () use ($record): DispatchRecord {

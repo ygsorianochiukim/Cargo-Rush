@@ -17,15 +17,6 @@ class CustomerRepository extends Repository
         return Customer::class;
     }
 
-    /**
-     * Trip count and outstanding balance are the two numbers the list prints,
-     * and both are aggregates — pulled here as subquery columns so a page of
-     * customers is one query rather than one per row.
-     *
-     * The logins come along for the same reason: the list says which firms can
-     * actually sign in, and reading that off the relation per row would be a
-     * query per customer.
-     */
     public function query(): Builder
     {
         return Customer::query()

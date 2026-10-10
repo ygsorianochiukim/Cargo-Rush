@@ -7,7 +7,6 @@ namespace App\Domain\Delivery\DTO;
 use App\Domain\Shared\DTO\Data;
 use App\Domain\Shared\Enums\StatusValue;
 
-/** Closing out a delivery: who signed, when, and the proof reference. */
 final class DeliveryLogData extends Data
 {
     public function __construct(

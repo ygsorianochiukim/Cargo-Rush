@@ -6,21 +6,6 @@ namespace App\Domain\Billing\DTO;
 
 use App\Domain\Shared\Enums\VatTreatment;
 
-/**
- * The four figures on an invoice, and the rates that produced them.
- *
- *     net           the haul itself, the taxable base
- *   + vat           charged on, remitted by us
- *   = gross         what the document says
- *   - withholding   kept back by the customer, remitted by them
- *   = due           what actually lands in the bank
- *
- * `gross` and `due` are derived here rather than stored, because they are
- * arithmetic on the three that are — and a stored total that can disagree with
- * its own parts is the failure this codebase avoids everywhere else. The
- * *rates* are carried because an invoice freezes them: what applied on the day
- * is part of the document, not a lookup that changes when statute does.
- */
 final class TaxBreakdown
 {
     public function __construct(
@@ -32,27 +17,17 @@ final class TaxBreakdown
         public readonly VatTreatment $treatment,
     ) {}
 
-    /** What the invoice asks for: net plus VAT. */
     public function grossCents(): int
     {
         return $this->net_cents + $this->vat_cents;
     }
 
-    /** What the payer actually remits, after keeping back the withholding. */
     public function dueCents(): int
     {
         return $this->grossCents() - $this->withholding_cents;
     }
 
-    /**
-     * The columns, ready to write onto an invoice.
-     *
-     * `amount_cents` is the gross and keeps its old meaning — what the
-     * document says — so every reader written before tax existed still reads
-     * the right figure.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function columns(): array
     {
         return [

@@ -53,15 +53,6 @@
           </div>
         </dl>
 
-        <!--
-          On what terms this truck runs — shown only when it is not the
-          fleet's own.
-
-          A fleet that owns everything should not have "Owned" repeated on
-          every card; the absence of this block is the ordinary case and says
-          enough. When it is there it answers the two questions a hired truck
-          raises: who gets paid, and how much.
-        -->
         @if (v.hired) {
           <div class="mt-4 rounded-control bg-cr-tint px-3 py-2">
             <div class="flex items-baseline justify-between gap-2">
@@ -80,13 +71,6 @@
               {{ v.owner_trucker_name ?? v.owner_name ?? 'No owner recorded' }}
             </p>
 
-            <!--
-              A truck that cannot pay anybody.
-
-              Marked as a share arrangement with nobody named to receive it —
-              it would haul all month and credit nothing. Said here rather
-              than discovered when the owner asks where their money went.
-            -->
             @if (
               (v.arrangement === 'rented_share' || v.arrangement === 'subcontracted') &&
               !v.shares_revenue
@@ -125,8 +109,6 @@
             </p>
           }
         </div>
-        <!-- Actions sit at the foot of the card so the reading order is
-             identity, figures, then what you can do about them. -->
         <div class="mt-4 flex items-center gap-1 border-t border-cr-line pt-3">
           <button
             type="button"

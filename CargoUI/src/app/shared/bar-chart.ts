@@ -4,26 +4,12 @@ import { ChartTooltip, TooltipRow } from './chart-tooltip';
 
 export interface Bar {
   key: string;
-  /** Printed under the bar. Keep it short — these sit in a narrow column. */
   label: string;
   value: number;
-  /** Lines shown on hover or focus. Falls back to the formatted value. */
   rows?: TooltipRow[];
-  /** Marks this bar as the one worth noticing, e.g. the busiest day. */
   highlight?: boolean;
 }
 
-/**
- * A column chart, for a single series that reads left to right over time.
- *
- * Every bar is a `<button>`. That is what makes it keyboard-reachable without
- * inventing a roving-tabindex scheme, and it means hover and focus can share
- * one code path rather than drifting apart — DESIGN.md section 9 asks for
- * exactly that.
- *
- * The whole chart also carries an `aria-label` summarising the series, so a
- * screen reader user gets the shape of the data without tabbing every column.
- */
 @Component({
   selector: 'app-bar-chart',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -45,13 +31,9 @@ export interface Bar {
             (mouseleave)="active.set(null)"
             (focus)="active.set(bar.key)"
             (blur)="active.set(null)">
-            <!-- The column, and a fixed-height track under it so bars of very
-                 different values still line up on a common baseline. -->
             <span
               class="flex w-full items-end justify-center"
               [style.height.px]="height()">
-              <!-- One class binding rather than two: the faded variant
-                   contains a slash, which is not a valid binding key. -->
               <span
                 class="w-full rounded-t-[4px] transition-all duration-300"
                 [class]="bar.highlight || active() === bar.key ? 'bg-cr-blue' : 'bg-cr-blue/35'"
@@ -72,25 +54,16 @@ export interface Bar {
 export class BarChart {
   readonly bars = input.required<Bar[]>();
 
-  /** Track height in pixels. Bars are scaled to fit inside it. */
   readonly height = input(96);
 
-  /** How a bare value reads in the tooltip when no `rows` were supplied. */
   readonly format = input<(value: number) => string>((v) => String(v));
 
-  /** Named in the whole-chart summary, e.g. "deliveries". */
   readonly unit = input('');
 
   protected readonly active = signal<string | null>(null);
 
-  /**
-   * Bars are sized in pixels, not percent: their column is auto-height, so a
-   * percentage would resolve against `auto` and collapse to nothing.
-   */
   protected barHeight(value: number): number {
     const peak = this.peak();
-    // A floor of 3px so a zero day is still a mark on the axis rather than a
-    // gap that reads as missing data.
     return Math.max(3, Math.round((value / peak) * this.height()));
   }
 

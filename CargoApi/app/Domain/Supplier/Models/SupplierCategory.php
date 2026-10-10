@@ -12,12 +12,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-/**
- * What kind of place a supplier is — GARAGE, MALL, FOODS.
- *
- * The firm's own words, added on Access Control. It labels and orders the shop
- * pickers; it carries no money and posts nothing.
- */
 class SupplierCategory extends Model
 {
     use BelongsToCompany, HasUlids, SoftDeletes;

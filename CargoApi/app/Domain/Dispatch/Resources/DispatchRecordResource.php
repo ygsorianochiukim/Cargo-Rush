@@ -8,9 +8,7 @@ use App\Domain\Dispatch\Models\DispatchRecord;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use Illuminate\Http\Request;
 
-/**
- * @mixin DispatchRecord
- */
+/** @mixin DispatchRecord */
 class DispatchRecordResource extends ApiResource
 {
     public function toArray(Request $request): array

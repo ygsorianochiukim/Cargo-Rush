@@ -5,13 +5,6 @@ import { RecordSpec } from '../../shared/record-form-spec';
 import { VehicleService } from '../vehicle/vehicle.service';
 import { FinanceService } from './finance.service';
 
-/**
- * A ledger unit — the workbook keeps one sheet per truck.
- *
- * Separate from a vehicle on purpose: a unit can be on the books before it has
- * a plate, and the money history outlives the vehicle it was attached to
- * (DESIGN.md section 5.1). Linking one to a vehicle is optional.
- */
 export function truckSpec(): RecordSpec<Truck> {
   const finance = inject(FinanceService);
   const vehicles = inject(VehicleService);
@@ -63,7 +56,6 @@ export function truckSpec(): RecordSpec<Truck> {
 
     toPayload: (values) => ({
       label: values['label'],
-      // An empty box means "no plate yet", which is a null, not "".
       plate: values['plate'] || null,
       vehicle_id: values['vehicle_id'] || null,
     }),

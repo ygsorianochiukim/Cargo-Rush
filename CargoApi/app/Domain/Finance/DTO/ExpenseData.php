@@ -7,19 +7,11 @@ namespace App\Domain\Finance\DTO;
 use App\Domain\Shared\DTO\Data;
 use App\Domain\Shared\Enums\StatusValue;
 
-/** Money arrives as integer centavos; there is no peso float on this path. */
 final class ExpenseData extends Data
 {
     public function __construct(
         public readonly ?string $category_id = null,
         public readonly ?string $trip_id = null,
-        /**
-         * Who it was bought from.
-         *
-         * Replaces the typing. `payee` is still here below and still written —
-         * it holds what was already typed, and a tyre bought once in Tagum from
-         * somebody nobody will see again does not deserve a supplier record.
-         */
         public readonly ?string $supplier_id = null,
         public readonly ?string $date = null,
         public readonly ?int $amount_cents = null,

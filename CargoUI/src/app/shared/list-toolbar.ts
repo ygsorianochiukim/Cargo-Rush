@@ -2,13 +2,6 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 
 import { Icon } from './icon';
 
-/**
- * The row above a list: what is in it, and the one action that adds to it.
- *
- * DESIGN.md section 4 puts at most one primary and one secondary action in the
- * canvas header. This is the per-module equivalent, and it exists once so the
- * count wording and the button placement do not drift across eight pages.
- */
 @Component({
   selector: 'app-list-toolbar',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -34,7 +27,6 @@ import { Icon } from './icon';
   `,
 })
 export class ListToolbar {
-  /** Null while loading, so the count does not flash a zero first. */
   readonly count = input<number | null>(null);
   readonly singular = input.required<string>();
   readonly plural = input.required<string>();

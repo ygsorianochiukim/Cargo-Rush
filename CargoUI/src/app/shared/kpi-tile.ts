@@ -2,11 +2,6 @@ import { ChangeDetectionStrategy, Component, computed, input } from '@angular/co
 
 import { Kpi } from '../models/dashboard/dashboard.model';
 
-/**
- * KPI tile — DESIGN.md section 8.
- * The delta carries a sign and an arrow as well as colour, so the direction is
- * readable without colour vision.
- */
 @Component({
   selector: 'app-kpi-tile',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -35,7 +30,6 @@ export class KpiTile {
 
   protected readonly rising = computed(() => (this.kpi().delta ?? 0) >= 0);
 
-  /** A rise is not automatically good — open incidents going up is bad. */
   protected readonly good = computed(() =>
     this.kpi().higher_is_better ? this.rising() : !this.rising(),
   );

@@ -14,8 +14,6 @@ class LoginRequest extends ApiFormRequest
         return [
             'email' => ['required', 'email', 'max:160'],
             'password' => ['required', 'string'],
-            // Present means "give me a bearer token" (mobile); absent means
-            // "set the SPA cookie" (web). DESIGN.md section 7.4.
             'device_name' => ['nullable', 'string', 'max:80'],
         ];
     }

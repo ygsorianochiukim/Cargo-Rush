@@ -14,11 +14,6 @@ use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Support\Carbon;
 
-/**
- * A flat-rented truck's rent is on the books for the whole month from its
- * first day, due on its last — so Payables shows it all month, and a month
- * still unpaid once it is over is overdue.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -73,12 +68,10 @@ it('marks an unpaid month overdue once it is over, beside the new month', functi
 });
 
 it('catches up a month the job missed, but nothing before the truck existed', function (): void {
-    // Nothing ran in September at all.
     $this->travelTo(Carbon::parse('2026-10-05'));
 
     expect(app(TruckRentService::class)->chargeDue(now()))->toBe(2);
 
-    // Rented in September: August is not owed.
     expect(Expense::query()->where('vehicle_id', $this->rented->getKey())->pluck('date')
         ->map->toDateString()->sort()->values()->all())
         ->toBe(['2026-09-30', '2026-10-31']);

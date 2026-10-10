@@ -8,19 +8,6 @@ import { fmt } from '../../shared/format';
 import { Modal } from '../../shared/modal';
 import { ErrorState } from '../../shared/states';
 
-/**
- * The transactions behind a period's Total expenses.
- *
- * Opened from the tile. The tile is one number made of four sources — the
- * daily sheet's cost columns, the categorised expenses, the supplier bills
- * paid, and the payouts to partners — and "why is it that much" is the first
- * thing anybody asks of it. The API builds this list from the same queries the
- * total is summed from, so the footer figure is the tile's figure; if the two
- * ever disagree, that is a bug, not a rounding.
- *
- * A row opens the screen that owns it. The Summary is a read-only roll-up, so
- * correcting a figure means going to where it was filed.
- */
 @Component({
   selector: 'app-expense-lines-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -79,15 +66,11 @@ export class ExpenseLinesDialog {
   protected readonly columns: Column<ExpenseLine>[] = [
     { label: 'Date', kind: 'num', value: (l) => fmt.date(l.date) },
     { label: 'Type', kind: 'strong', value: (l) => l.kind, sub: (l) => l.description },
-    // Overhead, bills and payouts belong to no unit, and saying so beats a dash.
     { label: 'Truck', kind: 'muted', value: (l) => l.truck ?? (l.source === 'sheet' ? null : 'No truck') },
     { label: 'Amount', kind: 'num', value: (l) => fmt.pesos(l.amount_cents) },
   ];
 
   constructor() {
-    // Fetched on opening rather than with the page: most visits never ask, and
-    // a quarter of transactions is the heaviest thing the Summary could load.
-    // Re-read each time, so a figure corrected elsewhere shows up here.
     effect(() => {
       if (this.open()) this.load();
     });
@@ -103,7 +86,6 @@ export class ExpenseLinesDialog {
     });
   }
 
-  /** Where each kind of row is filed, and so where it is corrected. */
   protected go(line: ExpenseLine): void {
     this.open.set(false);
 

@@ -11,29 +11,6 @@ import { ListToolbar } from '../../shared/list-toolbar';
 import { recordList } from '../../shared/record-list';
 import { ErrorState } from '../../shared/states';
 
-/**
- * Suppliers — who the fleet buys from.
- *
- * The mirror of Customer Management, and it exists because `payee` was free
- * text. The same garage came out as "Davao Lubes", "Davao lubes & parts" and
- * "DAVAO LUBES" over a year, and "what do we spend there" could not be asked —
- * not answered badly, asked. A record with an id fixes the spelling and makes
- * the question possible.
- *
- * ## The three columns of spend
- *
- * An expense, a service and a bill all point at a supplier, and the total is
- * kept split across them rather than added into one figure. What kind of spend
- * it was is what tells a garage from a chandler: a garage's money is servicing,
- * a chandler's is consumables, and one number would hide that.
- *
- * ## Inactive rather than deleted
- *
- * An office that has stopped buying from somebody wants them out of the pickers
- * and their history kept. That is `status: inactive`, which is why the delete is
- * there but rarely the right button — and why deleting is a soft delete, so the
- * rows already filed against them still resolve.
- */
 @Component({
   selector: 'app-suppliers',
   changeDetection: ChangeDetectionStrategy.OnPush,

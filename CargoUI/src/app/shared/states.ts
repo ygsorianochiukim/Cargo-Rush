@@ -2,7 +2,6 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 
 import { Icon } from './icon';
 
-/** Skeleton rows — DESIGN.md section 8: no spinners for full-panel loads. */
 @Component({
   selector: 'app-skeleton-rows',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -26,7 +25,6 @@ export class SkeletonRows {
   }
 }
 
-/** Empty state — DESIGN.md section 8. */
 @Component({
   selector: 'app-empty-state',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -46,7 +44,6 @@ export class EmptyState {
   readonly body = input('When there is data to show, it will appear here.');
 }
 
-/** Error state — the fourth required list state. */
 @Component({
   selector: 'app-error-state',
   changeDetection: ChangeDetectionStrategy.OnPush,

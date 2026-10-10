@@ -16,27 +16,6 @@ use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
 use Illuminate\Support\Carbon;
 
-/**
- * Payroll: a fortnight's pay, frozen, handed out, and put in the books.
- *
- * What these tests are actually defending:
- *
- *   **The figures are worked out, not typed.** A run is built from the employee
- *   records, and every statutory deduction on it comes from the rate table in
- *   `config/cargo.php`. The arithmetic is asserted to the centavo here because
- *   a payslip is a promise to a person and to the government both.
- *
- *   **The BIR's order.** Tax is charged on gross *less* the three
- *   contributions. Getting that backwards overstates the tax on every payslip,
- *   which is why the order has a test of its own and not just the total.
- *
- *   **Approving freezes it.** Payslips go out at approval, so nothing may move
- *   afterwards — not a line, not a rebuild, not a delete.
- *
- *   **Paying posts it.** A paid run writes the journal entry an accountant
- *   would write by hand, the trial balance still balances afterwards, and the
- *   same run can never post twice.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(PermissionSeeder::class);
@@ -49,14 +28,6 @@ beforeEach(function (): void {
     $this->accountant = User::where('email', 'accounts@cargorush.ph')->firstOrFail();
     $this->driverUser = User::where('email', 'marco@cargorush.ph')->firstOrFail();
 
-    /**
-     * Somebody on a monthly basic, which is who payroll is for.
-     *
-     * PHP 30,000 a month is chosen because it lands in the middle of every rate
-     * band — above the PhilHealth floor, below the SSS ceiling, over the
-     * Pag-IBIG cap, and inside the second withholding bracket — so one salary
-     * exercises all four rules at once.
-     */
     $this->hire = fn (array $overrides = []) => $this->actingAs($this->admin)
         ->postJson('/api/v1/employees', [
             'first_name' => 'Elena',
@@ -66,6 +37,9 @@ beforeEach(function (): void {
             'contact' => '0917 555 0199',
             'hired_on' => '2026-01-05',
             'amount_cents' => 3_000_000,
+            'sss_enrolled' => true,
+            'philhealth_enrolled' => true,
+            'pagibig_enrolled' => true,
             ...$overrides,
         ])->assertCreated()->json('data');
 
@@ -81,8 +55,6 @@ beforeEach(function (): void {
 describe('who is on a run', function (): void {
     it('pays the salaried and leaves the per-trip staff off', function (): void {
         ($this->hire)();
-        // A driver paid per trip: their money is already in the daily truck
-        // sheet's driver column, so paying them here would pay them twice.
         ($this->hire)([
             'first_name' => 'Marco',
             'last_name' => 'Villanueva',
@@ -96,9 +68,6 @@ describe('who is on a run', function (): void {
 
         expect($run['staff_count'])->toBe(1)
             ->and($run['lines'][0]['name'])->toBe('Elena Bautista')
-            // How the period reads on a list and at the head of the register.
-            // Sent rather than assembled by a client, so both clients say the
-            // same thing about the same fortnight.
             ->and($run['period_label'])->toBe('1–15 Sep 2026');
     });
 
@@ -117,15 +86,10 @@ describe('what comes off a payslip', function (): void {
 
         $line = ($this->open)()->assertCreated()->json('data.lines.0');
 
-        // Half a month of PHP 30,000.
         expect($line['basic_cents'])->toBe(1_500_000)
-            // 5% of the monthly basic (the 2025 SSS rate), halved onto this run.
             ->and($line['sss_cents'])->toBe(75_000)
-            // 2.5%, halved.
             ->and($line['philhealth_cents'])->toBe(37_500)
-            // The PHP 200 cap, halved — which is what most payslips show.
             ->and($line['pagibig_cents'])->toBe(10_000)
-            // 15% of the taxable pay above PHP 10,417 for the period.
             ->and($line['withholding_tax_cents'])->toBe(50_370);
     });
 
@@ -137,8 +101,6 @@ describe('what comes off a payslip', function (): void {
         $contributions = $line['sss_cents'] + $line['philhealth_cents'] + $line['pagibig_cents'];
         $taxable = $line['basic_cents'] - $contributions;
 
-        // The BIR's order. Taxing the gross instead would charge more on every
-        // fortnight, on every payslip, for as long as the mistake stood.
         expect($line['withholding_tax_cents'])
             ->toBe((int) round(($taxable - 1_041_700) * 0.15));
     });
@@ -152,36 +114,22 @@ describe('what comes off a payslip', function (): void {
         expect($line['gross_cents'])->toBe(1_500_000)
             ->and($line['deductions_cents'])->toBe(172_870)
             ->and($line['net_cents'])->toBe(1_327_130)
-            // And the run is the sum of its payslips, nothing else.
             ->and($run['gross_cents'])->toBe($line['gross_cents'])
             ->and($run['net_cents'])->toBe($line['net_cents']);
     });
 
     it('charges no tax to somebody under the first bracket', function (): void {
-        // A PHP 12,000 monthly basic: PHP 6,000 a period, which is under the
-        // PHP 10,417 floor of the first taxable bracket.
         ($this->hire)(['amount_cents' => 1_200_000]);
 
         $line = ($this->open)()->assertCreated()->json('data.lines.0');
 
         expect($line['withholding_tax_cents'])->toBe(0)
-            // The contributions still come off, though.
             ->and($line['net_cents'])->toBeLessThan($line['gross_cents']);
     });
 });
 
-/**
- * The monthly salary, split across the month's two cutoffs.
- *
- * Two payslips have to add up to the salary somebody was promised — exactly,
- * every month, for years. Halving with `intdiv` on both runs shorts a salary
- * ending in an odd centavo by a centavo a month: small, permanent, and
- * impossible to find from either payslip.
- */
 describe('splitting the salary', function (): void {
     it('pays half on each cutoff, and the two halves are the salary', function (): void {
-        // ₱10,000.01 a month — an odd number of centavos, which is where a
-        // careless split loses one.
         ($this->hire)(['amount_cents' => 1_000_001]);
 
         $first = ($this->open)(['period_start' => '2026-09-01', 'period_end' => '2026-09-15'])
@@ -190,7 +138,6 @@ describe('splitting the salary', function (): void {
             ->assertCreated()->json('data.lines.0');
 
         expect($first['basic_cents'])->toBe(500_000)
-            // The remainder lands on the second cutoff.
             ->and($second['basic_cents'])->toBe(500_001)
             ->and($first['basic_cents'] + $second['basic_cents'])->toBe(1_000_001);
     });
@@ -207,21 +154,11 @@ describe('splitting the salary', function (): void {
     });
 
     it('puts the odd centavo of any monthly figure on the last run', function (): void {
-        // The rule the salary and every contribution share, stated once.
         expect(DeductionSchedule::Split->shareOf(101, index: 0, count: 2))->toBe(50)
             ->and(DeductionSchedule::Split->shareOf(101, index: 1, count: 2))->toBe(51);
     });
 
     it('splits a month across three runs without inventing a peso', function (): void {
-        /**
-         * The bug this signature exists to stop.
-         *
-         * `shareOf` used to take "is this the first cutoff", which can describe
-         * a payroll of one run or two and nothing else. On three, `Split` gave
-         * the first run half the month and each of the other two the *other*
-         * half — one and a half months of SSS, PhilHealth and Pag-IBIG every
-         * month, on payslips that each looked ordinary.
-         */
         $shares = array_map(
             fn (int $index): int => DeductionSchedule::Split->shareOf(100_000, $index, 3),
             [0, 1, 2],
@@ -238,22 +175,11 @@ describe('splitting the salary', function (): void {
                 [0, 1, 2],
             ));
 
-            // `SecondCutoff` was the worst of them: every run but the first
-            // carried the whole month, so two of three did and the firm
-            // remitted double.
             expect($total)->toBe(100_000);
         }
     });
 });
 
-/**
- * Which cutoff the contributions come off — the firm's own setting.
- *
- * SSS, PhilHealth and Pag-IBIG are monthly figures and payroll runs twice a
- * month, so something has to decide where they land. All three answers remit
- * the same amount to the same agency; what changes is which payslip is lighter,
- * which is why it is the firm's decision and not a rate.
- */
 describe('which cutoff the contributions come off', function (): void {
     beforeEach(function (): void {
         ($this->hire)();
@@ -289,13 +215,11 @@ describe('which cutoff the contributions come off', function (): void {
         $first = ($this->firstCutoff)();
         $second = ($this->secondCutoff)();
 
-        // The whole month of contributions on the first payslip…
         expect($first['carries_contributions'])->toBeTrue()
             ->and($first['lines'][0]['sss_cents'])->toBe(150_000)
             ->and($first['lines'][0]['philhealth_cents'])->toBe(75_000)
             ->and($first['lines'][0]['pagibig_cents'])->toBe(20_000);
 
-        // …and none at all on the second, which is the point of the setting.
         expect($second['carries_contributions'])->toBeFalse()
             ->and($second['lines'][0]['sss_cents'])->toBe(0)
             ->and($second['lines'][0]['philhealth_cents'])->toBe(0)
@@ -323,12 +247,8 @@ describe('which cutoff the contributions come off', function (): void {
             $taken = $first['sss'] + $first['philhealth'] + $first['pagibig']
                 + $second['sss'] + $second['philhealth'] + $second['pagibig'];
 
-            // The agencies get their month either way. The setting decides
-            // which payslip is lighter, not what is owed.
             expect($taken)->toBe($monthly);
 
-            // One run per period, so the drafts go before the next schedule
-            // opens the same two again.
             $this->actingAs($this->admin)->deleteJson("/api/v1/payroll/{$firstRun['id']}")->assertNoContent();
             $this->actingAs($this->admin)->deleteJson("/api/v1/payroll/{$secondRun['id']}")->assertNoContent();
         }
@@ -337,9 +257,6 @@ describe('which cutoff the contributions come off', function (): void {
     it('moves the tax with the contributions, because the BIR charges what is left', function (): void {
         ($this->setSchedule)('first');
 
-        // Taxable pay is the gross less the contributions actually taken on
-        // *this* cutoff, so the loaded payslip is taxed less and the empty one
-        // more.
         expect(($this->firstCutoff)()['lines'][0]['withholding_tax_cents'])->toBe(31_995)
             ->and(($this->secondCutoff)()['lines'][0]['withholding_tax_cents'])->toBe(68_745);
     });
@@ -348,11 +265,6 @@ describe('which cutoff the contributions come off', function (): void {
         $company = ($this->setSchedule)('second')->json('data');
 
         expect($company['payroll_deduct_on'])->toBe('second')
-            // Said in runs rather than in dates. The label named the 16th and
-            // the end of the month, which is true of a fortnightly payroll on
-            // the old fixed calendar and of nothing else — a firm cutting off
-            // on the 5th, the 15th and the 25th was told about halves of a
-            // month it does not have.
             ->and($company['payroll_deduct_on_label'])->toBe('All on the second run')
             ->and($company['payroll_deduct_on_detail'])->toContain('The rest carry none.');
     });
@@ -364,15 +276,6 @@ describe('which cutoff the contributions come off', function (): void {
     });
 });
 
-/**
- * What salary range triggers withholding tax.
- *
- * ₱250,000 a year is exempt under TRAIN — ₱20,833.33 a month — and the check is
- * made against the **monthly basic** rather than one period's gross. A person's
- * salary decides whether they are a taxpayer at all; the bracket table only
- * decides how much once they are. Reading it off a single fortnight instead
- * makes payroll look arbitrary to the person receiving it.
- */
 describe('what triggers withholding tax', function (): void {
     it('charges nothing to a salary inside the exemption', function (): void {
         ($this->hire)(['amount_cents' => 2_000_000]);
@@ -380,13 +283,10 @@ describe('what triggers withholding tax', function (): void {
         $line = ($this->open)()->assertCreated()->json('data.lines.0');
 
         expect($line['withholding_tax_cents'])->toBe(0)
-            // The three contributions still come off — they are not a tax.
             ->and($line['sss_cents'])->toBeGreaterThan(0);
     });
 
     it('charges nothing at exactly the exemption, and something above it', function (): void {
-        // ₱20,833.33 a month is ₱250,000 a year: the last salary that pays no
-        // income tax.
         ($this->hire)(['amount_cents' => 2_083_333]);
         ($this->hire)([
             'first_name' => 'Rosa',
@@ -400,11 +300,6 @@ describe('what triggers withholding tax', function (): void {
             ->and($lines['Rosa Zamora']['withholding_tax_cents'])->toBe(15_683);
     });
 
-    /**
-     * Where the rule earns its keep: a monthly payroll, whose whole month of
-     * pay would otherwise be read against a semi-monthly bracket table and
-     * taxed as though the person earned twice what they do.
-     */
     it('keeps a monthly payroll from taxing an exempt salary', function (): void {
         config(['cargo.payroll.runs_per_month' => 1]);
 
@@ -416,14 +311,8 @@ describe('what triggers withholding tax', function (): void {
 
         expect($exempt['withholding_tax_cents'])->toBe(0);
 
-        // One run per period — the first draft goes before the second opens.
         $this->actingAs($this->admin)->deleteJson("/api/v1/payroll/{$exemptRun['id']}")->assertNoContent();
 
-        // Turn the exemption off and the answer is still nothing — because a
-        // monthly payroll now reads the BIR's *monthly* table, whose zero
-        // bracket runs to ₱20,833. This used to assert a tax here: the only
-        // table was the semi-monthly one, which read a month's pay as a
-        // fortnight's.
         config(['cargo.payroll.withholding.exempt_monthly_at_or_below_cents' => 0]);
 
         $taxed = ($this->open)(['period_start' => '2026-09-01', 'period_end' => '2026-09-30'])
@@ -456,8 +345,6 @@ describe('correcting a payslip', function (): void {
         expect($updated['gross_cents'])->toBe(1_700_000)
             ->and($updated['deductions_cents'])->toBe(222_870)
             ->and($updated['net_cents'])->toBe(1_477_130)
-            // Deliberately unmoved: an allowance is a one-off, and the table
-            // would tax it as if it were the person's regular pay.
             ->and($updated['withholding_tax_cents'])->toBe(50_370);
     });
 
@@ -486,9 +373,6 @@ describe('correcting a payslip', function (): void {
                 'contact' => '0917 555 0199',
                 'hired_on' => '2026-01-05',
                 'amount_cents' => 3_600_000,
-                // Backdated to the start of the period: this is a correction to
-                // a figure that was always wrong, not a rise from today. A rise
-                // would be left to default, and would not touch this run.
                 'effective_from' => '2026-09-01',
             ])->assertOk();
 
@@ -496,8 +380,6 @@ describe('correcting a payslip', function (): void {
             ->postJson("/api/v1/payroll/{$run['id']}/rebuild")
             ->assertOk()->json('data');
 
-        // One line, not two: rebuilding replaces the lines rather than adding
-        // to them, or somebody ends up paid from two calculations.
         expect($rebuilt['staff_count'])->toBe(1)
             ->and($rebuilt['lines'][0]['basic_cents'])->toBe(1_800_000);
     });
@@ -561,10 +443,6 @@ describe('paying puts it in the books', function (): void {
 
         expect($paid['status'])->toBe(PayRun::PAID)
             ->and($paid['journal_entry_id'])->not->toBeNull()
-            // The screen prints this on a paid run — it is the line that says
-            // payroll reached the accounts rather than stopping at a
-            // spreadsheet, so it has to come back with the run and not need a
-            // second call.
             ->and($paid['journal_reference'])->toStartWith('JV-');
 
         $entry = $this->actingAs($this->accountant)
@@ -577,14 +455,9 @@ describe('paying puts it in the books', function (): void {
         $lines = collect($entry['lines']);
         $byCode = $lines->keyBy('account_code');
 
-        // The wages, and the firm's own ₱1,990 of contributions on top of
-        // them — both a cost of employing the office.
         expect($lines->where('account_code', '5200')->pluck('debit_cents')->all())->toBe([1_500_000, 199_000])
-            // What each agency is now owed: the ₱1,225 withheld and the
-            // employer's ₱1,990, on two lines.
             ->and($lines->where('account_code', '2200')->pluck('credit_cents')->all())->toBe([122_500, 199_000])
             ->and($byCode['2160']['credit_cents'])->toBe(50_370)
-            // And what the staff were actually handed.
             ->and($byCode['1020']['credit_cents'])->toBe(1_327_130);
     });
 
@@ -597,14 +470,10 @@ describe('paying puts it in the books', function (): void {
 
         expect($trial['balanced'])->toBeTrue()
             ->and($trial['difference_cents'])->toBe(0)
-            // And it is balanced because there is something on it, not because
-            // the books are empty.
-            // The wages and the employer's contributions on top.
             ->and($trial['debit_total_cents'])->toBe(1_500_000 + 199_000);
     });
 
     it('sends a cash advance against wages payable rather than out of cash', function (): void {
-        // A second run, because the first is already approved and frozen.
         $run = ($this->open)([
             'period_start' => '2026-10-01',
             'period_end' => '2026-10-15',
@@ -628,7 +497,6 @@ describe('paying puts it in the books', function (): void {
         )->keyBy('account_code');
 
         expect($lines['2100']['credit_cents'])->toBe(40_000)
-            // Cash goes down by the net only — the advance never left.
             ->and($lines['1020']['credit_cents'])->toBe(1_287_130);
     });
 
@@ -672,16 +540,6 @@ describe('who may run it', function (): void {
     });
 });
 
-/**
- * The cutoff: payroll runs on the 1st and the 16th, so a period is the 1st to
- * the 15th or the 16th to the end of the month.
- *
- * Not a default — a rule. The statutory figures on every payslip are half a
- * month's contributions and a *semi-monthly* tax table, so a run covering the
- * 3rd to the 20th would take half a month's SSS off eighteen days of pay and
- * tax it on a table built for fifteen. Wrong twice, and wrong invisibly, which
- * is why the shape is refused rather than trusted.
- */
 describe('the cutoff', function (): void {
     it('takes the first half of a month', function (): void {
         ($this->hire)();
@@ -695,8 +553,6 @@ describe('the cutoff', function (): void {
     it('takes the second half, whatever length the month is', function (): void {
         ($this->hire)();
 
-        // Thirty days, thirty-one days, and a non-leap February — the end of
-        // the period is read off the calendar rather than written as a number.
         foreach ([
             ['2026-09-16', '2026-09-30', '16–30 Sep 2026'],
             ['2026-10-16', '2026-10-31', '16–31 Oct 2026'],
@@ -721,24 +577,17 @@ describe('the cutoff', function (): void {
     it('refuses a fortnight that is not one of the two', function (): void {
         ($this->hire)();
 
-        // Every one of these looks like a reasonable pay period and is not one.
         foreach ([
             ['2026-09-01', '2026-09-20'],
             ['2026-09-03', '2026-09-15'],
             ['2026-09-16', '2026-09-29'],
             ['2026-09-01', '2026-09-30'],
-            // Crossing a month boundary, which no period on *this* firm's
-            // calendar does. One cutting off on the 10th and the 25th has a
-            // period that does — see the cutoff-days tests below.
             ['2026-09-16', '2026-10-15'],
         ] as [$start, $end]) {
             ($this->open)(['period_start' => $start, 'period_end' => $end])
                 ->assertStatus(422)
                 ->assertJsonPath(
                     'errors.period_start.0',
-                    // The message names the firm's own cutoff days, because
-                    // they are now the firm's own setting and an office that
-                    // moved them may have forgotten doing so.
                     'Payroll is cut off on the 15th and the last day of the month here, so a pay period runs 1–15 Sep 2026 or 16–30 Sep 2026. Choose one of those.',
                 );
         }
@@ -747,8 +596,6 @@ describe('the cutoff', function (): void {
     it('leaves the pay date alone — paying late is not the same as a wrong period', function (): void {
         ($this->hire)();
 
-        // Closed on the 16th, paid on the 20th. Ordinary, and the books care
-        // when the money moved rather than when the period ended.
         $run = ($this->open)([
             'period_start' => '2026-09-01',
             'period_end' => '2026-09-15',
@@ -758,11 +605,6 @@ describe('the cutoff', function (): void {
         expect($run['pay_date'])->toBe('2026-09-20');
     });
 
-    /**
-     * The rule is enforced at the boundary, and deliberately not inside the
-     * service — so a run opened before the rule existed can still be worked
-     * out again rather than being stranded.
-     */
     it('still rebuilds a run whose period predates the rule', function (): void {
         ($this->hire)();
 
@@ -809,10 +651,6 @@ describe('offering the choice', function (): void {
             'end' => '2026-09-15',
             'label' => '1–15 Sep 2026',
             'short' => '1–15',
-            // The last day worked. This used to be the 16th — the day after —
-            // which was how an office described the 1st/16th calendar and stopped
-            // being true when the cutoff days became the firm's own: a firm
-            // setting the 15th was told its period cut off on the 16th.
             'cutoff' => '2026-09-15',
             'days' => 15,
         ]);
@@ -821,7 +659,6 @@ describe('offering the choice', function (): void {
             'half' => 'second',
             'start' => '2026-09-16',
             'end' => '2026-09-30',
-            // Cut off on the 1st of the next month.
             'cutoff' => '2026-09-30',
             'days' => 15,
         ]);
@@ -837,10 +674,6 @@ describe('offering the choice', function (): void {
             ->and($periods[1]['cutoff'])->toBe('2026-02-28');
     });
 
-    /**
-     * On a cutoff day, the run an office wants is the period that has just
-     * closed — which is last month's back half for the first half of a month.
-     */
     it('suggests the period that has just closed', function (): void {
         $this->travelTo('2026-10-03', function (): void {
             $body = $this->actingAs($this->admin)
@@ -860,8 +693,6 @@ describe('offering the choice', function (): void {
                 $this->actingAs($this->admin)->getJson('/api/v1/payroll/periods')->json('data')
             )->firstWhere('suggested', true);
 
-            // Past the 16th, the first half of this month is the one that has
-            // closed.
             expect($suggested['start'])->toBe('2026-10-01')
                 ->and($suggested['end'])->toBe('2026-10-15');
         });
@@ -908,8 +739,6 @@ describe('the reference', function (): void {
 
         $this->actingAs($this->admin)->deleteJson("/api/v1/payroll/{$second['id']}")->assertNoContent();
 
-        // The deleted draft keeps its number: PR-2026-0002 may have been quoted
-        // on a payslip somewhere, even if that run went away.
         $third = ($this->open)(['period_start' => '2026-10-01', 'period_end' => '2026-10-15'])
             ->assertCreated()->json('data.reference');
 

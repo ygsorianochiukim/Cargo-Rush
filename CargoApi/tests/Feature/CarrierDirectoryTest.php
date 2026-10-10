@@ -14,33 +14,12 @@ use Database\Seeders\Demo\FleetSeeder;
 use Database\Seeders\NavigationSeeder;
 use Illuminate\Support\Facades\Hash;
 
-/**
- * A shipper choosing who to send a load with.
- *
- * The half of the workflow that did not exist. A firm that signed itself up on
- * the platform can see the hauliers near its load, pick one, and have the
- * request land in that company's books — with an account opened there on the
- * way past.
- *
- * The customers an office typed in are not in this story and must not be: that
- * account is the haulier's, and `ShipperRegistrationTest` is where the line
- * between the two kinds is pinned down.
- *
- * What these cover is the boundary. The directory is the one read in the system
- * that crosses companies, so it is worth being explicit about what it shows (a
- * name, a yard, a phone, free units), what it does not (anything about another
- * firm's work), and that filing across the boundary still leaves every row in
- * exactly one company.
- */
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
     $this->seed(FleetSeeder::class);
 
-    // The demo company, pinned in Iponan, Cagayan de Oro.
     $this->company->update(['latitude' => 8.4856, 'longitude' => 124.5808]);
 
-    // A firm that signed itself up: its own books at the demo company, and a
-    // login flagged as able to shop around.
     $this->shopFirm = Customer::create([
         'name' => 'Highland Trading',
         'contact' => '0917 555 0333',
@@ -58,7 +37,6 @@ beforeEach(function (): void {
         'chooses_carrier' => true,
     ]);
 
-    // Iligan, about 50 km west across the bay.
     $this->neighbour = $this->makeCompany('Bay Coast Logistics');
     $this->neighbour->update([
         'latitude' => 8.2280,
@@ -67,8 +45,6 @@ beforeEach(function (): void {
         'contact_phone' => '0917 555 0110',
     ]);
 
-    // Manila, most of the country away, and pinned — so distance has something
-    // to be wrong about if the sort is wrong.
     $this->distant = $this->makeCompany('Northern Luzon Haulage');
     $this->distant->update(['latitude' => 14.5995, 'longitude' => 120.9842]);
 
@@ -82,8 +58,6 @@ describe('the carrier list', function (): void {
             ->assertOk()
             ->json('data.*.name');
 
-        // The shipper's own doorstep first, then Iligan. Manila is outside the
-        // default radius and is not an answer to "who is near me".
         expect($names)->toBe([$this->company->name, 'Bay Coast Logistics']);
     });
 
@@ -91,8 +65,6 @@ describe('the carrier list', function (): void {
         $rows = ($this->carriers)(['lat' => 8.4856, 'lng' => 124.5808])->json('data');
 
         expect($rows[0]['distance_km'])->toBeLessThan(0.1)
-            // Straight line across Macajalar Bay. Road distance is further,
-            // which is the honest thing about a sort key.
             ->and($rows[1]['distance_km'])->toBeGreaterThan(40.0)
             ->and($rows[1]['distance_km'])->toBeLessThan(60.0);
     });
@@ -118,8 +90,6 @@ describe('the carrier list', function (): void {
     });
 
     it('says what each could put on the road, and nothing about their work', function (): void {
-        // Two units free, one in the workshop — capacity is what could be sent
-        // out today, not what is on the books.
         $this->asCompany($this->neighbour, function (): void {
             Vehicle::create(['plate' => 'ILI 1120', 'model' => 'Isuzu Elf', 'registration_no' => 'R-1', 'capacity_kg' => 4000, 'status' => 'active']);
             Vehicle::create(['plate' => 'ILI 3345', 'model' => 'Hino 300', 'registration_no' => 'R-2', 'capacity_kg' => 3500, 'status' => 'available']);
@@ -132,8 +102,6 @@ describe('the carrier list', function (): void {
             ->and($card['capacity_kg'])->toBe(7500)
             ->and($card['contact_phone'])->toBe('0917 555 0110')
             ->and($card['address'])->toBe('Tibanga Highway, Iligan City')
-            // A shipper is choosing a haulier, not auditing one. Nothing about
-            // another firm's customers, trips or money is on this record.
             ->and(array_keys($card))->not->toContain('contact_email')
             ->and(array_keys($card))->not->toContain('trips');
     });
@@ -142,7 +110,6 @@ describe('the carrier list', function (): void {
         $names = ($this->carriers)()->assertOk()->json('data.*.name');
 
         expect($names)->toBe(['Bay Coast Logistics', $this->company->name, 'Northern Luzon Haulage'])
-            // Nothing to measure from, so nothing is claimed.
             ->and(($this->carriers)()->json('data.0.distance_km'))->toBeNull();
     });
 
@@ -159,8 +126,6 @@ describe('the carrier list', function (): void {
     it('is not open to a driver', function (): void {
         $driver = User::where('email', 'marco@cargorush.ph')->firstOrFail();
 
-        // `portal.view` is a customer's permission. A driver's handset has no
-        // business browsing the platform's hauliers.
         $this->actingAs($driver)->getJson('/api/v1/portal/carriers')->assertForbidden();
     });
 });
@@ -185,8 +150,6 @@ describe('filing with a carrier the shipper has never used', function (): void {
 
         expect($trip->company_id)->toBe($this->neighbour->id)
             ->and($response->json('data.carrier'))->toBe('Bay Coast Logistics')
-            // Priced by the carrier that will haul it, and waiting on their
-            // desk rather than on anybody else's.
             ->and($response->json('data.status'))->toBe(StatusValue::Pending->value);
     });
 
@@ -197,12 +160,8 @@ describe('filing with a carrier the shipper has never used', function (): void {
 
         expect($opened)->toHaveCount(1)
             ->and($opened->first()->name)->toBe('Highland Trading')
-            // The store travels with them, so the new haulier knows where the
-            // loads leave from without ringing to ask.
             ->and($opened->first()->address)->toBe('Carmen, Cagayan de Oro')
             ->and($opened->first()->isPinned())->toBeTrue()
-            // A second row in a second company, not the first one moved: the
-            // original haulier's account for this firm is untouched.
             ->and($opened->first()->id)->not->toBe($this->shopFirm->id);
     });
 
@@ -214,8 +173,6 @@ describe('filing with a carrier the shipper has never used', function (): void {
     });
 
     it('still goes to the usual carrier when none is named', function (): void {
-        // What every client written before the carrier list sends, and what a
-        // shipper means by "book me a pickup" without touching the list.
         $id = ($this->file)()->assertCreated()->json('data.id');
 
         expect(Trip::acrossCompanies()->findOrFail($id)->company_id)->toBe($this->company->id);
@@ -224,8 +181,6 @@ describe('filing with a carrier the shipper has never used', function (): void {
     it('refuses a carrier that is not taking requests', function (): void {
         $unpinned = $this->makeCompany('Nowhere Freight');
 
-        // Not on the list, so not bookable — and a 404, because confirming the
-        // company exists is itself the leak.
         ($this->file)(['carrier_id' => $unpinned->id])->assertNotFound();
     });
 
@@ -266,8 +221,6 @@ describe('a shipper with two hauliers', function (): void {
         $mine = ($this->fileWith)(null)->json('data.id');
         $theirs = ($this->fileWith)($this->neighbour->id)->json('data.id');
 
-        // The second is the one route binding could not have resolved: it lives
-        // in a company the caller is not signed in to.
         $this->actingAs($this->shopper)->getJson("/api/v1/portal/requests/{$mine}")->assertOk();
 
         $this->actingAs($this->shopper)->getJson("/api/v1/portal/requests/{$theirs}")
@@ -291,9 +244,6 @@ describe('a shipper with two hauliers', function (): void {
     });
 
     it('keeps a haulier they use on the list wherever it is', function (): void {
-        // Manila is well outside the default radius, and it stays on the list
-        // once there is work with them: a customer has to be able to reach a
-        // carrier they are mid-conversation with.
         ($this->fileWith)($this->distant->id)->assertCreated();
 
         $card = collect(($this->carriers)(['lat' => 8.4856, 'lng' => 124.5808])->json('data'))
@@ -304,9 +254,6 @@ describe('a shipper with two hauliers', function (): void {
     });
 
     it('cannot read another firm work at a carrier they share', function (): void {
-        // A second shipper, on the neighbour's books, with a delivery of their
-        // own. Our shipper files with the same carrier — and still sees only
-        // their own.
         $rivalTrip = $this->asCompany($this->neighbour, function (): Trip {
             $rival = Customer::create(['name' => 'Rival Trading', 'contact' => 'ops@rival.ph']);
 
@@ -332,8 +279,6 @@ describe('a shipper with two hauliers', function (): void {
 
 describe('the demo neighbours', function (): void {
     it('put a choice of carriers on the platform', function (): void {
-        // The demo seeder's job for this feature: a one-company install shows a
-        // single card, which demonstrates the plumbing and none of the point.
         $this->company->update(['latitude' => null, 'longitude' => null]);
 
         $this->seed(CarrierSeeder::class);
@@ -342,9 +287,6 @@ describe('the demo neighbours', function (): void {
 
         expect($names)->toContain('Bay Coast Logistics')
             ->and($names)->toContain('Bukidnon Highland Freight')
-            // And the install's own fleet, which is the more important half:
-            // without a pin it would be missing from the list a customer picks
-            // from.
             ->and($names)->toContain($this->company->name);
     });
 
@@ -367,8 +309,6 @@ describe('a haulier own pin', function (): void {
             'email' => 'ana@sunrisecargo.ph',
             'password' => 'sunrise-cargo-2026',
             'password_confirmation' => 'sunrise-cargo-2026',
-            // A token rather than a session cookie, as a handset would ask
-            // for — the test client is not a stateful origin.
             'device_name' => 'test-suite',
         ])->assertCreated();
 
@@ -409,8 +349,6 @@ describe('a haulier own pin', function (): void {
     });
 
     it('cannot be changed by somebody without the company permission', function (): void {
-        // The pin is part of the company's identity, and identity sits behind
-        // `company.manage` exactly as the logo does.
         $this->actingAs($this->shopper)->patchJson('/api/v1/company', ['latitude' => 0, 'longitude' => 0])
             ->assertForbidden();
     });

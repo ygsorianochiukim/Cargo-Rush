@@ -13,20 +13,12 @@ use App\Domain\Trucker\Models\WalletEntry;
 use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 
-/**
- * What customers still owed the fleet at the close of a quarter.
- *
- * Wound back to the date, like Payables: a bill paid in October was still owed
- * on 30 September, and one raised in October was not owed yet. The Summary tile
- * and the list it opens are pinned to the same figure.
- */
 beforeEach(function (): void {
     $this->seed(PermissionSeeder::class);
     $this->seed(NavigationSeeder::class);
 
     app(CompanyProvisioner::class)->provision($this->company);
 
-    // Into October, so a payment made after the quarter closed can be filed.
     $this->travelTo(now()->setDate(2026, 10, 10));
 
     $this->admin = User::create([
@@ -45,7 +37,6 @@ beforeEach(function (): void {
             'direction' => 'receivable',
         ])->assertCreated()->json('data');
 
-    /** What the customer actually owes on one: VAT on, withholding off. */
     $this->due = fn (array $invoice): int => Invoice::findOrFail($invoice['id'])->dueCents();
 
     $this->collect = fn (string $invoiceId, int $cents, string $paidOn) => $this->actingAs($this->admin)
@@ -73,11 +64,9 @@ it('counts what was still unpaid at the close, and matches the tile', function (
     $partPaid = ($this->invoice)(1_000_000);
     ($this->collect)($partPaid['id'], 400_000, '2026-09-10');
 
-    // Settled after the quarter closed, so it was still owed on 30 September.
     $paidLater = ($this->invoice)(250_000);
     ($this->collect)($paidLater['id'], ($this->due)($paidLater), '2026-10-05');
 
-    // Raised after the close: not owed yet.
     ($this->invoice)(900_000, '2026-10-02', '2026-10-30');
 
     $report = ($this->lines)();

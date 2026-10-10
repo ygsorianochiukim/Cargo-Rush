@@ -21,10 +21,6 @@ class TruckerRepository extends Repository
 
     public function query(): Builder
     {
-        // The units come with the row everywhere: the roster shows a plate, the
-        // detail screen shows the list, and `canTakeWork()` reads the
-        // collection. Eager here rather than at four call sites, one of which
-        // would forget and quietly issue a query per partner.
         return Trucker::query()->with(['vehicles', 'drivers'])->orderBy('name');
     }
 
@@ -38,39 +34,19 @@ class TruckerRepository extends Repository
         return $this->query()->where('user_id', $userId)->first();
     }
 
-    /**
-     * Registrations nobody has looked at yet — the badge on the office's
-     * sidebar row, and the list the desk works down.
-     *
-     * @return Collection<int, Trucker>
-     */
+    /** @return Collection<int, Trucker> */
     public function awaitingApproval(): Collection
     {
         return $this->query()->where('status', StatusValue::Pending->value)->get();
     }
 
-    /**
-     * How many are waiting on the desk. The badge itself.
-     *
-     * Registrations, and trucks sent in for checking — both are somebody with
-     * an app that will not let them work until this office says yes.
-     */
     public function pendingCount(): int
     {
         return Trucker::query()->where('status', StatusValue::Pending->value)->count()
             + TruckerVehicle::query()->where('verification', TruckVerification::Pending->value)->count();
     }
 
-    /**
-     * Vetted partners with their switch on, for the desk's assign dialog.
-     *
-     * Ordered by how recently they reported a position, which is the best
-     * available proxy for who is actually holding the app right now — a partner
-     * whose last pin was three days ago is online in the column and unreachable
-     * in practice.
-     *
-     * @return Collection<int, Trucker>
-     */
+    /** @return Collection<int, Trucker> */
     public function takingWork(): Collection
     {
         return $this->query()

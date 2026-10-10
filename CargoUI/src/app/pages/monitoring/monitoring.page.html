@@ -5,7 +5,6 @@
   <p class="text-[18px] leading-tight font-semibold">Daily trip monitoring</p>
 </header>
 
-<!-- Unit selector: one tab per truck sheet in the workbook -->
 <div class="mt-4 flex flex-wrap items-center gap-2">
   @if (trucks(); as list) {
     @for (t of list; track t.id) {
@@ -33,9 +32,6 @@
     }
   }
 
-  <!-- Adding a unit sits with the unit tabs; recording a day sits on the
-       right, because one changes what you are looking at and the other adds
-       to it. -->
   <button
     type="button"
     class="flex h-9 items-center gap-1.5 rounded-control border border-cr-blue px-3 text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
@@ -70,7 +66,6 @@
   }
 }
 
-<!-- Sheet header totals -->
 <section
   aria-label="Totals for this unit"
   class="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4 xl:grid-cols-8">
@@ -136,9 +131,6 @@
       </div>
     } @else {
       <div class="overflow-x-auto">
-        <!-- The floor was 1120 for eleven columns; Trip and Customer since made
-             thirteen, and the row squeezed instead of the wrapper scrolling.
-             `whitespace-nowrap` is on the table because white-space inherits. -->
         <table class="w-full min-w-[1360px] border-collapse text-left whitespace-nowrap">
           <thead>
             <tr class="border-b border-cr-line">
@@ -187,8 +179,6 @@
                   {{ fmt.money(netOf(e)) }}
                 </td>
                 <td class="px-4 py-3 text-[13px] text-cr-ink-muted">{{ e.route ?? '—' }}</td>
-                <!-- The run the row was opened by. An em dash means the office
-                     entered this day by hand, which is a normal thing to do. -->
                 <td class="cr-num px-4 py-3 text-[13px]">
                   @if (e.trip_reference) {
                     <span class="font-semibold">{{ e.trip_reference }}</span>
@@ -196,8 +186,6 @@
                     <span class="text-cr-ink-muted">—</span>
                   }
                 </td>
-                <!-- Whose work the day was. An em dash is a real answer: a
-                     truck's day can cover several customers, or none. -->
                 <td class="px-4 py-3 text-[13px]">
                   {{ e.customer ?? '—' }}
                 </td>

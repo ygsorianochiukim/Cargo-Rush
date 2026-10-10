@@ -24,14 +24,11 @@ class ApplicantRequest extends ApiFormRequest
             'email' => ['nullable', 'email', 'max:120'],
             'address' => ['nullable', 'string', 'max:255'],
             'source' => ['nullable', 'string', 'max:60'],
-            // Defaults to today in the service: most applications are entered
-            // on the day they arrive.
             'applied_on' => ['sometimes', 'date'],
             'stage' => ['sometimes', Rule::in(ApplicantStage::values())],
             'rating' => ['nullable', 'integer', 'min:1', 'max:5'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'photo' => ['nullable', 'image', 'max:'.(int) config('cargo.hr.photo_max_kb')],
-            // A CV is a PDF or a scan of one, so both are accepted.
             'resume' => [
                 'nullable', 'file', 'mimes:pdf,doc,docx,jpg,jpeg,png',
                 'max:'.(int) config('cargo.hr.resume_max_kb'),
