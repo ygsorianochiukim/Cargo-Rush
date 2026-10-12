@@ -330,3 +330,119 @@ describe('a price typed by hand', function (): void {
         expect(Trip::findOrFail($id)->price_cents)->toBeNull();
     });
 });
+
+describe('a trip on a sized truck', function (): void {
+    beforeEach(function (): void {
+        $this->tenWheeler->update(['cbm' => 54]);
+        ($this->card)();
+    });
+
+    it('takes the size from the vehicle and prices it ÷ 28 × 54', function (): void {
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/vehicles/{$this->vehicle->id}", ['truck_category_id' => $this->tenWheeler->id])
+            ->assertOk()
+            ->assertJsonPath('data.truck_category_id', $this->tenWheeler->id);
+
+        $trip = ($this->book)(120, ['vehicle_id' => $this->vehicle->id])->assertCreated()->json('data');
+
+        expect($trip['truck_category_id'])->toBe($this->tenWheeler->id)
+            ->and($trip['price_cents'])->toBe(1_928_571);
+    });
+
+    it('prices a 28 cbm vehicle off the card as it stands', function (): void {
+        $trip = ($this->book)(120, ['vehicle_id' => $this->vehicle->id])->assertCreated()->json('data');
+
+        expect($trip['truck_category_id'])->toBeNull()
+            ->and($trip['price_cents'])->toBe(1_000_000);
+    });
+
+    it('reprices when the trip moves to a 10 wheeler and back', function (): void {
+        $plain = Vehicle::query()->whereKeyNot($this->vehicle->id)->firstOrFail();
+        $this->vehicle->update(['truck_category_id' => $this->tenWheeler->id]);
+
+        $trip = ($this->book)(120, ['vehicle_id' => $plain->id])->assertCreated()->json('data');
+
+        $moved = $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$trip['id']}", ['vehicle_id' => $this->vehicle->id])
+            ->assertOk()->json('data');
+
+        expect($moved['price_cents'])->toBe(1_928_571);
+
+        $back = $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$trip['id']}", ['vehicle_id' => $plain->id])
+            ->assertOk()->json('data');
+
+        expect($back['truck_category_id'])->toBeNull()
+            ->and($back['price_cents'])->toBe(1_000_000);
+    });
+
+    it('keeps a size the desk picked by hand', function (): void {
+        $this->vehicle->update(['truck_category_id' => null]);
+
+        $trip = ($this->book)(120, [
+            'vehicle_id' => $this->vehicle->id,
+            'truck_category_id' => $this->tenWheeler->id,
+        ])->assertCreated()->json('data');
+
+        expect($trip['price_cents'])->toBe(1_928_571);
+    });
+});
+
+describe('a truck sized by its wheels', function (): void {
+    beforeEach(function (): void {
+        $this->tenWheeler->update(['cbm' => 54]);
+        ($this->card)();
+    });
+
+    it('makes a ten-wheel truck a 10 wheeler without being asked, and prices its trips ÷ 28 × 54', function (): void {
+        $made = $this->actingAs($this->admin)->postJson('/api/v1/vehicles', [
+            'plate' => 'TEN 0010',
+            'model' => 'Fuso Fighter',
+            'registration_no' => 'LTO-2026-01010',
+            'capacity_kg' => 18_000,
+            'arrangement' => 'rented',
+            'rent_cents' => 5_000_000,
+            'wheels' => 10,
+        ])->assertCreated()->json('data');
+
+        expect($made['truck_category_id'])->toBe($this->tenWheeler->id);
+
+        $trip = ($this->book)(120, ['vehicle_id' => $made['id']])->assertCreated()->json('data');
+
+        expect($trip['price_cents'])->toBe(1_928_571);
+    });
+
+    it('sizes a truck when its wheels are corrected to ten', function (): void {
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/vehicles/{$this->vehicle->id}", ['wheels' => 10])
+            ->assertOk()
+            ->assertJsonPath('data.truck_category_id', $this->tenWheeler->id);
+    });
+
+    it('leaves a six-wheel truck at the card size', function (): void {
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/vehicles/{$this->vehicle->id}", ['wheels' => 6])
+            ->assertOk()
+            ->assertJsonPath('data.truck_category_id', null);
+    });
+
+    it('sizes the ten-wheel trucks already on the fleet when the size is added', function (): void {
+        $this->tenWheeler->delete();
+        $this->vehicle->update(['wheels' => 10, 'truck_category_id' => null]);
+
+        $made = $this->actingAs($this->admin)
+            ->postJson('/api/v1/pricing/truck-categories', ['name' => '10 Wheeler', 'cbm' => 54])
+            ->assertCreated()->json('data');
+
+        expect($this->vehicle->refresh()->truck_category_id)->toBe($made['id']);
+    });
+
+    it('keeps a size the office picked over the wheel count', function (): void {
+        $big = TruckCategory::create(['key' => 'big', 'name' => 'Big box', 'cbm' => 70]);
+
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/vehicles/{$this->vehicle->id}", ['wheels' => 10, 'truck_category_id' => $big->id])
+            ->assertOk()
+            ->assertJsonPath('data.truck_category_id', $big->id);
+    });
+});

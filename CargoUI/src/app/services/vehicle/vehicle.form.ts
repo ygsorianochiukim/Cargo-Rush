@@ -3,6 +3,7 @@ import { inject } from '@angular/core';
 import { Vehicle } from '../../models/vehicle/vehicle.model';
 import { RecordSpec, statusOptions } from '../../shared/record-form-spec';
 import { DriverService } from '../driver/driver.service';
+import { RateCardService } from '../pricing/pricing.service';
 import { TruckerService } from '../trucker/trucker.service';
 import { VehicleService } from './vehicle.service';
 
@@ -23,6 +24,7 @@ export function vehicleSpec(
   const vehicles = inject(VehicleService);
   const drivers = inject(DriverService);
   const truckers = inject(TruckerService);
+  const rateCard = inject(RateCardService);
 
   const roster: { value: string; label: string }[] = [];
   drivers.list().subscribe((res) => {
@@ -34,6 +36,20 @@ export function vehicleSpec(
   truckers.list({ per_page: 100 }).subscribe((res) => {
     partners.length = 0;
     partners.push(...res.data.map((t) => ({ value: t.id, label: t.name })));
+  });
+
+  const sizes: { value: string; label: string }[] = [];
+  rateCard.truckCategories(true).subscribe({
+    next: (res) => {
+      sizes.length = 0;
+      sizes.push(
+        ...res.data.map((c) => ({
+          value: c.id,
+          label: c.cbm ? `${c.name} · ${c.cbm} cbm` : c.name,
+        })),
+      );
+    },
+    error: () => (sizes.length = 0),
   });
 
   return {
@@ -51,6 +67,13 @@ export function vehicleSpec(
         placeholder: 'LTO-2024-44120',
       },
       { key: 'capacity_kg', label: 'Capacity (kg)', kind: 'number', required: true, min: 0, max: 60000 },
+      {
+        key: 'truck_category_id',
+        label: 'Truck size',
+        kind: 'select',
+        options: () => sizes,
+        hint: 'Leave empty for a 28 cbm truck. A bigger size is priced ÷ 28 × its cbm.',
+      },
       { key: 'odometer_km', label: 'Odometer (km)', kind: 'number', min: 0 },
       {
         key: 'next_service_km',
@@ -92,7 +115,7 @@ export function vehicleSpec(
         min: 4,
         max: 22,
         showWhen: (values) => isHired(values),
-        hint: 'What the desk means by a six- or ten-wheeler.',
+        hint: '10 sets the truck size to 10 Wheeler when it is empty.',
       },
       {
         key: 'owner_name',
@@ -141,6 +164,7 @@ export function vehicleSpec(
       model: vehicle.model,
       registration_no: vehicle.registration_no,
       capacity_kg: vehicle.capacity_kg,
+      truck_category_id: vehicle.truck_category_id ?? '',
       odometer_km: vehicle.odometer_km,
       next_service_km: vehicle.next_service_km,
       driver_id: vehicle.driver_id ?? '',
@@ -168,6 +192,7 @@ export function vehicleSpec(
         model: values['model'],
         registration_no: values['registration_no'],
         capacity_kg: Number(values['capacity_kg'] ?? 0),
+        truck_category_id: values['truck_category_id'] || null,
         odometer_km: Number(values['odometer_km'] ?? 0),
         next_service_km: Number(values['next_service_km'] ?? 0),
         driver_id: values['driver_id'] || null,

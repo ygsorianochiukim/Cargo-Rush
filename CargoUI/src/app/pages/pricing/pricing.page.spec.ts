@@ -37,7 +37,7 @@ const zone = (id: string, code: string, base: number, step: number): PricingZone
 
 const ZONES = [zone('a1', 'A1', 4_165, 14), zone('g', 'G', 17_766, 98)];
 
-function mount() {
+function mount(categories: unknown[] = []) {
   TestBed.configureTestingModule({
     providers: [
       {
@@ -54,11 +54,12 @@ function mount() {
               adjustment_bp: 0,
               capped: false,
               currency: 'PHP',
+              card_cbm: 28,
               history: [],
             }),
         },
       },
-      { provide: RateCardService, useValue: { truckCategories: () => of({ data: [] }) } },
+      { provide: RateCardService, useValue: { truckCategories: () => of({ data: categories }) } },
       { provide: Confirm, useValue: { ask: async () => false } },
     ],
   });
@@ -107,5 +108,25 @@ describe('the rate card editor', () => {
 
     const today = el.querySelector('td.font-semibold.bg-cr-tint')?.textContent ?? '';
     expect(today.replace(/[^\d]/g, '')).toBe('21882');
+  });
+});
+
+describe('a class with no rate of its own', () => {
+  it('prints a 10 wheeler as the fleet line divided by 28 and times 54', () => {
+    const { el, open } = mount([
+      { id: 'ten', key: '10-wheeler', name: '10 Wheeler', cbm: 54, status: 'active' },
+      { id: 'recon', key: 'recon-truck', name: 'Recon Truck', cbm: null, status: 'active' },
+    ]);
+
+    open('G');
+
+    const rows = Array.from(el.querySelectorAll('tbody tr')).filter((row) =>
+      row.querySelector('td.sticky'),
+    );
+    const ten = rows.find((row) => row.textContent?.includes('10 Wheeler · 54 cbm'));
+    const today = ten?.querySelector('td.font-semibold.bg-cr-tint')?.textContent ?? '';
+
+    expect(rows.some((row) => row.textContent?.includes('Recon Truck'))).toBe(false);
+    expect(today.replace(/[^\d]/g, '')).toBe('42201');
   });
 });

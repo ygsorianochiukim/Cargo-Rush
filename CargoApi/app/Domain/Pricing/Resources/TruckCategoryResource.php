@@ -18,6 +18,7 @@ class TruckCategoryResource extends ApiResource
             'key' => $this->key,
             'name' => $this->name,
             'description' => $this->description,
+            'cbm' => $this->cbm,
             'position' => $this->position,
             'status' => $this->status?->value,
 

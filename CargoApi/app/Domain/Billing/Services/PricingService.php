@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Billing\Services;
 
 use App\Domain\Pricing\DTO\QuoteBreakdown;
+use App\Domain\Pricing\Models\PricingBracket;
 use App\Domain\Pricing\Models\PricingZone;
 use App\Domain\Pricing\Models\TruckCategory;
 use App\Domain\Pricing\Services\BracketResolver;
@@ -81,6 +82,16 @@ class PricingService
 
         $card = $bracket->priceFor($km, $weightKg);
         $fuel = $this->fuel->surchargeFor($bracket, $card, $zone);
+        $step = (int) $bracket->diesel_step_cents;
+        $cbm = $this->scaledCbm($bracket, $truckCategoryId);
+        $cardCbm = $this->cardCbm();
+
+        if ($cbm !== null) {
+            $total = $this->scale($card + $fuel['cents'], $cbm, $cardCbm);
+            $card = $this->scale($card, $cbm, $cardCbm);
+            $fuel['cents'] = $total - $card;
+            $step = $this->scale($step, $cbm, $cardCbm);
+        }
 
         return new QuoteBreakdown(
             cents: max(0, $card + $fuel['cents']),
@@ -99,12 +110,35 @@ class PricingService
             bracketRange: $bracket->range(),
             dieselCents: $this->fuel->currentPriceCents(),
             dieselBaselineCents: $this->fuel->baselineFor($zone),
-            dieselStepCents: $bracket->diesel_step_cents,
+            dieselStepCents: $step,
             dieselPesosAbove: $fuel['pesos_above'],
             fuelSurchargeCents: $fuel['stepped'] ? $fuel['cents'] : 0,
             fuelRule: $fuel['rule'],
             zoneAlternatives: $this->alternatives($km, $zone),
+            cbm: $cbm,
+            cardCbm: $cbm === null ? null : $cardCbm,
         );
+    }
+
+    private function scaledCbm(PricingBracket $bracket, ?string $truckCategoryId): ?int
+    {
+        if ($bracket->truck_category_id !== null || $truckCategoryId === null) {
+            return null;
+        }
+
+        $cbm = TruckCategory::query()->whereKey($truckCategoryId)->value('cbm');
+
+        return $cbm === null || (int) $cbm === $this->cardCbm() ? null : (int) $cbm;
+    }
+
+    public function cardCbm(): int
+    {
+        return max(1, (int) config('cargo.card_cbm', 28));
+    }
+
+    private function scale(int $cents, int $cbm, int $cardCbm): int
+    {
+        return (int) round($cents * $cbm / $cardCbm);
     }
 
     public static function mustBePriced(Trip $trip): void

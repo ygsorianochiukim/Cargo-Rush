@@ -47,6 +47,8 @@ return [
     */
     'currency' => env('CARGO_CURRENCY', env('TARIFF_CURRENCY', 'PHP')),
 
+    'card_cbm' => (int) env('CARGO_CARD_CBM', 28),
+
     /*
     |----------------------------------------------------------------------
     | Diesel — how pump price moves a quote

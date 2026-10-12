@@ -200,7 +200,8 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
               <p class="mt-2 text-[13px]">
                 <span class="cr-num font-semibold">{{ money(q.cents, q.currency) }}</span>
                 <span class="text-cr-ink-muted">
-                  · Zone {{ q.zone?.code }} · {{ q.bracket?.label }} · {{ q.km }} km{{
+                  · Zone {{ q.zone?.code }} · {{ q.bracket?.label
+                  }}{{ q.volume ? ' ÷ ' + q.volume.card_cbm + ' × ' + q.volume.cbm + ' cbm' : '' }} · {{ q.km }} km{{
                     estimated() ? ' (estimate)' : ''
                   }}
                 </span>
@@ -351,6 +352,19 @@ export class TripForm {
     initialValue: this.form.controls.weight_kg.value,
   });
 
+  private readonly vehicleId = toSignal(this.form.controls.vehicle_id.valueChanges, {
+    initialValue: this.form.controls.vehicle_id.value,
+  });
+
+  private readonly truckSize = computed(() => {
+    const id = this.vehicleId();
+    const vehicle = id ? this.vehicles().find((v) => v.id === id) : undefined;
+
+    if (vehicle) return vehicle.truck_category_id ?? null;
+
+    return this.trip()?.truck_category_id ?? null;
+  });
+
   private readonly previewDistance = computed(() => {
     const t = this.trip();
     const o = this.origin();
@@ -393,7 +407,7 @@ export class TripForm {
         open: this.open(),
         distance: this.previewDistance(),
         weight: Number(this.weight()) || 0,
-        category: this.trip()?.truck_category_id ?? null,
+        category: this.truckSize(),
       })),
     )
       .pipe(

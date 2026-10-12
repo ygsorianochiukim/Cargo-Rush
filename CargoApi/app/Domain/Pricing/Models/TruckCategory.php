@@ -17,11 +17,12 @@ class TruckCategory extends Model
 {
     use BelongsToCompany, HasUlids, SoftDeletes;
 
-    protected $fillable = ['key', 'name', 'description', 'position', 'status'];
+    protected $fillable = ['key', 'name', 'description', 'cbm', 'position', 'status'];
 
     protected function casts(): array
     {
         return [
+            'cbm' => 'integer',
             'position' => 'integer',
             'status' => StatusValue::class,
         ];
@@ -45,6 +46,48 @@ class TruckCategory extends Model
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('status', StatusValue::Active->value);
+    }
+
+    public static function sizedForWheels(?int $wheels): ?self
+    {
+        if ($wheels === null) {
+            return null;
+        }
+
+        return self::query()
+            ->active()
+            ->whereNotNull('cbm')
+            ->inCardOrder()
+            ->get()
+            ->first(fn (self $category): bool => $category->wheels() === $wheels);
+    }
+
+    public function wheels(): ?int
+    {
+        if ($this->cbm === null) {
+            return null;
+        }
+
+        if (preg_match('/^(\d+)-wheeler$/', (string) $this->key, $m) === 1
+            || preg_match('/^\s*(\d+)\s*-?\s*wheel/i', (string) $this->name, $m) === 1) {
+            return (int) $m[1];
+        }
+
+        return null;
+    }
+
+    public function sizeUnsizedVehicles(): int
+    {
+        $wheels = $this->wheels();
+
+        if ($wheels === null || ! $this->isActive()) {
+            return 0;
+        }
+
+        return Vehicle::query()
+            ->where('wheels', $wheels)
+            ->whereNull('truck_category_id')
+            ->update(['truck_category_id' => $this->id]);
     }
 
     public function scopeInCardOrder(Builder $query): Builder

@@ -26,6 +26,7 @@ final class VehicleData extends Data
         public readonly ?int $rent_cents = null,
         public readonly ?int $share_bp = null,
         public readonly ?string $owner_trucker_id = null,
+        public readonly ?string $truck_category_id = null,
     ) {}
 
     protected static function hydrate(array $attributes): static
@@ -48,6 +49,7 @@ final class VehicleData extends Data
             rent_cents: isset($attributes['rent_cents']) ? (int) $attributes['rent_cents'] : null,
             share_bp: isset($attributes['share_bp']) ? (int) $attributes['share_bp'] : null,
             owner_trucker_id: $attributes['owner_trucker_id'] ?? null,
+            truck_category_id: $attributes['truck_category_id'] ?? null,
         );
     }
 
@@ -69,6 +71,7 @@ final class VehicleData extends Data
             'rent_cents' => $this->rent_cents,
             'share_bp' => $this->share_bp,
             'owner_trucker_id' => $this->owner_trucker_id,
+            'truck_category_id' => $this->truck_category_id,
         ];
     }
 }

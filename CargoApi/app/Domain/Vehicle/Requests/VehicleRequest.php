@@ -7,6 +7,7 @@ namespace App\Domain\Vehicle\Requests;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\VehicleArrangement;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
+use App\Domain\Tenancy\Support\Tenant;
 use App\Domain\Vehicle\DTO\VehicleData;
 use Illuminate\Validation\Rule;
 
@@ -32,6 +33,13 @@ class VehicleRequest extends ApiFormRequest
             'arrangement' => ['sometimes', Rule::in(VehicleArrangement::values())],
 
             'wheels' => ['nullable', 'integer', 'min:4', 'max:22'],
+
+            'truck_category_id' => [
+                'nullable', 'string',
+                Rule::exists('truck_categories', 'id')
+                    ->where('company_id', app(Tenant::class)->id())
+                    ->whereNull('deleted_at'),
+            ],
 
             'owner_name' => ['nullable', 'string', 'max:120'],
             'owner_contact' => ['nullable', 'string', 'max:40'],

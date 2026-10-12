@@ -231,3 +231,97 @@ describe('the bands that share a distance', function (): void {
             ->toBe(2_101_900);
     });
 });
+
+describe('a 10 wheeler, priced off the 28 cbm line', function (): void {
+    it('divides the 28 cbm figure by 28 and times it by 54', function (): void {
+        PricingBracket::query()
+            ->whereNull('truck_category_id')
+            ->where('zone_id', PricingZone::query()->where('code', 'D')->value('id'))
+            ->update(['base_cents' => 1_050_000, 'diesel_step_cents' => 0]);
+
+        $quote = ($this->quote)([
+            'distance_km' => 140,
+            'truck_category_id' => ($this->category)('10-wheeler'),
+        ])->assertOk();
+
+        expect($quote->json('data.zone.code'))->toBe('D');
+        expect($quote->json('data.bracket.label'))->toBe('Current fleet');
+        expect($quote->json('data.cents'))->toBe(2_025_000);
+        expect($quote->json('data.card_cents'))->toBe(2_025_000);
+        expect($quote->json('data.volume'))->toBe(['cbm' => 54, 'card_cbm' => 28]);
+    });
+
+    it('scales the diesel step with it', function (): void {
+        ($this->diesel)(9_100);
+
+        $quote = ($this->quote)([
+            'distance_km' => 140,
+            'truck_category_id' => ($this->category)('10-wheeler'),
+        ])->assertOk();
+
+        expect(($this->quote)(['distance_km' => 140])->json('data.cents'))->toBe(1_049_100);
+        expect($quote->json('data.cents'))->toBe(2_023_264);
+        expect($quote->json('data.card_cents'))->toBe(1_504_864);
+        expect($quote->json('data.diesel.step_cents'))->toBe(10_800);
+    });
+
+    it('leaves the 28 cbm runs alone', function (): void {
+        expect(($this->quote)(['distance_km' => 140])->json('data.volume'))->toBeNull();
+        expect(($this->quote)(['distance_km' => 140])->json('data.cents'))->toBe(780_300);
+    });
+
+    it('does not scale a class that has a line of its own', function (): void {
+        TruckCategory::query()->where('key', 'brand-new-truck')->update(['cbm' => 54]);
+
+        $quote = ($this->quote)([
+            'distance_km' => 140,
+            'truck_category_id' => ($this->category)('brand-new-truck'),
+        ])->assertOk();
+
+        expect($quote->json('data.cents'))->toBe(909_000);
+        expect($quote->json('data.volume'))->toBeNull();
+    });
+
+    it('keeps the size a class is given', function (): void {
+        $made = $this->actingAs($this->accountant)
+            ->postJson('/api/v1/pricing/truck-categories', ['name' => '12 Wheeler', 'cbm' => 70])
+            ->assertCreated();
+
+        expect($made->json('data.cbm'))->toBe(70);
+
+        $quote = ($this->quote)(['distance_km' => 140, 'truck_category_id' => $made->json('data.id')]);
+
+        expect($quote->json('data.cents'))->toBe(1_950_750);
+    });
+});
+
+describe('the truck sizes list', function (): void {
+    it('resizes a class and reprices it', function (): void {
+        $ten = ($this->category)('10-wheeler');
+
+        $this->actingAs($this->accountant)
+            ->patchJson("/api/v1/pricing/truck-categories/{$ten}", ['name' => '10 Wheeler', 'cbm' => 56])
+            ->assertOk()
+            ->assertJsonPath('data.cbm', 56);
+
+        expect(($this->quote)(['distance_km' => 140, 'truck_category_id' => $ten])->json('data.cents'))
+            ->toBe(1_560_600);
+    });
+
+    it('refuses a size of nothing', function (): void {
+        $this->actingAs($this->accountant)
+            ->postJson('/api/v1/pricing/truck-categories', ['name' => 'Tiny', 'cbm' => 0])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('cbm');
+    });
+
+    it('removes a size nobody uses', function (): void {
+        $ten = ($this->category)('10-wheeler');
+
+        $this->actingAs($this->accountant)
+            ->deleteJson("/api/v1/pricing/truck-categories/{$ten}")
+            ->assertNoContent();
+
+        expect(TruckCategory::query()->whereKey($ten)->exists())->toBeFalse();
+    });
+});
