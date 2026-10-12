@@ -10,6 +10,7 @@ import {
   TruckCategory,
 } from '../../models/pricing/pricing.model';
 import { PricingService, RateCardService } from '../../services/pricing/pricing.service';
+import { CbmCard } from './cbm-card';
 import { DistanceCard } from './distance-card';
 import { Card } from '../../shared/card';
 import { Confirm } from '../../shared/confirm';
@@ -25,6 +26,7 @@ import { StatusPill } from '../../shared/status-pill';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
     Card,
+    CbmCard,
     DistanceCard,
     Field,
     Icon,
@@ -159,10 +161,7 @@ export class PricingPage {
     this.refresh();
     this.refreshDiesel();
 
-    this.rateCard.truckCategories(true).subscribe({
-      next: (envelope) => this.categories.set(envelope.data),
-      error: () => this.categories.set([]),
-    });
+    this.reloadCategories();
 
     this.previewForm.get('distance_km')?.valueChanges.subscribe(() => this.previewZoneId.set(null));
 
@@ -191,6 +190,7 @@ export class PricingPage {
     this.rateLines.set({
       baselinePesos: baseline > 0 ? Math.floor(baseline) : null,
       lines: this.brackets.controls.map((group) => ({
+        categoryId: String(group.get('truck_category_id')?.value ?? ''),
         label: String(group.get('label')?.value ?? ''),
         baseCents: Math.round(Number(group.get('base')?.value ?? 0) * 100),
         stepCents: Math.round(Number(group.get('diesel_step')?.value ?? 0) * 100),
@@ -200,7 +200,7 @@ export class PricingPage {
 
   private readonly rateLines = signal<{
     baselinePesos: number | null;
-    lines: { label: string; baseCents: number; stepCents: number }[];
+    lines: { categoryId: string; label: string; baseCents: number; stepCents: number }[];
   }>({ baselinePesos: null, lines: [] });
 
   protected readonly dieselGrid = computed(() => {
@@ -210,18 +210,58 @@ export class PricingPage {
     const today = state?.current ? Math.floor(state.current.price_per_litre_cents / 100) : null;
     const first = Math.max(baseline, (today ?? baseline + 7) - 7);
     const columns = Array.from({ length: 15 }, (_, offset) => first + offset);
+    const priced = (line: { baseCents: number; stepCents: number }) =>
+      columns.map((pesos) => line.baseCents + line.stepCents * Math.max(0, pesos - baseline));
+
+    const cardCbm = state?.card_cbm ?? 28;
+    const fleet = lines.find((line) => line.categoryId === '');
+    const lined = new Set(lines.map((line) => line.categoryId));
+    const scaled = fleet
+      ? this.categories()
+          .filter((category) => category.cbm && category.cbm !== cardCbm && !lined.has(category.id))
+          .map((category) => ({
+            label: `${category.name} · ${category.cbm} cbm`,
+            prices: priced(fleet).map((cents) =>
+              Math.round((cents * (category.cbm as number)) / cardCbm),
+            ),
+          }))
+      : [];
 
     return {
       today,
       columns,
-      rows: lines.map((line) => ({
-        label: line.label,
-        prices: columns.map(
-          (pesos) => line.baseCents + line.stepCents * Math.max(0, pesos - baseline),
-        ),
-      })),
+      cardCbm,
+      hasScaled: scaled.length > 0,
+      rows: [
+        ...lines.map((line) => ({ label: line.label, prices: priced(line), scaled: false })),
+        ...scaled.map((row) => ({ ...row, scaled: true })),
+      ],
     };
   });
+
+  protected readonly fleetToday = computed(() => {
+    const zone = this.selected();
+    const { baselinePesos, lines } = this.rateLines();
+    const fleet = lines.find((line) => line.categoryId === '');
+    const state = this.diesel();
+
+    if (!zone || !fleet) return null;
+
+    const baseline = baselinePesos ?? Math.floor((state?.baseline_cents ?? 0) / 100);
+    const today = state?.current ? Math.floor(state.current.price_per_litre_cents / 100) : baseline;
+
+    return {
+      code: zone.code,
+      cents: fleet.baseCents + fleet.stepCents * Math.max(0, today - baseline),
+    };
+  });
+
+  protected reloadCategories(): void {
+    this.rateCard.truckCategories(true).subscribe({
+      next: (envelope) => this.categories.set(envelope.data),
+      error: () => this.categories.set([]),
+    });
+  }
 
   protected get brackets(): FormArray<FormGroup> {
     return this.form.get('brackets') as FormArray<FormGroup>;

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Vehicle\Services;
 
 use App\Domain\Notification\Services\NotificationService;
+use App\Domain\Pricing\Models\TruckCategory;
 use App\Domain\Shared\DTO\Data;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\Tone;
@@ -34,6 +35,7 @@ class VehicleService extends CrudService
         $vehicle = parent::create($data);
 
         if ($vehicle instanceof Vehicle) {
+            $this->sizeFromWheels($vehicle);
             $this->rent->chargeDueFor($vehicle, now());
         }
 
@@ -45,10 +47,24 @@ class VehicleService extends CrudService
         $vehicle = parent::update($model, $data);
 
         if ($vehicle instanceof Vehicle) {
+            $this->sizeFromWheels($vehicle);
             $this->rent->chargeDueFor($vehicle, now());
         }
 
         return $vehicle;
+    }
+
+    private function sizeFromWheels(Vehicle $vehicle): void
+    {
+        if ($vehicle->truck_category_id !== null) {
+            return;
+        }
+
+        $size = TruckCategory::sizedForWheels($vehicle->wheels);
+
+        if ($size !== null) {
+            $vehicle->update(['truck_category_id' => $size->id]);
+        }
     }
 
     public function setStatus(Vehicle $vehicle, StatusValue $status): Vehicle

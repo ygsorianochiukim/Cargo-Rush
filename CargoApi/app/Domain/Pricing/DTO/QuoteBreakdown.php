@@ -30,6 +30,8 @@ final readonly class QuoteBreakdown
         /** @var array<int, array{id: string, code: string, name: string, band: string}> */
         public array $zoneAlternatives = [],
         public ?string $reason = null,
+        public ?int $cbm = null,
+        public ?int $cardCbm = null,
     ) {}
 
     /** @param array<int, array{id: string, code: string, name: string, band: string}> $zoneAlternatives */
@@ -110,6 +112,10 @@ final readonly class QuoteBreakdown
                 'id' => $this->bracketId,
                 'label' => $this->bracketLabel,
                 'range' => $this->bracketRange,
+            ],
+            'volume' => $this->cbm === null ? null : [
+                'cbm' => $this->cbm,
+                'card_cbm' => $this->cardCbm,
             ],
             'diesel' => [
                 'price_per_litre_cents' => $this->dieselCents,

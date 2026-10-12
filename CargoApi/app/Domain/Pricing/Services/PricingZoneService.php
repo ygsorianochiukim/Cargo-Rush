@@ -73,10 +73,14 @@ class PricingZoneService extends CrudService
     {
         $name = (string) ($attributes['name'] ?? '');
 
-        return TruckCategory::create([
+        $category = TruckCategory::create([
             ...$attributes,
             'key' => $this->uniqueCategoryKey(Str::slug($name) ?: 'category'),
         ])->refresh();
+
+        $category->sizeUnsizedVehicles();
+
+        return $category;
     }
 
     public function deleteTruckCategory(TruckCategory $category): bool
@@ -233,6 +237,7 @@ class PricingZoneService extends CrudService
             'adjustment_bp' => $adjustmentBp,
             'capped' => abs($adjustmentBp) >= abs((int) config('cargo.diesel.cap_bp')),
             'currency' => (string) config('cargo.currency', 'PHP'),
+            'card_cbm' => max(1, (int) config('cargo.card_cbm', 28)),
         ];
     }
 

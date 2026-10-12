@@ -52,6 +52,7 @@ export interface TruckCategory extends Timestamped {
   key: string;
   name: string;
   description: string | null;
+  cbm: number | null;
   position: number;
   status: string;
   bracket_count?: number;
@@ -61,6 +62,7 @@ export interface TruckCategory extends Timestamped {
 export interface TruckCategoryPayload {
   name: string;
   description?: string | null;
+  cbm?: number | null;
   position?: number;
   status?: string;
 }
@@ -89,6 +91,7 @@ export interface DieselState {
   adjustment_bp: number;
   capped: boolean;
   currency: string;
+  card_cbm: number;
   history: DieselPrice[];
 }
 
@@ -129,6 +132,7 @@ export interface QuoteBreakdown {
   zone: { id: string; code: string; name: string; band: string } | null;
   zone_alternatives: ZoneAlternative[];
   bracket: { id: string; label: string; range: string } | null;
+  volume: { cbm: number; card_cbm: number } | null;
   diesel: {
     price_per_litre_cents: number | null;
     baseline_cents: number | null;

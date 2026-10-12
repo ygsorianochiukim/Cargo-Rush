@@ -30,6 +30,7 @@ class VehicleResource extends ApiResource
             'arrangement_label' => $this->terms()->label(),
             'hired' => $this->terms()->isHired(),
             'wheels' => $this->wheels,
+            'truck_category_id' => $this->truck_category_id,
 
             'owner_name' => $this->owner_name,
             'owner_contact' => $this->owner_contact,

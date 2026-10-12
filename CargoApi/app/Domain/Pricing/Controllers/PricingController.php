@@ -73,6 +73,7 @@ class PricingController extends ApiController
         TruckCategory $truckCategory,
     ): JsonResponse {
         $truckCategory->update($request->toAttributes());
+        $truckCategory->sizeUnsizedVehicles();
 
         return $this->item(new TruckCategoryResource($truckCategory->refresh()));
     }

@@ -15,10 +15,11 @@ class SubsidyRateCardSeeder extends Seeder
 
     private const SOURCE = 'CDI-CO-DY-OD-280-0001-8 · CDO dry, 28 cbm, 2026';
 
-    /** @var array<int, array{0: string, 1: string, 2: string}> */
+    /** @var array<int, array{0: string, 1: string, 2: string, 3: int|null}> */
     private const CLASSES = [
-        ['brand-new-truck', 'Brand New Truck', 'A unit bought new. Priced above the standing fleet.'],
-        ['recon-truck', 'Recon Truck', 'A reconditioned unit. Priced between new and the standing fleet.'],
+        ['brand-new-truck', 'Brand New Truck', 'A unit bought new. Priced above the standing fleet.', null],
+        ['recon-truck', 'Recon Truck', 'A reconditioned unit. Priced between new and the standing fleet.', null],
+        ['10-wheeler', '10 Wheeler', '54 cbm. Priced off the 28 cbm fleet line, divided by 28 and times 54.', 54],
     ];
 
     /** @var array<int, array{0: string, 1: int, 2: int, 3: int, 4: int, 5: int, 6: int}> */
@@ -71,12 +72,13 @@ class SubsidyRateCardSeeder extends Seeder
     {
         $ids = [];
 
-        foreach (self::CLASSES as $offset => [$key, $name, $description]) {
+        foreach (self::CLASSES as $offset => [$key, $name, $description, $cbm]) {
             $ids[$key] = TruckCategory::updateOrCreate(
                 ['key' => $key],
                 [
                     'name' => $name,
                     'description' => $description,
+                    'cbm' => $cbm,
                     'position' => 100 + $offset,
                 ],
             )->id;

@@ -15,6 +15,7 @@ use App\Domain\Dispatch\Models\DispatchRecord;
 use App\Domain\Finance\Services\FinanceService;
 use App\Domain\Inspection\Services\InspectionService;
 use App\Domain\Notification\Services\NotificationService;
+use App\Domain\Pricing\Models\TruckCategory;
 use App\Domain\Shared\Enums\Role;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\Tone;
@@ -22,6 +23,7 @@ use App\Domain\Trip\DTO\TripData;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Trip\Repositories\TripRepository;
 use App\Domain\Trucker\Services\WalletService;
+use App\Domain\Vehicle\Models\Vehicle;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -59,6 +61,7 @@ class TripService
             $trip = $this->trips->create($data);
             $this->fillHelpers($trip, $data);
             $this->fillDistance($trip, $data);
+            $this->fillTruckSize($trip, $data);
             $this->fillPrice($trip, $data);
             $this->mustBePricedToGoOut($trip);
 
@@ -79,6 +82,7 @@ class TripService
             $updated = $this->trips->update($trip, $data);
             $this->fillHelpers($updated, $data);
             $this->fillDistance($updated, $data);
+            $this->fillTruckSize($updated, $data);
             $this->fillPrice($updated, $data);
             $this->mustBePricedToGoOut($updated);
 
@@ -128,6 +132,7 @@ class TripService
             $updated = $this->trips->update($trip, $data);
             $this->fillHelpers($updated, $data);
             $this->fillDistance($updated, $data);
+            $this->fillTruckSize($updated, $data);
             $this->fillPrice($updated, $data);
 
             PricingService::mustBePriced($updated);
@@ -181,6 +186,26 @@ class TripService
             'distance_total_m' => $measured['metres'],
             'distance_source' => $measured['source'],
         ])->save();
+    }
+
+    private function fillTruckSize(Trip $trip, TripData $data): void
+    {
+        if ($trip->isBilled() || $data->wasGiven('truck_category_id') || ! $data->wasGiven('vehicle_id')) {
+            return;
+        }
+
+        $sized = $trip->vehicle_id === null
+            ? null
+            : Vehicle::query()->whereKey($trip->vehicle_id)->value('truck_category_id');
+
+        if ($sized === null && $trip->truck_category_id !== null) {
+            $carried = TruckCategory::query()->whereKey($trip->truck_category_id)->value('cbm');
+            $sized = $carried === null ? $trip->truck_category_id : null;
+        }
+
+        if ($sized !== $trip->truck_category_id) {
+            $trip->forceFill(['truck_category_id' => $sized])->save();
+        }
     }
 
     private function fillPrice(Trip $trip, TripData $data): void
