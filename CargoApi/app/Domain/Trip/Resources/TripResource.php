@@ -6,6 +6,7 @@ namespace App\Domain\Trip\Resources;
 
 use App\Domain\Inspection\Services\InspectionService;
 use App\Domain\Shared\Enums\BookingSource;
+use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use App\Domain\Trip\Models\Trip;
 use Illuminate\Http\Request;
@@ -77,6 +78,7 @@ class TripResource extends ApiResource
             'distance_total_m' => $this->distance_total_m,
             'distance_source' => $this->distance_source,
             'billed_at' => $this->iso($this->billed_at),
+            'invoice' => $this->invoiceSummary(),
             'dispatch_checklist' => $this->dispatch_checked_at === null ? null : [
                 'answers' => $this->dispatch_checklist,
                 'remarks' => $this->dispatch_remarks,
@@ -89,6 +91,32 @@ class TripResource extends ApiResource
             ),
 
             ...$this->stamps(),
+        ];
+    }
+
+    /** @return array<string, mixed>|null */
+    private function invoiceSummary(): ?array
+    {
+        if ($this->billed_at === null) {
+            return null;
+        }
+
+        $invoice = $this->invoice;
+
+        if ($invoice === null || $invoice->direction !== InvoiceDirection::Receivable) {
+            return null;
+        }
+
+        return [
+            'id' => $invoice->id,
+            'number' => $invoice->number,
+            'status' => $invoice->status->value,
+            'amount_cents' => $invoice->amount_cents,
+            'due_cents' => $invoice->dueCents(),
+            'paid_cents' => $invoice->paidCents(),
+            'balance_cents' => $invoice->balanceCents(),
+            'currency' => $invoice->currency,
+            'due_at' => $invoice->due_at?->toDateString(),
         ];
     }
 

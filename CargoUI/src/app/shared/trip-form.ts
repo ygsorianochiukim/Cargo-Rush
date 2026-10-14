@@ -20,7 +20,7 @@ import { IdentityService } from '../services/identity/identity.service';
 import { PricingService } from '../services/pricing/pricing.service';
 import { fmt } from './format';
 import { StatusValue } from '../models/shared/status.model';
-import { TripPayload } from '../models/trip/trip.model';
+import { TripPayload, TripPaymentStatus } from '../models/trip/trip.model';
 import { Vehicle } from '../models/vehicle/vehicle.model';
 import { DriverService } from '../services/driver/driver.service';
 import { TripService } from '../services/trip/trip.service';
@@ -69,8 +69,14 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
           <p
             class="rounded-control bg-cr-tint px-3 py-2 text-[12px] text-cr-ink-muted sm:col-span-2"
           >
-            Delivered and billed. The vehicle and status are locked because this trip's income and
-            invoice are already on the books; everything else can still be corrected.
+            Delivered and billed. Correcting the customer, vehicle or price updates its income,
+            invoice and any trucker settlement to match.
+            @if (paidSome()) {
+              It has payments, so it stays delivered.
+            } @else {
+              Changing the status takes it off the books and cancels its invoice until it is
+              delivered again.
+            }
           </p>
         }
 
@@ -205,7 +211,7 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
 
         @if (enteringPast() && trip()?.status !== 'delivered') {
           <p class="rounded-control bg-cr-tint px-3 py-2 text-[12px] text-cr-ink-muted">
-            For a past trip. It's billed and recorded on the day it was delivered.
+            For a past trip. Its invoice and income are dated the day it was delivered.
           </p>
           <app-field label="Delivered on" hint="Blank uses the scheduled time.">
             <input type="datetime-local" formControlName="delivered_at" [class]="inputClass" />
@@ -318,6 +324,86 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
           }
         </div>
 
+        @if (showsPayment()) {
+          <div class="rounded-control border border-cr-line px-3 py-3 sm:col-span-2">
+            <div class="flex flex-wrap items-center gap-2">
+              <p class="text-[13px] font-semibold">Invoice</p>
+              @if (trip()?.invoice; as inv) {
+                <span class="text-[12px] text-cr-ink-muted">
+                  {{ inv.number }} · {{ label(inv.status) }} · paid
+                  <span class="cr-num">{{ money(inv.paid_cents, inv.currency) }}</span>
+                  of <span class="cr-num">{{ money(inv.due_cents, inv.currency) }}</span>
+                </span>
+                <a
+                  class="ml-auto text-[12px] font-semibold text-cr-blue hover:underline"
+                  href=""
+                  (click)="$event.preventDefault(); openInvoice(inv.id)"
+                  >Open invoice</a
+                >
+              }
+            </div>
+
+            @if (trip()?.invoice?.balance_cents === 0) {
+              <p class="mt-2 text-[12px] text-cr-ink-muted">Paid in full.</p>
+            } @else if (canBill()) {
+              <div class="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <app-field
+                  [label]="trip()?.invoice ? 'Record a payment' : 'Payment'"
+                  [hint]="
+                    trip()?.invoice
+                      ? 'Leave as is to keep the balance open.'
+                      : 'An invoice is raised either way. Mark it paid if the customer already settled.'
+                  "
+                >
+                  <select formControlName="payment_status" [class]="inputClass">
+                    <option value="unpaid">{{ trip()?.invoice ? 'No payment now' : 'Unpaid' }}</option>
+                    <option value="paid">{{ trip()?.invoice ? 'Pay the balance' : 'Paid in full' }}</option>
+                    <option value="partial">Part paid</option>
+                  </select>
+                </app-field>
+
+                @if (paymentStatus() === 'partial') {
+                  <app-field label="Amount paid (₱)" required [error]="errorFor('paid_amount')">
+                    <input
+                      type="number"
+                      min="0.01"
+                      step="0.01"
+                      formControlName="paid_amount"
+                      [class]="inputClass + ' cr-num'"
+                    />
+                  </app-field>
+                }
+
+                @if (paymentStatus() !== 'unpaid') {
+                  <app-field label="Date paid" hint="Blank uses the delivery date.">
+                    <input type="date" formControlName="paid_on" [max]="today" [class]="inputClass" />
+                  </app-field>
+                  <app-field label="How">
+                    <select formControlName="payment_method" [class]="inputClass">
+                      <option value="bank_transfer">Bank transfer</option>
+                      <option value="cash">Cash</option>
+                      <option value="cheque">Cheque</option>
+                      <option value="gcash">GCash</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </app-field>
+                  <app-field label="Reference">
+                    <input
+                      formControlName="payment_reference"
+                      [class]="inputClass"
+                      placeholder="OR number, transfer ref…"
+                    />
+                  </app-field>
+                }
+              </div>
+            } @else {
+              <p class="mt-2 text-[12px] text-cr-ink-muted">
+                Only someone who manages Billing can record a payment.
+              </p>
+            }
+          </div>
+        }
+
         @if (failure(); as message) {
           <p class="text-[13px] font-medium text-cr-red sm:col-span-2" role="alert">
             {{ message }}
@@ -421,6 +507,19 @@ export class TripForm {
     new_customer_name: [''],
     new_customer_contact: [''],
     new_customer_address: [''],
+    payment_status: ['unpaid' as TripPaymentStatus],
+    paid_amount: [''],
+    paid_on: [''],
+    payment_method: ['bank_transfer'],
+    payment_reference: [''],
+  });
+
+  protected readonly today = new Date().toISOString().slice(0, 10);
+
+  protected readonly canBill = computed(() => this.identity.can('billing.manage'));
+
+  protected readonly paymentStatus = toSignal(this.form.controls.payment_status.valueChanges, {
+    initialValue: this.form.controls.payment_status.value,
   });
 
   protected readonly NEW_CUSTOMER = NEW_CUSTOMER;
@@ -483,6 +582,19 @@ export class TripForm {
     this.form.controls.status.valueChanges.pipe(map((s) => s === 'delivered')),
     { initialValue: false },
   );
+
+  protected readonly showsPayment = computed(() => {
+    const t = this.trip();
+
+    return this.enteringPast() && (t?.billed_at ? t.invoice !== null : true);
+  });
+
+  protected readonly paidSome = computed(() => (this.trip()?.invoice?.paid_cents ?? 0) > 0);
+
+  protected openInvoice(id: string): void {
+    this.open.set(false);
+    void this.router.navigate(['/billing', id]);
+  }
 
   protected readonly helpers = signal<string[]>([]);
 
@@ -579,6 +691,11 @@ export class TripForm {
         new_customer_name: '',
         new_customer_contact: '',
         new_customer_address: '',
+        payment_status: 'unpaid',
+        paid_amount: '',
+        paid_on: '',
+        payment_method: 'bank_transfer',
+        payment_reference: '',
       });
 
       const known = t?.customer_id;
@@ -590,13 +707,18 @@ export class TripForm {
       this.preview.set(null);
       this.failure.set(null);
 
-      const locked = !!t?.billed_at;
-      for (const name of ['vehicle_id', 'status'] as const) {
-        const control = this.form.controls[name];
-        if (locked) control.disable();
-        else control.enable();
-      }
+      const status = this.form.controls.status;
+      if (t?.billed_at && (t.invoice?.paid_cents ?? 0) > 0) status.disable();
+      else status.enable();
     });
+
+    this.form.controls.payment_status.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe((s) => {
+        const control = this.form.controls.paid_amount;
+        control.setValidators(s === 'partial' ? [Validators.required, Validators.min(0.01)] : null);
+        control.updateValueAndValidity({ emitEvent: false });
+      });
   }
 
   protected label(s: StatusValue) {
@@ -617,6 +739,19 @@ export class TripForm {
     if (typed === '') return this.manuallyPriced() ? { price_cents: null } : {};
 
     return { price_cents: Math.round(Number(typed) * 100) };
+  }
+
+  private paymentPayload(raw: ReturnType<TripForm['form']['getRawValue']>): Partial<TripPayload> {
+    if (!this.showsPayment() || !this.canBill() || raw.payment_status === 'unpaid') return {};
+
+    return {
+      payment_status: raw.payment_status,
+      paid_cents:
+        raw.payment_status === 'partial' ? Math.round(Number(raw.paid_amount) * 100) : null,
+      paid_on: raw.paid_on || null,
+      payment_method: raw.payment_method,
+      payment_reference: raw.payment_reference.trim() || null,
+    };
   }
 
   protected errorFor(name: string): string | null {
@@ -678,6 +813,7 @@ export class TripForm {
       eta: existing?.eta ?? null,
       ...this.pricePayload(raw.price),
       ...(this.form.controls.zone_id.dirty ? { pricing_zone_id: raw.zone_id || null } : {}),
+      ...this.paymentPayload(raw),
     };
 
     const request = existing

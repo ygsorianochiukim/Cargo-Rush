@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 
@@ -232,10 +233,10 @@ export class TripsPage {
   }
 
   protected async remove(trip: Trip): Promise<void> {
-    if (trip.billed_at) {
+    if (trip.billed_at && (trip.invoice?.paid_cents ?? 0) > 0) {
       await this.confirmDelete.ask({
         title: `${trip.reference} cannot be deleted`,
-        body: `It has been delivered and billed, so its income, its invoice and any trucker settlement are already on the books.`,
+        body: `${trip.invoice?.number} already has payments against it. Remove the payment first to delete this trip.`,
         confirmLabel: 'OK',
         icon: 'billing',
       });
@@ -244,14 +245,23 @@ export class TripsPage {
 
     const ok = await this.confirmDelete.ask({
       title: `Delete ${trip.reference}?`,
-      body: `This removes the trip and its dispatch record. Delivery logs already filed against it are kept.`,
+      body: trip.billed_at
+        ? `It has been delivered but not paid. Its income and any trucker settlement come off the books, and ${trip.invoice?.number ?? 'its invoice'} is cancelled.`
+        : `This removes the trip and its dispatch record. Delivery logs already filed against it are kept.`,
       confirmLabel: 'Delete trip',
       danger: true,
     });
     if (!ok) return;
 
-    this.trips.remove(trip.id).subscribe(() => {
-      this.overrides.set((this.all() ?? []).filter((t) => t.id !== trip.id));
+    this.trips.remove(trip.id).subscribe({
+      next: () => this.overrides.set((this.all() ?? []).filter((t) => t.id !== trip.id)),
+      error: (error: HttpErrorResponse) =>
+        void this.confirmDelete.ask({
+          title: `${trip.reference} cannot be deleted`,
+          body: error.error?.message ?? `The server refused that request (${error.status}).`,
+          confirmLabel: 'OK',
+          icon: 'billing',
+        }),
     });
   }
 
@@ -299,9 +309,15 @@ export class TripsPage {
       sub: (t) =>
         t.price_cents === null
           ? t.pricing_note
-          : t.billed_at
-            ? 'Billed'
-            : t.manually_priced
+          : t.invoice
+            ? t.invoice.balance_cents <= 0
+              ? 'Paid'
+              : t.invoice.paid_cents > 0
+                ? 'Part paid'
+                : 'Unpaid'
+            : t.billed_at
+              ? 'Billed'
+              : t.manually_priced
               ? 'Manual price'
               : null,
     },

@@ -211,6 +211,30 @@ class BillingService
         ];
     }
 
+    public function reopenForTrip(Trip $trip, CarbonInterface $at): ?Invoice
+    {
+        $invoice = Invoice::query()
+            ->where('trip_id', $trip->id)
+            ->where('direction', InvoiceDirection::Receivable->value)
+            ->where('status', StatusValue::Cancelled->value)
+            ->first();
+
+        if ($invoice === null || $trip->customer_id === null || (int) $trip->price_cents <= 0) {
+            return $invoice;
+        }
+
+        $issued = Carbon::instance($at);
+
+        return $this->update($invoice, InvoiceData::fromArray([
+            'customer_id' => $trip->customer_id,
+            'amount_cents' => (int) $trip->price_cents,
+            'currency' => $trip->currency ?? $invoice->currency,
+            'issued_at' => $issued->toDateString(),
+            'due_at' => $issued->copy()->addDays($this->rates->billingTermsDays())->toDateString(),
+            'status' => StatusValue::Pending->value,
+        ]));
+    }
+
     public function raiseForTrip(Trip $trip, ?CarbonInterface $at = null): ?Invoice
     {
         PricingService::mustBePriced($trip);

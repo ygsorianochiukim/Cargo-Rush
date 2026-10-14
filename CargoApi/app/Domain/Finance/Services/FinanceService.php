@@ -699,6 +699,30 @@ class FinanceService
         return $row->refresh();
     }
 
+    public function takeBackTripIncome(
+        string $vehicleId,
+        CarbonInterface $date,
+        int $incomeCents,
+        int $ownerShareCents = 0,
+    ): ?LedgerEntry {
+        $truck = Truck::where('vehicle_id', $vehicleId)->value('id');
+
+        $row = $truck === null ? null : LedgerEntry::where('truck_id', $truck)
+            ->whereDate('date', $date->toDateString())
+            ->first();
+
+        if ($row === null) {
+            return null;
+        }
+
+        $row->update([
+            'trip_income_cents' => max(0, (int) $row->trip_income_cents - $incomeCents),
+            'owner_share_cents' => max(0, (int) $row->owner_share_cents - $ownerShareCents),
+        ]);
+
+        return $row->refresh();
+    }
+
     public function chargeMaintenance(
         string $vehicleId,
         ?string $plate,

@@ -4,14 +4,18 @@ declare(strict_types=1);
 
 use App\Domain\Billing\Models\Invoice;
 use App\Domain\Customer\Models\Customer;
+use App\Domain\Delivery\Models\DeliveryLog;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Finance\Models\LedgerEntry;
+use App\Domain\Finance\Models\Truck;
 use App\Domain\Identity\Models\User;
 use App\Domain\Shared\Enums\Role;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Trucker\Models\Trucker;
 use App\Domain\Trucker\Models\TruckerVehicle;
+use App\Domain\Trucker\Models\WalletEntry;
+use App\Domain\Trucker\Services\WalletService;
 use App\Domain\Vehicle\Models\Vehicle;
 use Database\Seeders\Demo\FleetSeeder;
 use Database\Seeders\NavigationSeeder;
@@ -83,6 +87,34 @@ describe('a trucker run', function (): void {
 
         expect(LedgerEntry::query()->sum('trip_income_cents'))->toEqual(0)
             ->and(($this->quarter)()['total_income_cents'])->toBe(120_000);
+    });
+
+    it('re-settles the trucker when a delivered run is repriced, until it has been paid out', function (): void {
+        $trip = ($this->pencilled)();
+
+        $this->actingAs($this->admin)
+            ->postJson("/api/v1/trips/{$trip->id}/assign-trucker", ['trucker_id' => $this->trucker->id])
+            ->assertOk();
+
+        ($this->partnerDelivers)($trip);
+
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$trip->id}", ['price_cents' => 500_000])
+            ->assertOk();
+
+        $entries = WalletEntry::query()->where('trip_id', $trip->id)->get();
+
+        expect($entries)->toHaveCount(1)
+            ->and($entries->first()->amount_cents)->toBe(440_000)
+            ->and($trip->refresh()->commission_cents)->toBe(60_000);
+
+        app(WalletService::class)->payOut($this->trucker, cleared: true);
+
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$trip->id}", ['price_cents' => 800_000])
+            ->assertStatus(422);
+
+        expect($trip->refresh()->price_cents)->toBe(500_000);
     });
 
     it('books no fleet income for an older row that carries both a trucker and a unit', function (): void {
@@ -158,30 +190,172 @@ describe('a billed run', function (): void {
         $this->other = Vehicle::query()->whereKeyNot($this->vehicle->id)->firstOrFail();
     });
 
-    it('refuses a change to the money on it', function (string $field): void {
-        $change = match ($field) {
-            'price' => ['price_cents' => 500_000],
-            'unit' => ['vehicle_id' => $this->other->id],
-            'customer' => ['customer_id' => null],
-            'status' => ['status' => StatusValue::Cancelled->value],
-        };
+    it('takes it off the books when an unpaid run is moved off delivered', function (): void {
+        $number = Invoice::query()->where('trip_id', $this->id)->value('number');
 
         $this->actingAs($this->admin)
-            ->patchJson("/api/v1/trips/{$this->id}", $change)
+            ->patchJson("/api/v1/trips/{$this->id}", ['status' => StatusValue::Assigned->value])
+            ->assertOk()
+            ->assertJsonPath('data.status', StatusValue::Assigned->value)
+            ->assertJsonPath('data.billed_at', null)
+            ->assertJsonPath('data.invoice', null);
+
+        $invoice = Invoice::query()->where('trip_id', $this->id)->firstOrFail();
+
+        expect($invoice->status)->toBe(StatusValue::Cancelled)
+            ->and($invoice->number)->toBe($number)
+            ->and((int) LedgerEntry::query()->sum('trip_income_cents'))->toBe(0)
+            ->and(DeliveryLog::query()->where('trip_id', $this->id)->value('delivered_at'))->toBeNull();
+    });
+
+    it('bills the same invoice again when it is delivered a second time', function (): void {
+        $number = Invoice::query()->where('trip_id', $this->id)->value('number');
+
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$this->id}", ['status' => StatusValue::Assigned->value])
+            ->assertOk();
+
+        $delivered = now()->subHours(2)->startOfMinute();
+
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$this->id}", [
+                'status' => StatusValue::Delivered->value,
+                'delivered_at' => $delivered->toIso8601String(),
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.status', StatusValue::Delivered->value);
+
+        $invoices = Invoice::query()->where('trip_id', $this->id)->get();
+
+        expect($invoices)->toHaveCount(1)
+            ->and($invoices->first()->number)->toBe($number)
+            ->and($invoices->first()->status)->not->toBe(StatusValue::Cancelled)
+            ->and($invoices->first()->issued_at->toDateString())->toBe($delivered->toDateString())
+            ->and((int) LedgerEntry::query()->sum('trip_income_cents'))->toBe(1_000_000);
+    });
+
+    it('can cancel an unpaid run that was entered as delivered by mistake', function (): void {
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$this->id}", ['status' => StatusValue::Cancelled->value])
+            ->assertOk()
+            ->assertJsonPath('data.status', StatusValue::Cancelled->value);
+
+        expect(Invoice::query()->where('trip_id', $this->id)->firstOrFail()->status)->toBe(StatusValue::Cancelled);
+    });
+
+    it('keeps a paid run delivered', function (): void {
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$this->id}", ['payment_status' => 'partial', 'paid_cents' => 100_000])
+            ->assertOk();
+
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$this->id}", ['status' => StatusValue::Assigned->value])
             ->assertStatus(422)
-            ->assertJsonPath('message', fn (string $m) => str_contains($m, 'delivered and billed'));
+            ->assertJsonPath('message', fn (string $m) => str_contains($m, 'already has payments'));
 
         $trip = Trip::findOrFail($this->id);
 
-        expect($trip->price_cents)->toBe(1_000_000)
-            ->and($trip->vehicle_id)->toBe($this->vehicle->id)
-            ->and($trip->status)->toBe(StatusValue::Delivered);
-    })->with(['price', 'unit', 'customer', 'status']);
+        expect($trip->status)->toBe(StatusValue::Delivered)
+            ->and($trip->isBilled())->toBeTrue()
+            ->and((int) LedgerEntry::query()->sum('trip_income_cents'))->toBe(1_000_000);
+    });
 
-    it('refuses to delete it', function (): void {
-        $this->actingAs($this->admin)->deleteJson("/api/v1/trips/{$this->id}")->assertStatus(422);
+    it('re-books the income and the invoice when its price is corrected', function (): void {
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$this->id}", ['price_cents' => 500_000])
+            ->assertOk()
+            ->assertJsonPath('data.price_cents', 500_000)
+            ->assertJsonPath('data.invoice.amount_cents', fn (int $cents) => $cents >= 500_000);
 
-        expect(Trip::find($this->id))->not->toBeNull();
+        $invoice = Invoice::query()->where('trip_id', $this->id)->firstOrFail();
+
+        expect((int) LedgerEntry::query()->where('trip_id', $this->id)->sum('trip_income_cents'))->toBe(500_000)
+            ->and($invoice->net_amount_cents)->toBe(500_000)
+            ->and(Invoice::query()->where('trip_id', $this->id)->count())->toBe(1)
+            ->and(Trip::findOrFail($this->id)->pricing_source)->toBe('manual');
+    });
+
+    it('moves the income to the other unit when its unit is corrected', function (): void {
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$this->id}", ['vehicle_id' => $this->other->id])
+            ->assertOk();
+
+        $old = Truck::query()->where('vehicle_id', $this->vehicle->id)->value('id');
+        $new = Truck::query()->where('vehicle_id', $this->other->id)->value('id');
+
+        expect((int) LedgerEntry::query()->where('truck_id', $old)->sum('trip_income_cents'))->toBe(0)
+            ->and((int) LedgerEntry::query()->where('truck_id', $new)->sum('trip_income_cents'))->toBe(1_000_000);
+    });
+
+    it('re-bills the other customer when its customer is corrected', function (): void {
+        $other = Customer::create(['name' => 'Pryce Gases', 'contact' => '0917 000 0000']);
+
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$this->id}", ['customer_id' => $other->getKey()])
+            ->assertOk()
+            ->assertJsonPath('data.customer_id', $other->getKey());
+
+        expect(Invoice::query()->where('trip_id', $this->id)->firstOrFail()->customer_id)->toBe($other->getKey());
+    });
+
+    it('drops the unpaid invoice when its customer is taken off', function (): void {
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$this->id}", ['customer_id' => null])
+            ->assertOk();
+
+        expect(Invoice::query()->where('trip_id', $this->id)->exists())->toBeFalse()
+            ->and((int) LedgerEntry::query()->where('trip_id', $this->id)->sum('trip_income_cents'))->toBe(1_000_000);
+    });
+
+    it('refuses a price below what has already been paid', function (): void {
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$this->id}", ['payment_status' => 'paid'])
+            ->assertOk()
+            ->assertJsonPath('data.invoice.status', StatusValue::Paid->value);
+
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$this->id}", ['price_cents' => 400_000])
+            ->assertStatus(422);
+
+        expect(Trip::findOrFail($this->id)->price_cents)->toBe(1_000_000)
+            ->and((int) LedgerEntry::query()->where('trip_id', $this->id)->sum('trip_income_cents'))->toBe(1_000_000);
+    });
+
+    it('refuses to move a paid run to another customer', function (): void {
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$this->id}", ['payment_status' => 'partial', 'paid_cents' => 100_000])
+            ->assertOk()
+            ->assertJsonPath('data.invoice.status', StatusValue::Partial->value);
+
+        $other = Customer::create(['name' => 'Pryce Gases', 'contact' => '0917 000 0000']);
+
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$this->id}", ['customer_id' => $other->getKey()])
+            ->assertStatus(422);
+
+        expect(Trip::findOrFail($this->id)->customer_id)->toBe($this->customer->getKey());
+    });
+
+    it('deletes it while unpaid, cancelling its invoice and taking it off the books', function (): void {
+        $this->actingAs($this->admin)->deleteJson("/api/v1/trips/{$this->id}")->assertSuccessful();
+
+        expect(Trip::find($this->id))->toBeNull()
+            ->and(Invoice::query()->where('trip_id', $this->id)->firstOrFail()->status)->toBe(StatusValue::Cancelled)
+            ->and((int) LedgerEntry::query()->sum('trip_income_cents'))->toBe(0);
+    });
+
+    it('refuses to delete it once it has a payment', function (): void {
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$this->id}", ['payment_status' => 'partial', 'paid_cents' => 100_000])
+            ->assertOk();
+
+        $this->actingAs($this->admin)
+            ->deleteJson("/api/v1/trips/{$this->id}")
+            ->assertStatus(422)
+            ->assertJsonPath('message', fn (string $m) => str_contains($m, 'cannot be deleted'));
+
+        expect(Trip::find($this->id))->not->toBeNull()
+            ->and((int) LedgerEntry::query()->sum('trip_income_cents'))->toBe(1_000_000);
     });
 
     it('still takes a corrected note, with the same unit and status sent back', function (): void {

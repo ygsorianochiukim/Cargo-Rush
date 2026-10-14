@@ -192,16 +192,16 @@ it('shows the trip reference on the row the office reads', function (): void {
         ->assertJsonPath('data.0.trip_reference', $reference);
 });
 
-it('keeps the day by refusing to delete its delivered trip', function (): void {
+it('takes the income off the day but keeps the day when an unpaid delivered trip is deleted', function (): void {
     $id = ($this->deliver)();
 
-    LedgerEntry::firstOrFail()->update(['trip_income_cents' => 900_00]);
+    LedgerEntry::firstOrFail()->update(['fuel_cents' => 250_00]);
 
-    $this->actingAs($this->admin)->deleteJson("/api/v1/trips/{$id}")->assertStatus(422);
+    $this->actingAs($this->admin)->deleteJson("/api/v1/trips/{$id}")->assertSuccessful();
 
     $row = LedgerEntry::firstOrFail();
 
-    expect($row->trip_income_cents)->toBe(900_00)
-        ->and($row->route)->toBe('Manila → Batangas')
-        ->and($row->trip_id)->toBe($id);
+    expect(Trip::find($id))->toBeNull()
+        ->and($row->trip_income_cents)->toBe(0)
+        ->and($row->fuel_cents)->toBe(250_00);
 });

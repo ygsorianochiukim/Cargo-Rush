@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace App\Domain\Trip\Services;
 
+use App\Domain\Billing\DTO\InvoiceData;
 use App\Domain\Billing\Models\Invoice;
+use App\Domain\Billing\Models\Payment;
 use App\Domain\Billing\Services\BillingService;
+use App\Domain\Billing\Services\PaymentService;
 use App\Domain\Billing\Services\PricingService;
 use App\Domain\Billing\Services\TaxService;
 use App\Domain\Delivery\DTO\ProofData;
@@ -16,6 +19,7 @@ use App\Domain\Finance\Services\FinanceService;
 use App\Domain\Inspection\Services\InspectionService;
 use App\Domain\Notification\Services\NotificationService;
 use App\Domain\Pricing\Models\TruckCategory;
+use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Enums\Role;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\Tone;
@@ -27,7 +31,9 @@ use App\Domain\Vehicle\Models\Vehicle;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class TripService
 {
@@ -42,6 +48,7 @@ class TripService
         private readonly WalletService $wallet,
         private readonly RoadDistance $roads,
         private readonly TaxService $tax,
+        private readonly PaymentService $payments,
     ) {}
 
     /** @param array<string, mixed> $filters */
@@ -77,19 +84,67 @@ class TripService
 
     public function update(Trip $trip, TripData $data): Trip
     {
-        $this->mustLeaveTheBooksAlone($trip, $data);
-
         return DB::transaction(function () use ($trip, $data): Trip {
-            $updated = $this->trips->update($trip, $data);
-            $this->fillHelpers($updated, $data);
-            $this->fillDistance($updated, $data);
-            $this->fillTruckSize($updated, $data);
-            $this->fillZonePin($updated, $data);
-            $this->fillPrice($updated, $data);
-            $this->mustBePricedToGoOut($updated);
+            if ($trip->isBilled() && $data->wasGiven('status') && $data->status !== $trip->status) {
+                $this->unbill($trip);
+            }
+
+            $before = clone $trip;
+            $this->repricing = $trip->isBilled() && $this->pricingMoves($trip, $data);
+
+            try {
+                $updated = $this->trips->update($trip, $data);
+                $this->fillHelpers($updated, $data);
+                $this->fillDistance($updated, $data);
+                $this->fillTruckSize($updated, $data);
+                $this->fillZonePin($updated, $data);
+                $this->fillPrice($updated, $data);
+                $this->mustBePricedToGoOut($updated);
+            } finally {
+                $this->repricing = false;
+            }
+
+            $updated->refresh();
+
+            if ($before->isBilled() && $this->booksMoved($before, $updated)) {
+                $this->takeOffTheBooks($before);
+                $this->rebook($updated->refresh());
+            }
 
             return $updated->refresh();
         });
+    }
+
+    private bool $repricing = false;
+
+    private function frozen(Trip $trip): bool
+    {
+        return $trip->isBilled() && ! $this->repricing;
+    }
+
+    private function pricingMoves(Trip $trip, TripData $data): bool
+    {
+        $differs = static fn (string $key, mixed $now): bool => $data->wasGiven($key) && $data->{$key} != $now;
+
+        $pinned = $trip->zone_pinned ? $trip->pricing_zone_id : null;
+
+        return ($data->wasGiven('price_cents') && $data->price_cents !== $trip->price_cents)
+            || $differs('weight_kg', $trip->weight_kg)
+            || $differs('distance_total_m', $trip->distance_total_m)
+            || $differs('vehicle_id', $trip->vehicle_id)
+            || $differs('truck_category_id', $trip->truck_category_id)
+            || $differs('origin_lat', $trip->origin_lat)
+            || $differs('origin_lng', $trip->origin_lng)
+            || $differs('destination_lat', $trip->destination_lat)
+            || $differs('destination_lng', $trip->destination_lng)
+            || ($data->wasGiven('pricing_zone_id') && ($data->pricing_zone_id ?: null) !== $pinned);
+    }
+
+    private function booksMoved(Trip $before, Trip $after): bool
+    {
+        return (int) $before->price_cents !== (int) $after->price_cents
+            || $before->vehicle_id !== $after->vehicle_id
+            || $before->customer_id !== $after->customer_id;
     }
 
     private function mustBePricedToGoOut(Trip $trip): void
@@ -193,7 +248,7 @@ class TripService
 
     private function fillZonePin(Trip $trip, TripData $data): void
     {
-        if (! $data->wasGiven('pricing_zone_id') || $trip->isBilled()) {
+        if (! $data->wasGiven('pricing_zone_id') || $this->frozen($trip)) {
             return;
         }
 
@@ -206,7 +261,7 @@ class TripService
 
     private function fillTruckSize(Trip $trip, TripData $data): void
     {
-        if ($trip->isBilled() || $data->wasGiven('truck_category_id') || ! $data->wasGiven('vehicle_id')) {
+        if ($this->frozen($trip) || $data->wasGiven('truck_category_id') || ! $data->wasGiven('vehicle_id')) {
             return;
         }
 
@@ -228,7 +283,7 @@ class TripService
     {
         $given = $data->wasGiven('price_cents');
 
-        if ($given && $data->price_cents !== null && ! $trip->isBilled()) {
+        if ($given && $data->price_cents !== null && ! $this->frozen($trip)) {
             $trip->forceFill([
                 'pricing_source' => 'manual',
                 'pricing_note' => null,
@@ -242,11 +297,11 @@ class TripService
 
         $handedBack = $given && $data->price_cents === null;
 
-        if ($handedBack && ! $trip->isBilled()) {
+        if ($handedBack && ! $this->frozen($trip)) {
             $trip->forceFill(['pricing_source' => null])->save();
         }
 
-        if (! $this->pricing->shouldQuote($trip, $given && ! $handedBack)) {
+        if ($this->frozen($trip) || ($given && ! $handedBack) || $trip->isManuallyPriced()) {
             return;
         }
 
@@ -261,35 +316,152 @@ class TripService
 
     public function delete(Trip $trip): void
     {
-        abort_if(
-            $trip->isBilled(),
-            422,
-            "{$trip->reference} has been delivered and billed, so it cannot be deleted. "
-                .'Its income, its invoice and any trucker settlement are already on the books.',
-        );
+        DB::transaction(function () use ($trip): void {
+            if ($trip->isBilled()) {
+                $this->unbill($trip, 'it cannot be deleted. Remove the payment first to delete it.');
+            }
 
-        $this->trips->delete($trip);
+            $this->trips->delete($trip);
+        });
     }
 
-    private function mustLeaveTheBooksAlone(Trip $trip, TripData $data): void
+    private function unbill(Trip $trip, string $refusal = 'it must stay delivered. Remove the payment first to change its status.'): void
     {
-        if (! $trip->isBilled()) {
+        $invoice = Invoice::query()
+            ->where('trip_id', $trip->id)
+            ->where('direction', InvoiceDirection::Receivable->value)
+            ->first();
+
+        $paid = $invoice === null ? 0 : (int) $invoice->allocations()->sum('amount_cents');
+
+        abort_if(
+            $paid > 0,
+            422,
+            "{$trip->reference} already has payments on {$invoice?->number}, so {$refusal}",
+        );
+
+        $this->takeOffTheBooks($trip);
+
+        if ($invoice !== null && $invoice->status !== StatusValue::Cancelled) {
+            $this->billing->update($invoice, InvoiceData::fromArray(['status' => StatusValue::Cancelled->value]));
+        }
+
+        DeliveryLog::query()->where('trip_id', $trip->id)->update([
+            'delivered_at' => null,
+            'receiver_name' => null,
+            'status' => StatusValue::Pending->value,
+        ]);
+
+        $trip->dispatchRecord?->update(['arrived_at' => null, 'status' => StatusValue::InTransit->value]);
+
+        if ((int) $trip->driver?->trips_completed > 0) {
+            $trip->driver->decrement('trips_completed');
+        }
+
+        $trip->forceFill(['billed_at' => null])->save();
+    }
+
+    private function takeOffTheBooks(Trip $trip): void
+    {
+        $ownerShare = $this->wallet->unsettleTrip($trip);
+
+        if ($trip->vehicle_id !== null && ! $trip->hauledByPartner()) {
+            $this->finance->takeBackTripIncome(
+                vehicleId: $trip->vehicle_id,
+                date: $trip->billed_at,
+                incomeCents: $this->tax->on((int) $trip->price_cents, $trip->customer)->net_cents,
+                ownerShareCents: $ownerShare,
+            );
+        }
+    }
+
+    private function rebook(Trip $trip): void
+    {
+        $at = $trip->billed_at;
+
+        $this->postToTheBooks($trip, $at);
+
+        $invoice = Invoice::withTrashed()
+            ->where('trip_id', $trip->id)
+            ->where('direction', InvoiceDirection::Receivable->value)
+            ->first();
+
+        $collectible = $trip->collectedByCarrier() && $trip->customer_id !== null && (int) $trip->price_cents > 0;
+
+        if ($invoice === null) {
+            if ($collectible) {
+                $this->billing->raiseForTrip($trip, $at);
+            }
+
             return;
         }
 
-        $moved = array_keys(array_filter([
-            'price' => $data->wasGiven('price_cents') && (int) $data->price_cents !== (int) $trip->price_cents,
-            'unit' => $data->wasGiven('vehicle_id') && $data->vehicle_id !== $trip->vehicle_id,
-            'customer' => $data->wasGiven('customer_id') && $data->customer_id !== $trip->customer_id,
-            'status' => $data->wasGiven('status') && $data->status !== $trip->status,
-        ]));
+        if ($invoice->trashed()) {
+            return;
+        }
+
+        $paid = (int) $invoice->allocations()->sum('amount_cents');
+
+        if (! $collectible) {
+            abort_if($paid > 0, 422, "{$invoice->number} already has payments against it, so this run must keep a customer and a price. Remove the payment first.");
+
+            $this->billing->delete($invoice);
+
+            return;
+        }
 
         abort_if(
-            $moved !== [],
+            $paid > 0 && $invoice->customer_id !== $trip->customer_id,
             422,
-            "{$trip->reference} has been delivered and billed, so its ".implode(', ', $moved)
-                .' can no longer be changed: its income, its invoice and any trucker settlement are already on the books. '
-                .'Notes and other details can still be edited.',
+            "{$invoice->number} already has payments from its customer, so the run cannot move to another customer. Remove the payment first.",
+        );
+
+        $this->billing->update($invoice, InvoiceData::fromArray([
+            'customer_id' => $trip->customer_id,
+            'amount_cents' => (int) $trip->price_cents,
+            'currency' => $trip->currency ?? $invoice->currency,
+        ]));
+    }
+
+    /**
+     * @param  array{amount_cents?: int|null, paid_on?: string|null, method?: string|null, reference?: string|null}  $payment
+     *
+     * @throws ValidationException
+     */
+    public function recordPayment(Trip $trip, array $payment, ?int $userId = null): ?Payment
+    {
+        $invoice = Invoice::query()
+            ->where('trip_id', $trip->id)
+            ->where('direction', InvoiceDirection::Receivable->value)
+            ->first();
+
+        if ($invoice === null) {
+            throw ValidationException::withMessages([
+                'payment_status' => ["{$trip->reference} has no invoice to pay. It needs a customer and a price, and must be booked through Cargo Rush."],
+            ]);
+        }
+
+        $balance = $invoice->balanceCents();
+
+        if ($balance <= 0 && ! isset($payment['amount_cents'])) {
+            return null;
+        }
+
+        $amount = (int) ($payment['amount_cents'] ?? $balance);
+        $delivered = DeliveryLog::query()->where('trip_id', $trip->id)->value('delivered_at');
+
+        return $this->payments->record(
+            [
+                'customer_id' => $invoice->customer_id,
+                'direction' => $invoice->direction->value,
+                'amount_cents' => $amount,
+                'currency' => $invoice->currency,
+                'paid_on' => $payment['paid_on'] ?? ($delivered === null ? now() : Carbon::parse($delivered))->toDateString(),
+                'method' => $payment['method'] ?? 'bank_transfer',
+                'reference' => $payment['reference'] ?? null,
+            ],
+            [['invoice_id' => $invoice->id, 'amount_cents' => $amount]],
+            $userId,
         );
     }
 
@@ -362,6 +534,19 @@ class TripService
             return $trip->invoice;
         }
 
+        $this->postToTheBooks($trip, $at);
+
+        $invoice = $trip->collectedByCarrier()
+            ? $this->billing->reopenForTrip($trip, $at) ?? $this->billing->raiseForTrip($trip, $at)
+            : null;
+
+        $trip->forceFill(['billed_at' => $at])->save();
+
+        return $invoice;
+    }
+
+    private function postToTheBooks(Trip $trip, CarbonInterface $at): void
+    {
         $partnerShare = $this->wallet->settleTrip($trip, $at);
 
         $ownerShare = $trip->hauledByPartner()
@@ -382,14 +567,6 @@ class TripService
                 ownerShareCents: $ownerShare === null ? 0 : abs($ownerShare->amount_cents),
             );
         }
-
-        $invoice = $trip->collectedByCarrier()
-            ? $this->billing->raiseForTrip($trip, $at)
-            : null;
-
-        $trip->forceFill(['billed_at' => $at])->save();
-
-        return $invoice;
     }
 
     public function reconcileOverdue(): int
