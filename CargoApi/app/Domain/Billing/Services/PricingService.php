@@ -203,11 +203,4 @@ class PricingService
     {
         return $this->rates->currency();
     }
-
-    public function shouldQuote(Trip $trip, bool $priceWasGiven): bool
-    {
-        return ! $priceWasGiven
-            && ! $trip->isBilled()
-            && $trip->pricing_source !== 'manual';
-    }
 }

@@ -26,6 +26,10 @@ class TripRequest extends ApiFormRequest
         StatusValue::Delivered->value,
     ];
 
+    private const PAYMENT_STATUSES = ['unpaid', 'paid', 'partial'];
+
+    private const PAYMENT_FIELDS = ['payment_status', 'paid_cents', 'paid_on', 'payment_method', 'payment_reference'];
+
     public function rules(): array
     {
         $required = $this->requiredOnCreate();
@@ -67,6 +71,11 @@ class TripRequest extends ApiFormRequest
             'status' => ['sometimes', Rule::in(self::OFFICE_SETTABLE)],
             'delivered_at' => ['nullable', 'date', 'before_or_equal:now'],
             'receiver_name' => ['nullable', 'string', 'max:120'],
+            'payment_status' => ['sometimes', 'nullable', Rule::in(self::PAYMENT_STATUSES)],
+            'paid_cents' => ['nullable', 'required_if:payment_status,partial', 'integer', 'min:1'],
+            'paid_on' => ['nullable', 'date', 'before_or_equal:today'],
+            'payment_method' => ['nullable', 'string', 'max:40'],
+            'payment_reference' => ['nullable', 'string', 'max:80'],
             'pickup_place' => ['nullable', 'string', 'max:255'],
             'dropoff_place' => ['nullable', 'string', 'max:255'],
             'scheduled_at' => [$required, 'date'],
@@ -77,7 +86,7 @@ class TripRequest extends ApiFormRequest
 
     public function after(): array
     {
-        return [$this->mustBeAllowedToPrice(...), $this->oneHaulierOnly(...), function (Validator $validator): void {
+        return [$this->mustBeAllowedToPrice(...), $this->oneHaulierOnly(...), $this->mayRecordPayment(...), function (Validator $validator): void {
             if ($this->input('status') !== StatusValue::Delivered->value) {
                 return;
             }
@@ -100,6 +109,26 @@ class TripRequest extends ApiFormRequest
                 $validator->errors()->add('delivered_at', 'It cannot have been delivered before it was scheduled.');
             }
         }];
+    }
+
+    private function mayRecordPayment(Validator $validator): void
+    {
+        if (! in_array($this->input('payment_status'), ['paid', 'partial'], true)) {
+            return;
+        }
+
+        abort_unless(
+            (bool) $this->user()?->hasPermission('billing.manage'),
+            403,
+            'Only someone who manages Billing can record a payment on a trip.',
+        );
+
+        $delivered = $this->input('status') === StatusValue::Delivered->value
+            || $this->route('trip')?->status === StatusValue::Delivered;
+
+        if (! $delivered) {
+            $validator->errors()->add('payment_status', 'Only a delivered trip has an invoice to pay.');
+        }
     }
 
     private function oneHaulierOnly(Validator $validator): void
@@ -141,11 +170,30 @@ class TripRequest extends ApiFormRequest
     /** @return array<string, mixed> */
     public function payload(): array
     {
-        $payload = collect($this->withoutUnmovedPrice($this->validated()))->except('new_customer')->all();
+        $payload = collect($this->withoutUnmovedPrice($this->validated()))
+            ->except(['new_customer', ...self::PAYMENT_FIELDS])
+            ->all();
 
         return $this->createdCustomer === null
             ? $payload
             : [...$payload, 'customer_id' => $this->createdCustomer];
+    }
+
+    /** @return array{amount_cents: int|null, paid_on: string|null, method: string|null, reference: string|null}|null */
+    public function payment(): ?array
+    {
+        $status = $this->validated('payment_status');
+
+        if (! in_array($status, ['paid', 'partial'], true)) {
+            return null;
+        }
+
+        return [
+            'amount_cents' => $status === 'partial' ? (int) $this->validated('paid_cents') : null,
+            'paid_on' => $this->validated('paid_on'),
+            'method' => $this->validated('payment_method'),
+            'reference' => $this->validated('payment_reference'),
+        ];
     }
 
     private ?string $createdCustomer = null;

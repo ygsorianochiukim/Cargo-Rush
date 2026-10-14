@@ -82,7 +82,22 @@ export interface Trip extends Timestamped {
   distance_total_m: number;
   distance_source: 'road' | 'estimate' | 'manual' | null;
   billed_at: string | null;
+  invoice: TripInvoice | null;
 }
+
+export interface TripInvoice {
+  id: string;
+  number: string;
+  status: StatusValue;
+  amount_cents: number;
+  due_cents: number;
+  paid_cents: number;
+  balance_cents: number;
+  currency: string;
+  due_at: string | null;
+}
+
+export type TripPaymentStatus = 'unpaid' | 'paid' | 'partial';
 
 export interface TripPayload {
   customer_id?: string | null;
@@ -109,6 +124,11 @@ export interface TripPayload {
   receiver_name?: string | null;
   price_cents?: number | null;
   pricing_zone_id?: string | null;
+  payment_status?: TripPaymentStatus;
+  paid_cents?: number | null;
+  paid_on?: string | null;
+  payment_method?: string | null;
+  payment_reference?: string | null;
 }
 
 export interface TripConfirmPayload {

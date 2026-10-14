@@ -124,6 +124,29 @@ class WalletService
         return $entry;
     }
 
+    public function unsettleTrip(Trip $trip): int
+    {
+        $entries = WalletEntry::query()
+            ->where('trip_id', $trip->getKey())
+            ->lockForUpdate()
+            ->get();
+
+        abort_if(
+            $entries->contains(static fn (WalletEntry $entry): bool => $entry->settled_by !== null),
+            422,
+            "{$trip->reference} has already been paid out to or remitted by its trucker or truck owner, "
+                .'so its price, unit and customer can no longer be changed. Reverse that settlement first.',
+        );
+
+        $removed = (int) $entries->sum(static fn (WalletEntry $entry): int => abs((int) $entry->amount_cents));
+
+        $entries->each(static fn (WalletEntry $entry) => $entry->forceDelete());
+
+        $trip->forceFill(['commission_bp' => null, 'commission_cents' => null])->save();
+
+        return $removed;
+    }
+
     /** @param string[] $entryIds */
     public function payOut(
         Trucker $trucker,

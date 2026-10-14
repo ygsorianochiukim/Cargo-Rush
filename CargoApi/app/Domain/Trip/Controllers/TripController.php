@@ -56,7 +56,7 @@ class TripController extends ApiController
                 return $this->trips->create($request->toData());
             }
 
-            return $this->recordDelivery($request, $this->trips->create($this->asAssigned($request)));
+            return $this->recordPayment($request, $this->recordDelivery($request, $this->trips->create($this->asAssigned($request))));
         });
 
         return $this->item(new TripResource($trip), status: 201);
@@ -68,10 +68,10 @@ class TripController extends ApiController
             $this->registerNewCustomer($request);
 
             if (! $this->isPastDelivery($request) || $trip->status === StatusValue::Delivered) {
-                return $this->trips->update($trip, $request->toData());
+                return $this->recordPayment($request, $this->trips->update($trip, $request->toData()));
             }
 
-            return $this->recordDelivery($request, $this->trips->update($trip, $this->asAssigned($request)));
+            return $this->recordPayment($request, $this->recordDelivery($request, $this->trips->update($trip, $this->asAssigned($request))));
         });
 
         return $this->item(new TripResource($updated));
@@ -113,6 +113,17 @@ class TripController extends ApiController
             new ProofData(receiver_name: $request->string('receiver_name')->value() ?: 'Recorded by the office'),
             $at,
         );
+    }
+
+    private function recordPayment(TripRequest $request, Trip $trip): Trip
+    {
+        $payment = $request->payment();
+
+        if ($payment !== null && $trip->status === StatusValue::Delivered) {
+            $this->trips->recordPayment($trip, $payment, $request->user()?->id);
+        }
+
+        return $trip->refresh();
     }
 
     public function destroy(Trip $trip): JsonResponse

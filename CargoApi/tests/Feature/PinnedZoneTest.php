@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
+use App\Domain\Billing\Models\Invoice;
+use App\Domain\Customer\Models\Customer;
 use App\Domain\Identity\Models\User;
 use App\Domain\Shared\Enums\Role;
+use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Trip\Models\Trip;
 use Database\Seeders\NavigationSeeder;
 
@@ -110,4 +113,38 @@ it('previews a picked zone outside the distance, and says it was picked', functi
         ->and($quote->json('data.cents'))->toBe(523_000)
         ->and($quote->json('data.zone_pinned'))->toBeTrue()
         ->and($quote->json('data.km'))->toBe(30);
+});
+
+it('re-prices a delivered, unpaid run when the desk picks another zone', function (): void {
+    $customer = Customer::create(['name' => 'Pryce Gases', 'contact' => '0917 000 0000']);
+
+    $id = ($this->book)([
+        'customer_id' => $customer->id,
+        'scheduled_at' => now()->subDay()->toIso8601String(),
+        'status' => StatusValue::Delivered->value,
+    ])->assertCreated()->assertJsonPath('data.price_cents', 416_500)->json('data.id');
+
+    $this->actingAs($this->admin)
+        ->patchJson("/api/v1/trips/{$id}", ['pricing_zone_id' => $this->b['id']])
+        ->assertOk()
+        ->assertJsonPath('data.price_cents', 523_000)
+        ->assertJsonPath('data.zone_pinned', true)
+        ->assertJsonPath('data.status', StatusValue::Delivered->value);
+
+    $invoice = Invoice::query()->where('trip_id', $id)->firstOrFail();
+
+    expect($invoice->taxBaseCents())->toBe(523_000)
+        ->and(Invoice::query()->where('trip_id', $id)->count())->toBe(1);
+});
+
+it('leaves a delivered run at its price when only a note changes', function (): void {
+    $id = ($this->book)([
+        'scheduled_at' => now()->subDay()->toIso8601String(),
+        'status' => StatusValue::Delivered->value,
+    ])->assertCreated()->json('data.id');
+
+    $this->actingAs($this->admin)
+        ->patchJson("/api/v1/trips/{$id}", ['cargo' => 'Dry goods, 14 pallets', 'weight_kg' => 500])
+        ->assertOk()
+        ->assertJsonPath('data.price_cents', 416_500);
 });

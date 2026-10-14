@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domain\Billing\Models\Invoice;
+use App\Domain\Billing\Models\Payment;
 use App\Domain\Customer\Models\Customer;
 use App\Domain\Delivery\Models\DeliveryLog;
 use App\Domain\Driver\Models\Driver;
@@ -93,4 +94,77 @@ it('marks an existing trip that already happened as delivered, once', function (
 
     expect(Invoice::query()->where('trip_id', $id)->count())->toBe(1)
         ->and(LedgerEntry::query()->where('trip_id', $id)->count())->toBe(1);
+});
+
+it('leaves the invoice of a past trip unpaid unless told otherwise', function (): void {
+    $id = ($this->enter)(['payment_status' => 'unpaid'])
+        ->assertCreated()
+        ->assertJsonPath('data.invoice.paid_cents', 0)
+        ->json('data.id');
+
+    expect(Payment::query()->count())->toBe(0)
+        ->and(Invoice::query()->where('trip_id', $id)->firstOrFail()->status)->not->toBe(StatusValue::Paid);
+});
+
+it('records a past trip as paid in full, on the day it was paid', function (): void {
+    $id = ($this->enter)([
+        'payment_status' => 'paid',
+        'paid_on' => '2026-06-20',
+        'payment_method' => 'cash',
+        'payment_reference' => 'OR-1182',
+    ])
+        ->assertCreated()
+        ->assertJsonPath('data.invoice.status', StatusValue::Paid->value)
+        ->assertJsonPath('data.invoice.balance_cents', 0)
+        ->json('data.id');
+
+    $invoice = Invoice::query()->where('trip_id', $id)->firstOrFail();
+    $payment = Payment::query()->firstOrFail();
+
+    expect($payment->amount_cents)->toBe($invoice->dueCents())
+        ->and($payment->paid_on->toDateString())->toBe('2026-06-20')
+        ->and($payment->method)->toBe('cash')
+        ->and($payment->reference)->toBe('OR-1182')
+        ->and($invoice->paid_at->toDateString())->toBe('2026-06-20');
+});
+
+it('dates the payment to the delivery when no paid date is given', function (): void {
+    ($this->enter)(['payment_status' => 'paid', 'delivered_at' => '2026-06-11 09:00:00'])->assertCreated();
+
+    expect(Payment::query()->firstOrFail()->paid_on->toDateString())->toBe('2026-06-11');
+});
+
+it('records a part payment and the rest later from the trip', function (): void {
+    $id = ($this->enter)(['payment_status' => 'partial', 'paid_cents' => 200_000])
+        ->assertCreated()
+        ->assertJsonPath('data.invoice.status', StatusValue::Partial->value)
+        ->assertJsonPath('data.invoice.paid_cents', 200_000)
+        ->json('data.id');
+
+    $this->actingAs($this->admin)
+        ->patchJson("/api/v1/trips/{$id}", ['payment_status' => 'paid'])
+        ->assertOk()
+        ->assertJsonPath('data.invoice.status', StatusValue::Paid->value);
+
+    expect(Payment::query()->count())->toBe(2);
+});
+
+it('needs the amount of a part payment', function (): void {
+    ($this->enter)(['payment_status' => 'partial'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('paid_cents');
+});
+
+it('refuses a payment on a trip that has not been delivered', function (): void {
+    ($this->enter)(['status' => StatusValue::Assigned->value, 'payment_status' => 'paid'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('payment_status');
+});
+
+it('refuses a payment on a past trip with no customer to bill', function (): void {
+    ($this->enter)(['customer_id' => null, 'payment_status' => 'paid'])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('payment_status');
+
+    expect(Trip::query()->count())->toBe(0);
 });
