@@ -49,7 +49,8 @@ export class LedgerForm {
 
   protected readonly customers = signal<Customer[]>([]);
 
-  protected readonly drivers = signal<Driver[]>([]);
+  private readonly crew = signal<Driver[]>([]);
+  protected readonly drivers = computed(() => this.crew().filter((d) => d.role === 'driver'));
 
   protected readonly inputClass =
     'h-10 w-full rounded-control border border-cr-line bg-cr-surface px-3 text-[14px] text-cr-ink placeholder:text-cr-ink-muted focus:border-cr-blue focus:outline-none';
@@ -101,7 +102,9 @@ export class LedgerForm {
       v.helpers.filter((_, i) => i !== index).map((line) => line.driver_id).concat(v.driver_id),
     );
 
-    return this.drivers().filter((d) => !taken.has(d.id));
+    const own = v.helpers[index]?.driver_id;
+
+    return this.crew().filter((d) => !taken.has(d.id) && (d.role === 'helper' || d.id === own));
   }
 
   protected addHelper(line?: LedgerHelperLine): void {
@@ -123,7 +126,7 @@ export class LedgerForm {
     this.financeApi.trucks().subscribe((trucks) => this.trucks.set(trucks));
     this.financeApi.routes().subscribe((routes) => this.routes.set(routes));
     this.customerApi.list().subscribe((res) => this.customers.set(res.data));
-    this.driverApi.list().subscribe((res) => this.drivers.set(res.data));
+    this.driverApi.crew().subscribe((res) => this.crew.set(res.data));
 
     this.form.valueChanges.subscribe(() => this.values.set(this.form.getRawValue()));
 

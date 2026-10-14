@@ -93,6 +93,12 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/drivers/drivers.page').then((m) => m.DriversPage),
       },
       {
+        path: 'helpers',
+        title: 'Helpers Management · Cargo Rush',
+        data: { title: 'Helpers Management' },
+        loadComponent: () => import('./pages/helpers/helpers.page').then((m) => m.HelpersPage),
+      },
+      {
         path: 'truckers',
         title: 'Truckers · Cargo Rush',
         data: { title: 'Truckers' },

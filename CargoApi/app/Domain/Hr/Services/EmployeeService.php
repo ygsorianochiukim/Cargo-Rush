@@ -11,6 +11,7 @@ use App\Domain\Hr\Models\Contract;
 use App\Domain\Hr\Models\Employee;
 use App\Domain\Hr\Repositories\EmployeeRepository;
 use App\Domain\Identity\Models\Position;
+use App\Domain\Shared\Enums\CrewRole;
 use App\Domain\Shared\Enums\EmploymentType;
 use App\Domain\Shared\Enums\PayBasis;
 use App\Domain\Shared\Enums\StatusValue;
@@ -145,9 +146,89 @@ class EmployeeService extends CrudService
         return $employee->refresh();
     }
 
+    public function enrolCrew(Driver $driver): Employee
+    {
+        $existing = Employee::query()->where('driver_id', $driver->id)->first();
+
+        if ($existing !== null) {
+            return $existing;
+        }
+
+        $position = Position::query()->where('key', $driver->role->value)->first();
+        [$first, $last] = $this->splitName($driver->name);
+
+        $userTaken = $driver->user_id === null
+            || Employee::withTrashed()->where('user_id', $driver->user_id)->exists();
+
+        $employee = Employee::create([
+            'employee_no' => $this->employees->nextEmployeeNo(),
+            'first_name' => $first,
+            'last_name' => $last,
+            'position' => $position?->name ?? $driver->role->label(),
+            'position_id' => $position?->id,
+            'employment_type' => EmploymentType::Probationary->value,
+            'status' => StatusValue::Active->value,
+            'hired_on' => Carbon::today()->toDateString(),
+            'contact' => $driver->contact ?? '',
+            'driver_id' => $driver->id,
+            'user_id' => $userTaken ? null : $driver->user_id,
+        ])->refresh();
+
+        if ($position !== null) {
+            $this->contracts->openFromPosition($employee, $position, $employee->hired_on);
+        }
+
+        return $employee;
+    }
+
+    public function syncCrew(Driver $driver): void
+    {
+        $employee = Employee::query()->where('driver_id', $driver->id)->first();
+
+        if ($employee === null) {
+            $this->enrolCrew($driver);
+
+            return;
+        }
+
+        [$first, $last] = $this->splitName($driver->name);
+
+        $changes = ['first_name' => $first, 'last_name' => $last];
+
+        if ($driver->contact !== null && $driver->contact !== '') {
+            $changes['contact'] = $driver->contact;
+        }
+
+        $employee->fill($changes);
+
+        if ($employee->isDirty()) {
+            $employee->save();
+        }
+    }
+
+    /** @return array{0: string, 1: string} */
+    private function splitName(string $name): array
+    {
+        $parts = preg_split('/\s+/', trim($name)) ?: [];
+
+        if (count($parts) < 2) {
+            return [trim($name), ''];
+        }
+
+        $last = array_pop($parts);
+
+        return [implode(' ', $parts), $last];
+    }
+
     private function linkDriverRecord(Employee $employee, ?LicenceData $licence): void
     {
+        if ($employee->driver !== null) {
+            $employee->driver->forceFill(['name' => $employee->fullName()])->save();
+        }
+
         if ($licence === null || ! $licence->hasLicence()) {
+            $this->linkHelperRecord($employee);
+
             return;
         }
 
@@ -170,7 +251,9 @@ class EmployeeService extends CrudService
 
         $driver = $existing ?? Driver::create([
             ...$details,
+            'role' => $this->crewRoleFor($employee)->value,
             'name' => $employee->fullName(),
+            'contact' => $employee->contact,
             'status' => StatusValue::Available->value,
         ]);
 
@@ -179,6 +262,29 @@ class EmployeeService extends CrudService
         }
 
         $employee->update(['driver_id' => $driver->id]);
+    }
+
+    private function linkHelperRecord(Employee $employee): void
+    {
+        if ($employee->driver_id !== null || $this->crewRoleFor($employee) !== CrewRole::Helper) {
+            return;
+        }
+
+        $driver = Driver::create([
+            'role' => CrewRole::Helper->value,
+            'name' => $employee->fullName(),
+            'contact' => $employee->contact,
+            'status' => StatusValue::Available->value,
+        ]);
+
+        $employee->update(['driver_id' => $driver->id]);
+    }
+
+    private function crewRoleFor(Employee $employee): CrewRole
+    {
+        return $employee->jobPosition?->key === CrewRole::Helper->value
+            ? CrewRole::Helper
+            : CrewRole::Driver;
     }
 
     /** @return array<string, mixed> */

@@ -36,6 +36,7 @@ export class DriversPage {
   }
 
   protected expiringSoon(d: Driver): boolean {
+    if (!d.licence_expiry) return false;
     const days = (new Date(d.licence_expiry).getTime() - Date.now()) / 86_400_000;
     return days <= 90;
   }

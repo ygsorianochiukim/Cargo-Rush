@@ -22,6 +22,7 @@ export interface ListQuery {
   from?: string;
   to?: string;
   driver_id?: string;
+  role?: string;
   vehicle_id?: string;
   customer_id?: string;
   truck_id?: string;

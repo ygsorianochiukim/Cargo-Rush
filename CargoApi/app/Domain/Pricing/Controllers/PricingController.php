@@ -141,6 +141,7 @@ class PricingController extends ApiController
             weightKg: (int) $request->integer('weight_kg'),
             truckCategoryId: $request->input('truck_category_id'),
             zoneId: $request->input('pricing_zone_id'),
+            pinned: $request->filled('pricing_zone_id'),
         );
 
         return $this->payload($breakdown->toArray());

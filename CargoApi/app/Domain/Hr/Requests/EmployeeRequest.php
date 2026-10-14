@@ -9,6 +9,7 @@ use App\Domain\Hr\DTO\EmployeeData;
 use App\Domain\Hr\DTO\LicenceData;
 use App\Domain\Hr\Models\Employee;
 use App\Domain\Identity\Models\Position;
+use App\Domain\Shared\Enums\CrewRole;
 use App\Domain\Shared\Enums\EmploymentType;
 use App\Domain\Shared\Enums\PayBasis;
 use App\Domain\Shared\Enums\StatusValue;
@@ -156,6 +157,7 @@ class EmployeeRequest extends ApiFormRequest
     private function licenceRequired(): bool
     {
         return $this->jobPosition()?->drives === true
+            && $this->jobPosition()?->key !== CrewRole::Helper->value
             && $this->employee()?->driver_id === null;
     }
 

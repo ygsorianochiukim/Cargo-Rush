@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace App\Domain\Trip\Controllers;
 
+use App\Domain\Customer\DTO\CustomerData;
+use App\Domain\Customer\Models\Customer;
+use App\Domain\Customer\Services\CustomerService;
 use App\Domain\Delivery\DTO\ProofData;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Http\Controllers\ApiController;
@@ -18,10 +21,14 @@ use App\Domain\Trip\Services\TripTicketService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class TripController extends ApiController
 {
-    public function __construct(private readonly TripService $trips) {}
+    public function __construct(
+        private readonly TripService $trips,
+        private readonly CustomerService $customers,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -42,24 +49,47 @@ class TripController extends ApiController
 
     public function store(TripRequest $request): JsonResponse
     {
-        if (! $this->isPastDelivery($request)) {
-            return $this->item(new TripResource($this->trips->create($request->toData())), status: 201);
-        }
+        $trip = DB::transaction(function () use ($request): Trip {
+            $this->registerNewCustomer($request);
 
-        $trip = $this->trips->create($this->asAssigned($request));
+            if (! $this->isPastDelivery($request)) {
+                return $this->trips->create($request->toData());
+            }
 
-        return $this->item(new TripResource($this->recordDelivery($request, $trip)), status: 201);
+            return $this->recordDelivery($request, $this->trips->create($this->asAssigned($request)));
+        });
+
+        return $this->item(new TripResource($trip), status: 201);
     }
 
     public function update(TripRequest $request, Trip $trip): JsonResponse
     {
-        if (! $this->isPastDelivery($request) || $trip->status === StatusValue::Delivered) {
-            return $this->item(new TripResource($this->trips->update($trip, $request->toData())));
+        $updated = DB::transaction(function () use ($request, $trip): Trip {
+            $this->registerNewCustomer($request);
+
+            if (! $this->isPastDelivery($request) || $trip->status === StatusValue::Delivered) {
+                return $this->trips->update($trip, $request->toData());
+            }
+
+            return $this->recordDelivery($request, $this->trips->update($trip, $this->asAssigned($request)));
+        });
+
+        return $this->item(new TripResource($updated));
+    }
+
+    private function registerNewCustomer(TripRequest $request): void
+    {
+        $fields = $request->newCustomer();
+
+        if ($fields === null) {
+            return;
         }
 
-        $updated = $this->trips->update($trip, $this->asAssigned($request));
+        $existing = Customer::query()
+            ->whereRaw('lower(name) = ?', [mb_strtolower(trim($fields['name']))])
+            ->value('id');
 
-        return $this->item(new TripResource($this->recordDelivery($request, $updated)));
+        $request->useCustomer($existing ?? $this->customers->create(CustomerData::fromArray($fields))->id);
     }
 
     private function isPastDelivery(TripRequest $request): bool

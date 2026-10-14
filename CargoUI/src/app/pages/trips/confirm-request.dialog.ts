@@ -1,11 +1,14 @@
-import { ChangeDetectionStrategy, Component, effect, inject, input, model, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, model, output, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { Driver } from '../../models/driver/driver.model';
+import { PricingZone } from '../../models/pricing/pricing.model';
 import { Trip } from '../../models/trip/trip.model';
 import { Vehicle } from '../../models/vehicle/vehicle.model';
 import { DriverService } from '../../services/driver/driver.service';
+import { IdentityService } from '../../services/identity/identity.service';
+import { PricingService } from '../../services/pricing/pricing.service';
 import { TripService } from '../../services/trip/trip.service';
 import { VehicleService } from '../../services/vehicle/vehicle.service';
 import { Field } from '../../shared/field';
@@ -90,7 +93,7 @@ import { Modal } from '../../shared/modal';
 
         <app-helper-picker
           hint="Optional — add as many as the load needs."
-          [drivers]="drivers()"
+          [drivers]="helperChoices()"
           [driverId]="driverId()"
           [(value)]="helpers" />
 
@@ -122,6 +125,24 @@ import { Modal } from '../../shared/modal';
             formControlName="weight_kg"
             [class]="inputClass + ' cr-num'" />
         </app-field>
+
+        @if (zones().length > 0) {
+          <app-field
+            label="Zone"
+            class="sm:col-span-2"
+            [hint]="
+              form.controls.zone_id.value
+                ? 'Picked by hand — priced off this zone whatever the distance says.'
+                : 'Automatic from the distance. Pick the right one if the kilometres were misread.'
+            ">
+            <select formControlName="zone_id" [class]="inputClass">
+              <option value="">Automatic (by distance)</option>
+              @for (z of zones(); track z.id) {
+                <option [value]="z.id">{{ z.code }} — {{ z.name }} · {{ z.band }}</option>
+              }
+            </select>
+          </app-field>
+        }
       </form>
 
       @if (error(); as message) {
@@ -151,6 +172,8 @@ export class ConfirmRequestDialog {
   private readonly tripApi = inject(TripService);
   private readonly vehiclesApi = inject(VehicleService);
   private readonly driversApi = inject(DriverService);
+  private readonly pricingApi = inject(PricingService);
+  private readonly identity = inject(IdentityService);
   private readonly fb = inject(FormBuilder);
 
   readonly open = model(false);
@@ -162,7 +185,15 @@ export class ConfirmRequestDialog {
   protected readonly error = signal<string | null>(null);
 
   protected readonly vehicles = signal<Vehicle[]>([]);
-  protected readonly drivers = signal<Driver[]>([]);
+  private readonly crew = signal<Driver[]>([]);
+  protected readonly zones = signal<PricingZone[]>([]);
+
+  protected readonly drivers = computed(() => this.crew().filter((d) => d.role === 'driver'));
+  protected readonly helperChoices = computed(() => {
+    const chosen = new Set(this.helpers());
+
+    return this.crew().filter((d) => d.role === 'helper' || chosen.has(d.id));
+  });
 
   protected readonly fmt = fmt;
 
@@ -174,6 +205,7 @@ export class ConfirmRequestDialog {
     vehicle_id: ['', Validators.required],
     scheduled_at: ['', Validators.required],
     weight_kg: [0, [Validators.required, Validators.min(1)]],
+    zone_id: [''],
   });
 
   protected readonly helpers = signal<string[]>([]);
@@ -207,7 +239,13 @@ export class ConfirmRequestDialog {
 
   constructor() {
     this.vehiclesApi.list().subscribe((res) => this.vehicles.set(res.data));
-    this.driversApi.list().subscribe((res) => this.drivers.set(res.data));
+    this.driversApi.crew().subscribe((res) => this.crew.set(res.data));
+
+    if (this.identity.can('pricing.view')) {
+      this.pricingApi
+        .list({ per_page: 100, status: 'active' })
+        .subscribe((res) => this.zones.set(res.data));
+    }
 
     effect(() => {
       if (!this.open()) return;
@@ -220,6 +258,7 @@ export class ConfirmRequestDialog {
         vehicle_id: request?.vehicle_id ?? '',
         scheduled_at: request ? request.scheduled_at.slice(0, 16) : '',
         weight_kg: request?.weight_kg ?? 0,
+        zone_id: request?.zone_pinned ? (request.pricing_zone_id ?? '') : '',
       });
 
       this.helpers.set(request?.helper_ids ?? []);
@@ -263,6 +302,7 @@ export class ConfirmRequestDialog {
         vehicle_id: raw.vehicle_id,
         scheduled_at: new Date(raw.scheduled_at).toISOString(),
         weight_kg: Number(raw.weight_kg),
+        ...(this.form.controls.zone_id.dirty ? { pricing_zone_id: raw.zone_id || null } : {}),
       })
       .subscribe({
         next: (assigned) => {

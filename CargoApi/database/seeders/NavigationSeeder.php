@@ -20,6 +20,7 @@ class NavigationSeeder extends Seeder
 
             ['vehicles', 'Vehicle Management', 'fleet', '/vehicles', 200, false, true, 'Fleet', 'vehicles.view', null],
             ['drivers', 'Drivers Management', 'profile', '/drivers', 210, false, true, 'Fleet', 'drivers.view', null],
+            ['helpers', 'Helpers Management', 'customers', '/helpers', 215, false, true, 'Fleet', 'drivers.view', null],
             ['truckers', 'Truckers', 'fleet', '/truckers', 220, false, true, 'Fleet', 'truckers.view', 'truckers.pending'],
             ['fuel', 'Fuel Expense', 'fuel', '/fuel', 230, false, true, 'Fleet', 'fuel.view', null],
 

@@ -130,6 +130,7 @@ export interface QuoteBreakdown {
   needs_zone: boolean;
   reason: string | null;
   zone: { id: string; code: string; name: string; band: string } | null;
+  zone_pinned: boolean;
   zone_alternatives: ZoneAlternative[];
   bracket: { id: string; label: string; range: string } | null;
   volume: { cbm: number; card_cbm: number } | null;

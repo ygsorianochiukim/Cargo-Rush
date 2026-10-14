@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Domain\Driver\Models;
 
 use App\Domain\Fuel\Models\FuelRecord;
+use App\Domain\Hr\Models\Employee;
 use App\Domain\Identity\Models\User;
 use App\Domain\Incident\Models\Incident;
+use App\Domain\Shared\Enums\CrewRole;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
 use App\Domain\Trip\Models\Trip;
@@ -27,19 +29,34 @@ class Driver extends Model
     use BelongsToCompany, HasFactory, HasUlids, SoftDeletes;
 
     protected $fillable = [
-        'user_id', 'name', 'licence_no', 'licence_expiry', 'violations',
+        'user_id', 'role', 'name', 'contact', 'licence_no', 'licence_expiry', 'violations',
         'status', 'trips_completed', 'on_time_rate',
+    ];
+
+    protected $attributes = [
+        'role' => 'driver',
     ];
 
     protected function casts(): array
     {
         return [
+            'role' => CrewRole::class,
             'licence_expiry' => 'date',
             'violations' => 'integer',
             'trips_completed' => 'integer',
             'on_time_rate' => 'float',
             'status' => StatusValue::class,
         ];
+    }
+
+    public function isHelper(): bool
+    {
+        return $this->role === CrewRole::Helper;
+    }
+
+    public function employee(): HasOne
+    {
+        return $this->hasOne(Employee::class);
     }
 
     public function user(): BelongsTo

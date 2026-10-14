@@ -1,0 +1,95 @@
+<app-list-toolbar
+  [count]="list.rows()?.length ?? null"
+  singular="helper"
+  plural="helpers"
+  actionLabel="New helper"
+  (add)="list.create()" />
+
+<app-card [padded]="false">
+  @if (list.rows(); as rows) {
+    <div class="overflow-x-auto">
+      <table class="w-full min-w-[720px] border-collapse text-left whitespace-nowrap">
+        <thead>
+          <tr class="border-b border-cr-line">
+            <th class="cr-th px-4 py-2.5">Helper</th>
+            <th class="cr-th px-4 py-2.5">Contact</th>
+            <th class="cr-th px-4 py-2.5">Employee no.</th>
+            <th class="cr-th px-4 py-2.5">Status</th>
+            <th class="cr-th px-4 py-2.5"><span class="sr-only">Open</span></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (h of rows; track h.id) {
+            <tr class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint">
+              <td class="px-4 py-3">
+                <span class="flex items-center gap-3">
+                  <span
+                    class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-cr-tint text-[11px] font-semibold text-cr-blue">
+                    {{ initials(h.name) }}
+                  </span>
+                  <span>
+                    <span class="block text-[13px] font-semibold">{{ h.name }}</span>
+                    <span class="block text-[11px] font-semibold text-cr-blue">
+                      {{ h.employer?.label ?? 'Cargo Rush' }}
+                    </span>
+                  </span>
+                </span>
+              </td>
+              <td class="cr-num px-4 py-3 text-[13px]">
+                @if (h.contact) {
+                  {{ h.contact }}
+                } @else {
+                  <span class="text-cr-ink-muted">—</span>
+                }
+              </td>
+              <td class="cr-num px-4 py-3 text-[13px]">
+                @if (h.employee_no) {
+                  {{ h.employee_no }}
+                } @else {
+                  <span class="text-cr-ink-muted">—</span>
+                }
+              </td>
+              <td class="px-4 py-3"><app-status-pill [status]="h.status" /></td>
+              <td class="px-4 py-3">
+                <span class="flex items-center justify-end gap-1">
+                  <button
+                    type="button"
+                    class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
+                    [attr.aria-label]="'Edit ' + h.name"
+                    (click)="list.edit(h)">
+                    <app-icon name="chevron-right" [size]="16" />
+                  </button>
+                  <button
+                    type="button"
+                    class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
+                    [attr.aria-label]="'Delete ' + h.name"
+                    (click)="list.remove(h)">
+                    <app-icon name="close" [size]="16" />
+                  </button>
+                </span>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    @if (rows.length === 0) {
+      <app-empty-state
+        icon="customers"
+        title="No helpers yet"
+        body="Add the crew who ride along. Each one is also added to Employees.">
+        <button
+          type="button"
+          class="mt-2 h-10 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+          (click)="list.create()">
+          Add the first helper
+        </button>
+      </app-empty-state>
+    }
+  } @else if (list.error(); as message) {
+    <app-error-state [message]="message" (retry)="list.refresh()" />
+  } @else {
+    <app-skeleton-rows [count]="6" />
+  }
+</app-card>

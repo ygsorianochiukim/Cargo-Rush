@@ -12,8 +12,10 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
 import { catchError, debounceTime, map, of, switchMap } from 'rxjs';
 
+import { Customer } from '../models/customer/customer.model';
 import { Driver } from '../models/driver/driver.model';
-import { QuoteBreakdown } from '../models/pricing/pricing.model';
+import { CustomerService } from '../services/customer/customer.service';
+import { PricingZone, QuoteBreakdown } from '../models/pricing/pricing.model';
 import { IdentityService } from '../services/identity/identity.service';
 import { PricingService } from '../services/pricing/pricing.service';
 import { fmt } from './format';
@@ -44,6 +46,8 @@ function straightLineMetres(lat1: number, lng1: number, lat2: number, lng2: numb
   return Math.round(6_371_000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
 }
 
+const NEW_CUSTOMER = '__new__';
+
 const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered', 'cancelled'];
 
 @Component({
@@ -68,6 +72,52 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
             Delivered and billed. The vehicle and status are locked because this trip's income and
             invoice are already on the books; everything else can still be corrected.
           </p>
+        }
+
+        <app-field
+          label="Customer"
+          class="sm:col-span-2"
+          [hint]="
+            addingCustomer()
+              ? 'Saved to Customer Management together with this trip.'
+              : 'Not on the list? Choose “Add a new customer”.'
+          "
+        >
+          <select formControlName="customer_id" [class]="inputClass">
+            <option value="">No customer</option>
+            @for (c of customers(); track c.id) {
+              <option [value]="c.id">{{ c.name }}</option>
+            }
+            <option [value]="NEW_CUSTOMER">+ Add a new customer…</option>
+          </select>
+        </app-field>
+
+        @if (addingCustomer()) {
+          <div
+            class="grid grid-cols-1 gap-4 rounded-control border border-cr-line px-3 py-3 sm:col-span-2 sm:grid-cols-2"
+          >
+            <app-field label="Customer name" required [error]="errorFor('new_customer_name')">
+              <input
+                formControlName="new_customer_name"
+                [class]="inputClass"
+                placeholder="e.g. Gaisano Mall"
+              />
+            </app-field>
+            <app-field label="Contact" required [error]="errorFor('new_customer_contact')">
+              <input
+                formControlName="new_customer_contact"
+                [class]="inputClass"
+                placeholder="Phone or email"
+              />
+            </app-field>
+            <app-field label="Address" class="sm:col-span-2">
+              <input
+                formControlName="new_customer_address"
+                [class]="inputClass"
+                placeholder="Optional"
+              />
+            </app-field>
+          </div>
         }
 
         <app-location-field
@@ -136,7 +186,7 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
 
         <app-helper-picker
           hint="Optional — add as many as the load needs."
-          [drivers]="drivers()"
+          [drivers]="helperChoices()"
           [driverId]="driverId()"
           [(value)]="helpers"
         />
@@ -200,7 +250,7 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
               <p class="mt-2 text-[13px]">
                 <span class="cr-num font-semibold">{{ money(q.cents, q.currency) }}</span>
                 <span class="text-cr-ink-muted">
-                  · Zone {{ q.zone?.code }} · {{ q.bracket?.label
+                  · Zone {{ q.zone?.code }}{{ q.zone_pinned ? ' (picked)' : '' }} · {{ q.bracket?.label
                   }}{{ q.volume ? ' ÷ ' + q.volume.card_cbm + ' × ' + q.volume.cbm + ' cbm' : '' }} · {{ q.km }} km{{
                     estimated() ? ' (estimate)' : ''
                   }}
@@ -221,6 +271,25 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
             <p class="mt-2 text-[12px] text-cr-ink-muted">
               Priced off the zone card when it is saved.
             </p>
+          }
+
+          @if (zones().length > 0) {
+            <app-field
+              label="Zone"
+              class="mt-3 block max-w-[360px]"
+              [hint]="
+                form.controls.zone_id.value
+                  ? 'Picked by hand — a new distance will not move it.'
+                  : 'Automatic from the distance. Pick the right one if the kilometres were misread.'
+              "
+            >
+              <select formControlName="zone_id" [class]="inputClass">
+                <option value="">Automatic (by distance)</option>
+                @for (z of zones(); track z.id) {
+                  <option [value]="z.id">{{ z.code }} — {{ z.name }} · {{ z.band }}</option>
+                }
+              </select>
+            </app-field>
           }
 
           @if (canPrice()) {
@@ -296,6 +365,7 @@ export class TripForm {
   private readonly fb = inject(FormBuilder);
   private readonly identity = inject(IdentityService);
   private readonly pricingApi = inject(PricingService);
+  private readonly customersApi = inject(CustomerService);
 
   private readonly dialog = inject(TripDialog);
 
@@ -321,7 +391,15 @@ export class TripForm {
     'h-10 w-full rounded-control border border-cr-line bg-cr-surface px-3 text-[14px] text-cr-ink placeholder:text-cr-ink-muted focus:border-cr-blue focus:outline-none';
 
   protected readonly vehicles = signal<Vehicle[]>([]);
-  protected readonly drivers = signal<Driver[]>([]);
+  private readonly crew = signal<Driver[]>([]);
+  protected readonly zones = signal<PricingZone[]>([]);
+
+  protected readonly drivers = computed(() => this.crew().filter((d) => d.role === 'driver'));
+  protected readonly helperChoices = computed(() => {
+    const chosen = new Set(this.helpers());
+
+    return this.crew().filter((d) => d.role === 'helper' || chosen.has(d.id));
+  });
 
   protected readonly origin = signal<TripLocation>(BLANK_LOCATION);
   protected readonly destination = signal<TripLocation>(BLANK_LOCATION);
@@ -338,6 +416,23 @@ export class TripForm {
     delivered_at: [''],
     receiver_name: [''],
     price: [''],
+    zone_id: [''],
+    customer_id: [''],
+    new_customer_name: [''],
+    new_customer_contact: [''],
+    new_customer_address: [''],
+  });
+
+  protected readonly NEW_CUSTOMER = NEW_CUSTOMER;
+  protected readonly customers = signal<Customer[]>([]);
+
+  protected readonly addingCustomer = toSignal(
+    this.form.controls.customer_id.valueChanges.pipe(map((id) => id === NEW_CUSTOMER)),
+    { initialValue: false },
+  );
+
+  private readonly zoneId = toSignal(this.form.controls.zone_id.valueChanges, {
+    initialValue: this.form.controls.zone_id.value,
   });
 
   protected readonly canPrice = computed(() => this.identity.can('pricing.manage'));
@@ -400,7 +495,28 @@ export class TripForm {
     effect(() => this.form.get('destination')?.setValue(this.destination().place));
 
     this.vehiclesApi.list().subscribe((res) => this.vehicles.set(res.data));
-    this.driversApi.list().subscribe((res) => this.drivers.set(res.data));
+    this.driversApi.crew().subscribe((res) => this.crew.set(res.data));
+
+    this.customersApi
+      .list({ per_page: 100 })
+      .pipe(catchError(() => of(null)))
+      .subscribe((res) => this.customers.set(res?.data ?? []));
+
+    this.form.controls.customer_id.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe((id) => {
+        for (const name of ['new_customer_name', 'new_customer_contact'] as const) {
+          const control = this.form.controls[name];
+          control.setValidators(id === NEW_CUSTOMER ? Validators.required : null);
+          control.updateValueAndValidity({ emitEvent: false });
+        }
+      });
+
+    if (this.identity.can('pricing.view')) {
+      this.pricingApi
+        .list({ per_page: 100, status: 'active' })
+        .subscribe((res) => this.zones.set(res.data));
+    }
 
     toObservable(
       computed(() => ({
@@ -408,6 +524,7 @@ export class TripForm {
         distance: this.previewDistance(),
         weight: Number(this.weight()) || 0,
         category: this.truckSize(),
+        zone: this.zoneId() || null,
       })),
     )
       .pipe(
@@ -422,6 +539,7 @@ export class TripForm {
               distance_km: ask.distance.metres / 1000,
               weight_kg: ask.weight,
               truck_category_id: ask.category,
+              pricing_zone_id: ask.zone,
             })
             .pipe(catchError(() => of(null)));
         }),
@@ -456,7 +574,17 @@ export class TripForm {
         delivered_at: '',
         receiver_name: '',
         price: t?.manually_priced && t.price_cents !== null ? String(t.price_cents / 100) : '',
+        zone_id: t?.zone_pinned ? (t.pricing_zone_id ?? '') : '',
+        customer_id: t?.customer_id ?? '',
+        new_customer_name: '',
+        new_customer_contact: '',
+        new_customer_address: '',
       });
+
+      const known = t?.customer_id;
+      if (known && t.customer && !this.customers().some((c) => c.id === known)) {
+        this.customers.update((list) => [...list, { id: known, name: t.customer } as Customer]);
+      }
 
       this.helpers.set(t?.helper_ids ?? []);
       this.preview.set(null);
@@ -519,6 +647,15 @@ export class TripForm {
     const destination = this.destination();
 
     const payload: TripPayload = {
+      ...(raw.customer_id === NEW_CUSTOMER
+        ? {
+            new_customer: {
+              name: raw.new_customer_name.trim(),
+              contact: raw.new_customer_contact.trim(),
+              address: raw.new_customer_address.trim() || null,
+            },
+          }
+        : { customer_id: raw.customer_id || null }),
       origin: origin.place,
       origin_lat: origin.lat,
       origin_lng: origin.lng,
@@ -540,6 +677,7 @@ export class TripForm {
         : {}),
       eta: existing?.eta ?? null,
       ...this.pricePayload(raw.price),
+      ...(this.form.controls.zone_id.dirty ? { pricing_zone_id: raw.zone_id || null } : {}),
     };
 
     const request = existing
@@ -549,6 +687,14 @@ export class TripForm {
     request.subscribe({
       next: (saved) => {
         this.saving.set(false);
+        const added = saved.customer_id;
+        if (added && saved.customer && !this.customers().some((c) => c.id === added)) {
+          this.customers.update((list) =>
+            [...list, { id: added, name: saved.customer } as Customer].sort((a, b) =>
+              a.name.localeCompare(b.name),
+            ),
+          );
+        }
         this.dialog.announceSaved(saved);
         this.open.set(false);
       },
