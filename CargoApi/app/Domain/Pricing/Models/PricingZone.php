@@ -45,6 +45,13 @@ class PricingZone extends Model
             && ($this->max_km === null || $km < $this->max_km);
     }
 
+    public function clamp(int $km): int
+    {
+        $km = max($km, (int) $this->min_km);
+
+        return $this->max_km === null ? $km : min($km, (int) $this->max_km - 1);
+    }
+
     public function band(): string
     {
         if ($this->max_km === null) {

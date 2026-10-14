@@ -427,7 +427,7 @@ describe('a truck sized by its wheels', function (): void {
     });
 
     it('sizes the ten-wheel trucks already on the fleet when the size is added', function (): void {
-        $this->tenWheeler->delete();
+        TruckCategory::query()->whereIn('id', [$this->tenWheeler->id])->orWhere('key', '10-wheeler')->forceDelete();
         $this->vehicle->update(['wheels' => 10, 'truck_category_id' => null]);
 
         $made = $this->actingAs($this->admin)
@@ -444,5 +444,34 @@ describe('a truck sized by its wheels', function (): void {
             ->patchJson("/api/v1/vehicles/{$this->vehicle->id}", ['wheels' => 10, 'truck_category_id' => $big->id])
             ->assertOk()
             ->assertJsonPath('data.truck_category_id', $big->id);
+    });
+});
+
+describe('a server that never ran the demo seeder', function (): void {
+    it('gets a 10 Wheeler at 54 cbm and its ten-wheel trucks are sized', function (): void {
+        TruckCategory::query()->whereIn('id', [$this->tenWheeler->id])->orWhere('key', '10-wheeler')->forceDelete();
+        $this->vehicle->update(['wheels' => 10, 'truck_category_id' => null]);
+        ($this->card)();
+
+        (require database_path('migrations/2026_10_12_000300_give_every_company_a_10_wheeler.php'))->up();
+
+        $size = TruckCategory::query()->where('key', '10-wheeler')->firstOrFail();
+
+        expect($size->cbm)->toBe(54)
+            ->and($this->vehicle->refresh()->truck_category_id)->toBe($size->id);
+
+        $trip = ($this->book)(120, ['vehicle_id' => $this->vehicle->id])->assertCreated()->json('data');
+
+        expect($trip['price_cents'])->toBe(1_928_571);
+    });
+
+    it('gives a 10 Wheeler class that has no size its 54 cbm', function (): void {
+        $this->tenWheeler = TruckCategory::query()->where('key', '10-wheeler')->firstOrFail();
+        $this->tenWheeler->update(['cbm' => null]);
+
+        (require database_path('migrations/2026_10_12_000300_give_every_company_a_10_wheeler.php'))->up();
+
+        expect($this->tenWheeler->refresh()->cbm)->toBe(54)
+            ->and(TruckCategory::query()->where('key', '10-wheeler')->count())->toBe(1);
     });
 });

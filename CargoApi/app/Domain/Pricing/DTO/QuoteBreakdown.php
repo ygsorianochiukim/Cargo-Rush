@@ -32,6 +32,7 @@ final readonly class QuoteBreakdown
         public ?string $reason = null,
         public ?int $cbm = null,
         public ?int $cardCbm = null,
+        public bool $zonePinned = false,
     ) {}
 
     /** @param array<int, array{id: string, code: string, name: string, band: string}> $zoneAlternatives */
@@ -45,6 +46,7 @@ final readonly class QuoteBreakdown
         ?string $zoneCode = null,
         ?string $zoneBand = null,
         array $zoneAlternatives = [],
+        bool $zonePinned = false,
     ): self {
         return new self(
             cents: null,
@@ -60,6 +62,7 @@ final readonly class QuoteBreakdown
             zoneBand: $zoneBand,
             zoneAlternatives: $zoneAlternatives,
             reason: $reason,
+            zonePinned: $zonePinned,
         );
     }
 
@@ -107,6 +110,7 @@ final readonly class QuoteBreakdown
                 'name' => $this->zoneName,
                 'band' => $this->zoneBand,
             ],
+            'zone_pinned' => $this->zonePinned,
             'zone_alternatives' => $this->zoneAlternatives,
             'bracket' => $this->bracketId === null ? null : [
                 'id' => $this->bracketId,

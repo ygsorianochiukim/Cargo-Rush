@@ -62,6 +62,7 @@ class TripService
             $this->fillHelpers($trip, $data);
             $this->fillDistance($trip, $data);
             $this->fillTruckSize($trip, $data);
+            $this->fillZonePin($trip, $data);
             $this->fillPrice($trip, $data);
             $this->mustBePricedToGoOut($trip);
 
@@ -83,6 +84,7 @@ class TripService
             $this->fillHelpers($updated, $data);
             $this->fillDistance($updated, $data);
             $this->fillTruckSize($updated, $data);
+            $this->fillZonePin($updated, $data);
             $this->fillPrice($updated, $data);
             $this->mustBePricedToGoOut($updated);
 
@@ -133,6 +135,7 @@ class TripService
             $this->fillHelpers($updated, $data);
             $this->fillDistance($updated, $data);
             $this->fillTruckSize($updated, $data);
+            $this->fillZonePin($updated, $data);
             $this->fillPrice($updated, $data);
 
             PricingService::mustBePriced($updated);
@@ -186,6 +189,19 @@ class TripService
             'distance_total_m' => $measured['metres'],
             'distance_source' => $measured['source'],
         ])->save();
+    }
+
+    private function fillZonePin(Trip $trip, TripData $data): void
+    {
+        if (! $data->wasGiven('pricing_zone_id') || $trip->isBilled()) {
+            return;
+        }
+
+        $pinned = $data->pricing_zone_id !== null && $data->pricing_zone_id !== '';
+
+        if ((bool) $trip->zone_pinned !== $pinned) {
+            $trip->forceFill(['zone_pinned' => $pinned])->save();
+        }
     }
 
     private function fillTruckSize(Trip $trip, TripData $data): void

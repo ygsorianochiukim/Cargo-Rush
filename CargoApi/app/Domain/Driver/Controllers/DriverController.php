@@ -8,9 +8,11 @@ use App\Domain\Driver\Models\Driver;
 use App\Domain\Driver\Requests\DriverRequest;
 use App\Domain\Driver\Resources\DriverResource;
 use App\Domain\Driver\Services\DriverService;
+use App\Domain\Shared\Enums\CrewRole;
 use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class DriverController extends ApiController
 {
@@ -18,7 +20,12 @@ class DriverController extends ApiController
 
     public function index(Request $request): JsonResponse
     {
-        $page = $this->drivers->paginate($this->filters($request), $this->perPage($request));
+        $request->validate(['role' => ['sometimes', Rule::in([...CrewRole::values(), 'all'])]]);
+
+        $page = $this->drivers->paginate(
+            [...$this->filters($request), ...$request->only('role')],
+            $this->perPage($request),
+        );
 
         return $this->collection(DriverResource::collection($page), $page);
     }

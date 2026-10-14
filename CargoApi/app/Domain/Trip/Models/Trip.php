@@ -61,6 +61,7 @@ class Trip extends Model
             'price_cents' => 'integer',
             'fuel_adjustment_bp' => 'integer',
             'fuel_surcharge_cents' => 'integer',
+            'zone_pinned' => 'boolean',
             'billed_at' => 'datetime',
             'scheduled_at' => 'datetime',
             'dispatch_checklist' => 'array',

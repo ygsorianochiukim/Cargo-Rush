@@ -16,7 +16,9 @@ class DriverResource extends ApiResource
     {
         return [
             'id' => $this->id,
+            'role' => $this->role->value,
             'name' => $this->name,
+            'contact' => $this->contact,
             'licence_no' => $this->licence_no,
             'licence_expiry' => $this->licence_expiry?->toDateString(),
             'licence_expiring' => $this->licenceExpiresWithin(),
@@ -25,6 +27,8 @@ class DriverResource extends ApiResource
             'trips_completed' => $this->trips_completed,
             'on_time_rate' => $this->on_time_rate,
             'user_id' => $this->user_id,
+            'employee_id' => $this->employee?->id,
+            'employee_no' => $this->employee?->employee_no,
 
             'employer' => [
                 'kind' => 'fleet',

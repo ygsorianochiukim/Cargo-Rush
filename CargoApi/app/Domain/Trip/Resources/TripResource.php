@@ -37,6 +37,8 @@ class TripResource extends ApiResource
             'pricing_note' => $this->pricing_note,
             'pricing_source' => $this->pricing_source,
             'manually_priced' => $this->pricing_source === 'manual',
+            'pricing_zone_id' => $this->pricing_zone_id,
+            'zone_pinned' => (bool) $this->zone_pinned,
 
             'customer_id' => $this->customer_id,
             'customer' => $this->customer?->name,

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Trip\Requests;
 
+use App\Domain\Shared\Enums\CrewRole;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
 use App\Domain\Tenancy\Support\Tenant;
@@ -31,6 +32,10 @@ class TripRequest extends ApiFormRequest
 
         return [
             'customer_id' => ['nullable', 'string', 'exists:customers,id'],
+            'new_customer' => ['sometimes', 'nullable', 'array'],
+            'new_customer.name' => ['required_with:new_customer', 'string', 'max:160'],
+            'new_customer.contact' => ['required_with:new_customer', 'string', 'max:160'],
+            'new_customer.address' => ['nullable', 'string', 'max:255'],
             'origin' => [$required, 'string', 'max:160'],
             'origin_lat' => ['nullable', 'numeric', 'between:-90,90', 'required_with:origin_lng'],
             'origin_lng' => ['nullable', 'numeric', 'between:-180,180', 'required_with:origin_lat'],
@@ -42,7 +47,7 @@ class TripRequest extends ApiFormRequest
             'pieces' => ['sometimes', 'integer', 'min:1', 'max:9999'],
             'handling' => ['nullable', 'string', 'max:255'],
             'price_cents' => $this->priceRules(),
-            'driver_id' => ['nullable', 'string', 'exists:drivers,id'],
+            'driver_id' => ['nullable', 'string', Rule::exists('drivers', 'id')->where('role', CrewRole::Driver->value)],
             'helper_ids' => ['sometimes', 'nullable', 'array', 'max:5'],
             'helper_ids.*' => ['string', 'distinct', 'exists:drivers,id', 'different:driver_id'],
             'vehicle_id' => ['nullable', 'string', 'exists:vehicles,id'],
@@ -116,6 +121,7 @@ class TripRequest extends ApiFormRequest
     public function messages(): array
     {
         return [
+            'driver_id.exists' => 'Pick someone from the driver roster to take the wheel.',
             'helper_ids.*.different' => 'A helper cannot be the same person as the driver.',
             'helper_ids.*.distinct' => 'The same helper is named twice.',
             'helper_ids.max' => 'A run can carry at most five helpers.',
@@ -135,6 +141,25 @@ class TripRequest extends ApiFormRequest
     /** @return array<string, mixed> */
     public function payload(): array
     {
-        return $this->withoutUnmovedPrice($this->validated());
+        $payload = collect($this->withoutUnmovedPrice($this->validated()))->except('new_customer')->all();
+
+        return $this->createdCustomer === null
+            ? $payload
+            : [...$payload, 'customer_id' => $this->createdCustomer];
+    }
+
+    private ?string $createdCustomer = null;
+
+    /** @return array<string, string>|null */
+    public function newCustomer(): ?array
+    {
+        $fields = $this->validated('new_customer');
+
+        return is_array($fields) && ($fields['name'] ?? '') !== '' ? $fields : null;
+    }
+
+    public function useCustomer(string $customerId): void
+    {
+        $this->createdCustomer = $customerId;
     }
 }

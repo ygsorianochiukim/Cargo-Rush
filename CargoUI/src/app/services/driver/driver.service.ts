@@ -13,6 +13,14 @@ export class DriverService {
     return this.api.envelope<Driver[]>('drivers', query);
   }
 
+  helpers(query?: ListQuery): Observable<Envelope<Driver[]>> {
+    return this.api.envelope<Driver[]>('drivers', { per_page: 100, ...query, role: 'helper' });
+  }
+
+  crew(query?: ListQuery): Observable<Envelope<Driver[]>> {
+    return this.api.envelope<Driver[]>('drivers', { per_page: 100, ...query, role: 'all' });
+  }
+
   find(id: string): Observable<Driver> {
     return this.api.get<Driver>(`drivers/${id}`);
   }

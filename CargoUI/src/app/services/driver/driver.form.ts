@@ -13,6 +13,7 @@ export function driverSpec(): RecordSpec<Driver> {
 
     fields: [
       { key: 'name', label: 'Full name', kind: 'text', required: true, wide: true, placeholder: 'Juan Dela Cruz' },
+      { key: 'contact', label: 'Contact number', kind: 'text', placeholder: '0917 555 0101' },
       { key: 'licence_no', label: 'Licence number', kind: 'text', required: true, placeholder: 'N02-14-882301' },
       { key: 'licence_expiry', label: 'Licence expiry', kind: 'date', required: true },
       {
@@ -36,6 +37,7 @@ export function driverSpec(): RecordSpec<Driver> {
 
     toForm: (driver) => ({
       name: driver.name,
+      contact: driver.contact ?? '',
       licence_no: driver.licence_no,
       licence_expiry: driver.licence_expiry,
       violations: driver.violations,
@@ -43,7 +45,9 @@ export function driverSpec(): RecordSpec<Driver> {
     }),
 
     toPayload: (values) => ({
+      role: 'driver',
       name: values['name'],
+      contact: values['contact'] || null,
       licence_no: values['licence_no'],
       licence_expiry: values['licence_expiry'],
       violations: Number(values['violations'] ?? 0),

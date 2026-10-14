@@ -12,9 +12,13 @@ class ZoneResolver
 {
     public function __construct(private readonly PricingZoneRepository $zones) {}
 
-    public function resolve(?string $zoneId, int $km): ?PricingZone
+    public function resolve(?string $zoneId, int $km, bool $pinned = false): ?PricingZone
     {
         $chosen = $this->byId($zoneId);
+
+        if ($chosen !== null && $pinned) {
+            return $chosen;
+        }
 
         return $chosen !== null && $chosen->covers($km) ? $chosen : $this->default($km);
     }

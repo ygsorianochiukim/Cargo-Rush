@@ -37,6 +37,7 @@ class PricingService
             weightKg: (int) $trip->weight_kg,
             truckCategoryId: $trip->truck_category_id,
             zoneId: $trip->pricing_zone_id,
+            pinned: (bool) $trip->zone_pinned,
         );
     }
 
@@ -45,11 +46,14 @@ class PricingService
         int $weightKg,
         ?string $truckCategoryId = null,
         ?string $zoneId = null,
+        bool $pinned = false,
     ): QuoteBreakdown {
         $km = $this->kilometres($distanceM);
         $weightKg = max(0, $weightKg);
 
-        $zone = $this->zones->resolve($zoneId, $km);
+        $zone = $this->zones->resolve($zoneId, $km, $pinned);
+        $pinned = $pinned && $zone !== null && $zone->id === $zoneId;
+        $cardKm = $pinned ? $zone->clamp($km) : $km;
 
         if ($zone === null) {
             return QuoteBreakdown::unzoned(
@@ -62,7 +66,7 @@ class PricingService
 
         $bracket = $this->brackets->pick(
             $this->brackets->candidatesFor($zone),
-            $km,
+            $cardKm,
             $truckCategoryId,
         );
 
@@ -77,10 +81,11 @@ class PricingService
                 zoneCode: $zone->code,
                 zoneBand: $zone->band(),
                 zoneAlternatives: $this->alternatives($km, $zone),
+                zonePinned: $pinned,
             );
         }
 
-        $card = $bracket->priceFor($km, $weightKg);
+        $card = $bracket->priceFor($cardKm, $weightKg);
         $fuel = $this->fuel->surchargeFor($bracket, $card, $zone);
         $step = (int) $bracket->diesel_step_cents;
         $cbm = $this->scaledCbm($bracket, $truckCategoryId);
@@ -117,6 +122,7 @@ class PricingService
             zoneAlternatives: $this->alternatives($km, $zone),
             cbm: $cbm,
             cardCbm: $cbm === null ? null : $cardCbm,
+            zonePinned: $pinned,
         );
     }
 

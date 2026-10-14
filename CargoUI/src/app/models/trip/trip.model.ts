@@ -43,6 +43,8 @@ export interface Trip extends Timestamped {
   pricing_note: string | null;
   pricing_source: 'zone' | 'manual' | 'unzoned' | null;
   manually_priced: boolean;
+  pricing_zone_id: string | null;
+  zone_pinned: boolean;
 
   customer_id: string | null;
   customer: string | null;
@@ -84,6 +86,7 @@ export interface Trip extends Timestamped {
 
 export interface TripPayload {
   customer_id?: string | null;
+  new_customer?: { name: string; contact: string; address?: string | null };
   origin: string;
   origin_lat?: number | null;
   origin_lng?: number | null;
@@ -105,6 +108,7 @@ export interface TripPayload {
   delivered_at?: string | null;
   receiver_name?: string | null;
   price_cents?: number | null;
+  pricing_zone_id?: string | null;
 }
 
 export interface TripConfirmPayload {
@@ -115,4 +119,5 @@ export interface TripConfirmPayload {
   eta?: string | null;
   weight_kg?: number;
   price_cents?: number | null;
+  pricing_zone_id?: string | null;
 }

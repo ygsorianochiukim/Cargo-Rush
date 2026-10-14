@@ -6,22 +6,51 @@ namespace App\Domain\Driver\Services;
 
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Driver\Repositories\DriverRepository;
+use App\Domain\Hr\Services\EmployeeService;
 use App\Domain\Notification\Services\NotificationService;
+use App\Domain\Shared\DTO\Data;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\Tone;
 use App\Domain\Shared\Repositories\Repository;
 use App\Domain\Shared\Services\CrudService;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class DriverService extends CrudService
 {
     public function __construct(
         private readonly DriverRepository $drivers,
         private readonly NotificationService $notifications,
+        private readonly EmployeeService $employees,
     ) {}
 
     protected function repository(): Repository
     {
         return $this->drivers;
+    }
+
+    public function create(Data $data): Model
+    {
+        return DB::transaction(function () use ($data): Driver {
+            /** @var Driver $driver */
+            $driver = $this->drivers->create($data);
+
+            $this->employees->enrolCrew($driver);
+
+            return $driver->load('employee');
+        });
+    }
+
+    public function update(Model $model, Data $data): Model
+    {
+        return DB::transaction(function () use ($model, $data): Driver {
+            /** @var Driver $driver */
+            $driver = $this->drivers->update($model, $data);
+
+            $this->employees->syncCrew($driver);
+
+            return $driver->load('employee');
+        });
     }
 
     public function forUser(int $userId): ?Driver
