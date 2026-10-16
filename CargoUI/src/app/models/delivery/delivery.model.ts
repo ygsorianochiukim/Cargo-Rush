@@ -12,7 +12,15 @@ export interface DeliveryLog extends Timestamped {
   delivered_at: string | null;
   pod_ref: string | null;
   receiver_name: string | null;
+  fuel_litres: number | null;
+  fuel_cost_cents: number | null;
+  currency: string | null;
   status: StatusValue;
+}
+
+export interface DeliveryFuelPayload {
+  fuel_litres: number | null;
+  fuel_cost_cents: number | null;
 }
 
 export interface DeliveryReport {

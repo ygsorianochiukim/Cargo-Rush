@@ -5,13 +5,16 @@ declare(strict_types=1);
 namespace App\Domain\Delivery\Controllers;
 
 use App\Domain\Delivery\Models\DeliveryLog;
+use App\Domain\Delivery\Requests\DeliveryFuelRequest;
 use App\Domain\Delivery\Requests\ProofOfDeliveryRequest;
 use App\Domain\Delivery\Resources\DeliveryLogResource;
 use App\Domain\Delivery\Services\DeliveryService;
+use App\Domain\Delivery\Services\TripCostPostingService;
 use App\Domain\Shared\Enums\Role;
 use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class DeliveryController extends ApiController
 {
@@ -36,6 +39,18 @@ class DeliveryController extends ApiController
         return $this->item(new DeliveryLogResource(
             $this->deliveries->attachProof($delivery, $request->toProof()),
         ));
+    }
+
+    public function fuel(DeliveryFuelRequest $request, DeliveryLog $delivery, TripCostPostingService $costs): JsonResponse
+    {
+        $this->assertTheirs($request, $delivery);
+
+        DB::transaction(function () use ($request, $delivery, $costs): void {
+            $delivery->update($request->fuel());
+            $costs->sync($delivery);
+        });
+
+        return $this->item(new DeliveryLogResource($delivery->refresh()));
     }
 
     public function report(): JsonResponse

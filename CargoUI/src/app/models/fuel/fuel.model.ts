@@ -28,10 +28,26 @@ export interface FuelRecordPayload {
   status?: StatusValue;
 }
 
+export interface TripFuel {
+  id: string;
+  trip_id: string;
+  reference: string | null;
+  route: string | null;
+  vehicle_plate: string | null;
+  driver_name: string | null;
+  litres: number | null;
+  amount_cents: number;
+  currency: string;
+  delivered_at: string | null;
+  posted_on: string | null;
+}
+
 export interface FuelBudget {
   date: string;
   daily_budget_cents: number;
   spent_today_cents: number;
+  trip_fuel_today_cents: number;
+  trip_fuel_month_cents: number;
   pending_today_cents: number;
   currency: string;
   projection_cents: number;

@@ -69,7 +69,7 @@ import { Modal } from '../../shared/modal';
             <dt class="cr-meta">Quoted</dt>
             <dd class="cr-num text-[13px] font-semibold">
               @if (request.price_cents === null) {
-                <span class="text-cr-warning">Needs a zone</span>
+                <span class="text-cr-warning">Needs a price</span>
                 @if (request.pricing_note) {
                   <span class="block text-[12px] font-normal text-cr-ink-muted">{{ request.pricing_note }}</span>
                 }
@@ -125,24 +125,6 @@ import { Modal } from '../../shared/modal';
             formControlName="weight_kg"
             [class]="inputClass + ' cr-num'" />
         </app-field>
-
-        @if (zones().length > 0) {
-          <app-field
-            label="Zone"
-            class="sm:col-span-2"
-            [hint]="
-              form.controls.zone_id.value
-                ? 'Picked by hand — priced off this zone whatever the distance says.'
-                : 'Automatic from the distance. Pick the right one if the kilometres were misread.'
-            ">
-            <select formControlName="zone_id" [class]="inputClass">
-              <option value="">Automatic (by distance)</option>
-              @for (z of zones(); track z.id) {
-                <option [value]="z.id">{{ z.code }} — {{ z.name }} · {{ z.band }}</option>
-              }
-            </select>
-          </app-field>
-        }
       </form>
 
       @if (error(); as message) {

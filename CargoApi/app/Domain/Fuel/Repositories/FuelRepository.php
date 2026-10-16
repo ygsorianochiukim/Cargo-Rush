@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Fuel\Repositories;
 
+use App\Domain\Delivery\Models\DeliveryLog;
 use App\Domain\Fuel\Models\FuelBudget;
 use App\Domain\Fuel\Models\FuelRecord;
 use App\Domain\Shared\Enums\StatusValue;
@@ -61,6 +62,27 @@ class FuelRepository extends Repository
             ->whereBetween('logged_at', [$from, $to])
             ->where('status', StatusValue::Active->value)
             ->sum('amount_cents');
+    }
+
+    public function tripFuelBetween(Carbon $from, Carbon $to): int
+    {
+        return (int) DeliveryLog::query()
+            ->where('posted_fuel_cents', '>', 0)
+            ->whereDate('posted_on', '>=', $from->toDateString())
+            ->whereDate('posted_on', '<=', $to->toDateString())
+            ->sum('posted_fuel_cents');
+    }
+
+    /** @return Collection<int, DeliveryLog> */
+    public function tripFuel(int $limit = 200): Collection
+    {
+        return DeliveryLog::query()
+            ->where('posted_fuel_cents', '>', 0)
+            ->with(['trip' => static fn ($q) => $q->with(['vehicle:id,plate', 'driver:id,name'])])
+            ->orderByDesc('posted_on')
+            ->orderByDesc('delivered_at')
+            ->limit($limit)
+            ->get();
     }
 
     public function pendingBetween(Carbon $from, Carbon $to): int

@@ -53,7 +53,7 @@ import { ConfirmRequestDialog } from './confirm-request.dialog';
                   <span
                     class="inline-flex items-center gap-1.5 rounded-full bg-cr-warning-bg px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] text-cr-warning uppercase">
                     <span class="h-1.5 w-1.5 rounded-full bg-cr-warning"></span>
-                    Needs a zone
+                    Needs a price
                   </span>
                   @if (request.pricing_note) {
                     <span class="text-[12px] text-cr-ink-muted">{{ request.pricing_note }}</span>
@@ -272,7 +272,7 @@ export class TripsPage {
   protected readonly fmt = fmt;
 
   protected readonly unpricedHint =
-    'This run has no price yet — add a zone line on the Pricing card or enter a price.';
+    'This run has no price yet — enter one on the trip.';
 
   protected readonly tripLabel = (t: Trip) => t.reference;
 
@@ -305,7 +305,7 @@ export class TripsPage {
       label: 'Price',
       kind: 'num',
       value: (t) => (t.price_cents === null ? null : fmt.money(t.price_cents, t.currency)),
-      badge: (t) => (t.price_cents === null ? 'Needs a zone' : null),
+      badge: (t) => (t.price_cents === null ? 'Needs a price' : null),
       sub: (t) =>
         t.price_cents === null
           ? t.pricing_note

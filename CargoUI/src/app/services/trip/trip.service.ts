@@ -3,7 +3,12 @@ import { Observable } from 'rxjs';
 
 import { ApiService } from '../shared/api.service';
 import { Envelope, ListQuery } from '../../models/shared/envelope.model';
-import { Trip, TripConfirmPayload, TripPayload } from '../../models/trip/trip.model';
+import {
+  Trip,
+  TripConfirmPayload,
+  TripHistoryEntry,
+  TripPayload,
+} from '../../models/trip/trip.model';
 import { TripTicket } from '../../models/trip/trip-ticket.model';
 
 @Injectable({ providedIn: 'root' })
@@ -20,6 +25,10 @@ export class TripService {
 
   ticket(id: string): Observable<TripTicket> {
     return this.api.get<TripTicket>(`trips/${id}/ticket`);
+  }
+
+  history(id: string): Observable<TripHistoryEntry[]> {
+    return this.api.get<TripHistoryEntry[]>(`trips/${id}/history`);
   }
 
   create(payload: TripPayload): Observable<Trip> {

@@ -238,6 +238,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('trips/{trip}', [TripController::class, 'show'])->middleware('permission:trips.view');
         // The Official Trip Ticket and the dispatch checklist, filled in for printing.
         Route::get('trips/{trip}/ticket', [TripController::class, 'ticket'])->middleware('permission:trips.view');
+        Route::get('trips/{trip}/history', [TripController::class, 'history'])->middleware('permission:trips.view');
 
         // Everything that changes the board needs `trips.manage`. Confirming is
         // the desk's one action on a customer's request: it names the crew, the
@@ -271,6 +272,8 @@ Route::prefix('v1')->group(function (): void {
         });
 
         Route::post('delivery-logs/{delivery}/proof', [DeliveryController::class, 'proof'])
+            ->middleware('permission:delivery.write');
+        Route::patch('delivery-logs/{delivery}/fuel', [DeliveryController::class, 'fuel'])
             ->middleware('permission:delivery.write');
 
         /* ---------------------------------------------------------- Assets */
@@ -570,6 +573,7 @@ Route::prefix('v1')->group(function (): void {
         });
 
         Route::get('fuel/budget', [FuelController::class, 'budget'])->middleware('permission:fuel.view');
+        Route::get('fuel/trips', [FuelController::class, 'trips'])->middleware('permission:fuel.view');
         Route::get('fuel', [FuelController::class, 'index'])->middleware('permission:fuel.view');
         Route::get('fuel/{fuel}', [FuelController::class, 'show'])->middleware('permission:fuel.view');
 

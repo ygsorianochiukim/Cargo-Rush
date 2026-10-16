@@ -108,6 +108,9 @@ export class ExpenseLinesDialog {
       case 'trucker_payout':
         void this.router.navigate(['/truckers']);
         break;
+      case 'trip':
+        void this.router.navigate(['/delivery-logs']);
+        break;
     }
   }
 }

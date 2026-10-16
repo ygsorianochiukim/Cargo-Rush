@@ -25,6 +25,9 @@ class DeliveryLogResource extends ApiResource
             'pod_ref' => $this->pod_ref,
             'pod_image_url' => $this->podImageUrl(),
             'receiver_name' => $this->receiver_name,
+            'fuel_litres' => $this->fuel_litres,
+            'fuel_cost_cents' => $this->fuel_cost_cents,
+            'currency' => $this->trip?->currency,
             'status' => $this->status->value,
 
             ...$this->stamps(),

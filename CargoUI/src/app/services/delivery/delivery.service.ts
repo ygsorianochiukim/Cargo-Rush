@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { ApiService } from '../shared/api.service';
-import { DeliveryLog, DeliveryReport } from '../../models/delivery/delivery.model';
+import { DeliveryFuelPayload, DeliveryLog, DeliveryReport } from '../../models/delivery/delivery.model';
 import { Envelope, ListQuery } from '../../models/shared/envelope.model';
 
 @Injectable({ providedIn: 'root' })
@@ -15,6 +15,10 @@ export class DeliveryService {
 
   find(id: string): Observable<DeliveryLog> {
     return this.api.get<DeliveryLog>(`delivery-logs/${id}`);
+  }
+
+  encodeFuel(id: string, payload: DeliveryFuelPayload): Observable<DeliveryLog> {
+    return this.api.patch<DeliveryLog>(`delivery-logs/${id}/fuel`, payload);
   }
 
   report(): Observable<DeliveryReport> {

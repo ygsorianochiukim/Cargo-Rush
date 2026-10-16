@@ -33,6 +33,8 @@ class TripResource extends ApiResource
 
             'price_cents' => $this->price_cents,
             'currency' => $this->currency,
+            'driver_allowance_cents' => $this->driver_allowance_cents,
+            'helper_allowance_cents' => $this->helper_allowance_cents,
 
             'needs_zone' => $this->price_cents === null,
             'pricing_note' => $this->pricing_note,

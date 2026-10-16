@@ -14,6 +14,7 @@ use App\Domain\Billing\Services\TaxService;
 use App\Domain\Delivery\DTO\ProofData;
 use App\Domain\Delivery\Models\DeliveryLog;
 use App\Domain\Delivery\Services\ProofStore;
+use App\Domain\Delivery\Services\TripCostPostingService;
 use App\Domain\Dispatch\Models\DispatchRecord;
 use App\Domain\Finance\Services\FinanceService;
 use App\Domain\Inspection\Services\InspectionService;
@@ -49,6 +50,7 @@ class TripService
         private readonly RoadDistance $roads,
         private readonly TaxService $tax,
         private readonly PaymentService $payments,
+        private readonly TripCostPostingService $costs,
     ) {}
 
     /** @param array<string, mixed> $filters */
@@ -110,6 +112,8 @@ class TripService
                 $this->takeOffTheBooks($before);
                 $this->rebook($updated->refresh());
             }
+
+            $this->costs->syncTrip($updated->refresh());
 
             return $updated->refresh();
         });
@@ -322,6 +326,7 @@ class TripService
             }
 
             $this->trips->delete($trip);
+            $this->costs->syncTrip($trip);
         });
     }
 
@@ -351,6 +356,8 @@ class TripService
             'receiver_name' => null,
             'status' => StatusValue::Pending->value,
         ]);
+
+        $this->costs->syncTrip($trip);
 
         $trip->dispatchRecord?->update(['arrived_at' => null, 'status' => StatusValue::InTransit->value]);
 
@@ -523,6 +530,8 @@ class TripService
             $trip->driver?->increment('trips_completed');
 
             $this->putOnTheBooks($trip->refresh(), $now);
+
+            $this->costs->sync($log);
 
             return $trip->refresh();
         });

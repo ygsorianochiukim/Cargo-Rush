@@ -46,6 +46,11 @@ class FuelController extends ApiController
         return $this->noContent();
     }
 
+    public function trips(): JsonResponse
+    {
+        return $this->payload($this->fuel->tripFuel());
+    }
+
     public function budget(Request $request): JsonResponse
     {
         $on = $request->filled('date') ? Carbon::parse($request->string('date')->toString()) : null;

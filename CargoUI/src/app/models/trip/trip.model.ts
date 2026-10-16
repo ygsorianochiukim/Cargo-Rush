@@ -39,6 +39,8 @@ export interface Trip extends Timestamped {
 
   price_cents: number | null;
   currency: string;
+  driver_allowance_cents?: number | null;
+  helper_allowance_cents?: number | null;
   needs_zone: boolean;
   pricing_note: string | null;
   pricing_source: 'zone' | 'manual' | 'unzoned' | null;
@@ -124,6 +126,8 @@ export interface TripPayload {
   receiver_name?: string | null;
   price_cents?: number | null;
   pricing_zone_id?: string | null;
+  driver_allowance_cents?: number | null;
+  helper_allowance_cents?: number | null;
   payment_status?: TripPaymentStatus;
   paid_cents?: number | null;
   paid_on?: string | null;
@@ -140,4 +144,21 @@ export interface TripConfirmPayload {
   weight_kg?: number;
   price_cents?: number | null;
   pricing_zone_id?: string | null;
+}
+
+export interface TripHistoryChange {
+  field: string;
+  from: unknown;
+  to: unknown;
+}
+
+export interface TripHistoryEntry {
+  id: string;
+  subject: string;
+  action: 'created' | 'updated' | 'deleted' | 'restored';
+  at: string;
+  user: string | null;
+  ip_address: string | null;
+  url: string | null;
+  changes: TripHistoryChange[];
 }

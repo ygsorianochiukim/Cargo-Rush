@@ -139,7 +139,8 @@ export type ExpenseLineSource =
   | 'fuel_log'
   | 'supplier_bill'
   | 'payroll'
-  | 'trucker_payout';
+  | 'trucker_payout'
+  | 'trip';
 
 export interface ExpenseLine {
   key: string;
