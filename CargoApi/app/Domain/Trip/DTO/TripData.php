@@ -24,6 +24,7 @@ final class TripData extends Data
         public readonly ?int $price_cents = null,
         public readonly ?int $driver_allowance_cents = null,
         public readonly ?int $helper_allowance_cents = null,
+        public readonly ?int $toll_cents = null,
         public readonly ?string $currency = null,
         public readonly ?string $driver_id = null,
         /** @var string[]|null */
@@ -57,6 +58,7 @@ final class TripData extends Data
             price_cents: isset($attributes['price_cents']) ? (int) $attributes['price_cents'] : null,
             driver_allowance_cents: isset($attributes['driver_allowance_cents']) ? (int) $attributes['driver_allowance_cents'] : null,
             helper_allowance_cents: isset($attributes['helper_allowance_cents']) ? (int) $attributes['helper_allowance_cents'] : null,
+            toll_cents: isset($attributes['toll_cents']) ? (int) $attributes['toll_cents'] : null,
             currency: $attributes['currency'] ?? null,
             driver_id: $attributes['driver_id'] ?? null,
             helper_ids: isset($attributes['helper_ids']) ? array_values(array_map('strval', (array) $attributes['helper_ids'])) : null,
@@ -90,6 +92,7 @@ final class TripData extends Data
             'price_cents' => $this->price_cents,
             'driver_allowance_cents' => $this->driver_allowance_cents,
             'helper_allowance_cents' => $this->helper_allowance_cents,
+            'toll_cents' => $this->toll_cents,
             'currency' => $this->currency,
             'driver_id' => $this->driver_id,
             'vehicle_id' => $this->vehicle_id,

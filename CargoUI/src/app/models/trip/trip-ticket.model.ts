@@ -29,6 +29,7 @@ export interface TripTicket {
   vehicle: { plate: string | null; model: string | null; type: string | null };
   customer: { name: string | null; contact: string | null };
   allowance_cents: number | null;
+  toll_cents: number | null;
   checklist: {
     section: string;
     items: { key: string; label: string; answer: 'yes' | 'no' | 'na' | null }[];

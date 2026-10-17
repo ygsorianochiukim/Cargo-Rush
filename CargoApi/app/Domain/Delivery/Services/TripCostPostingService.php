@@ -5,9 +5,12 @@ declare(strict_types=1);
 namespace App\Domain\Delivery\Services;
 
 use App\Domain\Delivery\Models\DeliveryLog;
+use App\Domain\Finance\Models\Expense;
+use App\Domain\Finance\Models\ExpenseCategory;
 use App\Domain\Finance\Services\FinanceService;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Trip\Models\Trip;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
 class TripCostPostingService
@@ -37,8 +40,9 @@ class TripCostPostingService
             $fuel = (int) $log->fuel_cost_cents;
             $driver = (int) $trip->driver_allowance_cents;
             $helper = (int) $trip->helper_allowance_cents;
+            $toll = (int) $trip->toll_cents;
 
-            if ($fuel + $driver + $helper === 0) {
+            if ($fuel + $driver + $helper + $toll === 0) {
                 return $log;
             }
 
@@ -51,6 +55,7 @@ class TripCostPostingService
                 'posted_fuel_cents' => $fuel,
                 'posted_driver_allowance_cents' => $driver,
                 'posted_helper_allowance_cents' => $helper,
+                'posted_toll_expense_id' => $toll > 0 ? $this->chargeToll($trip, $truck->getKey(), $on, $toll)->getKey() : null,
                 'posted_truck_id' => $truck->getKey(),
                 'posted_on' => $on->toDateString(),
             ])->saveQuietly();
@@ -70,13 +75,43 @@ class TripCostPostingService
             );
         }
 
+        if ($log->posted_toll_expense_id !== null) {
+            Expense::query()->find($log->posted_toll_expense_id)?->delete();
+        }
+
         $log->forceFill([
             'posted_fuel_cents' => 0,
             'posted_driver_allowance_cents' => 0,
             'posted_helper_allowance_cents' => 0,
+            'posted_toll_expense_id' => null,
             'posted_truck_id' => null,
             'posted_on' => null,
         ])->saveQuietly();
+    }
+
+    private function chargeToll(Trip $trip, string $truckId, CarbonInterface $on, int $toll): Expense
+    {
+        $category = ExpenseCategory::firstOrCreate(['key' => 'toll-parking'], [
+            'name' => 'Toll & Parking',
+            'description' => 'Toll gates, terminal fees and parking.',
+            'icon' => 'route',
+            'position' => 30,
+        ]);
+
+        return Expense::create([
+            'category_id' => $category->getKey(),
+            'truck_id' => $truckId,
+            'trip_id' => $trip->getKey(),
+            'vehicle_id' => $trip->vehicle_id,
+            'driver_id' => $trip->driver_id,
+            'ledger_entry_id' => $this->finance->openDailyRowForTruck($truckId, $on)->getKey(),
+            'date' => $on->toDateString(),
+            'amount_cents' => $toll,
+            'currency' => 'PHP',
+            'reference' => $trip->reference,
+            'note' => sprintf('Toll for trip %s', $trip->reference),
+            'status' => StatusValue::Active->value,
+        ]);
     }
 
     private function postable(DeliveryLog $log, ?Trip $trip): bool

@@ -247,55 +247,38 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
             }
           }
 
+          <app-field
+            label="Kilometers"
+            class="mt-3 block max-w-[240px]"
+            hint="Picks the zone, and the zone sets the price."
+          >
+            <input
+              type="number"
+              min="0"
+              step="1"
+              formControlName="km"
+              [class]="inputClass + ' cr-num'"
+              placeholder="0"
+            />
+          </app-field>
+
           <div class="mt-2 flex flex-wrap items-center gap-2 text-[13px]" role="status">
-            <span class="text-cr-ink-muted">Suggested</span>
+            <span class="text-cr-ink-muted">Zone price</span>
             @if (preview(); as q) {
               @if (q.cents !== null) {
                 <span class="cr-num font-semibold">{{ money(q.cents, q.currency) }}</span>
                 <span class="text-[12px] text-cr-ink-muted">
-                  · {{ q.km }} km{{ estimated() ? ' (estimate)' : '' }} · temporary guide only
+                  · {{ q.km }} km{{ estimated() ? ' (estimate)' : '' }}{{ q.zone ? ' · ' + q.zone.name : '' }}
                 </span>
-                @if (canPrice()) {
-                  <button
-                    type="button"
-                    class="text-[12px] font-semibold text-cr-blue hover:underline"
-                    (click)="useSuggestion(q.cents)"
-                  >
-                    Use this
-                  </button>
-                }
               } @else {
-                <span class="text-[12px] text-cr-ink-muted">None yet — type the price below.</span>
+                <span class="text-[12px] text-cr-ink-muted">
+                  {{ q.reason ?? 'No zone covers this distance yet.' }}
+                </span>
               }
             } @else {
-              <span class="text-[12px] text-cr-ink-muted">
-                Pick the route and truck to see one.
-              </span>
+              <span class="text-[12px] text-cr-ink-muted">Type the kilometers to see it.</span>
             }
           </div>
-
-          @if (canPrice()) {
-            <app-field
-              label="Price (₱)"
-              class="mt-3 block max-w-[240px]"
-              [hint]="
-                manuallyPriced() ? 'Clear it to fall back to the suggestion.' : 'Blank uses the suggestion.'
-              "
-            >
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                formControlName="price"
-                [class]="inputClass + ' cr-num'"
-                placeholder="0.00"
-              />
-            </app-field>
-          } @else if (!editing() || trip()?.price_cents === null) {
-            <p class="mt-2 text-[12px] text-cr-ink-muted">
-              Only someone who manages the Pricing card can enter a price by hand.
-            </p>
-          }
 
           <div class="mt-3 grid gap-3 sm:grid-cols-2">
             <app-field label="Driver allowance (₱)" hint="Optional">
@@ -314,6 +297,16 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
                 min="0"
                 step="0.01"
                 formControlName="helper_allowance"
+                [class]="inputClass + ' cr-num'"
+                placeholder="0.00"
+              />
+            </app-field>
+            <app-field label="Toll (₱)" hint="Optional">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                formControlName="toll"
                 [class]="inputClass + ' cr-num'"
                 placeholder="0.00"
               />
@@ -502,10 +495,11 @@ export class TripForm {
     status: ['scheduled' as StatusValue],
     delivered_at: [''],
     receiver_name: [''],
-    price: [''],
+    km: ['', Validators.min(0)],
     zone_id: [''],
     driver_allowance: ['', Validators.min(0)],
     helper_allowance: ['', Validators.min(0)],
+    toll: ['', Validators.min(0)],
     customer_id: [''],
     new_customer_name: [''],
     new_customer_contact: [''],
@@ -562,7 +556,14 @@ export class TripForm {
     return this.trip()?.truck_category_id ?? null;
   });
 
+  private readonly typedKm = toSignal(this.form.controls.km.valueChanges, {
+    initialValue: this.form.controls.km.value,
+  });
+
   private readonly previewDistance = computed(() => {
+    const km = Number(this.typedKm());
+    if (km > 0) return { metres: Math.round(km * 1000), estimate: false };
+
     const t = this.trip();
     const o = this.origin();
     const d = this.destination();
@@ -688,10 +689,11 @@ export class TripForm {
         status: t?.status ?? 'scheduled',
         delivered_at: '',
         receiver_name: '',
-        price: t?.manually_priced && t.price_cents !== null ? String(t.price_cents / 100) : '',
+        km: t && t.distance_total_m > 0 ? String(Math.ceil(t.distance_total_m / 1000)) : '',
         zone_id: t?.zone_pinned ? (t.pricing_zone_id ?? '') : '',
         driver_allowance: this.pesos(t?.driver_allowance_cents),
         helper_allowance: this.pesos(t?.helper_allowance_cents),
+        toll: this.pesos(t?.toll_cents),
         customer_id: t?.customer_id ?? '',
         new_customer_name: '',
         new_customer_contact: '',
@@ -734,12 +736,6 @@ export class TripForm {
     return fmt.money(cents, currency);
   }
 
-  protected useSuggestion(cents: number): void {
-    const control = this.form.controls.price;
-    control.setValue(String(cents / 100));
-    control.markAsDirty();
-  }
-
   private pesos(cents: number | null | undefined): string {
     return cents === null || cents === undefined ? '' : String(cents / 100);
   }
@@ -750,16 +746,15 @@ export class TripForm {
     return typed === '' ? null : Math.round(Number(typed) * 100);
   }
 
-  private pricePayload(raw: string): { price_cents?: number | null } {
-    const control = this.form.controls.price;
+  private kmPayload(raw: string): { distance_total_m?: number; price_cents?: null } {
+    const km = Number(String(raw ?? '').trim());
 
-    if (!this.canPrice() || !control.dirty) return {};
+    if (!this.form.controls.km.dirty || !(km > 0)) return {};
 
-    const typed = String(raw ?? '').trim();
-
-    if (typed === '') return this.manuallyPriced() ? { price_cents: null } : {};
-
-    return { price_cents: Math.round(Number(typed) * 100) };
+    return {
+      distance_total_m: Math.round(km * 1000),
+      ...(this.manuallyPriced() && this.canPrice() ? { price_cents: null } : {}),
+    };
   }
 
   private paymentPayload(raw: ReturnType<TripForm['form']['getRawValue']>): Partial<TripPayload> {
@@ -832,10 +827,11 @@ export class TripForm {
           }
         : {}),
       eta: existing?.eta ?? null,
-      ...this.pricePayload(raw.price),
+      ...this.kmPayload(raw.km),
       ...(this.form.controls.zone_id.dirty ? { pricing_zone_id: raw.zone_id || null } : {}),
       driver_allowance_cents: this.cents(raw.driver_allowance),
       helper_allowance_cents: this.cents(raw.helper_allowance),
+      toll_cents: this.cents(raw.toll),
       ...this.paymentPayload(raw),
     };
 

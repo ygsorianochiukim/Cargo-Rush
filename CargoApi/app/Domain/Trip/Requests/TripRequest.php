@@ -53,6 +53,7 @@ class TripRequest extends ApiFormRequest
             'price_cents' => $this->priceRules(),
             'driver_allowance_cents' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:100000000'],
             'helper_allowance_cents' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:100000000'],
+            'toll_cents' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:100000000'],
             'driver_id' => ['nullable', 'string', Rule::exists('drivers', 'id')->where('role', CrewRole::Driver->value)],
             'helper_ids' => ['sometimes', 'nullable', 'array', 'max:5'],
             'helper_ids.*' => ['string', 'distinct', 'exists:drivers,id', 'different:driver_id'],

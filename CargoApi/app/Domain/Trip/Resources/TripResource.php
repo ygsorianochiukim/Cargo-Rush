@@ -35,12 +35,14 @@ class TripResource extends ApiResource
             'currency' => $this->currency,
             'driver_allowance_cents' => $this->driver_allowance_cents,
             'helper_allowance_cents' => $this->helper_allowance_cents,
+            'toll_cents' => $this->toll_cents,
 
             'needs_zone' => $this->price_cents === null,
             'pricing_note' => $this->pricing_note,
             'pricing_source' => $this->pricing_source,
             'manually_priced' => $this->pricing_source === 'manual',
             'pricing_zone_id' => $this->pricing_zone_id,
+            'pricing_zone' => $this->whenLoaded('pricingZone', fn () => $this->pricingZone?->name),
             'zone_pinned' => (bool) $this->zone_pinned,
 
             'customer_id' => $this->customer_id,

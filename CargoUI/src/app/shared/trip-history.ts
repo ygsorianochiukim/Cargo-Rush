@@ -7,6 +7,9 @@ import { fmt } from './format';
 
 const LABELS: Record<string, string> = {
   price_cents: 'Price',
+  driver_allowance_cents: 'Driver allowance',
+  helper_allowance_cents: 'Helper allowance',
+  toll_cents: 'Toll',
   amount_cents: 'Amount',
   net_amount_cents: 'Net amount',
   vat_cents: 'VAT',
@@ -23,7 +26,7 @@ const LABELS: Record<string, string> = {
   due_at: 'Due',
   pricing_zone_id: 'Zone',
   weight_kg: 'Weight (kg)',
-  distance_total_m: 'Distance (m)',
+  distance_total_m: 'Kilometers',
 };
 
 const ACTIONS: Record<TripHistoryEntry['action'], string> = {
@@ -138,6 +141,7 @@ export class TripHistory {
   protected value(c: TripHistoryChange, v: unknown): string {
     if (v === null || v === undefined || v === '') return '—';
     if (c.field.endsWith('_cents') && typeof v === 'number') return fmt.money(v);
+    if (c.field === 'distance_total_m' && typeof v === 'number') return fmt.km(Math.ceil(v / 1000));
     if (typeof v === 'object') return JSON.stringify(v);
 
     return String(v);

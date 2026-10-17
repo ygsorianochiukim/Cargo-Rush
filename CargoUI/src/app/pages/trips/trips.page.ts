@@ -280,14 +280,6 @@ export class TripsPage {
     { label: 'Reference', kind: 'strong', value: (t) => t.reference },
     { label: 'Route', value: (t) => `${t.origin} → ${t.destination}`, sub: (t) => t.cargo },
     {
-      label: 'Handled by',
-      value: (t) => (t.hauled_by === 'trucker' ? 'Trucker' : 'Company'),
-      sub: (t) =>
-        t.hauled_by === 'trucker' && t.status === 'pending'
-          ? 'Offered — not accepted yet'
-          : t.booking_source_label,
-    },
-    {
       label: 'Driver',
       value: (t) => t.driver_name ?? t.trucker_driver_name ?? t.trucker_name,
       sub: (t) =>
@@ -302,24 +294,15 @@ export class TripsPage {
     { label: 'Vehicle', kind: 'muted', value: (t) => t.vehicle_plate ?? t.trucker_plate },
     { label: 'Weight', kind: 'num', value: (t) => fmt.kg(t.weight_kg) },
     {
-      label: 'Price',
+      label: 'Kilometers',
       kind: 'num',
-      value: (t) => (t.price_cents === null ? null : fmt.money(t.price_cents, t.currency)),
-      badge: (t) => (t.price_cents === null ? 'Needs a price' : null),
-      sub: (t) =>
-        t.price_cents === null
-          ? t.pricing_note
-          : t.invoice
-            ? t.invoice.balance_cents <= 0
-              ? 'Paid'
-              : t.invoice.paid_cents > 0
-                ? 'Part paid'
-                : 'Unpaid'
-            : t.billed_at
-              ? 'Billed'
-              : t.manually_priced
-              ? 'Manual price'
-              : null,
+      value: (t) => (t.distance_total_m > 0 ? fmt.km(Math.ceil(t.distance_total_m / 1000)) : null),
+      sub: (t) => (t.distance_source === 'estimate' ? 'Estimate' : null),
+    },
+    {
+      label: 'Zone',
+      value: (t) => t.pricing_zone ?? null,
+      badge: (t) => (t.needs_zone ? 'No zone yet' : null),
     },
     { label: 'Scheduled', kind: 'num', value: (t) => fmt.dateTime(t.scheduled_at) },
     { label: 'ETA', kind: 'num', value: (t) => fmt.dateTime(t.eta) },

@@ -41,12 +41,14 @@ export interface Trip extends Timestamped {
   currency: string;
   driver_allowance_cents?: number | null;
   helper_allowance_cents?: number | null;
+  toll_cents?: number | null;
   needs_zone: boolean;
   pricing_note: string | null;
   pricing_source: 'zone' | 'manual' | 'unzoned' | null;
   manually_priced: boolean;
   pricing_zone_id: string | null;
   zone_pinned: boolean;
+  pricing_zone?: string | null;
 
   customer_id: string | null;
   customer: string | null;
@@ -128,6 +130,8 @@ export interface TripPayload {
   pricing_zone_id?: string | null;
   driver_allowance_cents?: number | null;
   helper_allowance_cents?: number | null;
+  toll_cents?: number | null;
+  distance_total_m?: number;
   payment_status?: TripPaymentStatus;
   paid_cents?: number | null;
   paid_on?: string | null;
