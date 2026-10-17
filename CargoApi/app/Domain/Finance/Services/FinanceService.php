@@ -7,6 +7,7 @@ namespace App\Domain\Finance\Services;
 use App\Domain\Billing\Models\Invoice;
 use App\Domain\Billing\Models\PaymentAllocation;
 use App\Domain\Billing\Repositories\InvoiceRepository;
+use App\Domain\Delivery\Models\DeliveryLog;
 use App\Domain\Finance\DTO\LedgerEntryData;
 use App\Domain\Finance\Models\LedgerEntry;
 use App\Domain\Finance\Models\Truck;
@@ -515,6 +516,12 @@ class FinanceService
 
         if ($posted['fuel'] && $changes('fuel_cents', (int) $entry->fuel_cents)) {
             $errors['fuel_cents'] = 'Fuel for this day is logged at Fuel Monitoring. Correct the fill there.';
+        } elseif ($posted['trip_costs'] && $changes('fuel_cents', (int) $entry->fuel_cents)) {
+            $errors['fuel_cents'] = 'Fuel on this day was encoded on a delivery log. Correct it under Delivery Logs.';
+        }
+
+        if ($posted['trip_costs'] && $changes('allowance_cents', (int) $entry->allowance_cents)) {
+            $errors['allowance_cents'] = 'Allowances on this day come from a delivered trip. Correct them on the trip.';
         }
 
         if ($errors !== []) {
@@ -522,14 +529,14 @@ class FinanceService
         }
     }
 
-    /** @return array{maintenance: bool, trip_income: bool, fuel: bool} */
+    /** @return array{maintenance: bool, trip_income: bool, fuel: bool, trip_costs: bool} */
     public function postedOn(LedgerEntry $entry): array
     {
         $day = $entry->date?->toDateString();
         $vehicleId = Truck::query()->whereKey($entry->truck_id)->value('vehicle_id');
 
         if ($day === null) {
-            return ['maintenance' => false, 'trip_income' => false, 'fuel' => false];
+            return ['maintenance' => false, 'trip_income' => false, 'fuel' => false, 'trip_costs' => false];
         }
 
         return [
@@ -546,6 +553,10 @@ class FinanceService
                 ->whereDate('billed_at', $day)
                 ->exists(),
             'fuel' => $this->fillsPostedTo((string) $entry->truck_id, $entry->date),
+            'trip_costs' => DeliveryLog::query()
+                ->where('posted_truck_id', $entry->truck_id)
+                ->whereDate('posted_on', $day)
+                ->exists(),
         ];
     }
 
@@ -767,7 +778,31 @@ class FinanceService
         return $row->refresh();
     }
 
-    private function truckForVehicle(string $vehicleId, ?string $plate): Truck
+    public function chargeTripCosts(string $truckId, CarbonInterface $date, int $fuelDelta, int $allowanceDelta): ?LedgerEntry
+    {
+        if ($fuelDelta === 0 && $allowanceDelta === 0) {
+            return null;
+        }
+
+        $adding = $fuelDelta > 0 || $allowanceDelta > 0;
+
+        $row = $adding
+            ? $this->openDailyRowForTruck($truckId, $date)
+            : LedgerEntry::where('truck_id', $truckId)->whereDate('date', $date->toDateString())->first();
+
+        if ($row === null) {
+            return null;
+        }
+
+        $row->update([
+            'fuel_cents' => max(0, (int) $row->fuel_cents + $fuelDelta),
+            'allowance_cents' => max(0, (int) $row->allowance_cents + $allowanceDelta),
+        ]);
+
+        return $row->refresh();
+    }
+
+    public function truckForVehicle(string $vehicleId, ?string $plate): Truck
     {
         $existing = Truck::where('vehicle_id', $vehicleId)->first();
 

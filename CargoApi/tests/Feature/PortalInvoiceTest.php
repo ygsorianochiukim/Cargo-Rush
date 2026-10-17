@@ -59,7 +59,7 @@ describe('the liquidation', function (): void {
 
         $invoice = ($this->invoices)()[0];
 
-        expect($invoice['trip_reference'])->toStartWith('CR-')
+        expect($invoice['trip_reference'])->toStartWith('CTS-')
             ->and($invoice['trip_origin'])->toBe('Bacolod')
             ->and($invoice['trip_destination'])->toBe('Iloilo')
             ->and($invoice['trip_cargo'])->toBe('Chilled produce, 8 crates')

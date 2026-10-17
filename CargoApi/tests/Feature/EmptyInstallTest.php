@@ -91,7 +91,7 @@ describe('entering the first records', function (): void {
             'scheduled_at' => now()->addDay()->toIso8601String(),
         ])
             ->assertCreated()
-            ->assertJsonPath('data.reference', 'CR-24801');
+            ->assertJsonPath('data.reference', 'CTS-'.now()->setTimezone('Asia/Manila')->format('mdy').'-00001');
     });
 
     it('adds a ledger unit with no plate yet', function (): void {

@@ -12,6 +12,11 @@
         {{ fmt.money(b.spent_today_cents, b.currency) }}
       </p>
       <p class="cr-meta mt-1">Spent of {{ fmt.money(b.daily_budget_cents, b.currency) }}</p>
+      @if (b.trip_fuel_today_cents > 0) {
+        <p class="cr-meta mt-1">
+          incl. {{ fmt.money(b.trip_fuel_today_cents, b.currency) }} encoded after trips
+        </p>
+      }
       @if (b.pending_today_cents > 0) {
         <p class="cr-meta mt-1">
           + {{ fmt.money(b.pending_today_cents, b.currency) }} awaiting approval
@@ -48,8 +53,9 @@
       </p>
       <p class="cr-meta mt-1">Projected month-end spend</p>
       <p class="mt-4 text-[13px] text-cr-ink-muted">
-        Based on {{ fmt.litres(totalLitres()) }} logged across the current cycle and the
-        odometer readings attached to each receipt.
+        Based on {{ fmt.litres(totalLitres() + tripLitres()) }} logged across the current cycle,
+        including {{ fmt.money(b.trip_fuel_month_cents, b.currency) }} of fuel encoded after trips
+        this month.
       </p>
     } @else {
       <div class="cr-skeleton h-7 w-32"></div>
@@ -93,4 +99,21 @@
       (open)="list.edit($any($event))"
       (remove)="list.remove($any($event))" />
   }
+</app-card>
+
+<app-card
+  heading="Fuel after trips"
+  icon="fuel"
+  hint="Encoded on delivery logs"
+  [padded]="false"
+  class="mt-4 block">
+  <app-data-table
+    [columns]="tripColumns"
+    [rows]="tripFuel()"
+    [minWidth]="820"
+    rowAction="Open delivery logs"
+    emptyIcon="fuel"
+    emptyTitle="No trip fuel yet"
+    emptyBody="Fuel encoded on a delivered trip's delivery log shows here."
+    (open)="openTrip()" />
 </app-card>

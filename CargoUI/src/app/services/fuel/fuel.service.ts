@@ -6,6 +6,7 @@ import {
   FuelBudget,
   FuelRecord,
   FuelRecordPayload,
+  TripFuel,
 } from '../../models/fuel/fuel.model';
 import { Envelope, ListQuery } from '../../models/shared/envelope.model';
 
@@ -27,6 +28,10 @@ export class FuelService {
 
   remove(id: string): Observable<void> {
     return this.api.delete(`fuel/${id}`);
+  }
+
+  trips(): Observable<TripFuel[]> {
+    return this.api.get<TripFuel[]>('fuel/trips');
   }
 
   budget(date?: string): Observable<FuelBudget> {

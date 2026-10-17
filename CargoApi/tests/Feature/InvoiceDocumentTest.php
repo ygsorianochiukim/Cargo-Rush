@@ -113,7 +113,7 @@ describe('the delivery invoice', function (): void {
             ->and($line['weight_kg'])->toBe(1800)
             ->and($line['plate'])->toBe('NCR 4412')
             ->and($line['driver'])->toBe('Marco Reyes')
-            ->and($line['reference'])->toStartWith('CR-')
+            ->and($line['reference'])->toStartWith('CTS-')
             ->and($line['delivered_at'])->toBe(now()->toDateString());
     });
 

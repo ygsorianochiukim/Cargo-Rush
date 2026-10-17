@@ -46,7 +46,7 @@ describe('a customer files a request', function (): void {
         $response = ($this->file)()->assertCreated();
 
         expect($response->json('data.status'))->toBe(StatusValue::Pending->value)
-            ->and($response->json('data.reference'))->toStartWith('CR-')
+            ->and($response->json('data.reference'))->toStartWith('CTS-')
             ->and($response->json('data.customer_id'))->toBe($this->firm->id)
             ->and($response->json('data.driver_id'))->toBeNull()
             ->and($response->json('data.vehicle_id'))->toBeNull();

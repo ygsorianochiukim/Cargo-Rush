@@ -11,6 +11,7 @@ use App\Domain\Dispatch\Models\DispatchRecord;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Gps\Models\GpsPing;
 use App\Domain\Inspection\Models\Inspection;
+use App\Domain\Pricing\Models\PricingZone;
 use App\Domain\Pricing\Models\TruckCategory;
 use App\Domain\Shared\Enums\BookingSource;
 use App\Domain\Shared\Enums\StatusValue;
@@ -20,6 +21,7 @@ use App\Domain\Trucker\Models\Trucker;
 use App\Domain\Trucker\Models\TruckerDriver;
 use App\Domain\Trucker\Models\TruckerVehicle;
 use App\Domain\Vehicle\Models\Vehicle;
+use Carbon\CarbonInterface;
 use Database\Factories\TripFactory;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -43,6 +45,7 @@ class Trip extends Model
         'vehicle_id', 'truck_category_id', 'status', 'pickup_place', 'dropoff_place',
         'scheduled_at', 'eta', 'distance_total_m',
         'price_cents', 'currency', 'billed_at', 'requested_by',
+        'driver_allowance_cents', 'helper_allowance_cents', 'toll_cents',
         'pricing_zone_id', 'pricing_bracket_id', 'fuel_adjustment_bp', 'fuel_surcharge_cents',
         'pricing_source', 'pricing_note',
         'trucker_id', 'trucker_vehicle_id', 'trucker_driver_id', 'booking_source',
@@ -59,6 +62,9 @@ class Trip extends Model
             'pieces' => 'integer',
             'distance_total_m' => 'integer',
             'price_cents' => 'integer',
+            'driver_allowance_cents' => 'integer',
+            'helper_allowance_cents' => 'integer',
+            'toll_cents' => 'integer',
             'fuel_adjustment_bp' => 'integer',
             'fuel_surcharge_cents' => 'integer',
             'zone_pinned' => 'boolean',
@@ -82,6 +88,11 @@ class Trip extends Model
     public function driver(): BelongsTo
     {
         return $this->belongsTo(Driver::class);
+    }
+
+    public function pricingZone(): BelongsTo
+    {
+        return $this->belongsTo(PricingZone::class);
     }
 
     public function helpers(): BelongsToMany
@@ -216,7 +227,10 @@ class Trip extends Model
     protected static function booted(): void
     {
         static::creating(function (self $trip): void {
-            $trip->reference ??= static::nextReference();
+            if ($trip->reference === null) {
+                $trip->reference_seq = static::nextSeries();
+                $trip->reference = static::referenceFor($trip->reference_seq, now());
+            }
         });
     }
 
@@ -242,15 +256,19 @@ class Trip extends Model
         ));
     }
 
-    public static function nextReference(): string
+    public const REFERENCE_TIMEZONE = 'Asia/Manila';
+
+    public static function nextSeries(): int
     {
-        $last = static::withTrashed()
-            ->where('reference', 'like', 'CR-%')
-            ->orderByDesc('reference')
-            ->value('reference');
+        return (int) static::withTrashed()->max('reference_seq') + 1;
+    }
 
-        $n = $last === null ? 24800 : (int) substr((string) $last, 3);
-
-        return 'CR-'.($n + 1);
+    public static function referenceFor(int $series, CarbonInterface $createdAt): string
+    {
+        return sprintf(
+            'CTS-%s-%05d',
+            $createdAt->copy()->setTimezone(self::REFERENCE_TIMEZONE)->format('mdy'),
+            $series,
+        );
     }
 }

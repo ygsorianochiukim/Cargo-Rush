@@ -41,7 +41,7 @@ it('assigns the reference itself and opens a delivery log with the trip', functi
 
     $id = $response->json('data.id');
 
-    expect($response->json('data.reference'))->toStartWith('CR-')
+    expect($response->json('data.reference'))->toMatch('/^CTS-\d{6}-\d{5}$/')
         ->and(DeliveryLog::where('trip_id', $id)->exists())->toBeTrue();
 });
 

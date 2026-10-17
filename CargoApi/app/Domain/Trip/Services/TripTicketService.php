@@ -110,6 +110,7 @@ class TripTicketService
                 'contact' => $trip->customer?->contact,
             ],
             'allowance_cents' => (int) LedgerEntry::query()->where('trip_id', $trip->getKey())->sum('allowance_cents') ?: null,
+            'toll_cents' => $trip->toll_cents ?: null,
             'checklist' => $this->answered($trip),
             'checked' => [
                 'at' => $trip->dispatch_checked_at?->toIso8601String(),

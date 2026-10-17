@@ -22,12 +22,19 @@ class DeliveryLog extends Model
 
     protected $fillable = [
         'trip_id', 'delivered_at', 'pod_ref', 'pod_image_path', 'receiver_name', 'status',
+        'fuel_litres', 'fuel_cost_cents',
     ];
 
     protected function casts(): array
     {
         return [
             'delivered_at' => 'datetime',
+            'fuel_litres' => 'float',
+            'fuel_cost_cents' => 'integer',
+            'posted_fuel_cents' => 'integer',
+            'posted_driver_allowance_cents' => 'integer',
+            'posted_helper_allowance_cents' => 'integer',
+            'posted_on' => 'date',
             'status' => StatusValue::class,
         ];
     }

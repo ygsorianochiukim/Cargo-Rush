@@ -68,7 +68,9 @@ class DemoPayrollCommand extends Command
         }
 
         $removed = DB::transaction(function (): array {
-            $trips = Trip::query()->where('reference', 'like', 'DEMO-TR-%')->delete();
+            $trips = Trip::query()
+                ->where(fn ($q) => $q->where('reference', 'like', 'DEMO-TR-%')->orWhere('legacy_reference', 'like', 'DEMO-TR-%'))
+                ->delete();
 
             $trucks = Truck::query()->whereIn('label', ['Demo Truck A', 'Demo Truck B'])->pluck('id');
 

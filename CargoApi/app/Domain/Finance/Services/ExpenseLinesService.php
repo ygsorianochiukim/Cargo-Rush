@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Finance\Services;
 
 use App\Domain\Billing\Models\PaymentAllocation;
+use App\Domain\Delivery\Models\DeliveryLog;
 use App\Domain\Finance\Models\Expense;
 use App\Domain\Finance\Models\LedgerEntry;
 use App\Domain\Finance\Repositories\ExpenseRepository;
@@ -43,8 +44,17 @@ class ExpenseLinesService
             ->filter(static fn (FuelRecord $fill): bool => $trucks->has($fill->posted_truck_id))
             ->values();
 
+        $tripCosts = DeliveryLog::query()
+            ->whereNotNull('posted_truck_id')
+            ->whereDate('posted_on', '>=', $from->toDateString())
+            ->whereDate('posted_on', '<=', $to->toDateString())
+            ->get()
+            ->filter(static fn (DeliveryLog $log): bool => $trucks->has($log->posted_truck_id))
+            ->values();
+
         $lines = [
-            ...$this->sheetLines($from, $to, $trucks, $posted),
+            ...$this->sheetLines($from, $to, $trucks, $posted, $tripCosts),
+            ...$this->tripCostLines($trucks, $tripCosts),
             ...$this->expenseLines($from, $to, $trucks),
             ...$this->fuelLogLines($from, $to, $trucks, $posted),
             ...$this->supplierBillLines($from, $to),
@@ -61,7 +71,7 @@ class ExpenseLinesService
         ];
     }
 
-    private function sheetLines(Carbon $from, Carbon $to, Collection $trucks, Collection $posted): array
+    private function sheetLines(Carbon $from, Carbon $to, Collection $trucks, Collection $posted, Collection $tripCosts): array
     {
         $lines = [];
 
@@ -73,16 +83,38 @@ class ExpenseLinesService
             ->map(static fn (Collection $fills): int => (int) $fills->sum('posted_cents'))
             ->all();
 
+        $tripDay = static fn (DeliveryLog $log): string => $log->posted_truck_id.'|'.$log->posted_on->toDateString();
+
+        $tripFuel = $tripCosts->groupBy($tripDay)
+            ->map(static fn (Collection $logs): int => (int) $logs->sum('posted_fuel_cents'))
+            ->all();
+
+        $tripAllowance = $tripCosts->groupBy($tripDay)
+            ->map(static fn (Collection $logs): int => (int) $logs->sum(
+                static fn (DeliveryLog $log): int => $log->posted_driver_allowance_cents + $log->posted_helper_allowance_cents,
+            ))
+            ->all();
+
         foreach ($entries as $entry) {
             $truck = $trucks->get($entry->truck_id);
+            $day = $entry->truck_id.'|'.$entry->date->toDateString();
 
             foreach (self::COLUMNS as $column => $label) {
                 $cents = (int) $entry->{$column};
 
                 if ($column === 'fuel_cents') {
-                    $day = $entry->truck_id.'|'.$entry->date->toDateString();
                     $taken = min($cents, $fromFills[$day] ?? 0);
                     $fromFills[$day] = ($fromFills[$day] ?? 0) - $taken;
+                    $cents -= $taken;
+
+                    $taken = min($cents, $tripFuel[$day] ?? 0);
+                    $tripFuel[$day] = ($tripFuel[$day] ?? 0) - $taken;
+                    $cents -= $taken;
+                }
+
+                if ($column === 'allowance_cents') {
+                    $taken = min($cents, $tripAllowance[$day] ?? 0);
+                    $tripAllowance[$day] = ($tripAllowance[$day] ?? 0) - $taken;
                     $cents -= $taken;
                 }
 
@@ -120,6 +152,44 @@ class ExpenseLinesService
                     truck: $truck->plate ?? $truck->label,
                     cents: $cents,
                     recordId: $entry->id,
+                );
+            }
+        }
+
+        return $lines;
+    }
+
+    private function tripCostLines(Collection $trucks, Collection $tripCosts): array
+    {
+        $lines = [];
+
+        $logs = (new EloquentCollection($tripCosts->all()))
+            ->load(['trip' => static fn ($q) => $q->withTrashed()->with(['driver:id,name', 'helpers:id,name'])]);
+
+        foreach ($logs as $log) {
+            $truck = $trucks->get($log->posted_truck_id);
+            $reference = (string) $log->trip?->reference;
+
+            $parts = [
+                'fuel' => ['Fuel', $log->posted_fuel_cents, $reference],
+                'driver_allowance' => ['Driver allowance', $log->posted_driver_allowance_cents, $reference.' · '.($log->trip?->driver?->name ?? '')],
+                'helper_allowance' => ['Helper allowance', $log->posted_helper_allowance_cents, $reference.' · '.($log->trip?->helpers->pluck('name')->implode(', ') ?? '')],
+            ];
+
+            foreach ($parts as $key => [$kind, $cents, $description]) {
+                if ((int) $cents === 0) {
+                    continue;
+                }
+
+                $lines[] = $this->line(
+                    key: "trip:{$log->id}:{$key}",
+                    source: 'trip',
+                    date: $log->posted_on->toDateString(),
+                    kind: $kind,
+                    description: trim($description, ' ·'),
+                    truck: $truck->plate ?? $truck->label,
+                    cents: (int) $cents,
+                    recordId: $log->trip_id,
                 );
             }
         }

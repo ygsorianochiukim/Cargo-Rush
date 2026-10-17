@@ -133,7 +133,7 @@ describe('paying an allowance without retyping it', function (): void {
             ->toBe(150_000);
 
         $this->actingAs($this->admin)
-            ->patchJson("/api/v1/employees/{$employee['id']}", ['amount_cents' => 4_000_000])
+            ->patchJson("/api/v1/employees/{$employee['id']}", ['amount_cents' => 4_000_000, 'effective_from' => '2026-10-01'])
             ->assertOk();
 
         expect(($this->open)(['period_start' => '2026-10-01', 'period_end' => '2026-10-15', 'pay_date' => '2026-10-15'])

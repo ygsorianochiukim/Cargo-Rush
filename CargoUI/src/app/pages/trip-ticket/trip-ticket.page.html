@@ -410,13 +410,13 @@
           <td class="text-right">{{ amount(t.allowance_cents) }}</td>
         </tr>
         <tr class="tt-row">
-          <td></td>
-          <td></td>
-          <td></td>
+          <td class="tt-label">Toll</td>
+          <td class="tt-value">{{ t.toll_cents ? t.trip.origin + ' – ' + t.trip.destination : '' }}</td>
+          <td class="text-right">{{ amount(t.toll_cents) }}</td>
         </tr>
         <tr class="tt-row">
           <td colspan="2" class="text-right font-bold">TOTAL</td>
-          <td class="text-right font-bold">{{ amount(t.allowance_cents) }}</td>
+          <td class="text-right font-bold">{{ amount((t.allowance_cents ?? 0) + (t.toll_cents ?? 0)) }}</td>
         </tr>
       </table>
 

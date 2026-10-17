@@ -2,7 +2,9 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 
-import { FuelRecord } from '../../models/fuel/fuel.model';
+import { Router } from '@angular/router';
+
+import { FuelRecord, TripFuel } from '../../models/fuel/fuel.model';
 import { fuelSpec } from '../../services/fuel/fuel.form';
 import { FuelService } from '../../services/fuel/fuel.service';
 import { Card } from '../../shared/card';
@@ -20,6 +22,7 @@ import { ErrorState } from '../../shared/states';
 })
 export class FuelPage {
   private readonly fuelApi = inject(FuelService);
+  private readonly router = inject(Router);
 
   protected readonly budget = toSignal(this.fuelApi.budget(), {
     initialValue: null,
@@ -52,6 +55,24 @@ export class FuelPage {
   protected readonly totalLitres = computed(() =>
     (this.rows() ?? []).reduce((sum, r) => sum + r.litres, 0),
   );
+
+  protected readonly tripFuel = toSignal(this.fuelApi.trips(), { initialValue: null });
+
+  protected readonly tripLitres = computed(() =>
+    (this.tripFuel() ?? []).reduce((sum, r) => sum + (r.litres ?? 0), 0),
+  );
+
+  protected readonly tripColumns: Column<TripFuel>[] = [
+    { label: 'Trip', kind: 'strong', value: (t) => t.reference, sub: (t) => t.route },
+    { label: 'Vehicle', value: (t) => t.vehicle_plate, sub: (t) => t.driver_name },
+    { label: 'Litres', kind: 'num', value: (t) => (t.litres === null ? '—' : fmt.litres(t.litres)) },
+    { label: 'Fuel expense', kind: 'num', value: (t) => fmt.money(t.amount_cents, t.currency) },
+    { label: 'Delivered', kind: 'num', value: (t) => fmt.dateTime(t.delivered_at) },
+  ];
+
+  protected openTrip(): void {
+    void this.router.navigate(['/delivery-logs']);
+  }
 
   protected readonly fmt = fmt;
 

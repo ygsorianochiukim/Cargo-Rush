@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Fuel\Services;
 
+use App\Domain\Delivery\Models\DeliveryLog;
 use App\Domain\Fuel\DTO\FuelRecordData;
 use App\Domain\Fuel\Models\FuelRecord;
 use App\Domain\Fuel\Repositories\FuelRepository;
@@ -56,18 +57,42 @@ class FuelService
         });
     }
 
+    /** @return array<int, array<string, mixed>> */
+    public function tripFuel(): array
+    {
+        return $this->fuel->tripFuel()
+            ->map(static fn (DeliveryLog $log): array => [
+                'id' => $log->id,
+                'trip_id' => $log->trip_id,
+                'reference' => $log->trip?->reference,
+                'route' => $log->trip === null ? null : "{$log->trip->origin} → {$log->trip->destination}",
+                'vehicle_plate' => $log->trip?->vehicle?->plate,
+                'driver_name' => $log->trip?->driver?->name,
+                'litres' => $log->fuel_litres,
+                'amount_cents' => (int) $log->posted_fuel_cents,
+                'currency' => $log->trip?->currency ?? 'PHP',
+                'delivered_at' => $log->delivered_at?->toIso8601String(),
+                'posted_on' => $log->posted_on?->toDateString(),
+            ])
+            ->values()
+            ->all();
+    }
+
     /** @return array<string, mixed> */
     public function budget(?Carbon $on = null): array
     {
         $day = $on ?? now();
         $budget = $this->fuel->budgetFor($day);
 
-        $spentToday = $this->fuel->spentBetween($day->copy()->startOfDay(), $day->copy()->endOfDay());
+        $tripToday = $this->fuel->tripFuelBetween($day, $day);
+        $spentToday = $this->fuel->spentBetween($day->copy()->startOfDay(), $day->copy()->endOfDay()) + $tripToday;
 
         return [
             'date' => $day->toDateString(),
             'daily_budget_cents' => $budget?->daily_budget_cents ?? 0,
             'spent_today_cents' => $spentToday,
+            'trip_fuel_today_cents' => $tripToday,
+            'trip_fuel_month_cents' => $this->fuel->tripFuelBetween($day->copy()->startOfMonth(), $day),
             'pending_today_cents' => $this->fuel->pendingBetween($day->copy()->startOfDay(), $day->copy()->endOfDay()),
             'currency' => $budget?->currency ?? 'PHP',
             'projection_cents' => $this->monthProjection($day),
@@ -78,7 +103,8 @@ class FuelService
     private function monthProjection(Carbon $day): int
     {
         $start = $day->copy()->startOfMonth();
-        $spent = $this->fuel->spentBetween($start, $day->copy()->endOfDay());
+        $spent = $this->fuel->spentBetween($start, $day->copy()->endOfDay())
+            + $this->fuel->tripFuelBetween($start, $day);
 
         $elapsed = max(1, $start->diffInDays($day) + 1);
 

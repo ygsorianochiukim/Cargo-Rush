@@ -39,7 +39,7 @@ import { EmptyState, SkeletonRows } from '../../shared/states';
       @if (trip(); as t) {
         @if (t.price_cents === null) {
           <p class="mb-4 rounded-control bg-cr-warning-bg px-4 py-3 text-[13px] text-cr-warning" role="alert">
-            This run has no price yet — add a zone line on the Pricing card or enter a price.
+            This run has no price yet — enter one on the trip.
             @if (t.pricing_note) {
               <span class="mt-1 block text-[12px]">{{ t.pricing_note }}</span>
             }

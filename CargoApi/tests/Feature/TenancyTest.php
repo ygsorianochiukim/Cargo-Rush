@@ -156,8 +156,10 @@ describe('per-company configuration', function (): void {
             'cargo' => 'Crates', 'weight_kg' => 200, 'scheduled_at' => now()->addDay(),
         ]));
 
-        expect($first->reference)->toBe('CR-24801')
-            ->and($theirs->reference)->toBe('CR-24801');
+        $expected = 'CTS-'.now()->setTimezone('Asia/Manila')->format('mdy').'-00001';
+
+        expect($first->reference)->toBe($expected)
+            ->and($theirs->reference)->toBe($expected);
     });
 });
 

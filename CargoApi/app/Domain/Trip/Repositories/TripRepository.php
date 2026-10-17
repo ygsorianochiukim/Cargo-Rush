@@ -26,6 +26,7 @@ class TripRepository extends Repository
                 'customer:id,name', 'driver:id,name', 'helpers', 'vehicle:id,plate',
                 'trucker:id,name,business_name,phone', 'truckerVehicle:id,plate',
                 'truckerDriver:id,name',
+                'pricingZone:id,name',
                 'latestInspection.driver:id,name',
                 'invoice' => static fn ($query) => $query->withSum('allocations', 'amount_cents'),
             ])
@@ -34,7 +35,7 @@ class TripRepository extends Repository
 
     protected function searchable(): array
     {
-        return ['reference', 'origin', 'destination', 'cargo'];
+        return ['reference', 'legacy_reference', 'origin', 'destination', 'cargo'];
     }
 
     protected function applyFilters(Builder $query, array $filters): Builder
@@ -80,12 +81,16 @@ class TripRepository extends Repository
             $query->where('scheduled_at', '<=', Carbon::parse($filters['to'])->endOfDay());
         }
 
-        return $query;
+        return $query->reorder()
+            ->orderByRaw('CASE WHEN reference_seq IS NULL THEN 1 ELSE 0 END')
+            ->orderByDesc('reference_seq')
+            ->orderByDesc('created_at');
     }
 
     public function findByReference(string $reference): ?Trip
     {
-        return $this->query()->where('reference', $reference)->first();
+        return $this->query()->where('reference', $reference)->first()
+            ?? $this->query()->where('legacy_reference', $reference)->first();
     }
 
     public function dueScheduled(): Collection
