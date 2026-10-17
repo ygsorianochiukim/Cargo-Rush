@@ -2,7 +2,6 @@
 
 declare(strict_types=1);
 
-use App\Domain\Trip\Models\Trip;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Carbon;

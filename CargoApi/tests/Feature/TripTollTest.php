@@ -13,6 +13,7 @@ use App\Domain\Identity\Models\User;
 use App\Domain\Pricing\Models\PricingZone;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Trip\Models\Trip;
+use App\Domain\Trip\Repositories\TripRepository;
 use App\Domain\Vehicle\Models\Vehicle;
 use Database\Seeders\ChartOfAccountsSeeder;
 use Database\Seeders\Demo\FleetSeeder;
@@ -148,7 +149,6 @@ it('lists trips by reference, newest first, whatever was edited last', function 
         ->and($references->search('DEMO-TR-D07'))->toBeGreaterThan($references->search($first['reference']));
 });
 
-
 it('numbers trips CTS-date-series, running on without resetting', function (): void {
     $this->travelTo(Carbon\Carbon::parse('2026-10-17 01:00:00', 'Asia/Manila'));
     $first = ($this->trip)()->json('data.reference');
@@ -182,7 +182,7 @@ it('renumbers existing trips in the order they were made, and still finds them b
         ->and($newer->reference)->toStartWith('CTS-030726-')
         ->and($newer->reference_seq)->toBe($older->reference_seq + 1)
         ->and($older->legacy_reference)->toBe('CR-24900')
-        ->and(app(App\Domain\Trip\Repositories\TripRepository::class)->findByReference('CR-24901')?->id)->toBe($newer->id);
+        ->and(app(TripRepository::class)->findByReference('CR-24901')?->id)->toBe($newer->id);
 });
 
 it('prices from the zone the typed kilometers fall in', function (): void {
