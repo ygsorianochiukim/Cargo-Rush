@@ -5,6 +5,7 @@ import { map } from 'rxjs';
 
 import { StatusValue } from '../../models/shared/status.model';
 import { Trip } from '../../models/trip/trip.model';
+import { IdentityService } from '../../services/identity/identity.service';
 import { TripService } from '../../services/trip/trip.service';
 import { statusLabel } from '../../shared/status';
 import { Card } from '../../shared/card';
@@ -121,7 +122,7 @@ function tripNumber(reference: string | null | undefined): number {
       <app-data-table
         [columns]="columns"
         [rows]="rows()"
-        [minWidth]="1240"
+        [minWidth]="1100"
         rowAction="Edit trip"
         [deletable]="true"
         [rowLabel]="tripLabel"
@@ -147,6 +148,10 @@ export class TripsPage {
   private readonly trips = inject(TripService);
   private readonly confirmDelete = inject(Confirm);
   private readonly tripDialog = inject(TripDialog);
+  private readonly identity = inject(IdentityService);
+
+  protected readonly canSeeMoney =
+    this.identity.can('finance.view') || this.identity.can('expenses.view');
 
   private readonly loaded = toSignal(this.trips.list().pipe(map((r) => r.data)), {
     initialValue: null,
@@ -298,20 +303,27 @@ export class TripsPage {
             : 'No helper',
     },
     { label: 'Vehicle', kind: 'muted', value: (t) => t.vehicle_plate ?? t.trucker_plate },
-    { label: 'Weight', kind: 'num', value: (t) => fmt.kg(t.weight_kg) },
     {
-      label: 'Kilometers',
+      label: 'Gross',
       kind: 'num',
-      value: (t) => (t.distance_total_m > 0 ? fmt.km(Math.ceil(t.distance_total_m / 1000)) : null),
-      sub: (t) => (t.distance_source === 'estimate' ? 'Estimate' : null),
+      value: (t) =>
+        t.price_cents === null || t.status === 'cancelled' ? null : fmt.money(t.price_cents, t.currency),
     },
-    {
-      label: 'Zone',
-      value: (t) => t.pricing_zone ?? null,
-      badge: (t) => (t.needs_zone ? 'No zone yet' : null),
-    },
+    ...(this.canSeeMoney
+      ? ([
+          {
+            label: 'Expenses',
+            kind: 'num',
+            value: (t) => (t.costs_cents === undefined ? null : fmt.money(t.costs_cents, t.currency)),
+          },
+          {
+            label: 'Net',
+            kind: 'strong',
+            value: (t) => (t.net_cents === undefined ? null : fmt.money(t.net_cents, t.currency)),
+          },
+        ] satisfies Column<Trip>[])
+      : []),
     { label: 'Scheduled', kind: 'num', value: (t) => fmt.dateTime(t.scheduled_at) },
-    { label: 'ETA', kind: 'num', value: (t) => fmt.dateTime(t.eta) },
     { label: 'Status', kind: 'status', status: (t) => t.status },
   ];
 }

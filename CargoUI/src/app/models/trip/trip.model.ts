@@ -76,6 +76,10 @@ export interface Trip extends Timestamped {
   commission_bp: number | null;
   commission_cents: number | null;
 
+  trip_income_cents?: number;
+  costs_cents?: number;
+  net_cents?: number;
+
   inspection: TripInspection;
 
   status: StatusValue;
@@ -165,4 +169,26 @@ export interface TripHistoryEntry {
   ip_address: string | null;
   url: string | null;
   changes: TripHistoryChange[];
+}
+
+export interface TripCostLine {
+  key: string;
+  kind: string;
+  description: string | null;
+  amount_cents: number;
+  source: 'trip' | 'delivery_log' | 'expense';
+  record_id: string | null;
+  paid_with: string | null;
+}
+
+export interface TripCosts {
+  trip_id: string;
+  hauled_by: 'company' | 'trucker';
+  income_label: string;
+  income_cents: number;
+  lines: TripCostLine[];
+  costs_cents: number;
+  net_cents: number;
+  final: boolean;
+  currency: string;
 }

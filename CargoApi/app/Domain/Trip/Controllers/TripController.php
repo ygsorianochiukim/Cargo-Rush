@@ -16,6 +16,7 @@ use App\Domain\Trip\Requests\ConfirmTripRequest;
 use App\Domain\Trip\Requests\DeliverTripRequest;
 use App\Domain\Trip\Requests\TripRequest;
 use App\Domain\Trip\Resources\TripResource;
+use App\Domain\Trip\Services\TripCostService;
 use App\Domain\Trip\Services\TripHistoryService;
 use App\Domain\Trip\Services\TripService;
 use App\Domain\Trip\Services\TripTicketService;
@@ -46,6 +47,11 @@ class TripController extends ApiController
     public function history(Trip $trip, TripHistoryService $history): JsonResponse
     {
         return $this->payload($history->for($trip));
+    }
+
+    public function costs(Trip $trip, TripCostService $costs): JsonResponse
+    {
+        return $this->payload($costs->for($trip));
     }
 
     public function ticket(Trip $trip, TripTicketService $tickets): JsonResponse

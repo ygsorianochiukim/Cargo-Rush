@@ -3,6 +3,7 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { map } from 'rxjs';
 
 import { DashboardService } from '../../services/dashboard/dashboard.service';
+import { IdentityService } from '../../services/identity/identity.service';
 import { TripService } from '../../services/trip/trip.service';
 import { TONE_CLASS, TONE_DOT, toneFor } from '../../shared/status';
 import { Bar, BarChart } from '../../shared/bar-chart';
@@ -13,16 +14,20 @@ import { Icon } from '../../shared/icon';
 import { KpiTile } from '../../shared/kpi-tile';
 import { SkeletonRows } from '../../shared/states';
 import { StatusPill } from '../../shared/status-pill';
+import { TruckCards } from './truck-cards';
 
 @Component({
   selector: 'app-dashboard',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BarChart, Card, ChartTooltip, Icon, KpiTile, SkeletonRows, StatusPill],
+  imports: [BarChart, Card, ChartTooltip, Icon, KpiTile, SkeletonRows, StatusPill, TruckCards],
   templateUrl: './dashboard.page.html',
 })
 export class DashboardPage {
   private readonly dashboard = inject(DashboardService);
   private readonly trips = inject(TripService);
+  private readonly identity = inject(IdentityService);
+
+  protected readonly canSeeMoney = this.identity.can('finance.view');
 
   protected readonly kpis = toSignal(this.dashboard.kpis(), {
     initialValue: null,

@@ -9,6 +9,7 @@ use App\Domain\Shared\Enums\BookingSource;
 use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use App\Domain\Trip\Models\Trip;
+use App\Domain\Trip\Services\TripCostService;
 use Illuminate\Http\Request;
 
 /** @mixin Trip */
@@ -71,6 +72,7 @@ class TripResource extends ApiResource
             'booking_source_label' => ($this->booking_source ?? BookingSource::CargoRush)->label(),
             'commission_bp' => $this->commission_bp,
             'commission_cents' => $this->commission_cents,
+            ...$this->profit($request),
 
             'inspection' => app(InspectionService::class)->summaryFor($this->resource, $this->detailedInspection()),
 
@@ -127,5 +129,25 @@ class TripResource extends ApiResource
     protected function detailedInspection(): bool
     {
         return true;
+    }
+
+    /** @return array<string, int> */
+    private function profit(Request $request): array
+    {
+        $user = $request->user();
+
+        if (! $this->resource->relationLoaded('expenses')
+            || $user === null
+            || ! ($user->hasPermission('finance.view') || $user->hasPermission('expenses.view'))) {
+            return [];
+        }
+
+        $costs = app(TripCostService::class)->for($this->resource);
+
+        return [
+            'trip_income_cents' => $costs['income_cents'],
+            'costs_cents' => $costs['costs_cents'],
+            'net_cents' => $costs['net_cents'],
+        ];
     }
 }
