@@ -137,6 +137,7 @@ class ExpenseLinesService
                             truck: $truck->plate ?? $truck->label,
                             cents: (int) $line->salary_cents,
                             recordId: $entry->id,
+                            truckId: $entry->truck_id,
                         );
                     }
 
@@ -152,6 +153,7 @@ class ExpenseLinesService
                     truck: $truck->plate ?? $truck->label,
                     cents: $cents,
                     recordId: $entry->id,
+                    truckId: $entry->truck_id,
                 );
             }
         }
@@ -164,7 +166,10 @@ class ExpenseLinesService
         $lines = [];
 
         $logs = (new EloquentCollection($tripCosts->all()))
-            ->load(['trip' => static fn ($q) => $q->withTrashed()->with(['driver:id,name', 'helpers:id,name'])]);
+            ->load([
+                'trip' => static fn ($q) => $q->withTrashed()->with(['driver:id,name', 'helpers:id,name']),
+                'paymentSource:id,name,kind,last_four',
+            ]);
 
         foreach ($logs as $log) {
             $truck = $trucks->get($log->posted_truck_id);
@@ -190,6 +195,8 @@ class ExpenseLinesService
                     truck: $truck->plate ?? $truck->label,
                     cents: (int) $cents,
                     recordId: $log->trip_id,
+                    truckId: $log->posted_truck_id,
+                    paidWith: $key === 'fuel' ? $log->paymentSource?->label() : null,
                 );
             }
         }
@@ -201,7 +208,7 @@ class ExpenseLinesService
     {
         return $this->expenses->between($from, $to)
             ->filter(static fn (Expense $e): bool => $e->truck_id === null || $trucks->has($e->truck_id))
-            ->load(['category:id,name', 'supplier:id,name'])
+            ->load(['category:id,name', 'supplier:id,name', 'paymentSource:id,name,kind,last_four'])
             ->map(function (Expense $expense) use ($trucks): array {
                 $truck = $expense->truck_id === null ? null : $trucks->get($expense->truck_id);
 
@@ -214,6 +221,8 @@ class ExpenseLinesService
                     truck: $truck === null ? null : ($truck->plate ?? $truck->label),
                     cents: (int) $expense->amount_cents,
                     recordId: $expense->id,
+                    truckId: $truck?->id,
+                    paidWith: $expense->paymentSource?->label(),
                 );
             })
             ->values()
@@ -227,7 +236,7 @@ class ExpenseLinesService
         $unposted = $this->fuel->unpostedBetween($from, $to);
 
         return (new EloquentCollection([...$posted->all(), ...$unposted->all()]))
-            ->load(['vehicle:id,plate', 'driver:id,name'])
+            ->load(['vehicle:id,plate', 'driver:id,name', 'paymentSource:id,name,kind,last_four'])
             ->map(function (FuelRecord $fill) use ($trucks, $truckOf): array {
                 $truck = $fill->isPosted()
                     ? $trucks->get($fill->posted_truck_id)
@@ -242,6 +251,8 @@ class ExpenseLinesService
                     truck: $truck === null ? $fill->vehicle?->plate : ($truck->plate ?? $truck->label),
                     cents: $fill->isPosted() ? (int) $fill->posted_cents : (int) $fill->amount_cents,
                     recordId: $fill->id,
+                    truckId: $truck?->id,
+                    paidWith: $fill->paymentSource?->label(),
                 );
             })
             ->values()
@@ -314,6 +325,8 @@ class ExpenseLinesService
         ?string $truck,
         int $cents,
         ?string $recordId,
+        ?string $truckId = null,
+        ?string $paidWith = null,
     ): array {
         return [
             'key' => $key,
@@ -322,6 +335,8 @@ class ExpenseLinesService
             'kind' => $kind,
             'description' => $description === '' ? null : $description,
             'truck' => $truck,
+            'truck_id' => $truckId,
+            'paid_with' => $paidWith,
             'amount_cents' => $cents,
             'record_id' => $recordId,
         ];

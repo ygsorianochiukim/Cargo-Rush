@@ -9,9 +9,11 @@ use App\Domain\Finance\DTO\ExpenseData;
 use App\Domain\Finance\Models\Expense;
 use App\Domain\Finance\Models\ExpenseCategory;
 use App\Domain\Finance\Repositories\ExpenseRepository;
+use App\Domain\Shared\Enums\PaySchedule;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Repositories\Repository;
 use App\Domain\Shared\Services\CrudService;
+use App\Domain\Tenancy\Support\RateBook;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Str;
@@ -21,6 +23,7 @@ class ExpenseService extends CrudService
     public function __construct(
         private readonly ExpenseRepository $expenses,
         private readonly FinanceService $finance,
+        private readonly RateBook $rates,
     ) {}
 
     protected function repository(): Repository
@@ -124,6 +127,8 @@ class ExpenseService extends CrudService
 
         $total = (int) $spend->sum('amount_cents');
         $overhead = (int) $spend->whereNull('truck_id')->sum('amount_cents');
+        $vatable = $spend->where('is_vatable', true);
+        $rateBp = $this->rates->vatRateBp();
 
         return [
             'range' => ['from' => $from->toDateString(), 'to' => $to->toDateString()],
@@ -131,6 +136,17 @@ class ExpenseService extends CrudService
             'total_cents' => $total,
             'overhead_cents' => $overhead,
             'attributed_cents' => $total - $overhead,
+            'vatable_cents' => (int) $vatable->sum('amount_cents'),
+            'non_vatable_cents' => $total - (int) $vatable->sum('amount_cents'),
+            'input_vat_cents' => (int) $vatable->sum(static fn (Expense $e): int => $e->vatCents($rateBp)),
+            'vat_rate_bp' => $rateBp,
+            'by_schedule' => array_map(static fn (PaySchedule $schedule): array => [
+                'schedule' => $schedule->value,
+                'label' => $schedule->label(),
+                'amount_cents' => (int) $spend
+                    ->filter(static fn (Expense $e): bool => ($e->pay_schedule ?? PaySchedule::OnReceipt) === $schedule)
+                    ->sum('amount_cents'),
+            ], PaySchedule::cases()),
             'entry_count' => $spend->count(),
             'currency' => 'PHP',
         ];

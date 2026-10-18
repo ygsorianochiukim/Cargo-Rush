@@ -1,16 +1,19 @@
 import { inject } from '@angular/core';
 
-import { Expense } from '../../models/expense/expense.model';
+import { Expense, PAY_SCHEDULES } from '../../models/expense/expense.model';
 import { RecordSpec, statusOptions } from '../../shared/record-form-spec';
+import { PaymentSourceService } from '../accounting/payment-source.service';
 import { SupplierService } from '../supplier/supplier.service';
 import { ExpenseService } from './expense.service';
 
 export function expenseSpec(): RecordSpec<Expense> {
   const expenses = inject(ExpenseService);
   const suppliers = inject(SupplierService);
+  const sources = inject(PaymentSourceService);
 
   const categories: { value: string; label: string }[] = [];
   const shops: { value: string; label: string }[] = [];
+  const wallets: { value: string; label: string }[] = [];
 
   expenses.categories(true).subscribe((rows) => {
     categories.length = 0;
@@ -20,6 +23,11 @@ export function expenseSpec(): RecordSpec<Expense> {
   suppliers.options().subscribe((rows) => {
     shops.length = 0;
     shops.push(...rows);
+  });
+
+  sources.options().subscribe((rows) => {
+    wallets.length = 0;
+    wallets.push(...rows);
   });
 
   return {
@@ -37,18 +45,36 @@ export function expenseSpec(): RecordSpec<Expense> {
       { key: 'amount', label: 'Amount (₱)', kind: 'money', required: true },
       { key: 'date', label: 'Date', kind: 'date', required: true },
       {
+        key: 'payment_source_id',
+        label: 'Paid with',
+        kind: 'select',
+        options: () => wallets,
+      },
+      {
+        key: 'pay_schedule',
+        label: 'Paid',
+        kind: 'select',
+        required: true,
+        blank: 'on_receipt',
+        options: () => PAY_SCHEDULES,
+      },
+      {
+        key: 'is_vatable',
+        label: 'VAT',
+        kind: 'checkbox',
+        placeholder: 'VAT receipt (VAT-able)',
+      },
+      {
         key: 'supplier_id',
         label: 'Bought from',
         kind: 'select',
         options: () => shops,
-        hint: 'Pick the shop so what you spend there adds up. Leave it empty for a one-off.',
       },
       {
         key: 'payee',
         label: 'Or paid to',
         kind: 'text',
         placeholder: 'Aling Nena, Tagum',
-        hint: 'For somebody with no record — a roadside sale, a one-off.',
       },
       { key: 'reference', label: 'Reference', kind: 'text', placeholder: 'OR-88214' },
       {
@@ -56,7 +82,6 @@ export function expenseSpec(): RecordSpec<Expense> {
         label: 'Status',
         kind: 'select',
         options: statusOptions(['active', 'pending', 'cancelled']),
-        hint: 'Only active counts as spend.',
       },
       { key: 'note', label: 'Note', kind: 'textarea', wide: true },
     ],
@@ -67,6 +92,9 @@ export function expenseSpec(): RecordSpec<Expense> {
       category_id: record.category_id,
       amount: record.amount_cents / 100,
       date: record.date,
+      payment_source_id: record.payment_source_id ?? '',
+      pay_schedule: record.pay_schedule,
+      is_vatable: record.is_vatable,
       supplier_id: record.supplier_id ?? '',
       payee: record.payee ?? '',
       reference: record.reference ?? '',
@@ -79,6 +107,9 @@ export function expenseSpec(): RecordSpec<Expense> {
       amount_cents: Math.round(Number(values['amount'] ?? 0) * 100),
       currency: 'PHP',
       date: values['date'],
+      payment_source_id: values['payment_source_id'] || null,
+      pay_schedule: values['pay_schedule'] || 'on_receipt',
+      is_vatable: values['is_vatable'] === true,
       supplier_id: values['supplier_id'] || null,
       payee: values['payee'] || null,
       reference: values['reference'] || null,

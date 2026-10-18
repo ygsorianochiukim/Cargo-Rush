@@ -63,6 +63,6 @@ class FuelPostingService
             return null;
         }
 
-        return Truck::query()->where('vehicle_id', $fill->vehicle_id)->first();
+        return $this->finance->truckForVehicle($fill->vehicle_id, $fill->vehicle?->plate);
     }
 }

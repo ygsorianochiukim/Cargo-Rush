@@ -7,6 +7,9 @@ export interface FuelRecord extends Timestamped {
   vehicle_plate: string | null;
   driver_id: string | null;
   driver_name: string | null;
+  payment_source_id: string | null;
+  payment_source_label: string | null;
+  payment_source_kind: string | null;
   litres: number;
   amount_cents: number;
   currency: string;
@@ -19,6 +22,7 @@ export interface FuelRecord extends Timestamped {
 export interface FuelRecordPayload {
   vehicle_id: string;
   driver_id?: string | null;
+  payment_source_id?: string | null;
   litres: number;
   amount_cents: number;
   currency?: string;

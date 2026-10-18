@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Fuel\Models;
 
+use App\Domain\Accounting\Models\PaymentSource;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
@@ -21,7 +22,7 @@ class FuelRecord extends Model
     use BelongsToCompany, HasFactory, HasUlids, SoftDeletes;
 
     protected $fillable = [
-        'vehicle_id', 'driver_id', 'litres', 'amount_cents', 'currency',
+        'vehicle_id', 'driver_id', 'payment_source_id', 'litres', 'amount_cents', 'currency',
         'odometer_km', 'receipt_no', 'logged_at', 'status',
     ];
 
@@ -51,5 +52,10 @@ class FuelRecord extends Model
     public function driver(): BelongsTo
     {
         return $this->belongsTo(Driver::class);
+    }
+
+    public function paymentSource(): BelongsTo
+    {
+        return $this->belongsTo(PaymentSource::class)->withTrashed();
     }
 }

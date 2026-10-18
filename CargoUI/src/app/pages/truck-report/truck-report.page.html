@@ -1,0 +1,239 @@
+<header class="rounded-card bg-cr-surface p-5 shadow-card ring-1 ring-cr-line/60">
+  <div class="flex flex-wrap items-center gap-x-6 gap-y-4">
+    <div class="flex items-center gap-3">
+      <span
+        class="flex h-11 w-11 flex-none items-center justify-center rounded-control bg-cr-tint text-cr-blue">
+        <app-icon name="fleet" [size]="22" />
+      </span>
+      <div>
+        <h2 class="text-[11px] font-semibold tracking-[0.08em] text-cr-ink-muted uppercase">
+          Income and expenses per truck
+        </h2>
+        <p class="text-[18px] leading-tight font-semibold">{{ report()?.label ?? '…' }}</p>
+      </div>
+    </div>
+
+    <div class="flex rounded-control bg-cr-tint p-1" role="tablist" aria-label="Period">
+      @for (p of periods; track p.value) {
+        <button
+          type="button"
+          role="tab"
+          [attr.aria-selected]="period() === p.value"
+          class="h-8 rounded-control px-3 text-[13px] font-semibold transition-colors"
+          [class.bg-cr-surface]="period() === p.value"
+          [class.text-cr-blue]="period() === p.value"
+          [class.shadow-card]="period() === p.value"
+          [class.text-cr-ink-muted]="period() !== p.value"
+          (click)="setPeriod(p.value)">
+          {{ p.label }}
+        </button>
+      }
+    </div>
+
+    <div class="flex items-center gap-2">
+      <button
+        type="button"
+        class="flex h-9 w-9 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
+        (click)="step(-1)"
+        aria-label="Previous period">
+        <app-icon name="chevron-left" [size]="16" />
+      </button>
+
+      @if (period() === 'month') {
+        <input
+          type="month"
+          aria-label="Month"
+          class="cr-num h-9 rounded-control border border-cr-line px-2 text-[13px]"
+          [value]="monthValue()"
+          (change)="setDate($any($event.target).value)" />
+      } @else {
+        <input
+          type="date"
+          [attr.aria-label]="period() === 'day' ? 'Day' : 'Any day in the cutoff'"
+          class="cr-num h-9 rounded-control border border-cr-line px-2 text-[13px]"
+          [value]="date()"
+          (change)="setDate($any($event.target).value)" />
+      }
+
+      <button
+        type="button"
+        class="flex h-9 w-9 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
+        (click)="step(1)"
+        aria-label="Next period">
+        <app-icon name="chevron-right" [size]="16" />
+      </button>
+    </div>
+
+    <p class="ml-auto max-w-[18rem] text-[12px] text-cr-ink-muted">
+      @if (period() === 'cutoff') {
+        Follows the company's payroll cutoffs. Pick any day and the whole cutoff it falls in is shown.
+      } @else {
+        Income is what each own truck earned on its trips. Expenses are every cost charged to it.
+      }
+    </p>
+  </div>
+</header>
+
+@if (failed()) {
+  <div class="mt-4 rounded-card bg-cr-red-bg px-4 py-3 text-[13px] font-medium text-cr-red">
+    Could not load the report. Check the connection and try again.
+  </div>
+} @else if (report(); as r) {
+  <section aria-label="Period totals" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+      <p class="cr-meta text-cr-ink-muted">Truck income</p>
+      <p class="cr-num mt-2 text-[24px] leading-none font-semibold">{{ fmt.pesos(r.totals.income_cents) }}</p>
+    </div>
+    <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+      <p class="cr-meta text-cr-ink-muted">Charged to trucks</p>
+      <p class="cr-num mt-2 text-[24px] leading-none font-semibold">{{ fmt.pesos(r.totals.truck_expenses_cents) }}</p>
+      <p class="cr-num mt-2 text-[12px] text-cr-ink-muted">Net {{ fmt.pesos(r.totals.truck_net_cents) }}</p>
+    </div>
+    <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+      <p class="cr-meta text-cr-ink-muted">Not on a truck</p>
+      <p class="cr-num mt-2 text-[24px] leading-none font-semibold">{{ fmt.pesos(r.totals.unassigned_cents) }}</p>
+      <p class="mt-2 text-[12px] text-cr-ink-muted">Office, payroll, supplier bills</p>
+    </div>
+    <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+      <p class="cr-meta text-cr-ink-muted">Net after everything</p>
+      <p
+        class="cr-num mt-2 text-[24px] leading-none font-semibold"
+        [class.text-cr-red]="r.totals.net_income_cents < 0">
+        {{ fmt.pesos(r.totals.net_income_cents) }}
+      </p>
+    </div>
+  </section>
+
+  @if (active().length === 0) {
+    <app-card class="mt-4">
+      <div class="flex flex-col items-center justify-center gap-2 py-10 text-center">
+        <app-icon name="fleet" [size]="28" class="text-cr-ink-muted" />
+        <h3 class="text-[15px] font-semibold">No truck earned or spent anything in {{ r.label }}</h3>
+        <p class="max-w-sm text-[13px] text-cr-ink-muted">Try another {{ period() === 'day' ? 'day' : period() }}.</p>
+      </div>
+    </app-card>
+  }
+
+  @for (row of active(); track row.truck.id) {
+    <app-card
+      class="mt-4"
+      [heading]="row.truck.label + (row.truck.plate ? ' · ' + row.truck.plate : '')"
+      icon="fleet"
+      [padded]="false">
+      <div class="grid grid-cols-3 gap-4 border-b border-cr-line px-4 py-3">
+        <div>
+          <p class="cr-meta text-cr-ink-muted">Income</p>
+          <p class="cr-num mt-1 text-[18px] font-semibold">{{ fmt.pesos(row.income_cents) }}</p>
+        </div>
+        <div>
+          <p class="cr-meta text-cr-ink-muted">Expenses</p>
+          <p class="cr-num mt-1 text-[18px] font-semibold">{{ fmt.pesos(row.expenses_cents) }}</p>
+        </div>
+        <div>
+          <p class="cr-meta text-cr-ink-muted">Net</p>
+          <p
+            class="cr-num mt-1 text-[18px] font-semibold"
+            [class.text-cr-red]="row.net_income_cents < 0"
+            [class.text-cr-success]="row.net_income_cents > 0">
+            {{ fmt.pesos(row.net_income_cents) }}
+          </p>
+        </div>
+      </div>
+
+      @if (row.lines.length > 0) {
+        <div class="flex flex-wrap items-center gap-2 px-4 py-3">
+          @for (k of row.by_kind; track k.kind) {
+            <span class="inline-flex items-center gap-1.5 rounded-full border border-cr-line px-2.5 py-1 text-[12px]">
+              {{ k.kind }}
+              <span class="cr-num font-semibold">{{ fmt.pesos(k.amount_cents) }}</span>
+            </span>
+          }
+          <button
+            type="button"
+            class="ml-auto h-8 rounded-control px-3 text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+            [attr.aria-expanded]="open().has(row.truck.id)"
+            (click)="toggle(row.truck.id)">
+            {{ open().has(row.truck.id) ? 'Hide' : 'Show' }} {{ row.lines.length }}
+            {{ row.lines.length === 1 ? 'expense' : 'expenses' }}
+          </button>
+        </div>
+
+        @if (open().has(row.truck.id)) {
+          <ng-container *ngTemplateOutlet="lineTable; context: { $implicit: row.lines }" />
+        }
+      } @else {
+        <p class="px-4 py-3 text-[13px] text-cr-ink-muted">No expenses charged to this truck.</p>
+      }
+    </app-card>
+  }
+
+  @if (r.unassigned.lines.length > 0) {
+    <app-card class="mt-4" heading="Not charged to a truck" icon="wallet" [padded]="false">
+      <div class="flex flex-wrap items-center gap-2 px-4 py-3">
+        @for (k of r.unassigned.by_kind; track k.kind) {
+          <span class="inline-flex items-center gap-1.5 rounded-full border border-cr-line px-2.5 py-1 text-[12px]">
+            {{ k.kind }}
+            <span class="cr-num font-semibold">{{ fmt.pesos(k.amount_cents) }}</span>
+          </span>
+        }
+        <button
+          type="button"
+          class="ml-auto h-8 rounded-control px-3 text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+          [attr.aria-expanded]="open().has('')"
+          (click)="toggle('')">
+          {{ open().has('') ? 'Hide' : 'Show' }} {{ r.unassigned.lines.length }}
+          {{ r.unassigned.lines.length === 1 ? 'expense' : 'expenses' }}
+        </button>
+      </div>
+
+      @if (open().has('')) {
+        <ng-container *ngTemplateOutlet="lineTable; context: { $implicit: r.unassigned.lines }" />
+      }
+    </app-card>
+  }
+
+  @if (idle().length > 0) {
+    <p class="mt-4 text-[12px] text-cr-ink-muted">
+      {{ idle().length }} {{ idle().length === 1 ? 'truck' : 'trucks' }} with nothing in {{ r.label }}:
+      @for (t of idle(); track t.truck.id; let last = $last) {
+        {{ t.truck.label }}{{ last ? '' : ', ' }}
+      }
+    </p>
+  }
+} @else {
+  <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    @for (s of [1, 2, 3, 4]; track s) {
+      <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+        <div class="cr-skeleton h-2 w-24"></div>
+        <div class="cr-skeleton mt-3 h-7 w-28"></div>
+      </div>
+    }
+  </div>
+}
+
+<ng-template #lineTable let-lines>
+  <div class="overflow-x-auto border-t border-cr-line">
+    <table class="w-full min-w-[640px] text-left">
+      <thead>
+        <tr class="border-b border-cr-line">
+          <th class="cr-th px-4 py-2.5">Date</th>
+          <th class="cr-th px-4 py-2.5">Expense</th>
+          <th class="cr-th px-4 py-2.5">Details</th>
+          <th class="cr-th px-4 py-2.5">Paid with</th>
+          <th class="cr-th px-4 py-2.5 text-right">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (line of lines; track line.key) {
+          <tr class="border-b border-cr-line/70 last:border-0">
+            <td class="cr-num px-4 py-2.5 text-[13px]">{{ fmt.date(line.date) }}</td>
+            <td class="px-4 py-2.5 text-[13px] font-semibold">{{ line.kind }}</td>
+            <td class="px-4 py-2.5 text-[13px] text-cr-ink-muted">{{ line.description ?? '—' }}</td>
+            <td class="px-4 py-2.5 text-[13px] text-cr-ink-muted">{{ line.paid_with ?? '—' }}</td>
+            <td class="cr-num px-4 py-2.5 text-right text-[13px]">{{ fmt.pesos(line.amount_cents) }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</ng-template>

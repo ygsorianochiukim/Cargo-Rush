@@ -91,6 +91,32 @@ it('counts a fill on a vehicle no truck points at as overhead', function (): voi
         ->and($totals['total_expenses_cents'])->toBe(620_000 + 80_000);
 });
 
+it('gives a vehicle with no unit one when a fill is logged, so the fill counts as Fuel', function (): void {
+    $spare = Vehicle::create([
+        'plate' => 'ILI 2204', 'model' => 'Hino 300', 'registration_no' => 'R-2',
+        'capacity_kg' => 3500, 'status' => 'active',
+    ]);
+
+    $this->actingAs($this->admin)->postJson('/api/v1/fuel', [
+        'vehicle_id' => $spare->id,
+        'litres' => 40,
+        'amount_cents' => 80_000,
+        'odometer_km' => 1000,
+        'receipt_no' => 'RC-1',
+        'logged_at' => '2026-08-01T10:00:00+08:00',
+        'status' => 'active',
+    ])->assertCreated();
+
+    $unit = Truck::where('vehicle_id', $spare->id)->firstOrFail();
+    $summary = ($this->summary)();
+
+    expect($unit->plate)->toBe('ILI 2204')
+        ->and(collect($summary['trucks'])->firstWhere('truck.id', $unit->id)['fuel_cents'])->toBe(80_000)
+        ->and($summary['totals']['fuel_cents'])->toBe(620_000 + 80_000)
+        ->and($summary['totals']['overhead_cents'])->toBe(0)
+        ->and($summary['totals']['total_expenses_cents'])->toBe(620_000 + 80_000);
+});
+
 it('lists every counted fill behind the tile, and still adds up to it', function (): void {
     $spare = Vehicle::create([
         'plate' => 'ILI 2204', 'model' => 'Hino 300', 'registration_no' => 'R-2',

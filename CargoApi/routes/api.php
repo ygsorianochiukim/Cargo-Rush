@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Domain\Accounting\Controllers\AccountController;
 use App\Domain\Accounting\Controllers\GeneralLedgerController;
 use App\Domain\Accounting\Controllers\JournalController;
+use App\Domain\Accounting\Controllers\PaymentSourceController;
 use App\Domain\Accounting\Controllers\StatementController;
 use App\Domain\Billing\Controllers\BillingController;
 use App\Domain\Billing\Controllers\PaymentController;
@@ -380,6 +381,18 @@ Route::prefix('v1')->group(function (): void {
             Route::delete('supplier-categories/{supplierCategory}', [SupplierCategoryController::class, 'destroy']);
         });
 
+        Route::middleware('permission:accounting.view,expenses.view,fuel.view,finance.view,delivery.write')->group(function (): void {
+            Route::get('payment-sources/kinds', [PaymentSourceController::class, 'kinds']);
+            Route::get('payment-sources', [PaymentSourceController::class, 'index']);
+            Route::get('payment-sources/{paymentSource}', [PaymentSourceController::class, 'show']);
+        });
+
+        Route::middleware('permission:accounting.manage')->group(function (): void {
+            Route::post('payment-sources', [PaymentSourceController::class, 'store']);
+            Route::match(['put', 'patch'], 'payment-sources/{paymentSource}', [PaymentSourceController::class, 'update']);
+            Route::delete('payment-sources/{paymentSource}', [PaymentSourceController::class, 'destroy']);
+        });
+
         /**
          * The driver's own availability switch.
          *
@@ -593,6 +606,7 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('summary', [FinanceController::class, 'summary']);
                 // What a period's Total expenses is made of, row by row.
                 Route::get('expense-lines', [FinanceController::class, 'expenseLines']);
+                Route::get('truck-report', [FinanceController::class, 'truckReport']);
                 // And what customers still owed at a date, invoice by invoice.
                 Route::get('receivable-lines', [FinanceController::class, 'receivableLines']);
 

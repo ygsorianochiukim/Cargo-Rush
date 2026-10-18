@@ -138,6 +138,20 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/summary/summary.page').then((m) => m.SummaryPage),
       },
       {
+        path: 'truck-report',
+        title: 'Truck Report · Cargo Rush',
+        data: { title: 'Truck Report' },
+        loadComponent: () =>
+          import('./pages/truck-report/truck-report.page').then((m) => m.TruckReportPage),
+      },
+      {
+        path: 'payment-sources',
+        title: 'Wallets & Cards · Cargo Rush',
+        data: { title: 'Wallets & Cards' },
+        loadComponent: () =>
+          import('./pages/payment-sources/payment-sources.page').then((m) => m.PaymentSourcesPage),
+      },
+      {
         path: 'expenses',
         title: 'Other Expenses · Cargo Rush',
         data: { title: 'Other Expenses' },

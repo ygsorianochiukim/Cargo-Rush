@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Domain\Accounting\Models\PaymentSource;
 use App\Domain\Delivery\Models\DeliveryLog;
 use App\Domain\Identity\Models\User;
 use App\Domain\Shared\Enums\Role;
@@ -58,6 +59,29 @@ it('encodes the fuel used and its cost at the end of a trip', function (): void 
         ->assertJsonPath('data.fuel_cost_cents', 255_000);
 
     expect($log->refresh()->fuel_cost_cents)->toBe(255_000);
+});
+
+it('records which wallet or card paid for the trip\'s fuel', function (): void {
+    $log = ($this->log)();
+    $shell = PaymentSource::create(['name' => 'Shell Fleet Card', 'kind' => 'fuel_card', 'last_four' => '0093']);
+
+    $this->actingAs($this->admin)
+        ->patchJson("/api/v1/delivery-logs/{$log->id}/fuel", [
+            'fuel_litres' => 40, 'fuel_cost_cents' => 240_000, 'payment_source_id' => $shell->id,
+        ])
+        ->assertOk()
+        ->assertJsonPath('data.payment_source_id', $shell->id)
+        ->assertJsonPath('data.payment_source_label', 'Shell Fleet Card ···· 0093');
+
+    $this->actingAs($this->admin)
+        ->patchJson("/api/v1/delivery-logs/{$log->id}/fuel", ['fuel_litres' => 41, 'fuel_cost_cents' => 246_000])
+        ->assertOk()
+        ->assertJsonPath('data.payment_source_id', $shell->id);
+
+    $row = collect($this->actingAs($this->admin)->getJson('/api/v1/payment-sources')->json('data'))
+        ->firstWhere('id', $shell->id);
+
+    expect($row['fuel_spend_cents'])->toBe(246_000);
 });
 
 it('clears the fuel when both are left blank', function (): void {

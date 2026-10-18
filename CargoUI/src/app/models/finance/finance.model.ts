@@ -149,6 +149,8 @@ export interface ExpenseLine {
   kind: string;
   description: string | null;
   truck: string | null;
+  truck_id: string | null;
+  paid_with: string | null;
   amount_cents: number;
   record_id: string | null;
 }
@@ -157,6 +159,43 @@ export interface ExpenseLines {
   range: DateRange;
   lines: ExpenseLine[];
   total_cents: number;
+  currency: string;
+}
+
+export type TruckReportPeriod = 'day' | 'cutoff' | 'month';
+
+export interface KindTotal {
+  kind: string;
+  amount_cents: number;
+  count: number;
+}
+
+export interface TruckReportRow {
+  truck: { id: string; label: string; plate: string | null };
+  income_cents: number;
+  expenses_cents: number;
+  net_income_cents: number;
+  by_kind: KindTotal[];
+  lines: ExpenseLine[];
+}
+
+export interface TruckReport {
+  period: TruckReportPeriod;
+  label: string;
+  date: string;
+  range: DateRange;
+  previous: string;
+  next: string;
+  trucks: TruckReportRow[];
+  unassigned: { expenses_cents: number; by_kind: KindTotal[]; lines: ExpenseLine[] };
+  totals: {
+    income_cents: number;
+    truck_expenses_cents: number;
+    truck_net_cents: number;
+    unassigned_cents: number;
+    expenses_cents: number;
+    net_income_cents: number;
+  };
   currency: string;
 }
 

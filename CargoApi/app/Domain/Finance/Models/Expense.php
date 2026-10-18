@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace App\Domain\Finance\Models;
 
+use App\Domain\Accounting\Models\PaymentSource;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Identity\Models\User;
+use App\Domain\Shared\Enums\PaySchedule;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Supplier\Models\Supplier;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
@@ -23,7 +25,7 @@ class Expense extends Model
 
     protected $fillable = [
         'category_id', 'truck_id', 'trip_id', 'vehicle_id', 'driver_id', 'supplier_id',
-        'ledger_entry_id', 'date', 'amount_cents', 'currency',
+        'payment_source_id', 'pay_schedule', 'ledger_entry_id', 'date', 'amount_cents', 'currency', 'is_vatable',
         'payee', 'reference', 'note', 'status', 'recorded_by',
     ];
 
@@ -32,8 +34,26 @@ class Expense extends Model
         return [
             'date' => 'date',
             'amount_cents' => 'integer',
+            'is_vatable' => 'boolean',
+            'pay_schedule' => PaySchedule::class,
             'status' => StatusValue::class,
         ];
+    }
+
+    public function vatCents(int $rateBp): int
+    {
+        if (! $this->is_vatable || $rateBp <= 0) {
+            return 0;
+        }
+
+        $amount = (int) $this->amount_cents;
+
+        return $amount - intdiv($amount * 10_000 + intdiv(10_000 + $rateBp, 2), 10_000 + $rateBp);
+    }
+
+    public function paymentSource(): BelongsTo
+    {
+        return $this->belongsTo(PaymentSource::class)->withTrashed();
     }
 
     public function category(): BelongsTo

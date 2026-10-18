@@ -6,6 +6,7 @@ namespace App\Domain\Delivery\Repositories;
 
 use App\Domain\Delivery\Models\DeliveryLog;
 use App\Domain\Shared\Repositories\Repository;
+use App\Domain\Shared\Support\NumberOrder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -18,9 +19,10 @@ class DeliveryLogRepository extends Repository
 
     public function query(): Builder
     {
-        return DeliveryLog::query()
+        return NumberOrder::newestTripFirst(DeliveryLog::query()
             ->with(['trip:id,reference,destination,customer_id,driver_id',
-                'trip.customer:id,name', 'trip.driver:id,name', 'trip.helpers'])
+                'trip.customer:id,name', 'trip.driver:id,name', 'trip.helpers',
+                'paymentSource:id,name,kind,last_four']))
             ->orderByDesc('delivered_at');
     }
 

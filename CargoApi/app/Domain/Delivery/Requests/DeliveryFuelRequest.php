@@ -6,6 +6,8 @@ namespace App\Domain\Delivery\Requests;
 
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
+use App\Domain\Tenancy\Support\Tenant;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
 
 class DeliveryFuelRequest extends ApiFormRequest
@@ -15,6 +17,12 @@ class DeliveryFuelRequest extends ApiFormRequest
         return [
             'fuel_litres' => ['present', 'nullable', 'numeric', 'min:0', 'max:5000'],
             'fuel_cost_cents' => ['present', 'nullable', 'integer', 'min:0', 'max:100000000'],
+            'payment_source_id' => [
+                'sometimes', 'nullable', 'string',
+                Rule::exists('payment_sources', 'id')
+                    ->where('company_id', app(Tenant::class)->id())
+                    ->whereNull('deleted_at'),
+            ],
         ];
     }
 
@@ -34,15 +42,21 @@ class DeliveryFuelRequest extends ApiFormRequest
         ];
     }
 
-    /** @return array{fuel_litres: float|null, fuel_cost_cents: int|null} */
+    /** @return array<string, mixed> */
     public function fuel(): array
     {
         $litres = $this->validated('fuel_litres');
         $cost = $this->validated('fuel_cost_cents');
 
-        return [
+        $fuel = [
             'fuel_litres' => $litres === null ? null : round((float) $litres, 2),
             'fuel_cost_cents' => $cost === null ? null : (int) $cost,
         ];
+
+        if ($this->has('payment_source_id')) {
+            $fuel['payment_source_id'] = $this->validated('payment_source_id');
+        }
+
+        return $fuel;
     }
 }

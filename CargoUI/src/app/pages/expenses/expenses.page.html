@@ -59,6 +59,26 @@
           </dt>
           <dd class="cr-num">{{ fmt.money(r.overhead_cents, r.currency) }}</dd>
         </div>
+        @for (s of r.by_schedule; track s.schedule; let first = $first) {
+          <div class="flex justify-between" [class.border-t]="first" [class.border-cr-line]="first" [class.pt-1.5]="first">
+            <dt class="text-cr-ink-muted">{{ s.label }}</dt>
+            <dd class="cr-num">{{ fmt.money(s.amount_cents, r.currency) }}</dd>
+          </div>
+        }
+        <div class="flex justify-between border-t border-cr-line pt-1.5">
+          <dt class="text-cr-ink-muted">VAT-able</dt>
+          <dd class="cr-num">{{ fmt.money(r.vatable_cents, r.currency) }}</dd>
+        </div>
+        <div class="flex justify-between">
+          <dt class="text-cr-ink-muted" title="The VAT inside the VAT-able receipts, at the company VAT rate.">
+            Input VAT in it
+          </dt>
+          <dd class="cr-num">{{ fmt.money(r.input_vat_cents, r.currency) }}</dd>
+        </div>
+        <div class="flex justify-between">
+          <dt class="text-cr-ink-muted">Non-VAT</dt>
+          <dd class="cr-num">{{ fmt.money(r.non_vatable_cents, r.currency) }}</dd>
+        </div>
       </dl>
 
     } @else {
@@ -181,6 +201,13 @@
   @if (list.error(); as message) {
     <app-error-state [message]="message" (retry)="list.refresh()" />
   } @else {
+    <div class="border-b border-cr-line px-4 py-3">
+      <app-filter-bar
+        label="How it is paid"
+        [options]="scheduleFilters()"
+        [selected]="schedule()"
+        (select)="schedule.set($any($event))" />
+    </div>
     <app-data-table
       [columns]="columns"
       [rows]="rows()"

@@ -26,6 +26,7 @@ class ExpenseRepository extends Repository
                 'truck:id,label,plate',
                 'driver:id,name',
                 'supplier:id,name',
+                'paymentSource:id,name,kind,last_four',
             ])
             ->orderByDesc('date')
             ->orderByDesc('created_at');
@@ -54,6 +55,18 @@ class ExpenseRepository extends Repository
 
         if (! empty($filters['trip_id'])) {
             $query->where('trip_id', $filters['trip_id']);
+        }
+
+        if (! empty($filters['pay_schedule'])) {
+            $query->whereIn('pay_schedule', (array) $filters['pay_schedule']);
+        }
+
+        if (! empty($filters['payment_source_id'])) {
+            $query->where('payment_source_id', $filters['payment_source_id']);
+        }
+
+        if (isset($filters['vatable']) && $filters['vatable'] !== '') {
+            $query->where('is_vatable', filter_var($filters['vatable'], FILTER_VALIDATE_BOOLEAN));
         }
 
         if (! empty($filters['from'])) {

@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace App\Domain\Finance\Resources;
 
 use App\Domain\Finance\Models\Expense;
+use App\Domain\Shared\Enums\PaySchedule;
 use App\Domain\Shared\Http\Resources\ApiResource;
+use App\Domain\Tenancy\Support\RateBook;
 use Illuminate\Http\Request;
 
 /** @mixin Expense */
@@ -24,6 +26,11 @@ class ExpenseResource extends ApiResource
 
             'supplier_id' => $this->supplier_id,
             'supplier_name' => $this->supplier?->name,
+            'payment_source_id' => $this->payment_source_id,
+            'payment_source_label' => $this->paymentSource?->label(),
+            'payment_source_kind' => $this->paymentSource?->kind->value,
+            'pay_schedule' => ($this->pay_schedule ?? PaySchedule::OnReceipt)->value,
+            'pay_schedule_label' => ($this->pay_schedule ?? PaySchedule::OnReceipt)->label(),
             'trip_id' => $this->trip_id,
             'vehicle_id' => $this->vehicle_id,
             'driver_id' => $this->driver_id,
@@ -32,6 +39,8 @@ class ExpenseResource extends ApiResource
             'date' => $this->date?->toDateString(),
             'amount_cents' => $this->amount_cents,
             'currency' => $this->currency,
+            'is_vatable' => (bool) $this->is_vatable,
+            'vat_cents' => $this->vatCents(app(RateBook::class)->vatRateBp()),
             'payee' => $this->payee,
             'reference' => $this->reference,
             'note' => $this->note,

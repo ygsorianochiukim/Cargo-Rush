@@ -20,6 +20,7 @@ export interface Column<T = any> {
   status?: (row: T) => StatusValue;
   sub?: (row: T) => string | null;
   badge?: (row: T) => string | null;
+  pill?: (row: T) => { label: string; on: boolean };
 }
 
 @Component({
@@ -111,6 +112,22 @@ export interface Column<T = any> {
                     >
                       @if (col.kind === 'status' && col.status) {
                         <app-status-pill [status]="col.status(row)" />
+                      } @else if (col.pill) {
+                        <span
+                          class="inline-flex items-center rounded-full px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] uppercase"
+                          [class.bg-cr-tint]="col.pill(row).on"
+                          [class.text-cr-blue]="col.pill(row).on"
+                          [class.border]="!col.pill(row).on"
+                          [class.border-cr-line]="!col.pill(row).on"
+                          [class.text-cr-ink-muted]="!col.pill(row).on"
+                        >
+                          {{ col.pill(row).label }}
+                        </span>
+                        @if (col.sub) {
+                          <span class="block text-[12px] text-cr-ink-muted">{{
+                            col.sub(row) ?? dash
+                          }}</span>
+                        }
                       } @else if (col.badge && col.badge(row)) {
                         <span
                           class="inline-flex items-center gap-1.5 rounded-full bg-cr-warning-bg px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] text-cr-warning uppercase"

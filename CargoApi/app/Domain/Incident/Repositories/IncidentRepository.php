@@ -7,6 +7,7 @@ namespace App\Domain\Incident\Repositories;
 use App\Domain\Incident\Models\Incident;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Repositories\Repository;
+use App\Domain\Shared\Support\NumberOrder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Carbon;
@@ -20,8 +21,8 @@ class IncidentRepository extends Repository
 
     public function query(): Builder
     {
-        return Incident::query()
-            ->with(['driver:id,name', 'vehicle:id,plate', 'trip:id,reference'])
+        return NumberOrder::newestFirst(Incident::query()
+            ->with(['driver:id,name', 'vehicle:id,plate', 'trip:id,reference']), 'reference')
             ->orderByDesc('occurred_at');
     }
 

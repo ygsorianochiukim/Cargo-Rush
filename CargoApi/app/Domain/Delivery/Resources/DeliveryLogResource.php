@@ -27,6 +27,8 @@ class DeliveryLogResource extends ApiResource
             'receiver_name' => $this->receiver_name,
             'fuel_litres' => $this->fuel_litres,
             'fuel_cost_cents' => $this->fuel_cost_cents,
+            'payment_source_id' => $this->payment_source_id,
+            'payment_source_label' => $this->paymentSource?->label(),
             'currency' => $this->trip?->currency,
             'status' => $this->status->value,
 

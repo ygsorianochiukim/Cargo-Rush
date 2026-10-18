@@ -8,6 +8,7 @@ use App\Domain\Accounting\Models\JournalEntry;
 use App\Domain\Identity\Models\User;
 use App\Domain\Payroll\Services\PayrollService;
 use App\Domain\Payroll\Support\PayPeriod;
+use App\Domain\Shared\Support\NumberOrder;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -186,7 +187,7 @@ class PayRun extends Model
 
     public function scopeInPayrollOrder(Builder $query): Builder
     {
-        return $query->orderByDesc('period_start')->orderByDesc('reference');
+        return NumberOrder::newestFirst($query, 'reference')->orderByDesc('period_start');
     }
 
     protected static function booted(): void

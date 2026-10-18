@@ -9,6 +9,7 @@ use App\Domain\Fuel\Models\FuelBudget;
 use App\Domain\Fuel\Models\FuelRecord;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Repositories\Repository;
+use App\Domain\Shared\Support\NumberOrder;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
@@ -23,7 +24,7 @@ class FuelRepository extends Repository
     public function query(): Builder
     {
         return FuelRecord::query()
-            ->with(['vehicle:id,plate', 'driver:id,name'])
+            ->with(['vehicle:id,plate', 'driver:id,name', 'paymentSource:id,name,kind,last_four'])
             ->orderByDesc('logged_at');
     }
 
@@ -76,9 +77,9 @@ class FuelRepository extends Repository
     /** @return Collection<int, DeliveryLog> */
     public function tripFuel(int $limit = 200): Collection
     {
-        return DeliveryLog::query()
+        return NumberOrder::newestTripFirst(DeliveryLog::query()
             ->where('posted_fuel_cents', '>', 0)
-            ->with(['trip' => static fn ($q) => $q->with(['vehicle:id,plate', 'driver:id,name'])])
+            ->with(['trip' => static fn ($q) => $q->with(['vehicle:id,plate', 'driver:id,name'])]))
             ->orderByDesc('posted_on')
             ->orderByDesc('delivered_at')
             ->limit($limit)

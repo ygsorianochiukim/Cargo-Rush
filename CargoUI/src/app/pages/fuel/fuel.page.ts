@@ -80,6 +80,7 @@ export class FuelPage {
     { label: 'Vehicle', kind: 'strong', value: (f) => f.vehicle_plate, sub: (f) => f.driver_name },
     { label: 'Litres', kind: 'num', value: (f) => fmt.litres(f.litres) },
     { label: 'Amount', kind: 'num', value: (f) => fmt.money(f.amount_cents, f.currency) },
+    { label: 'Paid with', value: (f) => f.payment_source_label },
     { label: 'Odometer', kind: 'num', value: (f) => fmt.km(f.odometer_km) },
     { label: 'Receipt', kind: 'muted', value: (f) => f.receipt_no },
     { label: 'Logged', kind: 'num', value: (f) => fmt.dateTime(f.logged_at) },

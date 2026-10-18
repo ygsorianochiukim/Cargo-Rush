@@ -35,12 +35,14 @@ class NavigationSeeder extends Seeder
             ['monitoring', 'Trip Monitoring', 'clipboard', '/monitoring', 400, false, true, 'Reports', 'finance.view', null],
             ['profitability', 'Profitability', 'gauge', '/profitability', 410, false, true, 'Reports', 'finance.view', null],
             ['summary', 'Quarterly Summary', 'calendar', '/summary', 420, false, true, 'Reports', 'finance.view', null],
+            ['truck-report', 'Truck Report', 'fleet', '/truck-report', 425, false, true, 'Reports', 'finance.view', null],
             ['sales', 'Sales Report', 'trend', '/sales', 430, false, true, 'Reports', 'sales.view', null],
 
             ['statements', 'Financial Statements', 'trend', '/statements', 500, false, true, 'Accounting', 'accounting.view', null],
             ['journal', 'General Journal', 'clipboard', '/journal', 510, false, true, 'Accounting', 'accounting.view', null],
             ['ledger', 'General Ledger', 'gauge', '/ledger', 520, false, true, 'Accounting', 'accounting.view', null],
             ['accounts', 'Chart of Accounts', 'tag', '/accounts', 530, false, true, 'Accounting', 'accounting.view', null],
+            ['payment-sources', 'Wallets & Cards', 'wallet', '/payment-sources', 540, false, true, 'Accounting', 'accounting.view', null],
 
             ['employees', 'Employees', 'badge', '/employees', 600, false, true, 'People', 'hr.view', null],
             ['applicants', 'Applicants', 'inbox', '/applicants', 610, false, true, 'People', 'hr.view', 'applicants.open'],
