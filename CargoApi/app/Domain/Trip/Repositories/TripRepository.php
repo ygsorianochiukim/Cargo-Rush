@@ -7,6 +7,7 @@ namespace App\Domain\Trip\Repositories;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Repositories\Repository;
 use App\Domain\Trip\Models\Trip;
+use App\Domain\Trip\Services\TripCostService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Carbon;
@@ -23,7 +24,8 @@ class TripRepository extends Repository
     {
         return Trip::query()
             ->with([
-                'customer:id,name', 'driver:id,name', 'helpers', 'vehicle:id,plate',
+                ...TripCostService::RELATIONS,
+                'driver:id,name', 'helpers', 'vehicle:id,plate',
                 'trucker:id,name,business_name,phone', 'truckerVehicle:id,plate',
                 'truckerDriver:id,name',
                 'pricingZone:id,name',

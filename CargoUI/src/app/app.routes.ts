@@ -44,6 +44,12 @@ export const routes: Routes = [
         path: 'dashboard',
         title: 'Dashboard · Cargo Rush',
         data: { title: 'Dashboard' },
+        loadComponent: () => import('./pages/home/home.page').then((m) => m.HomePage),
+      },
+      {
+        path: 'fleet-dashboard',
+        title: 'Fleet Dashboard · Cargo Rush',
+        data: { title: 'Fleet Dashboard' },
         loadComponent: () =>
           import('./pages/dashboard/dashboard.page').then((m) => m.DashboardPage),
       },

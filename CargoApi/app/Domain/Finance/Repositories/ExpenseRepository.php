@@ -27,6 +27,7 @@ class ExpenseRepository extends Repository
                 'driver:id,name',
                 'supplier:id,name',
                 'paymentSource:id,name,kind,last_four',
+                'trip:id,reference',
             ])
             ->orderByDesc('date')
             ->orderByDesc('created_at');

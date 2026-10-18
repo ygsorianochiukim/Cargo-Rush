@@ -1,0 +1,295 @@
+<header class="rounded-card bg-cr-surface p-5 shadow-card ring-1 ring-cr-line/60">
+  <div class="flex flex-wrap items-center gap-x-6 gap-y-4">
+    <div class="flex items-center gap-3">
+      <span class="flex h-11 w-11 flex-none items-center justify-center rounded-control bg-cr-tint text-cr-blue">
+        <app-icon name="trend" [size]="22" />
+      </span>
+      <div>
+        <h2 class="text-[11px] font-semibold tracking-[0.08em] text-cr-ink-muted uppercase">Business overview</h2>
+        <p class="text-[18px] leading-tight font-semibold">{{ data()?.label ?? '…' }}</p>
+      </div>
+    </div>
+
+    <div class="flex rounded-control bg-cr-tint p-1" role="tablist" aria-label="Period">
+      @for (p of periods; track p.value) {
+        <button
+          type="button"
+          role="tab"
+          [attr.aria-selected]="period() === p.value"
+          class="h-8 rounded-control px-3 text-[13px] font-semibold transition-colors"
+          [class.bg-cr-surface]="period() === p.value"
+          [class.text-cr-blue]="period() === p.value"
+          [class.shadow-card]="period() === p.value"
+          [class.text-cr-ink-muted]="period() !== p.value"
+          (click)="period.set(p.value)">
+          {{ p.label }}
+        </button>
+      }
+    </div>
+
+    <div class="flex items-center gap-1">
+      <button
+        type="button"
+        class="flex h-9 w-9 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
+        aria-label="Previous period"
+        (click)="step(-1)">
+        <app-icon name="chevron-left" [size]="16" />
+      </button>
+      <button
+        type="button"
+        class="flex h-9 w-9 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
+        aria-label="Next period"
+        (click)="step(1)">
+        <app-icon name="chevron-right" [size]="16" />
+      </button>
+    </div>
+
+    <a
+      routerLink="/fleet-dashboard"
+      class="ml-auto flex h-9 items-center gap-2 rounded-control px-3 text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint">
+      <app-icon name="fleet" [size]="16" />
+      Fleet dashboard
+    </a>
+  </div>
+</header>
+
+@if (failed()) {
+  <div class="mt-4 rounded-card bg-cr-red-bg px-4 py-3 text-[13px] font-medium text-cr-red" role="alert">
+    Could not load the dashboard. Check the connection and try again.
+  </div>
+} @else if (data(); as d) {
+  <!-- KPIs -->
+  <section aria-label="Headline figures" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    @for (k of d.kpis; track k.key) {
+      <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+        <div class="flex items-center gap-2">
+          <span class="flex h-8 w-8 items-center justify-center rounded-control bg-cr-tint text-cr-blue">
+            <app-icon [name]="kpiIcon(k)" [size]="16" />
+          </span>
+          <p class="cr-meta text-cr-ink-muted">{{ k.label }}</p>
+        </div>
+        <p
+          class="cr-num mt-3 text-[26px] leading-none font-semibold"
+          [class.text-cr-red]="(k.key === 'net' && (k.value_cents ?? 0) < 0) || (k.key === 'margin' && (k.ratio ?? 0) < 0)">
+          {{ kpiValue(k) }}
+        </p>
+        @if (kpiChange(k); as c) {
+          <p class="mt-2 flex items-center gap-1.5 text-[12px]">
+            <span
+              class="cr-num rounded-full px-1.5 py-0.5 font-semibold"
+              [class.bg-cr-success-bg]="c.good === true"
+              [class.text-cr-success]="c.good === true"
+              [class.bg-cr-red-bg]="c.good === false"
+              [class.text-cr-red]="c.good === false"
+              [class.bg-cr-tint]="c.good === null"
+              [class.text-cr-ink-muted]="c.good === null">
+              {{ c.text }}
+            </span>
+            <span class="text-cr-ink-muted">vs {{ previousLabel() }}</span>
+          </p>
+        } @else {
+          <p class="mt-2 text-[12px] text-cr-ink-muted">Nothing to compare in {{ previousLabel() }}</p>
+        }
+      </div>
+    }
+  </section>
+
+  <!-- Trend + income -->
+  <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+    <app-card heading="Income vs expenses" icon="trend" hint="Last 12 months" class="xl:col-span-2">
+      <app-income-trend [points]="d.trend" />
+    </app-card>
+
+    <app-card heading="Where income came from" icon="billing">
+      <app-bar-rows [bars]="incomeBars()" align="top" />
+      <dl class="mt-4 space-y-1.5 border-t border-cr-line pt-3 text-[13px]">
+        <div class="flex justify-between">
+          <dt class="text-cr-ink-muted" title="Output VAT on what you billed. It is the government's, so it is not income.">
+            VAT collected (not income)
+          </dt>
+          <dd class="cr-num">{{ fmt.pesos(d.income.vat_collected_cents) }}</dd>
+        </div>
+      </dl>
+    </app-card>
+  </div>
+
+  <!-- Receivables + payables -->
+  <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-2">
+    <app-card heading="Receivables" icon="billing" hint="Owed to you, today">
+      <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div class="col-span-2">
+          <p class="cr-meta text-cr-ink-muted">Outstanding</p>
+          <p class="cr-num mt-1 text-[24px] leading-none font-semibold">{{ fmt.pesos(d.receivables.outstanding_cents) }}</p>
+        </div>
+        <div>
+          <p class="cr-meta text-cr-ink-muted">Overdue</p>
+          <p class="cr-num mt-1 text-[16px] font-semibold" [class.text-cr-red]="d.receivables.overdue_cents > 0">
+            {{ fmt.pesos(d.receivables.overdue_cents) }}
+          </p>
+        </div>
+        <div>
+          <p class="cr-meta text-cr-ink-muted">Collected</p>
+          <p class="cr-num mt-1 text-[16px] font-semibold">{{ fmt.pesos(d.receivables.collected_cents) }}</p>
+          <p class="text-[11px] text-cr-ink-muted">in {{ d.label }} · {{ pct(d.receivables.collection_rate) }} of billed</p>
+        </div>
+      </div>
+
+      <ng-container *ngTemplateOutlet="aging; context: { $implicit: d.receivables.aging }" />
+
+      <h3 class="mt-5 text-[12px] font-semibold tracking-[0.06em] text-cr-ink-muted uppercase">Biggest balances</h3>
+      <ul class="mt-2 divide-y divide-cr-line/70">
+        @for (r of d.receivables.top_debtors; track r.name) {
+          <li class="flex items-center justify-between gap-3 py-2 text-[13px]">
+            <span class="min-w-0 truncate font-medium">{{ r.name }}</span>
+            <span class="flex flex-none items-center gap-3">
+              @if (r.overdue_cents > 0) {
+                <span class="cr-num rounded-full bg-cr-red-bg px-2 py-0.5 text-[11px] font-semibold text-cr-red">
+                  {{ fmt.pesos(r.overdue_cents) }} late
+                </span>
+              }
+              <span class="cr-num font-semibold">{{ fmt.pesos(r.total_cents) }}</span>
+            </span>
+          </li>
+        } @empty {
+          <li class="py-3 text-[13px] text-cr-ink-muted">Nobody owes you anything.</li>
+        }
+      </ul>
+      <a routerLink="/billing" class="mt-3 inline-block text-[13px] font-semibold text-cr-blue hover:underline">Open Billing →</a>
+    </app-card>
+
+    <app-card heading="Payables" icon="wallet" hint="What you owe, today">
+      <div class="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <div class="col-span-2">
+          <p class="cr-meta text-cr-ink-muted">Outstanding</p>
+          <p class="cr-num mt-1 text-[24px] leading-none font-semibold">{{ fmt.pesos(d.payables.outstanding_cents) }}</p>
+          @if (d.payables.in_flight_cents > 0) {
+            <p class="cr-num text-[11px] text-cr-ink-muted">{{ fmt.pesos(d.payables.in_flight_cents) }} already on its way</p>
+          }
+        </div>
+        <div>
+          <p class="cr-meta text-cr-ink-muted">Overdue items</p>
+          <p class="cr-num mt-1 text-[16px] font-semibold" [class.text-cr-red]="d.payables.overdue_count > 0">
+            {{ d.payables.overdue_count }}
+          </p>
+        </div>
+        <div>
+          <p class="cr-meta text-cr-ink-muted">Paid out</p>
+          <p class="cr-num mt-1 text-[16px] font-semibold">{{ fmt.pesos(d.payables.paid_cents) }}</p>
+          <p class="text-[11px] text-cr-ink-muted">bills and truckers, {{ d.label }}</p>
+        </div>
+      </div>
+
+      <ul class="mt-4 divide-y divide-cr-line/70">
+        @for (g of d.payables.groups; track g.key) {
+          <li class="flex items-center justify-between gap-3 py-2 text-[13px]">
+            <span class="flex min-w-0 items-center gap-2">
+              <app-icon [name]="g.icon" [size]="15" class="text-cr-ink-muted" />
+              <span class="truncate font-medium">{{ g.label }}</span>
+              <span class="text-[12px] text-cr-ink-muted">{{ g.count }}</span>
+            </span>
+            <span class="flex flex-none items-center gap-3">
+              @if (g.overdue_count > 0) {
+                <span class="rounded-full bg-cr-red-bg px-2 py-0.5 text-[11px] font-semibold text-cr-red">
+                  {{ g.overdue_count }} overdue
+                </span>
+              }
+              <span class="cr-num font-semibold">{{ fmt.pesos(g.total_cents) }}</span>
+            </span>
+          </li>
+        }
+      </ul>
+
+      @if (agingTotal(d.payables.bill_aging) > 0) {
+        <h3 class="mt-4 text-[12px] font-semibold tracking-[0.06em] text-cr-ink-muted uppercase">Supplier bills by age</h3>
+        <ng-container *ngTemplateOutlet="aging; context: { $implicit: d.payables.bill_aging }" />
+      }
+      <a routerLink="/payables" class="mt-3 inline-block text-[13px] font-semibold text-cr-blue hover:underline">Open Payables →</a>
+    </app-card>
+  </div>
+
+  <!-- Mix, customers, wallets -->
+  <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+    <app-card heading="Where the money went" icon="wallet" [hint]="d.label">
+      @if (expenseBars().length > 0) {
+        <app-bar-rows [bars]="expenseBars()" align="top" />
+      } @else {
+        <p class="py-6 text-center text-[13px] text-cr-ink-muted">No expenses in {{ d.label }}.</p>
+      }
+    </app-card>
+
+    <app-card heading="Top customers" icon="customers" [hint]="'Billed, ' + d.label">
+      <ol class="divide-y divide-cr-line/70">
+        @for (c of d.top_customers; track c.name; let i = $index) {
+          <li class="flex items-center gap-3 py-2 text-[13px]">
+            <span class="cr-num flex h-6 w-6 flex-none items-center justify-center rounded-full bg-cr-tint text-[11px] font-semibold text-cr-blue">
+              {{ i + 1 }}
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate font-medium">{{ c.name }}</span>
+              <span class="text-[11px] text-cr-ink-muted">{{ c.invoices }} {{ c.invoices === 1 ? 'invoice' : 'invoices' }}</span>
+            </span>
+            <span class="cr-num flex-none font-semibold">{{ fmt.pesos(c.billed_cents) }}</span>
+          </li>
+        } @empty {
+          <li class="py-6 text-center text-[13px] text-cr-ink-muted">Nothing billed in {{ d.label }}.</li>
+        }
+      </ol>
+    </app-card>
+
+    <app-card heading="Paid from" icon="wallet" hint="Expenses and fuel">
+      <ul class="divide-y divide-cr-line/70">
+        @for (w of d.paid_from; track w.name) {
+          <li class="flex items-center justify-between gap-3 py-2 text-[13px]">
+            <span class="min-w-0">
+              <span class="block truncate font-medium">{{ w.name }}</span>
+              <span class="text-[11px] text-cr-ink-muted">{{ w.kind }}</span>
+            </span>
+            <span class="cr-num flex-none font-semibold">{{ fmt.pesos(w.amount_cents) }}</span>
+          </li>
+        } @empty {
+          <li class="py-6 text-center text-[13px] text-cr-ink-muted">
+            No spend tagged with a wallet or card in {{ d.label }}.
+          </li>
+        }
+      </ul>
+      <a routerLink="/payment-sources" class="mt-3 inline-block text-[13px] font-semibold text-cr-blue hover:underline">Wallets &amp; Cards →</a>
+    </app-card>
+  </div>
+} @else {
+  <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    @for (s of kpiSkeletons; track s) {
+      <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+        <div class="cr-skeleton h-2 w-24"></div>
+        <div class="cr-skeleton mt-3 h-7 w-32"></div>
+        <div class="cr-skeleton mt-3 h-3 w-20"></div>
+      </div>
+    }
+  </div>
+  <div class="mt-4 rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+    <div class="cr-skeleton h-[180px] w-full"></div>
+  </div>
+}
+
+<ng-template #aging let-buckets>
+  <div class="mt-4">
+    <div class="flex h-3 w-full gap-[2px] overflow-hidden rounded-full bg-cr-line/60" role="img"
+      [attr.aria-label]="'By age: ' + agingLabel(buckets)">
+      @for (b of buckets; track b.key) {
+        @if (b.cents > 0) {
+          <span class="h-full" [class]="toneFor(b.key)" [style.width.%]="agingPct(b, buckets)"></span>
+        }
+      }
+    </div>
+    <ul class="mt-2 grid grid-cols-1 gap-x-6 gap-y-1 text-[12px] sm:grid-cols-2">
+      @for (b of buckets; track b.key) {
+        <li class="flex items-center justify-between gap-2">
+          <span class="flex items-center gap-1.5 text-cr-ink-muted">
+            <span class="h-2 w-2 flex-none rounded-[2px]" [class]="toneFor(b.key)"></span>
+            {{ b.label }}
+          </span>
+          <span class="cr-num font-medium">{{ fmt.pesos(b.cents) }}</span>
+        </li>
+      }
+    </ul>
+  </div>
+</ng-template>

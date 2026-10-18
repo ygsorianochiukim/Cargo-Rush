@@ -75,6 +75,7 @@
   </div>
 
   <div class="flex flex-col gap-4">
+    @if (!canSeeMoney) {
     <app-card heading="Receivables" icon="billing" [hint]="receivablesHint()">
       @if (receivables(); as money) {
         <p class="cr-meta">Invoices awaiting payment</p>
@@ -146,6 +147,7 @@
         </div>
       }
     </app-card>
+    }
 
     <app-card heading="Fleet status" icon="fleet">
       @if (fleet(); as list) {
@@ -230,3 +232,7 @@
     </app-card>
   </div>
 </div>
+
+@if (canSeeMoney) {
+  <app-truck-cards />
+}

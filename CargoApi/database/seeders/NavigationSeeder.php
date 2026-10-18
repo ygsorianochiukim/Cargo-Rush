@@ -13,6 +13,7 @@ class NavigationSeeder extends Seeder
     {
         $items = [
             ['dashboard', 'Dashboard', 'dashboard', '/dashboard', 100, true, true, 'Operations', null, null],
+            ['fleet-dashboard', 'Fleet Dashboard', 'fleet', '/fleet-dashboard', 105, false, true, 'Operations', null, null],
             ['trips', 'Trip Management', 'route', '/trips', 110, true, true, 'Operations', 'trips.view', 'trips.requests'],
             ['dispatch', 'Dispatch Monitoring', 'dispatch', '/dispatch', 120, false, true, 'Operations', 'dispatch.view', null],
             ['delivery-logs', 'Delivery Logs', 'clipboard', '/delivery-logs', 130, true, true, 'Operations', 'delivery.view', null],

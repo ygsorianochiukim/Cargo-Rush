@@ -32,6 +32,7 @@ class ExpenseResource extends ApiResource
             'pay_schedule' => ($this->pay_schedule ?? PaySchedule::OnReceipt)->value,
             'pay_schedule_label' => ($this->pay_schedule ?? PaySchedule::OnReceipt)->label(),
             'trip_id' => $this->trip_id,
+            'trip_reference' => $this->trip_id === null ? null : $this->trip?->reference,
             'vehicle_id' => $this->vehicle_id,
             'driver_id' => $this->driver_id,
             'driver_name' => $this->driver?->name,

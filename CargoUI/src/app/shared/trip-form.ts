@@ -33,6 +33,7 @@ import { HelperPicker } from './helper-picker';
 import { LocationField } from './location-field';
 import { Modal } from './modal';
 import { TripDialog } from './trip-dialog';
+import { TripCostsPanel } from './trip-costs';
 import { TripHistory } from './trip-history';
 
 const BLANK_LOCATION: TripLocation = { place: '', lat: null, lng: null };
@@ -54,7 +55,7 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
 @Component({
   selector: 'app-trip-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Modal, Field, HelperPicker, Icon, LocationField, ReactiveFormsModule, TripHistory],
+  imports: [Modal, Field, HelperPicker, Icon, LocationField, ReactiveFormsModule, TripCostsPanel, TripHistory],
   template: `
     <app-modal
       [(open)]="open"
@@ -268,7 +269,7 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
               @if (q.cents !== null) {
                 <span class="cr-num font-semibold">{{ money(q.cents, q.currency) }}</span>
                 <span class="text-[12px] text-cr-ink-muted">
-                  · {{ q.km }} km{{ estimated() ? ' (estimate)' : '' }}{{ q.zone ? ' · ' + q.zone.name : '' }}
+                  · {{ q.km }} km{{ q.zone ? ' · ' + q.zone.name : '' }}
                 </span>
               } @else {
                 <span class="text-[12px] text-cr-ink-muted">
@@ -395,6 +396,9 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
         }
 
         @if (trip(); as t) {
+          @if (canSeeCosts()) {
+            <app-trip-costs class="sm:col-span-2" [tripId]="t.id" />
+          }
           <app-trip-history class="sm:col-span-2" [tripId]="t.id" />
         }
 
@@ -514,6 +518,9 @@ export class TripForm {
   protected readonly today = new Date().toISOString().slice(0, 10);
 
   protected readonly canBill = computed(() => this.identity.can('billing.manage'));
+  protected readonly canSeeCosts = computed(
+    () => this.identity.can('finance.view') || this.identity.can('expenses.view'),
+  );
 
   protected readonly paymentStatus = toSignal(this.form.controls.payment_status.valueChanges, {
     initialValue: this.form.controls.payment_status.value,
@@ -536,8 +543,6 @@ export class TripForm {
   protected readonly manuallyPriced = computed(() => !!this.trip()?.manually_priced);
 
   protected readonly preview = signal<QuoteBreakdown | null>(null);
-
-  protected readonly estimated = signal(false);
 
   private readonly weight = toSignal(this.form.controls.weight_kg.valueChanges, {
     initialValue: this.form.controls.weight_kg.value,
@@ -647,8 +652,6 @@ export class TripForm {
         debounceTime(300),
         switchMap((ask) => {
           if (!ask.open || !this.identity.can('pricing.view')) return of(null);
-
-          this.estimated.set(ask.distance.estimate);
 
           return this.pricingApi
             .quote({

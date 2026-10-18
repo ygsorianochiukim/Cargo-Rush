@@ -6,6 +6,7 @@ import { Envelope, ListQuery } from '../../models/shared/envelope.model';
 import {
   Trip,
   TripConfirmPayload,
+  TripCosts,
   TripHistoryEntry,
   TripPayload,
 } from '../../models/trip/trip.model';
@@ -29,6 +30,10 @@ export class TripService {
 
   history(id: string): Observable<TripHistoryEntry[]> {
     return this.api.get<TripHistoryEntry[]>(`trips/${id}/history`);
+  }
+
+  costs(id: string): Observable<TripCosts> {
+    return this.api.get<TripCosts>(`trips/${id}/costs`);
   }
 
   create(payload: TripPayload): Observable<Trip> {

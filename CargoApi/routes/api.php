@@ -206,6 +206,8 @@ Route::prefix('v1')->group(function (): void {
             Route::get('deliveries', [DashboardController::class, 'deliveries']);
             Route::get('activity', [DashboardController::class, 'activity']);
             Route::get('receivables', [DashboardController::class, 'receivables']);
+            Route::get('business', [DashboardController::class, 'business'])->middleware('permission:finance.view');
+            Route::get('trucks', [DashboardController::class, 'trucks'])->middleware('permission:finance.view');
         });
 
         // The driver's own work. Declared before the `trips/{trip}` resource so
@@ -240,6 +242,7 @@ Route::prefix('v1')->group(function (): void {
         // The Official Trip Ticket and the dispatch checklist, filled in for printing.
         Route::get('trips/{trip}/ticket', [TripController::class, 'ticket'])->middleware('permission:trips.view');
         Route::get('trips/{trip}/history', [TripController::class, 'history'])->middleware('permission:trips.view');
+        Route::get('trips/{trip}/costs', [TripController::class, 'costs'])->middleware('permission:finance.view,expenses.view');
 
         // Everything that changes the board needs `trips.manage`. Confirming is
         // the desk's one action on a customer's request: it names the crew, the

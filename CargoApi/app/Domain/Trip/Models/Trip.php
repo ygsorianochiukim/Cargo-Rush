@@ -9,6 +9,7 @@ use App\Domain\Customer\Models\Customer;
 use App\Domain\Delivery\Models\DeliveryLog;
 use App\Domain\Dispatch\Models\DispatchRecord;
 use App\Domain\Driver\Models\Driver;
+use App\Domain\Finance\Models\Expense;
 use App\Domain\Gps\Models\GpsPing;
 use App\Domain\Inspection\Models\Inspection;
 use App\Domain\Pricing\Models\PricingZone;
@@ -20,6 +21,7 @@ use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
 use App\Domain\Trucker\Models\Trucker;
 use App\Domain\Trucker\Models\TruckerDriver;
 use App\Domain\Trucker\Models\TruckerVehicle;
+use App\Domain\Trucker\Models\WalletEntry;
 use App\Domain\Vehicle\Models\Vehicle;
 use Carbon\CarbonInterface;
 use Database\Factories\TripFactory;
@@ -180,6 +182,16 @@ class Trip extends Model
     public function deliveryLog(): HasOne
     {
         return $this->hasOne(DeliveryLog::class);
+    }
+
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(Expense::class);
+    }
+
+    public function walletEntries(): HasMany
+    {
+        return $this->hasMany(WalletEntry::class);
     }
 
     public function isCrewedBy(?string $driverId): bool
