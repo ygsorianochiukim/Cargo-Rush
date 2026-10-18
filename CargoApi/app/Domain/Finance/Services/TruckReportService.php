@@ -9,6 +9,7 @@ use App\Domain\Payroll\Support\PayPeriod;
 use App\Domain\Payroll\Support\PayrollCalendar;
 use App\Domain\Tenancy\Support\Tenant;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 class TruckReportService
 {
@@ -113,7 +114,7 @@ class TruckReportService
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, array<string, mixed>>  $lines
+     * @param  Collection<int, array<string, mixed>>  $lines
      * @return array<int, array{kind: string, amount_cents: int, count: int}>
      */
     private function byKind($lines): array
