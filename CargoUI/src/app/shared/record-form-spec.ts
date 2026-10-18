@@ -11,6 +11,7 @@ export interface FieldSpec {
     | 'datetime'
     | 'select'
     | 'textarea'
+    | 'checkbox'
     | 'file';
   required?: boolean;
   hint?: string | ((values: Record<string, unknown>, editing: boolean) => string);

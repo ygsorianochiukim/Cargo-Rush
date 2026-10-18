@@ -6,6 +6,7 @@ namespace App\Domain\Dispatch\Repositories;
 
 use App\Domain\Dispatch\Models\DispatchRecord;
 use App\Domain\Shared\Repositories\Repository;
+use App\Domain\Shared\Support\NumberOrder;
 use Illuminate\Database\Eloquent\Builder;
 
 class DispatchRecordRepository extends Repository
@@ -17,8 +18,8 @@ class DispatchRecordRepository extends Repository
 
     public function query(): Builder
     {
-        return DispatchRecord::query()
-            ->with(['trip:id,reference', 'vehicle:id,plate'])
+        return NumberOrder::newestTripFirst(DispatchRecord::query()
+            ->with(['trip:id,reference', 'vehicle:id,plate']))
             ->orderByDesc('dispatched_at');
     }
 

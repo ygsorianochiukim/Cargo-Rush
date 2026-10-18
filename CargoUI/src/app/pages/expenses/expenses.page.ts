@@ -3,7 +3,13 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { map } from 'rxjs';
 
-import { Expense, ExpenseCategory, ExpenseReport } from '../../models/expense/expense.model';
+import {
+  Expense,
+  ExpenseCategory,
+  ExpenseReport,
+  PAY_SCHEDULES,
+  PaySchedule,
+} from '../../models/expense/expense.model';
 import { expenseSpec } from '../../services/expense/expense.form';
 import { ExpenseService } from '../../services/expense/expense.service';
 import { BarRow, BarRows } from '../../shared/bar-rows';
@@ -11,6 +17,7 @@ import { Card } from '../../shared/card';
 import { Confirm } from '../../shared/confirm';
 import { Column, DataTable } from '../../shared/data-table';
 import { Field } from '../../shared/field';
+import { FilterBar, FilterOption } from '../../shared/filter-bar';
 import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 import { ListToolbar } from '../../shared/list-toolbar';
@@ -20,7 +27,7 @@ import { ErrorState } from '../../shared/states';
 @Component({
   selector: 'app-expenses',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BarRows, Card, DataTable, Field, Icon, ListToolbar, ErrorState, ReactiveFormsModule],
+  imports: [BarRows, Card, DataTable, Field, FilterBar, Icon, ListToolbar, ErrorState, ReactiveFormsModule],
   templateUrl: './expenses.page.html',
 })
 export class ExpensesPage {
@@ -40,10 +47,32 @@ export class ExpensesPage {
   private readonly spec = expenseSpec();
 
   protected readonly list = recordList<Expense>(this.spec, () =>
-    this.expensesApi.list().pipe(map((res) => res.data)),
+    this.expensesApi.list({ per_page: 100 }).pipe(map((res) => res.data)),
   );
 
-  protected readonly rows = this.list.rows;
+  protected readonly schedule = signal<PaySchedule | 'all'>('all');
+
+  protected readonly scheduleFilters = computed<FilterOption[]>(() => {
+    const rows = this.list.rows() ?? [];
+
+    return [
+      { value: 'all', label: 'All', count: rows.length },
+      ...PAY_SCHEDULES.map((s) => ({
+        value: s.value,
+        label: s.label,
+        count: rows.filter((r) => r.pay_schedule === s.value).length,
+      })),
+    ];
+  });
+
+  protected readonly rows = computed(() => {
+    const rows = this.list.rows();
+    const schedule = this.schedule();
+
+    if (rows === null) return null;
+
+    return schedule === 'all' ? rows : rows.filter((r) => r.pay_schedule === schedule);
+  });
 
   protected readonly report = signal<ExpenseReport | null>(null);
 
@@ -141,8 +170,14 @@ export class ExpensesPage {
       value: (e) => e.supplier_name ?? e.payee,
       sub: (e) => e.driver_name,
     },
-    { label: 'Reference', kind: 'muted', value: (e) => e.reference },
+    { label: 'Paid with', value: (e) => e.payment_source_label, sub: (e) => e.reference },
+    { label: 'Paid', value: (e) => e.pay_schedule_label },
     { label: 'Amount', kind: 'num', value: (e) => fmt.money(e.amount_cents, e.currency) },
+    {
+      label: 'VAT',
+      pill: (e) => ({ label: e.is_vatable ? 'VAT-able' : 'Non-VAT', on: e.is_vatable }),
+      sub: (e) => (e.is_vatable ? `${fmt.money(e.vat_cents, e.currency)} input VAT` : null),
+    },
     { label: 'Status', kind: 'status', status: (e) => e.status },
   ];
 

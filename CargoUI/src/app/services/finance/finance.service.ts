@@ -12,6 +12,8 @@ import {
   QuarterKey,
   ReceivableLines,
   Truck,
+  TruckReport,
+  TruckReportPeriod,
 } from '../../models/finance/finance.model';
 import { Granularity, SalesReport } from '../../models/finance/sales.model';
 import { Envelope, ListQuery } from '../../models/shared/envelope.model';
@@ -82,6 +84,10 @@ export class FinanceService {
 
   expenseLines(range: DateRange): Observable<ExpenseLines> {
     return this.api.get<ExpenseLines>('finance/expense-lines', { ...range });
+  }
+
+  truckReport(period: TruckReportPeriod, date: string): Observable<TruckReport> {
+    return this.api.get<TruckReport>('finance/truck-report', { period, date });
   }
 
   receivableLines(asOf: string): Observable<ReceivableLines> {

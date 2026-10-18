@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@a
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
+import { PaymentSourceService } from '../../services/accounting/payment-source.service';
 import { DeliveryService } from '../../services/delivery/delivery.service';
 import { IdentityService } from '../../services/identity/identity.service';
 import { DeliveryLog } from '../../models/delivery/delivery.model';
@@ -44,7 +45,7 @@ import { Modal } from '../../shared/modal';
       size="sm"
       [locked]="saving()">
       <form [formGroup]="form" class="space-y-4">
-        <app-field label="Fuel consumed (litres)" hint="Optional" [error]="errorFor('litres')">
+        <app-field label="Fuel consumed (litres)" [error]="errorFor('litres')">
           <input
             type="number"
             min="0"
@@ -53,7 +54,7 @@ import { Modal } from '../../shared/modal';
             placeholder="0.00"
             [class]="inputClass + ' cr-num'" />
         </app-field>
-        <app-field label="Fuel expense (₱)" hint="Optional — what was spent on fuel this trip." [error]="errorFor('cost')">
+        <app-field label="Fuel expense (₱)" [error]="errorFor('cost')">
           <input
             type="number"
             min="0"
@@ -61,6 +62,14 @@ import { Modal } from '../../shared/modal';
             formControlName="cost"
             placeholder="0.00"
             [class]="inputClass + ' cr-num'" />
+        </app-field>
+        <app-field label="Paid with">
+          <select formControlName="source" [class]="inputClass">
+            <option value="">Select…</option>
+            @for (option of wallets(); track option.value) {
+              <option [value]="option.value">{{ option.label }}</option>
+            }
+          </select>
         </app-field>
       </form>
 
@@ -91,6 +100,7 @@ export class DeliveryLogsPage {
   private readonly deliveryApi = inject(DeliveryService);
   private readonly identity = inject(IdentityService);
   private readonly fb = inject(FormBuilder);
+  private readonly sources = inject(PaymentSourceService);
 
   private readonly all = signal<DeliveryLog[] | null>(null);
 
@@ -109,10 +119,17 @@ export class DeliveryLogsPage {
   protected readonly form = this.fb.nonNullable.group({
     litres: ['', Validators.min(0)],
     cost: ['', Validators.min(0)],
+    source: [''],
   });
+
+  protected readonly wallets = signal<{ value: string; label: string }[]>([]);
 
   constructor() {
     this.deliveryApi.list().subscribe((r) => this.all.set(r.data));
+
+    if (this.canEncode()) {
+      this.sources.options().subscribe({ next: (rows) => this.wallets.set(rows), error: () => {} });
+    }
   }
 
   protected readonly filters = computed<FilterOption[]>(() => {
@@ -146,6 +163,7 @@ export class DeliveryLogsPage {
       label: 'Fuel expense',
       kind: 'num',
       value: (l) => (l.fuel_cost_cents === null ? '—' : fmt.money(l.fuel_cost_cents, l.currency ?? undefined)),
+      sub: (l) => l.payment_source_label,
     },
     { label: 'Status', kind: 'status', status: (l) => l.status },
   ];
@@ -160,6 +178,7 @@ export class DeliveryLogsPage {
     this.form.reset({
       litres: log.fuel_litres === null ? '' : String(log.fuel_litres),
       cost: log.fuel_cost_cents === null ? '' : String(log.fuel_cost_cents / 100),
+      source: log.payment_source_id ?? '',
     });
     this.fuelOpen.set(true);
   }
@@ -190,6 +209,7 @@ export class DeliveryLogsPage {
       .encodeFuel(log.id, {
         fuel_litres: litres === '' ? null : Number(litres),
         fuel_cost_cents: cost === '' ? null : Math.round(Number(cost) * 100),
+        payment_source_id: raw.source || null,
       })
       .subscribe({
         next: (saved) => {

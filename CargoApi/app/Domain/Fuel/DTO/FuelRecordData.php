@@ -12,6 +12,7 @@ final class FuelRecordData extends Data
     public function __construct(
         public readonly ?string $vehicle_id = null,
         public readonly ?string $driver_id = null,
+        public readonly ?string $payment_source_id = null,
         public readonly ?float $litres = null,
         public readonly ?int $amount_cents = null,
         public readonly ?string $currency = null,
@@ -26,6 +27,7 @@ final class FuelRecordData extends Data
         return new self(
             vehicle_id: $attributes['vehicle_id'] ?? null,
             driver_id: $attributes['driver_id'] ?? null,
+            payment_source_id: $attributes['payment_source_id'] ?? null,
             litres: isset($attributes['litres']) ? (float) $attributes['litres'] : null,
             amount_cents: isset($attributes['amount_cents']) ? (int) $attributes['amount_cents'] : null,
             currency: $attributes['currency'] ?? null,
@@ -41,6 +43,7 @@ final class FuelRecordData extends Data
         return [
             'vehicle_id' => $this->vehicle_id,
             'driver_id' => $this->driver_id,
+            'payment_source_id' => $this->payment_source_id,
             'litres' => $this->litres,
             'amount_cents' => $this->amount_cents,
             'currency' => $this->currency,

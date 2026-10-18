@@ -74,6 +74,18 @@
                 <span class="mt-1 block truncate text-[12px] text-cr-ink-muted">{{ name }}</span>
               }
             }
+            @case ('checkbox') {
+              <label
+                class="flex h-10 cursor-pointer items-center gap-2.5 rounded-control border border-cr-line bg-cr-surface px-3 text-[14px] text-cr-ink"
+              >
+                <input
+                  type="checkbox"
+                  [formControlName]="field.key"
+                  class="h-4 w-4 accent-cr-blue"
+                />
+                {{ field.placeholder ?? 'Yes' }}
+              </label>
+            }
             @case ('date') {
               <input type="date" [formControlName]="field.key" [class]="inputClass" />
             }

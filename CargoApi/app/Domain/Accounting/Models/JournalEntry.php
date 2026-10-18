@@ -6,6 +6,7 @@ namespace App\Domain\Accounting\Models;
 
 use App\Domain\Identity\Models\User;
 use App\Domain\Shared\Enums\JournalCategory;
+use App\Domain\Shared\Support\NumberOrder;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
@@ -116,7 +117,7 @@ class JournalEntry extends Model
 
     public function scopeInJournalOrder(Builder $query): Builder
     {
-        return $query->orderByDesc('entry_date')->orderByDesc('reference');
+        return NumberOrder::newestFirst($query, 'reference')->orderByDesc('entry_date');
     }
 
     protected static function booted(): void

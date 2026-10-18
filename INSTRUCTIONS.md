@@ -547,6 +547,14 @@ Amounts are entered in pesos, the ordinary way: type `30721` for ₱30,721.00.
 | **Trip Monitoring** | One unit's daily rows, with that sheet's totals across the top |
 | **Profitability** | A 10-day window: income, expenses and net per unit, best performer, expense split |
 | **Quarterly Summary** | The same roll-up over a quarter |
+| **Truck Report** | Each truck's income, its expenses and its net, with every expense listed under the truck it was charged to. Pick **Day**, **Cutoff** or **Month** |
+
+**The Truck Report's cutoff is your payroll cutoff.** Pick any day and it shows the whole cutoff that
+day falls in — the 1st to the 15th and the 16th to the month's end, unless you changed the cutoff days
+on Access Control. The arrows step to the period before or after. Spend that belongs to no truck —
+office costs, payroll, supplier bills — is listed separately under **Not charged to a truck**, so the
+trucks add up to what they really cost and the bottom line still counts everything. Each truck's
+figures are the same ones Profitability shows for the same dates.
 
 Profitability and Quarterly Summary are the **same calculation** over different date ranges, so
 they cannot disagree with each other. The dashboard's 30-day net income is the same one again.
@@ -659,7 +667,30 @@ At the top of the screen:
 - **Projection** — month-end spend at the current rate
 - **Open requests** — fills still marked *Pending*
 
-A **Cancelled** fill is not spend and never enters a total.
+A **Cancelled** fill is not spend and never enters a total. An **Active** fill is charged to its
+truck's daily sheet as Fuel. If the vehicle has no ledger unit yet, one is made for it, the same way
+a delivered trip's fuel is, so the fill shows in the Fuel column of Profitability and the Quarterly
+Summary rather than in overhead.
+
+### What paid for it — wallets and cards
+
+**Accounting → Wallets & Cards** lists everything the business pays from: **Cash** (already there),
+each company **credit card**, each **fuel card** (Shell, Petron fleet cards), a **bank account** or an
+**e-wallet** such as GCash. For a card, add the bank or issuer and the **last four digits** — only the
+last four, enough to tell two cards apart. The full number is refused.
+
+Every fuel fill, every trip's fuel on **Delivery Logs → Encode fuel**, and every Other Expense then has a **Paid with** picker, so the list shows whether it
+was cash, which credit card or which fuel card. The Wallets & Cards screen adds up what was paid from
+each. A card that has paid for something is switched off rather than deleted, so its history stays.
+Anybody who can see expenses, fuel or finance can pick a card; only somebody who can post to the books
+can add or change one.
+
+### VAT on an expense
+
+Tick **VAT receipt** on an Other Expense when the official receipt shows VAT. The list marks each
+entry **VAT-able** or **Non-VAT**, shows the input VAT inside a VAT-able one (at your VAT rate on
+Access Control → Rates), and the spend card splits the period into VAT-able, its input VAT, and
+non-VAT. Nothing is ticked unless you tick it.
 
 ---
 

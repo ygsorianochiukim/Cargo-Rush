@@ -14,6 +14,8 @@ export interface DeliveryLog extends Timestamped {
   receiver_name: string | null;
   fuel_litres: number | null;
   fuel_cost_cents: number | null;
+  payment_source_id: string | null;
+  payment_source_label: string | null;
   currency: string | null;
   status: StatusValue;
 }
@@ -21,6 +23,7 @@ export interface DeliveryLog extends Timestamped {
 export interface DeliveryFuelPayload {
   fuel_litres: number | null;
   fuel_cost_cents: number | null;
+  payment_source_id?: string | null;
 }
 
 export interface DeliveryReport {

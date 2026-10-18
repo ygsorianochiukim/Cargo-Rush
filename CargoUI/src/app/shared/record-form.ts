@@ -243,6 +243,7 @@ export class RecordForm {
 
     if (field.kind === 'number' || field.kind === 'money') return 0;
     if (field.kind === 'file') return null;
+    if (field.kind === 'checkbox') return false;
 
     return '';
   }

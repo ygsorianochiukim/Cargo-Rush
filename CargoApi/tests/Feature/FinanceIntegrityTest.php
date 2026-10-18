@@ -528,14 +528,15 @@ describe('/fuel as the one source for fuel (fix 14)', function (): void {
             ->assertStatus(422)->assertJsonValidationErrors('fuel_cents');
     });
 
-    it('keeps a fill on a vehicle no truck points at as overhead', function (): void {
+    it('gives a fill on a vehicle no truck points at a unit, and counts it as fuel', function (): void {
         $spare = ($this->vehicle)();
         ($this->log)(['vehicle_id' => $spare->id, 'amount_cents' => 200_000]);
 
         $totals = ($this->period)('2026-07-01', '2026-07-31')['totals'];
 
-        expect(FuelRecord::query()->where('vehicle_id', $spare->id)->first()->posted_cents)->toBe(0)
-            ->and($totals['overhead_cents'])->toBe(200_000)
+        expect(FuelRecord::query()->where('vehicle_id', $spare->id)->first()->posted_cents)->toBe(200_000)
+            ->and($totals['fuel_cents'])->toBe(200_000)
+            ->and($totals['overhead_cents'])->toBe(0)
             ->and($totals['total_expenses_cents'])->toBe(200_000);
     });
 

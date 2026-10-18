@@ -7,6 +7,7 @@ namespace App\Domain\Fuel\Requests;
 use App\Domain\Fuel\DTO\FuelRecordData;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
+use App\Domain\Tenancy\Support\Tenant;
 use Illuminate\Validation\Rule;
 
 class FuelRecordRequest extends ApiFormRequest
@@ -18,6 +19,12 @@ class FuelRecordRequest extends ApiFormRequest
         return [
             'vehicle_id' => [$required, 'string', 'exists:vehicles,id'],
             'driver_id' => ['nullable', 'string', 'exists:drivers,id'],
+            'payment_source_id' => [
+                'nullable', 'string',
+                Rule::exists('payment_sources', 'id')
+                    ->where('company_id', app(Tenant::class)->id())
+                    ->whereNull('deleted_at'),
+            ],
             'litres' => [$required, 'numeric', 'min:0.01', 'max:2000'],
             'amount_cents' => [$required, 'integer', 'min:0'],
             'currency' => ['sometimes', 'string', 'size:3'],

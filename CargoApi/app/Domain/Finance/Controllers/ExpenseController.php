@@ -23,7 +23,7 @@ class ExpenseController extends ApiController
     public function index(Request $request): JsonResponse
     {
         $page = $this->expenses->paginate(
-            [...$this->filters($request), ...$request->only(['category_id', 'trip_id'])],
+            [...$this->filters($request), ...$request->only(['category_id', 'trip_id', 'payment_source_id', 'vatable', 'pay_schedule'])],
             $this->perPage($request, 50),
         );
 

@@ -9,6 +9,7 @@ use App\Domain\Tenancy\Support\Tenant;
 use Database\Seeders\ChartOfAccountsSeeder;
 use Database\Seeders\ExpenseCategorySeeder;
 use Database\Seeders\NavigationSeeder;
+use Database\Seeders\PaymentSourceSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
@@ -28,6 +29,7 @@ class CompanyProvisioner
             (new ExpenseCategorySeeder)->run();
             (new TruckCategorySeeder)->run();
             (new ChartOfAccountsSeeder)->run();
+            (new PaymentSourceSeeder)->run();
         });
     }
 

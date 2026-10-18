@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Delivery\Models;
 
+use App\Domain\Accounting\Models\PaymentSource;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
 use App\Domain\Trip\Models\Trip;
@@ -22,7 +23,7 @@ class DeliveryLog extends Model
 
     protected $fillable = [
         'trip_id', 'delivered_at', 'pod_ref', 'pod_image_path', 'receiver_name', 'status',
-        'fuel_litres', 'fuel_cost_cents',
+        'fuel_litres', 'fuel_cost_cents', 'payment_source_id',
     ];
 
     protected function casts(): array
@@ -42,6 +43,11 @@ class DeliveryLog extends Model
     public function trip(): BelongsTo
     {
         return $this->belongsTo(Trip::class);
+    }
+
+    public function paymentSource(): BelongsTo
+    {
+        return $this->belongsTo(PaymentSource::class)->withTrashed();
     }
 
     protected static function booted(): void

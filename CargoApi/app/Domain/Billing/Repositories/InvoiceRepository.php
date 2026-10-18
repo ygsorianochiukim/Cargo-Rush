@@ -9,6 +9,7 @@ use App\Domain\Billing\Models\PaymentAllocation;
 use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Repositories\Repository;
+use App\Domain\Shared\Support\NumberOrder;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -22,9 +23,9 @@ class InvoiceRepository extends Repository
 
     public function query(): Builder
     {
-        return Invoice::query()
+        return NumberOrder::newestFirst(Invoice::query()
             ->with(['customer:id,name', 'trip:id,reference'])
-            ->withSum('allocations', 'amount_cents')
+            ->withSum('allocations', 'amount_cents'), 'number')
             ->orderByDesc('issued_at');
     }
 

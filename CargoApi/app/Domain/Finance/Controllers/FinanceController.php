@@ -14,6 +14,7 @@ use App\Domain\Finance\Resources\TruckResource;
 use App\Domain\Finance\Services\ExpenseLinesService;
 use App\Domain\Finance\Services\FinanceService;
 use App\Domain\Finance\Services\ReceivablesService;
+use App\Domain\Finance\Services\TruckReportService;
 use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -151,6 +152,14 @@ class FinanceController extends ApiController
         [$from, $to] = $from->greaterThan($to) ? [$to, $from] : [$from, $to];
 
         return $this->payload($this->expenseLines->between($from, $to));
+    }
+
+    public function truckReport(Request $request, TruckReportService $report): JsonResponse
+    {
+        return $this->payload($report->report(
+            $request->string('period', 'month')->toString(),
+            $this->date($request, 'date') ?? now()->startOfDay(),
+        ));
     }
 
     public function receivableLines(Request $request): JsonResponse

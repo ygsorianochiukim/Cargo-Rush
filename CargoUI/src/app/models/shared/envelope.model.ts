@@ -44,6 +44,11 @@ export interface ListQuery {
   account_id?: string;
   as_of?: string;
   month?: string;
+  period?: string;
+  date?: string;
+  kind?: string;
+  payment_source_id?: string;
+  vatable?: boolean | number;
 }
 
 export interface Timestamped {

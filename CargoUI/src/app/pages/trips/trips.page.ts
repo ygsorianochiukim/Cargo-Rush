@@ -17,6 +17,12 @@ import { TripDialog } from '../../shared/trip-dialog';
 import { AssignTruckerDialog } from './assign-trucker.dialog';
 import { ConfirmRequestDialog } from './confirm-request.dialog';
 
+function tripNumber(reference: string | null | undefined): number {
+  const tail = Number((reference ?? '').split('-').pop());
+
+  return Number.isFinite(tail) ? tail : -1;
+}
+
 @Component({
   selector: 'app-trips',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -160,7 +166,7 @@ export class TripsPage {
   protected readonly requests = computed(() =>
     (this.all() ?? [])
       .filter((trip) => trip.status === 'pending')
-      .sort((a, b) => a.scheduled_at.localeCompare(b.scheduled_at)),
+      .sort((a, b) => tripNumber(b.reference) - tripNumber(a.reference)),
   );
 
   protected readonly filters = computed<FilterOption[]>(() => {
