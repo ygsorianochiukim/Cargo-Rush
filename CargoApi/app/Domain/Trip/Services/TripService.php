@@ -19,7 +19,6 @@ use App\Domain\Dispatch\Models\DispatchRecord;
 use App\Domain\Finance\Services\FinanceService;
 use App\Domain\Inspection\Services\InspectionService;
 use App\Domain\Notification\Services\NotificationService;
-use App\Domain\Pricing\Models\TruckCategory;
 use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Enums\Role;
 use App\Domain\Shared\Enums\StatusValue;
@@ -137,6 +136,7 @@ class TripService
             || $differs('distance_total_m', $trip->distance_total_m)
             || $differs('vehicle_id', $trip->vehicle_id)
             || $differs('truck_category_id', $trip->truck_category_id)
+            || $differs('truck_size_id', $trip->truck_size_id)
             || $differs('origin_lat', $trip->origin_lat)
             || $differs('origin_lng', $trip->origin_lng)
             || $differs('destination_lat', $trip->destination_lat)
@@ -265,21 +265,24 @@ class TripService
 
     private function fillTruckSize(Trip $trip, TripData $data): void
     {
-        if ($this->frozen($trip) || $data->wasGiven('truck_category_id') || ! $data->wasGiven('vehicle_id')) {
+        if ($this->frozen($trip) || ! $data->wasGiven('vehicle_id')) {
             return;
         }
 
-        $sized = $trip->vehicle_id === null
+        $vehicle = $trip->vehicle_id === null
             ? null
-            : Vehicle::query()->whereKey($trip->vehicle_id)->value('truck_category_id');
+            : Vehicle::query()->whereKey($trip->vehicle_id)->first(['truck_category_id', 'truck_size_id']);
 
-        if ($sized === null && $trip->truck_category_id !== null) {
-            $carried = TruckCategory::query()->whereKey($trip->truck_category_id)->value('cbm');
-            $sized = $carried === null ? $trip->truck_category_id : null;
+        if (! $data->wasGiven('truck_category_id') && $vehicle?->truck_category_id !== null) {
+            $trip->truck_category_id = $vehicle->truck_category_id;
         }
 
-        if ($sized !== $trip->truck_category_id) {
-            $trip->forceFill(['truck_category_id' => $sized])->save();
+        if (! $data->wasGiven('truck_size_id')) {
+            $trip->truck_size_id = $vehicle?->truck_size_id;
+        }
+
+        if ($trip->isDirty(['truck_category_id', 'truck_size_id'])) {
+            $trip->save();
         }
     }
 

@@ -25,6 +25,12 @@ class TruckerVehicleRequest extends ApiFormRequest
             'model' => [$this->requiredOnCreate(), 'string', 'max:120'],
             'capacity_kg' => [$this->requiredOnCreate(), 'integer', 'min:100', 'max:100000'],
             'truck_category_id' => ['nullable', 'string', 'max:26'],
+            'truck_size_id' => [
+                'nullable', 'string',
+                Rule::exists('truck_sizes', 'id')
+                    ->where('company_id', app(Tenant::class)->id())
+                    ->whereNull('deleted_at'),
+            ],
             'status' => ['sometimes', 'string', 'in:'.implode(',', [
                 StatusValue::Available->value,
                 StatusValue::Maintenance->value,

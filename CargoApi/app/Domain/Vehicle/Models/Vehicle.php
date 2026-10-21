@@ -26,7 +26,7 @@ class Vehicle extends Model
 
     protected $fillable = [
         'plate', 'model', 'registration_no', 'capacity_kg', 'status',
-        'driver_id', 'truck_category_id', 'odometer_km', 'next_service_km',
+        'driver_id', 'truck_category_id', 'truck_size_id', 'odometer_km', 'next_service_km',
         'arrangement', 'wheels', 'owner_name', 'owner_contact',
         'rent_cents', 'share_bp', 'owner_trucker_id',
     ];

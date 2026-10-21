@@ -25,7 +25,6 @@ class TruckCategoryRequest extends ApiFormRequest
                     ->whereNull('deleted_at'),
             ],
             'description' => ['nullable', 'string', 'max:160'],
-            'cbm' => ['nullable', 'integer', 'min:1', 'max:200'],
             'position' => ['sometimes', 'integer', 'min:0', 'max:999'],
             'status' => ['sometimes', Rule::in([StatusValue::Active->value, StatusValue::Inactive->value])],
         ];
@@ -41,6 +40,6 @@ class TruckCategoryRequest extends ApiFormRequest
     /** @return array<string, mixed> */
     public function toAttributes(): array
     {
-        return $this->safe()->only(['name', 'description', 'cbm', 'position', 'status']);
+        return $this->safe()->only(['name', 'description', 'position', 'status']);
     }
 }

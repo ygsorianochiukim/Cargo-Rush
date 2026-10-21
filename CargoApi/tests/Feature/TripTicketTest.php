@@ -68,6 +68,21 @@ it('fills the ticket in from the trip, the crew and the truck', function (): voi
         ->and($ticket['issuer'])->toHaveKeys(['name', 'address', 'contact_email', 'logo_url']);
 });
 
+it('shows the start-off date once the trip is dispatched', function (): void {
+    $trip = ($this->trip)();
+    $url = "/api/v1/trips/{$trip['id']}/ticket";
+
+    expect($this->actingAs($this->admin)->getJson($url)->json('data.trip.start_off_at'))->toBeNull();
+
+    $this->travelTo('2026-09-11 06:30:00');
+    $this->actingAs($this->admin)
+        ->postJson("/api/v1/trips/{$trip['id']}/dispatch", ['location' => 'CDI Cagayan · Bay 1'])
+        ->assertOk();
+
+    expect($this->actingAs($this->admin)->getJson($url)->json('data.trip.start_off_at'))
+        ->toBe(now()->toIso8601String());
+});
+
 it('carries the dispatch checklist the paper form has', function (): void {
     $trip = ($this->trip)();
 

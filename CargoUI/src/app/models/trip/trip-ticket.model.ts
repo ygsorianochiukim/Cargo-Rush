@@ -11,6 +11,7 @@ export interface TripTicket {
     reference: string;
     status: string;
     dispatch_date: string | null;
+    start_off_at: string | null;
     origin: string | null;
     destination: string | null;
     cargo: string | null;

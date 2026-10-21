@@ -38,7 +38,7 @@ class TruckerController extends ApiController
     public function show(Trucker $trucker): JsonResponse
     {
         return $this->item(
-            new TruckerResource($trucker->loadMissing(['vehicles.category', 'drivers'])),
+            new TruckerResource($trucker->loadMissing(['vehicles.category', 'vehicles.size', 'drivers'])),
             ['balance_cents' => $this->wallet->balance($trucker)],
         );
     }

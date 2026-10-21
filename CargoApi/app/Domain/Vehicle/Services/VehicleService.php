@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Vehicle\Services;
 
 use App\Domain\Notification\Services\NotificationService;
-use App\Domain\Pricing\Models\TruckCategory;
+use App\Domain\Pricing\Models\TruckSize;
 use App\Domain\Shared\DTO\Data;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\Tone;
@@ -56,14 +56,14 @@ class VehicleService extends CrudService
 
     private function sizeFromWheels(Vehicle $vehicle): void
     {
-        if ($vehicle->truck_category_id !== null) {
+        if ($vehicle->truck_size_id !== null) {
             return;
         }
 
-        $size = TruckCategory::sizedForWheels($vehicle->wheels);
+        $size = TruckSize::sizedForWheels($vehicle->wheels);
 
         if ($size !== null) {
-            $vehicle->update(['truck_category_id' => $size->id]);
+            $vehicle->update(['truck_size_id' => $size->id]);
         }
     }
 

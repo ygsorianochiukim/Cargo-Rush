@@ -49,6 +49,8 @@ export interface TruckerVehicle {
   capacity_kg: number;
   truck_category_id: string | null;
   truck_category?: string | null;
+  truck_size_id?: string | null;
+  truck_size?: string | null;
   status: StatusValue;
 
   verification: TruckVerification;

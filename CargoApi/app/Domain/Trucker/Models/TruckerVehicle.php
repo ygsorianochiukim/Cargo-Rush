@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Trucker\Models;
 
 use App\Domain\Pricing\Models\TruckCategory;
+use App\Domain\Pricing\Models\TruckSize;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\TruckVerification;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
@@ -23,7 +24,7 @@ class TruckerVehicle extends Model
     use BelongsToCompany, HasFactory, HasUlids, SoftDeletes;
 
     protected $fillable = [
-        'trucker_id', 'plate', 'model', 'capacity_kg', 'truck_category_id', 'status',
+        'trucker_id', 'plate', 'model', 'capacity_kg', 'truck_category_id', 'truck_size_id', 'status',
         'photo_front_path', 'photo_left_path', 'photo_right_path', 'photo_back_path',
         'photo_plate_path', 'photo_engine_path',
         'verification', 'verified_at', 'verified_by', 'rejection_reason',
@@ -49,6 +50,11 @@ class TruckerVehicle extends Model
         return $this->belongsTo(TruckCategory::class, 'truck_category_id');
     }
 
+    public function size(): BelongsTo
+    {
+        return $this->belongsTo(TruckSize::class, 'truck_size_id');
+    }
+
     public function isVerified(): bool
     {
         return $this->verification === TruckVerification::Verified;
@@ -64,7 +70,7 @@ class TruckerVehicle extends Model
         return $this->hasMany(Trip::class);
     }
 
-    public function canCarry(?int $weightKg, ?string $categoryId): bool
+    public function canCarry(?int $weightKg, ?string $categoryId, ?string $sizeId = null): bool
     {
         if (! $this->isOnTheRoad()) {
             return false;
@@ -74,8 +80,12 @@ class TruckerVehicle extends Model
             return false;
         }
 
-        return $categoryId === null
+        $fitsSize = $sizeId === null
+            || $this->truck_size_id === null
+            || $this->truck_size_id === $sizeId;
+
+        return $fitsSize && ($categoryId === null
             || $this->truck_category_id === null
-            || $this->truck_category_id === $categoryId;
+            || $this->truck_category_id === $categoryId);
     }
 }

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 
-import { TruckCategory } from '../../models/pricing/pricing.model';
+import { TruckSize } from '../../models/pricing/pricing.model';
 import { RateCardService } from '../../services/pricing/pricing.service';
 import { Card } from '../../shared/card';
 import { Confirm } from '../../shared/confirm';
@@ -15,7 +15,7 @@ import { Icon } from '../../shared/icon';
   template: `
     <app-card heading="Truck sizes" icon="fleet" [hint]="cardCbm() + ' cbm is the rate card'">
       <p class="cr-meta mb-3">
-        A size with no rate of its own is priced off Current fleet: ÷ {{ cardCbm() }} cbm × its cbm.
+        Every run is priced off its rate line ÷ {{ cardCbm() }} cbm × the truck's cbm. No size means {{ cardCbm() }} cbm.
       </p>
 
       <div class="overflow-x-auto">
@@ -161,7 +161,7 @@ export class CbmCard {
   private readonly rateCard = inject(RateCardService);
   private readonly confirm = inject(Confirm);
 
-  readonly categories = input<TruckCategory[]>([]);
+  readonly truckSizes = input<TruckSize[]>([]);
   readonly cardCbm = input(28);
   readonly fleet = input<{ code: string; cents: number } | null>(null);
   readonly changed = output<void>();
@@ -171,9 +171,7 @@ export class CbmCard {
     'h-8 rounded-control border border-cr-line bg-cr-surface px-2 text-[13px] focus:border-cr-blue focus:outline-none';
 
   protected readonly sizes = computed(() =>
-    this.categories()
-      .filter((category) => category.cbm !== null && category.cbm !== undefined)
-      .sort((a, b) => (a.cbm as number) - (b.cbm as number)),
+    [...this.truckSizes()].sort((a, b) => a.cbm - b.cbm),
   );
 
   protected readonly editing = signal<string | null>(null);
@@ -181,12 +179,12 @@ export class CbmCard {
   protected readonly notice = signal<string | null>(null);
   protected readonly noticeIsError = signal(false);
 
-  protected multiplier(size: TruckCategory): string {
-    return ((size.cbm as number) / this.cardCbm()).toFixed(2);
+  protected multiplier(size: TruckSize): string {
+    return (size.cbm / this.cardCbm()).toFixed(2);
   }
 
-  protected scaled(cents: number, size: TruckCategory): number {
-    return Math.round((cents * (size.cbm as number)) / this.cardCbm());
+  protected scaled(cents: number, size: TruckSize): number {
+    return Math.round((cents * size.cbm) / this.cardCbm());
   }
 
   protected add(event: Event, name: HTMLInputElement, cbm: HTMLInputElement): void {
@@ -196,7 +194,7 @@ export class CbmCard {
     if (payload === null) return;
 
     this.busy.set(true);
-    this.rateCard.createCategory(payload).subscribe({
+    this.rateCard.createSize(payload).subscribe({
       next: (made) => {
         name.value = '';
         cbm.value = '';
@@ -206,12 +204,12 @@ export class CbmCard {
     });
   }
 
-  protected update(size: TruckCategory, name: string, cbm: string): void {
+  protected update(size: TruckSize, name: string, cbm: string): void {
     const payload = this.read(name, cbm);
     if (payload === null) return;
 
     this.busy.set(true);
-    this.rateCard.updateCategory(size.id, payload).subscribe({
+    this.rateCard.updateSize(size.id, payload).subscribe({
       next: () => {
         this.editing.set(null);
         this.done(`${payload.name} saved.`);
@@ -220,17 +218,17 @@ export class CbmCard {
     });
   }
 
-  protected async remove(size: TruckCategory): Promise<void> {
+  protected async remove(size: TruckSize): Promise<void> {
     const ok = await this.confirm.ask({
       title: `Remove ${size.name}?`,
-      body: 'Trips already priced keep their figure. A size on trucks or rate lines is switched off instead.',
+      body: 'Trips already priced keep their figure. A size on trucks or trips is switched off instead.',
       confirmLabel: 'Remove',
       danger: true,
     });
     if (!ok) return;
 
     this.busy.set(true);
-    this.rateCard.removeCategory(size.id).subscribe({
+    this.rateCard.removeSize(size.id).subscribe({
       next: ({ reason }) => this.done(reason ?? `${size.name} removed.`),
       error: (error: HttpErrorResponse) => this.fail(error),
     });

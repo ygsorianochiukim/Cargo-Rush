@@ -34,6 +34,7 @@ export interface Trip extends Timestamped {
   cargo: string;
   weight_kg: number;
   truck_category_id?: string | null;
+  truck_size_id?: string | null;
   pieces: number;
   handling: string | null;
 

@@ -149,7 +149,7 @@ describe('the rest of the walkthrough', function (): void {
             'employee_pay_components', 'payroll_cutoff_requests',
             'invoices', 'ledger_entries', 'trucks', 'accounts',
             'diesel_prices', 'pricing_zones', 'pricing_brackets',
-            'truck_categories', 'positions', 'roles', 'notification_items',
+            'truck_categories', 'truck_sizes', 'positions', 'roles', 'notification_items',
         ];
 
         $empty = collect($tables)->filter(static fn (string $table): bool => DB::table($table)->count() === 0);

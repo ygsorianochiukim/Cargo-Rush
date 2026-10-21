@@ -45,10 +45,10 @@ export class TripTicketPage {
     const t = this.ticket()?.trip;
 
     return [
-      { label: 'Origin / Departure', place: t?.origin ?? '' },
-      { label: 'First Drop-off', place: t?.destination ?? '' },
-      { label: 'Last Drop-off', place: '' },
-      { label: 'Final Return Hub', place: '' },
+      { label: 'Origin / Departure', place: t?.origin ?? '', at: t?.start_off_at ?? null },
+      { label: 'First Drop-off', place: t?.destination ?? '', at: null },
+      { label: 'Last Drop-off', place: '', at: null },
+      { label: 'Final Return Hub', place: '', at: null },
     ];
   });
 

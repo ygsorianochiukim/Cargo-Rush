@@ -208,6 +208,10 @@
           <td class="tt-value">{{ date(t.trip.dispatch_date) }}</td>
         </tr>
         <tr>
+          <td class="tt-label">Start-off Date:</td>
+          <td class="tt-value" colspan="3">{{ t.trip.start_off_at ? stamp(t.trip.start_off_at) : '' }}</td>
+        </tr>
+        <tr>
           <td class="tt-label">Driver:</td>
           <td class="tt-value">{{ t.crew.driver }}</td>
           <td class="tt-label">License No.:</td>
@@ -277,7 +281,7 @@
           <tr class="tt-row">
             <td class="tt-label">{{ leg.label }}</td>
             <td class="tt-value">{{ leg.place }}</td>
-            <td></td>
+            <td class="tt-value">{{ leg.at ? stamp(leg.at) : '' }}</td>
             <td></td>
           </tr>
         }

@@ -7,15 +7,18 @@ namespace App\Domain\Pricing\Controllers;
 use App\Domain\Billing\Services\PricingService;
 use App\Domain\Pricing\Models\PricingZone;
 use App\Domain\Pricing\Models\TruckCategory;
+use App\Domain\Pricing\Models\TruckSize;
 use App\Domain\Pricing\Requests\DieselPriceRequest;
 use App\Domain\Pricing\Requests\PricingCardRequest;
 use App\Domain\Pricing\Requests\PricingZoneRequest;
 use App\Domain\Pricing\Requests\QuotePreviewRequest;
 use App\Domain\Pricing\Requests\TruckCategoryRequest;
+use App\Domain\Pricing\Requests\TruckSizeRequest;
 use App\Domain\Pricing\Resources\DieselPriceResource;
 use App\Domain\Pricing\Resources\PricingBracketResource;
 use App\Domain\Pricing\Resources\PricingZoneResource;
 use App\Domain\Pricing\Resources\TruckCategoryResource;
+use App\Domain\Pricing\Resources\TruckSizeResource;
 use App\Domain\Pricing\Services\PricingZoneService;
 use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
@@ -73,9 +76,50 @@ class PricingController extends ApiController
         TruckCategory $truckCategory,
     ): JsonResponse {
         $truckCategory->update($request->toAttributes());
-        $truckCategory->sizeUnsizedVehicles();
 
         return $this->item(new TruckCategoryResource($truckCategory->refresh()));
+    }
+
+    public function truckSizes(Request $request): JsonResponse
+    {
+        $sizes = TruckSize::query()
+            ->withCount('vehicles')
+            ->when($request->boolean('active'), fn ($query) => $query->active())
+            ->smallestFirst()
+            ->get();
+
+        return $this->collection(TruckSizeResource::collection($sizes), $sizes);
+    }
+
+    public function storeTruckSize(TruckSizeRequest $request): JsonResponse
+    {
+        return $this->item(
+            new TruckSizeResource($this->zones->createTruckSize($request->toAttributes())),
+            status: 201,
+        );
+    }
+
+    public function updateTruckSize(TruckSizeRequest $request, TruckSize $truckSize): JsonResponse
+    {
+        $truckSize->update($request->toAttributes());
+        $truckSize->sizeUnsizedVehicles();
+
+        return $this->item(new TruckSizeResource($truckSize->refresh()));
+    }
+
+    public function destroyTruckSize(TruckSize $truckSize): JsonResponse
+    {
+        if ($this->zones->deleteTruckSize($truckSize)) {
+            return $this->noContent();
+        }
+
+        return $this->item(
+            new TruckSizeResource($truckSize->refresh()),
+            meta: [
+                'retired' => true,
+                'reason' => 'This size is on units or trips, so it has been retired rather than deleted.',
+            ],
+        );
     }
 
     public function destroyTruckCategory(TruckCategory $truckCategory): JsonResponse
@@ -140,6 +184,7 @@ class PricingController extends ApiController
             distanceM: $request->distanceMetres(),
             weightKg: (int) $request->integer('weight_kg'),
             truckCategoryId: $request->input('truck_category_id'),
+            truckSizeId: $request->input('truck_size_id'),
             zoneId: $request->input('pricing_zone_id'),
             pinned: $request->filled('pricing_zone_id'),
         );

@@ -19,6 +19,7 @@ export interface Vehicle extends Timestamped {
   hired: boolean;
   wheels: number | null;
   truck_category_id: string | null;
+  truck_size_id: string | null;
 
   owner_name: string | null;
   owner_contact: string | null;
@@ -45,6 +46,7 @@ export interface VehiclePayload {
   arrangement?: VehicleArrangement;
   wheels?: number | null;
   truck_category_id?: string | null;
+  truck_size_id?: string | null;
   owner_name?: string | null;
   owner_contact?: string | null;
   rent_cents?: number | null;

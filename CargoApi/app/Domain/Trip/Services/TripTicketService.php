@@ -6,6 +6,7 @@ namespace App\Domain\Trip\Services;
 
 use App\Domain\Finance\Models\LedgerEntry;
 use App\Domain\Pricing\Models\TruckCategory;
+use App\Domain\Pricing\Models\TruckSize;
 use App\Domain\Tenancy\Services\LogoStore;
 use App\Domain\Tenancy\Support\Tenant;
 use App\Domain\Trip\Models\Trip;
@@ -51,8 +52,8 @@ class TripTicketService
     public function build(Trip $trip): array
     {
         $trip->loadMissing([
-            'customer', 'driver', 'helpers', 'vehicle', 'truckCategory',
-            'trucker', 'truckerDriver', 'truckerVehicle',
+            'customer', 'driver', 'helpers', 'vehicle', 'truckCategory', 'truckSize',
+            'trucker', 'truckerDriver', 'truckerVehicle', 'dispatchRecord',
         ]);
 
         $company = $this->tenant->company();
@@ -63,6 +64,10 @@ class TripTicketService
         $category = $categoryId === $trip->truck_category_id
             ? $trip->truckCategory
             : TruckCategory::query()->find($categoryId);
+        $sizeId = $vehicle?->truck_size_id ?? $trip->truck_size_id;
+        $size = $sizeId === $trip->truck_size_id
+            ? $trip->truckSize
+            : TruckSize::query()->find($sizeId);
 
         $helpers = $trip->helpers->pluck('name')->values()->all();
 
@@ -79,6 +84,7 @@ class TripTicketService
                 'reference' => $trip->reference,
                 'status' => $trip->status?->value ?? $trip->status,
                 'dispatch_date' => $trip->scheduled_at?->toDateString(),
+                'start_off_at' => $trip->dispatchRecord?->dispatched_at?->toIso8601String(),
                 'origin' => $trip->pickup_place ?: $trip->origin,
                 'destination' => $trip->dropoff_place ?: $trip->destination,
                 'cargo' => $trip->cargo,
@@ -101,6 +107,7 @@ class TripTicketService
                 'model' => $vehicle?->model,
                 'type' => $this->type(
                     $category?->name,
+                    $size?->name,
                     $vehicle?->wheels ? (int) $vehicle->wheels : null,
                     $vehicle?->capacity_kg ? (int) $vehicle->capacity_kg : null,
                 ),
@@ -154,10 +161,11 @@ class TripTicketService
         ], self::checklist());
     }
 
-    private function type(?string $category, ?int $wheels, ?int $capacityKg): ?string
+    private function type(?string $category, ?string $size, ?int $wheels, ?int $capacityKg): ?string
     {
         $parts = array_filter([
-            $category ?: ($wheels ? "{$wheels} wheelers" : null),
+            $category,
+            $size ?: ($wheels ? "{$wheels} wheelers" : null),
             $capacityKg ? number_format($capacityKg).' kg' : null,
         ]);
 

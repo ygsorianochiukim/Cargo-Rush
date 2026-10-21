@@ -128,7 +128,7 @@ class CrewService
                 "{$truck->plate} is marked as in the shop. Put it back on the road first.",
             );
             abort_unless(
-                $truck->canCarry($trip->weight_kg, $trip->truck_category_id),
+                $truck->canCarry($trip->weight_kg, $trip->truck_category_id, $trip->truck_size_id),
                 422,
                 "{$truck->plate} cannot carry this load ({$trip->weight_kg} kg).",
             );

@@ -52,7 +52,6 @@ export interface TruckCategory extends Timestamped {
   key: string;
   name: string;
   description: string | null;
-  cbm: number | null;
   position: number;
   status: string;
   bracket_count?: number;
@@ -62,8 +61,22 @@ export interface TruckCategory extends Timestamped {
 export interface TruckCategoryPayload {
   name: string;
   description?: string | null;
-  cbm?: number | null;
   position?: number;
+  status?: string;
+}
+
+export interface TruckSize extends Timestamped {
+  id: string;
+  key: string;
+  name: string;
+  cbm: number;
+  status: string;
+  vehicle_count?: number;
+}
+
+export interface TruckSizePayload {
+  name: string;
+  cbm: number;
   status?: string;
 }
 
@@ -146,5 +159,6 @@ export interface QuoteRequest {
   distance_km?: number;
   weight_kg?: number;
   truck_category_id?: string | null;
+  truck_size_id?: string | null;
   pricing_zone_id?: string | null;
 }

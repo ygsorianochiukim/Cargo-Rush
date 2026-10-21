@@ -14,6 +14,7 @@ use Database\Seeders\PermissionSeeder;
 use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
 use Database\Seeders\TruckCategorySeeder;
+use Database\Seeders\TruckSizeSeeder;
 
 class CompanyProvisioner
 {
@@ -28,6 +29,7 @@ class CompanyProvisioner
             (new PositionSeeder)->run();
             (new ExpenseCategorySeeder)->run();
             (new TruckCategorySeeder)->run();
+            (new TruckSizeSeeder)->run();
             (new ChartOfAccountsSeeder)->run();
             (new PaymentSourceSeeder)->run();
         });

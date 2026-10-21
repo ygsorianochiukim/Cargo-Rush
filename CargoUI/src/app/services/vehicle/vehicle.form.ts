@@ -38,16 +38,20 @@ export function vehicleSpec(
     partners.push(...res.data.map((t) => ({ value: t.id, label: t.name })));
   });
 
-  const sizes: { value: string; label: string }[] = [];
+  const types: { value: string; label: string }[] = [];
   rateCard.truckCategories(true).subscribe({
     next: (res) => {
+      types.length = 0;
+      types.push(...res.data.map((c) => ({ value: c.id, label: c.name })));
+    },
+    error: () => (types.length = 0),
+  });
+
+  const sizes: { value: string; label: string }[] = [];
+  rateCard.truckSizes(true).subscribe({
+    next: (res) => {
       sizes.length = 0;
-      sizes.push(
-        ...res.data.map((c) => ({
-          value: c.id,
-          label: c.cbm ? `${c.name} · ${c.cbm} cbm` : c.name,
-        })),
-      );
+      sizes.push(...res.data.map((s) => ({ value: s.id, label: `${s.name} · ${s.cbm} cbm` })));
     },
     error: () => (sizes.length = 0),
   });
@@ -69,10 +73,17 @@ export function vehicleSpec(
       { key: 'capacity_kg', label: 'Capacity (kg)', kind: 'number', required: true, min: 0, max: 60000 },
       {
         key: 'truck_category_id',
+        label: 'Truck type',
+        kind: 'select',
+        options: () => types,
+        hint: 'Picks the rate-card line, e.g. Freezer or Brand New Truck.',
+      },
+      {
+        key: 'truck_size_id',
         label: 'Truck size',
         kind: 'select',
         options: () => sizes,
-        hint: 'Leave empty for a 28 cbm truck. A bigger size is priced ÷ 28 × its cbm.',
+        hint: 'Leave empty for a 28 cbm truck. Other sizes are priced ÷ 28 × their cbm.',
       },
       { key: 'odometer_km', label: 'Odometer (km)', kind: 'number', min: 0 },
       {
@@ -165,6 +176,7 @@ export function vehicleSpec(
       registration_no: vehicle.registration_no,
       capacity_kg: vehicle.capacity_kg,
       truck_category_id: vehicle.truck_category_id ?? '',
+      truck_size_id: vehicle.truck_size_id ?? '',
       odometer_km: vehicle.odometer_km,
       next_service_km: vehicle.next_service_km,
       driver_id: vehicle.driver_id ?? '',
@@ -193,6 +205,7 @@ export function vehicleSpec(
         registration_no: values['registration_no'],
         capacity_kg: Number(values['capacity_kg'] ?? 0),
         truck_category_id: values['truck_category_id'] || null,
+        truck_size_id: values['truck_size_id'] || null,
         odometer_km: Number(values['odometer_km'] ?? 0),
         next_service_km: Number(values['next_service_km'] ?? 0),
         driver_id: values['driver_id'] || null,

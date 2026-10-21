@@ -10,6 +10,7 @@ use App\Domain\Identity\Models\User;
 use App\Domain\Pricing\Models\PricingBracket;
 use App\Domain\Pricing\Models\PricingZone;
 use App\Domain\Pricing\Models\TruckCategory;
+use App\Domain\Pricing\Models\TruckSize;
 use App\Domain\Shared\Enums\Role;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Trip\Models\Trip;
@@ -20,6 +21,7 @@ use Database\Seeders\Demo\FleetSeeder;
 use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 
 beforeEach(function (): void {
@@ -333,32 +335,48 @@ describe('a price typed by hand', function (): void {
 
 describe('a trip on a sized truck', function (): void {
     beforeEach(function (): void {
-        $this->tenWheeler->update(['cbm' => 54]);
+        $this->tenSize = TruckSize::query()->where('key', '10-wheeler')->firstOrFail();
         ($this->card)();
     });
 
     it('takes the size from the vehicle and prices it ÷ 28 × 54', function (): void {
         $this->actingAs($this->admin)
-            ->patchJson("/api/v1/vehicles/{$this->vehicle->id}", ['truck_category_id' => $this->tenWheeler->id])
+            ->patchJson("/api/v1/vehicles/{$this->vehicle->id}", ['truck_size_id' => $this->tenSize->id])
             ->assertOk()
-            ->assertJsonPath('data.truck_category_id', $this->tenWheeler->id);
+            ->assertJsonPath('data.truck_size_id', $this->tenSize->id);
+
+        $trip = ($this->book)(120, ['vehicle_id' => $this->vehicle->id])->assertCreated()->json('data');
+
+        expect($trip['truck_size_id'])->toBe($this->tenSize->id)
+            ->and($trip['price_cents'])->toBe(1_928_571);
+    });
+
+    it('keeps the type and the size of a vehicle apart', function (): void {
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/vehicles/{$this->vehicle->id}", [
+                'truck_category_id' => $this->tenWheeler->id,
+                'truck_size_id' => $this->tenSize->id,
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.truck_category_id', $this->tenWheeler->id)
+            ->assertJsonPath('data.truck_size_id', $this->tenSize->id);
 
         $trip = ($this->book)(120, ['vehicle_id' => $this->vehicle->id])->assertCreated()->json('data');
 
         expect($trip['truck_category_id'])->toBe($this->tenWheeler->id)
-            ->and($trip['price_cents'])->toBe(1_928_571);
+            ->and($trip['truck_size_id'])->toBe($this->tenSize->id);
     });
 
     it('prices a 28 cbm vehicle off the card as it stands', function (): void {
         $trip = ($this->book)(120, ['vehicle_id' => $this->vehicle->id])->assertCreated()->json('data');
 
-        expect($trip['truck_category_id'])->toBeNull()
+        expect($trip['truck_size_id'])->toBeNull()
             ->and($trip['price_cents'])->toBe(1_000_000);
     });
 
     it('reprices when the trip moves to a 10 wheeler and back', function (): void {
         $plain = Vehicle::query()->whereKeyNot($this->vehicle->id)->firstOrFail();
-        $this->vehicle->update(['truck_category_id' => $this->tenWheeler->id]);
+        $this->vehicle->update(['truck_size_id' => $this->tenSize->id]);
 
         $trip = ($this->book)(120, ['vehicle_id' => $plain->id])->assertCreated()->json('data');
 
@@ -372,16 +390,16 @@ describe('a trip on a sized truck', function (): void {
             ->patchJson("/api/v1/trips/{$trip['id']}", ['vehicle_id' => $plain->id])
             ->assertOk()->json('data');
 
-        expect($back['truck_category_id'])->toBeNull()
+        expect($back['truck_size_id'])->toBeNull()
             ->and($back['price_cents'])->toBe(1_000_000);
     });
 
     it('keeps a size the desk picked by hand', function (): void {
-        $this->vehicle->update(['truck_category_id' => null]);
+        $this->vehicle->update(['truck_size_id' => null]);
 
         $trip = ($this->book)(120, [
             'vehicle_id' => $this->vehicle->id,
-            'truck_category_id' => $this->tenWheeler->id,
+            'truck_size_id' => $this->tenSize->id,
         ])->assertCreated()->json('data');
 
         expect($trip['price_cents'])->toBe(1_928_571);
@@ -390,7 +408,7 @@ describe('a trip on a sized truck', function (): void {
 
 describe('a truck sized by its wheels', function (): void {
     beforeEach(function (): void {
-        $this->tenWheeler->update(['cbm' => 54]);
+        $this->tenSize = TruckSize::query()->where('key', '10-wheeler')->firstOrFail();
         ($this->card)();
     });
 
@@ -405,7 +423,7 @@ describe('a truck sized by its wheels', function (): void {
             'wheels' => 10,
         ])->assertCreated()->json('data');
 
-        expect($made['truck_category_id'])->toBe($this->tenWheeler->id);
+        expect($made['truck_size_id'])->toBe($this->tenSize->id);
 
         $trip = ($this->book)(120, ['vehicle_id' => $made['id']])->assertCreated()->json('data');
 
@@ -416,62 +434,93 @@ describe('a truck sized by its wheels', function (): void {
         $this->actingAs($this->admin)
             ->patchJson("/api/v1/vehicles/{$this->vehicle->id}", ['wheels' => 10])
             ->assertOk()
-            ->assertJsonPath('data.truck_category_id', $this->tenWheeler->id);
+            ->assertJsonPath('data.truck_size_id', $this->tenSize->id);
     });
 
     it('leaves a six-wheel truck at the card size', function (): void {
         $this->actingAs($this->admin)
             ->patchJson("/api/v1/vehicles/{$this->vehicle->id}", ['wheels' => 6])
             ->assertOk()
-            ->assertJsonPath('data.truck_category_id', null);
+            ->assertJsonPath('data.truck_size_id', null);
     });
 
     it('sizes the ten-wheel trucks already on the fleet when the size is added', function (): void {
-        TruckCategory::query()->whereIn('id', [$this->tenWheeler->id])->orWhere('key', '10-wheeler')->forceDelete();
-        $this->vehicle->update(['wheels' => 10, 'truck_category_id' => null]);
+        $this->tenSize->forceDelete();
+        $this->vehicle->update(['wheels' => 10, 'truck_size_id' => null]);
 
         $made = $this->actingAs($this->admin)
-            ->postJson('/api/v1/pricing/truck-categories', ['name' => '10 Wheeler', 'cbm' => 54])
+            ->postJson('/api/v1/pricing/truck-sizes', ['name' => '10 Wheeler', 'cbm' => 54])
             ->assertCreated()->json('data');
 
-        expect($this->vehicle->refresh()->truck_category_id)->toBe($made['id']);
+        expect($this->vehicle->refresh()->truck_size_id)->toBe($made['id']);
     });
 
     it('keeps a size the office picked over the wheel count', function (): void {
-        $big = TruckCategory::create(['key' => 'big', 'name' => 'Big box', 'cbm' => 70]);
+        $big = TruckSize::create(['key' => 'big', 'name' => 'Big box', 'cbm' => 70]);
 
         $this->actingAs($this->admin)
-            ->patchJson("/api/v1/vehicles/{$this->vehicle->id}", ['wheels' => 10, 'truck_category_id' => $big->id])
+            ->patchJson("/api/v1/vehicles/{$this->vehicle->id}", ['wheels' => 10, 'truck_size_id' => $big->id])
             ->assertOk()
-            ->assertJsonPath('data.truck_category_id', $big->id);
+            ->assertJsonPath('data.truck_size_id', $big->id);
     });
 });
 
-describe('a server that never ran the demo seeder', function (): void {
-    it('gets a 10 Wheeler at 54 cbm and its ten-wheel trucks are sized', function (): void {
-        TruckCategory::query()->whereIn('id', [$this->tenWheeler->id])->orWhere('key', '10-wheeler')->forceDelete();
-        $this->vehicle->update(['wheels' => 10, 'truck_category_id' => null]);
-        ($this->card)();
+describe('a partner truck of the wrong size', function (): void {
+    it('is not offered a run that needs a 10 wheeler', function (): void {
+        $ten = TruckSize::query()->where('key', '10-wheeler')->firstOrFail();
+        $small = TruckSize::query()->where('key', 'small-truck')->firstOrFail();
 
-        (require database_path('migrations/2026_10_12_000300_give_every_company_a_10_wheeler.php'))->up();
+        $unit = TruckerVehicle::factory()->make(['truck_size_id' => $small->id]);
 
-        $size = TruckCategory::query()->where('key', '10-wheeler')->firstOrFail();
-
-        expect($size->cbm)->toBe(54)
-            ->and($this->vehicle->refresh()->truck_category_id)->toBe($size->id);
-
-        $trip = ($this->book)(120, ['vehicle_id' => $this->vehicle->id])->assertCreated()->json('data');
-
-        expect($trip['price_cents'])->toBe(1_928_571);
+        expect($unit->canCarry(1_000, null, $ten->id))->toBeFalse()
+            ->and($unit->canCarry(1_000, null, $small->id))->toBeTrue()
+            ->and($unit->canCarry(1_000, null, null))->toBeTrue();
     });
+});
 
-    it('gives a 10 Wheeler class that has no size its 54 cbm', function (): void {
-        $this->tenWheeler = TruckCategory::query()->where('key', '10-wheeler')->firstOrFail();
-        $this->tenWheeler->update(['cbm' => null]);
+describe('moving sizes off the truck categories', function (): void {
+    it('turns a sized category into a size and carries its trucks and trips across', function (): void {
+        ($this->card)();
+        $trip = ($this->book)(120, ['vehicle_id' => $this->vehicle->id])->assertCreated()->json('data');
+        $other = Vehicle::query()->whereKeyNot($this->vehicle->id)->firstOrFail();
 
-        (require database_path('migrations/2026_10_12_000300_give_every_company_a_10_wheeler.php'))->up();
+        $migration = require database_path('migrations/2026_10_21_000100_separate_truck_sizes_from_categories.php');
+        $migration->down();
 
-        expect($this->tenWheeler->refresh()->cbm)->toBe(54)
-            ->and(TruckCategory::query()->where('key', '10-wheeler')->count())->toBe(1);
+        $ten = TruckCategory::create(['key' => 'ten-wheeler-box', 'name' => 'Ten Wheeler Box']);
+        $reefer = TruckCategory::create(['key' => 'big-reefer', 'name' => 'Big Reefer']);
+        DB::table('truck_categories')->where('id', $ten->id)->update(['cbm' => 54]);
+        DB::table('truck_categories')->where('id', $reefer->id)->update(['cbm' => 40]);
+        PricingBracket::create([
+            'zone_id' => PricingZone::query()->value('id'), 'truck_category_id' => $reefer->id,
+            'label' => 'Reefer', 'base_cents' => 1_200_000, 'position' => 1,
+        ]);
+
+        DB::table('vehicles')->where('id', $this->vehicle->id)->update(['truck_category_id' => $ten->id]);
+        DB::table('vehicles')->where('id', $other->id)->update(['truck_category_id' => $reefer->id]);
+        DB::table('trips')->where('id', $trip['id'])->update(['truck_category_id' => $ten->id]);
+
+        $migration->up();
+
+        $sizes = TruckSize::query()->pluck('cbm', 'key')->all();
+
+        expect($sizes)->toEqual([
+            'big-reefer' => 40,
+            'small-truck' => 17,
+            'standard-truck' => 28,
+            'ten-wheeler-box' => 54,
+        ]);
+
+        $tenSize = TruckSize::query()->where('key', 'ten-wheeler-box')->value('id');
+        $reeferSize = TruckSize::query()->where('key', 'big-reefer')->value('id');
+
+        expect($this->vehicle->refresh()->only(['truck_category_id', 'truck_size_id']))
+            ->toBe(['truck_category_id' => null, 'truck_size_id' => $tenSize])
+            ->and(Trip::findOrFail($trip['id'])->only(['truck_category_id', 'truck_size_id']))
+            ->toBe(['truck_category_id' => null, 'truck_size_id' => $tenSize])
+            ->and(TruckCategory::query()->whereKey($ten->id)->exists())->toBeFalse()
+            ->and($other->refresh()->only(['truck_category_id', 'truck_size_id']))
+            ->toBe(['truck_category_id' => $reefer->id, 'truck_size_id' => $reeferSize])
+            ->and(TruckCategory::query()->whereKey($reefer->id)->exists())->toBeTrue();
     });
 });

@@ -921,6 +921,15 @@ Route::prefix('v1')->group(function (): void {
                 Route::match(['put', 'patch'], 'truck-categories/{truckCategory}', [PricingController::class, 'updateTruckCategory']);
                 Route::delete('truck-categories/{truckCategory}', [PricingController::class, 'destroyTruckCategory']);
             });
+
+            Route::get('truck-sizes', [PricingController::class, 'truckSizes'])
+                ->middleware('permission:pricing.view');
+
+            Route::middleware('permission:pricing.manage')->group(function (): void {
+                Route::post('truck-sizes', [PricingController::class, 'storeTruckSize']);
+                Route::match(['put', 'patch'], 'truck-sizes/{truckSize}', [PricingController::class, 'updateTruckSize']);
+                Route::delete('truck-sizes/{truckSize}', [PricingController::class, 'destroyTruckSize']);
+            });
         });
 
         Route::get('pricing/zones', [PricingController::class, 'index'])->middleware('permission:pricing.view');

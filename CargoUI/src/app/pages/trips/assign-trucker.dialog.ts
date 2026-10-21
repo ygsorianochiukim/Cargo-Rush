@@ -210,7 +210,8 @@ export class AssignTruckerDialog {
       (v) =>
         v.status === 'available' &&
         v.capacity_kg >= trip.weight_kg &&
-        (!trip.truck_category_id || !v.truck_category_id || v.truck_category_id === trip.truck_category_id),
+        (!trip.truck_category_id || !v.truck_category_id || v.truck_category_id === trip.truck_category_id) &&
+        (!trip.truck_size_id || !v.truck_size_id || v.truck_size_id === trip.truck_size_id),
     );
   }
 

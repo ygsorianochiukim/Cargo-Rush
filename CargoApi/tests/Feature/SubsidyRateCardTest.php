@@ -6,7 +6,9 @@ use App\Domain\Identity\Models\User;
 use App\Domain\Pricing\Models\PricingBracket;
 use App\Domain\Pricing\Models\PricingZone;
 use App\Domain\Pricing\Models\TruckCategory;
+use App\Domain\Pricing\Models\TruckSize;
 use App\Domain\Shared\Enums\Role;
+use App\Domain\Vehicle\Models\Vehicle;
 use Database\Seeders\NavigationSeeder;
 use Database\Seeders\SubsidyRateCardSeeder;
 
@@ -23,6 +25,9 @@ beforeEach(function (): void {
         ->assertCreated();
 
     $this->category = fn (string $key): string => TruckCategory::query()
+        ->where('key', $key)->firstOrFail()->id;
+
+    $this->size = fn (string $key): string => TruckSize::query()
         ->where('key', $key)->firstOrFail()->id;
 });
 
@@ -241,7 +246,7 @@ describe('a 10 wheeler, priced off the 28 cbm line', function (): void {
 
         $quote = ($this->quote)([
             'distance_km' => 140,
-            'truck_category_id' => ($this->category)('10-wheeler'),
+            'truck_size_id' => ($this->size)('10-wheeler'),
         ])->assertOk();
 
         expect($quote->json('data.zone.code'))->toBe('D');
@@ -256,7 +261,7 @@ describe('a 10 wheeler, priced off the 28 cbm line', function (): void {
 
         $quote = ($this->quote)([
             'distance_km' => 140,
-            'truck_category_id' => ($this->category)('10-wheeler'),
+            'truck_size_id' => ($this->size)('10-wheeler'),
         ])->assertOk();
 
         expect(($this->quote)(['distance_km' => 140])->json('data.cents'))->toBe(1_049_100);
@@ -268,60 +273,115 @@ describe('a 10 wheeler, priced off the 28 cbm line', function (): void {
     it('leaves the 28 cbm runs alone', function (): void {
         expect(($this->quote)(['distance_km' => 140])->json('data.volume'))->toBeNull();
         expect(($this->quote)(['distance_km' => 140])->json('data.cents'))->toBe(780_300);
+
+        $standard = ($this->quote)(['distance_km' => 140, 'truck_size_id' => ($this->size)('standard-truck')]);
+
+        expect($standard->json('data.volume'))->toBeNull();
+        expect($standard->json('data.cents'))->toBe(780_300);
     });
 
-    it('does not scale a class that has a line of its own', function (): void {
-        TruckCategory::query()->where('key', 'brand-new-truck')->update(['cbm' => 54]);
+    it('prices a 17 cbm small truck below the card', function (): void {
+        $quote = ($this->quote)(['distance_km' => 140, 'truck_size_id' => ($this->size)('small-truck')]);
 
+        expect($quote->json('data.cents'))->toBe(473_754);
+        expect($quote->json('data.volume'))->toBe(['cbm' => 17, 'card_cbm' => 28]);
+    });
+
+    it('scales the line the truck type picks', function (): void {
         $quote = ($this->quote)([
             'distance_km' => 140,
             'truck_category_id' => ($this->category)('brand-new-truck'),
+            'truck_size_id' => ($this->size)('10-wheeler'),
         ])->assertOk();
 
-        expect($quote->json('data.cents'))->toBe(909_000);
-        expect($quote->json('data.volume'))->toBeNull();
+        expect($quote->json('data.bracket.label'))->toBe('Brand new truck');
+        expect($quote->json('data.cents'))->toBe(1_753_071);
     });
 
-    it('keeps the size a class is given', function (): void {
+    it('keeps the size it is given', function (): void {
         $made = $this->actingAs($this->accountant)
-            ->postJson('/api/v1/pricing/truck-categories', ['name' => '12 Wheeler', 'cbm' => 70])
+            ->postJson('/api/v1/pricing/truck-sizes', ['name' => '12 Wheeler', 'cbm' => 70])
             ->assertCreated();
 
         expect($made->json('data.cbm'))->toBe(70);
 
-        $quote = ($this->quote)(['distance_km' => 140, 'truck_category_id' => $made->json('data.id')]);
+        $quote = ($this->quote)(['distance_km' => 140, 'truck_size_id' => $made->json('data.id')]);
 
         expect($quote->json('data.cents'))->toBe(1_950_750);
     });
 });
 
 describe('the truck sizes list', function (): void {
-    it('resizes a class and reprices it', function (): void {
-        $ten = ($this->category)('10-wheeler');
+    it('ships the 17, 28 and 54 cbm sizes, smallest first', function (): void {
+        $sizes = $this->actingAs($this->accountant)
+            ->getJson('/api/v1/pricing/truck-sizes')
+            ->assertOk()
+            ->json('data');
+
+        expect(collect($sizes)->map(fn (array $size): array => [$size['name'], $size['cbm']])->all())->toBe([
+            ['Small Truck', 17],
+            ['Standard Truck', 28],
+            ['10 Wheeler', 54],
+        ]);
+    });
+
+    it('keeps sizes out of the truck types', function (): void {
+        $types = $this->actingAs($this->accountant)
+            ->getJson('/api/v1/pricing/truck-categories')
+            ->assertOk()
+            ->json('data');
+
+        expect(collect($types)->pluck('name'))->not->toContain('10 Wheeler')
+            ->and(collect($types)->first())->not->toHaveKey('cbm');
+    });
+
+    it('resizes a size and reprices it', function (): void {
+        $ten = ($this->size)('10-wheeler');
 
         $this->actingAs($this->accountant)
-            ->patchJson("/api/v1/pricing/truck-categories/{$ten}", ['name' => '10 Wheeler', 'cbm' => 56])
+            ->patchJson("/api/v1/pricing/truck-sizes/{$ten}", ['name' => '10 Wheeler', 'cbm' => 56])
             ->assertOk()
             ->assertJsonPath('data.cbm', 56);
 
-        expect(($this->quote)(['distance_km' => 140, 'truck_category_id' => $ten])->json('data.cents'))
+        expect(($this->quote)(['distance_km' => 140, 'truck_size_id' => $ten])->json('data.cents'))
             ->toBe(1_560_600);
     });
 
     it('refuses a size of nothing', function (): void {
         $this->actingAs($this->accountant)
-            ->postJson('/api/v1/pricing/truck-categories', ['name' => 'Tiny', 'cbm' => 0])
+            ->postJson('/api/v1/pricing/truck-sizes', ['name' => 'Tiny', 'cbm' => 0])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('cbm');
+    });
+
+    it('refuses a size with no cbm', function (): void {
+        $this->actingAs($this->accountant)
+            ->postJson('/api/v1/pricing/truck-sizes', ['name' => 'Mystery'])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('cbm');
     });
 
     it('removes a size nobody uses', function (): void {
-        $ten = ($this->category)('10-wheeler');
+        $ten = ($this->size)('10-wheeler');
 
         $this->actingAs($this->accountant)
-            ->deleteJson("/api/v1/pricing/truck-categories/{$ten}")
+            ->deleteJson("/api/v1/pricing/truck-sizes/{$ten}")
             ->assertNoContent();
 
-        expect(TruckCategory::query()->whereKey($ten)->exists())->toBeFalse();
+        expect(TruckSize::query()->whereKey($ten)->exists())->toBeFalse();
+    });
+
+    it('retires a size a unit is using', function (): void {
+        $ten = ($this->size)('10-wheeler');
+        Vehicle::create([
+            'plate' => 'TEN 0054', 'model' => 'Fuso Fighter', 'registration_no' => 'LTO-2026-00054',
+            'capacity_kg' => 18_000, 'truck_size_id' => $ten,
+        ]);
+
+        $this->actingAs($this->accountant)
+            ->deleteJson("/api/v1/pricing/truck-sizes/{$ten}")
+            ->assertOk()
+            ->assertJsonPath('meta.retired', true)
+            ->assertJsonPath('data.status', 'inactive');
     });
 });

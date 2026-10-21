@@ -39,7 +39,7 @@ class JobBoardService
         }
 
         $jobs = Trip::query()
-            ->with(['customer:id,name,vat_treatment,withholds_tax,withholding_rate_bp', 'truckCategory:id,name'])
+            ->with(['customer:id,name,vat_treatment,withholds_tax,withholding_rate_bp', 'truckCategory:id,name', 'truckSize:id,name,cbm'])
             ->where('status', StatusValue::Pending->value)
             ->whereNull('driver_id')
             ->where('trucker_id', $trucker->getKey())
@@ -47,7 +47,7 @@ class JobBoardService
             ->orderByDesc('created_at')
             ->limit(100)
             ->get()
-            ->filter(static fn (Trip $trip): bool => $trucker->fittingVehicle($trip->weight_kg, $trip->truck_category_id) !== null);
+            ->filter(static fn (Trip $trip): bool => $trucker->fittingVehicle($trip->weight_kg, $trip->truck_category_id, $trip->truck_size_id) !== null);
 
         return $this->nearestFirst($jobs, $trucker, $lat, $lng);
     }
@@ -89,7 +89,7 @@ class JobBoardService
             );
 
             abort_unless(
-                $trucker->fittingVehicle($trip->weight_kg, $trip->truck_category_id) !== null,
+                $trucker->fittingVehicle($trip->weight_kg, $trip->truck_category_id, $trip->truck_size_id) !== null,
                 422,
                 'None of your trucks can carry that load.',
             );
@@ -227,7 +227,7 @@ class JobBoardService
     public function onlyFittingTruck(Trip $trip): ?TruckerVehicle
     {
         $fitting = $trip->trucker?->vehicles()->get()
-            ->filter(static fn (TruckerVehicle $v): bool => $v->canCarry($trip->weight_kg, $trip->truck_category_id))
+            ->filter(static fn (TruckerVehicle $v): bool => $v->canCarry($trip->weight_kg, $trip->truck_category_id, $trip->truck_size_id))
             ?? collect();
 
         return $fitting->count() === 1 ? $fitting->first() : null;
