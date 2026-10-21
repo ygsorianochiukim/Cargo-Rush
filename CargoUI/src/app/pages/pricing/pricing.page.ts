@@ -8,6 +8,7 @@ import {
   PricingZone,
   QuoteBreakdown,
   TruckCategory,
+  TruckSize,
 } from '../../models/pricing/pricing.model';
 import { PricingService, RateCardService } from '../../services/pricing/pricing.service';
 import { CbmCard } from './cbm-card';
@@ -60,6 +61,7 @@ export class PricingPage {
   protected readonly quoting = signal(false);
 
   protected readonly categories = signal<TruckCategory[]>([]);
+  protected readonly sizes = signal<TruckSize[]>([]);
 
   protected readonly previewZoneId = signal<string | null>(null);
 
@@ -155,6 +157,7 @@ export class PricingPage {
   protected readonly previewForm = this.fb.group({
     distance_km: [0],
     truck_category_id: [''],
+    truck_size_id: [''],
   });
 
   constructor() {
@@ -215,15 +218,12 @@ export class PricingPage {
 
     const cardCbm = state?.card_cbm ?? 28;
     const fleet = lines.find((line) => line.categoryId === '');
-    const lined = new Set(lines.map((line) => line.categoryId));
     const scaled = fleet
-      ? this.categories()
-          .filter((category) => category.cbm && category.cbm !== cardCbm && !lined.has(category.id))
-          .map((category) => ({
-            label: `${category.name} · ${category.cbm} cbm`,
-            prices: priced(fleet).map((cents) =>
-              Math.round((cents * (category.cbm as number)) / cardCbm),
-            ),
+      ? this.sizes()
+          .filter((size) => size.cbm !== cardCbm)
+          .map((size) => ({
+            label: `${size.name} · ${size.cbm} cbm`,
+            prices: priced(fleet).map((cents) => Math.round((cents * size.cbm) / cardCbm)),
           }))
       : [];
 
@@ -260,6 +260,11 @@ export class PricingPage {
     this.rateCard.truckCategories(true).subscribe({
       next: (envelope) => this.categories.set(envelope.data),
       error: () => this.categories.set([]),
+    });
+
+    this.rateCard.truckSizes(true).subscribe({
+      next: (envelope) => this.sizes.set(envelope.data),
+      error: () => this.sizes.set([]),
     });
   }
 
@@ -517,7 +522,7 @@ export class PricingPage {
 
 
   protected preview(): void {
-    const { distance_km, truck_category_id } = this.previewForm.getRawValue();
+    const { distance_km, truck_category_id, truck_size_id } = this.previewForm.getRawValue();
 
     this.quoting.set(true);
 
@@ -526,6 +531,7 @@ export class PricingPage {
         distance_km: Number(distance_km ?? 0),
         weight_kg: 0,
         truck_category_id: truck_category_id || null,
+        truck_size_id: truck_size_id || null,
         pricing_zone_id: this.previewZoneId(),
       })
       .subscribe({

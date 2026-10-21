@@ -21,7 +21,7 @@ final class ChangeLog
         'notification_items', 'pay_components', 'pay_run_line_components', 'pay_run_line_trips',
         'pay_run_lines', 'pay_runs', 'payment_allocations', 'payment_sources', 'payments', 'payroll_cutoff_requests',
         'permissions', 'positions', 'pricing_brackets', 'pricing_zones', 'roles', 'store_credits',
-        'supplier_categories', 'suppliers', 'trips', 'truck_categories', 'trucker_drivers',
+        'supplier_categories', 'suppliers', 'trips', 'truck_categories', 'truck_sizes', 'trucker_drivers',
         'trucker_vehicles', 'trucker_wallet_entries', 'truckers', 'trucks', 'undertime_requests',
         'users', 'vehicles',
     ];

@@ -60,6 +60,7 @@ class HaulerDirectory
             'vehicle' => $unit->model,
             'plate' => $unit->plate,
             'truck_category' => $unit->category?->name,
+            'truck_size' => $unit->size?->name,
             'trips_completed' => $trucker->trips_completed,
         ];
     }

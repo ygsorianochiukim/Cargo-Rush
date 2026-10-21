@@ -107,6 +107,14 @@
           }
         </select>
       </app-field>
+      <app-field label="Truck size">
+        <select formControlName="truck_size_id" [class]="inputClass">
+          <option value="">{{ diesel()?.card_cbm ?? 28 }} cbm (the card)</option>
+          @for (size of sizes(); track size.id) {
+            <option [value]="size.id">{{ size.name }} · {{ size.cbm }} cbm</option>
+          }
+        </select>
+      </app-field>
       <button
         type="button"
         class="h-10 w-full rounded-control border border-cr-blue text-[14px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
@@ -455,7 +463,7 @@
             <p class="cr-meta mt-0.5">The same grid as the subsidy table. Today's price is highlighted.</p>
             @if (dieselGrid().hasScaled) {
               <p class="cr-meta mt-0.5">
-                Grey rows have no rate of their own: Current fleet ÷ {{ dieselGrid().cardCbm }} cbm × their cbm.
+                Grey rows are truck sizes: Current fleet ÷ {{ dieselGrid().cardCbm }} cbm × their cbm.
               </p>
             }
 
@@ -516,7 +524,7 @@
 
 <app-cbm-card
   class="mt-4 block"
-  [categories]="categories()"
+  [truckSizes]="sizes()"
   [cardCbm]="diesel()?.card_cbm ?? 28"
   [fleet]="fleetToday()"
   (changed)="reloadCategories()"

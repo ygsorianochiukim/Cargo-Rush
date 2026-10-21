@@ -39,6 +39,7 @@ class JobResource extends ApiResource
             'pieces' => $this->pieces,
             'handling' => $this->handling,
             'truck_category' => $this->whenLoaded('truckCategory', fn () => $this->truckCategory?->name),
+            'truck_size' => $this->whenLoaded('truckSize', fn () => $this->truckSize?->name),
 
             'distance_total_m' => $this->distance_total_m,
             'distance_from_m' => $this->distance_from_m ?? null,

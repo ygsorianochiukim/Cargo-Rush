@@ -41,6 +41,13 @@ class VehicleRequest extends ApiFormRequest
                     ->whereNull('deleted_at'),
             ],
 
+            'truck_size_id' => [
+                'nullable', 'string',
+                Rule::exists('truck_sizes', 'id')
+                    ->where('company_id', app(Tenant::class)->id())
+                    ->whereNull('deleted_at'),
+            ],
+
             'owner_name' => ['nullable', 'string', 'max:120'],
             'owner_contact' => ['nullable', 'string', 'max:40'],
 

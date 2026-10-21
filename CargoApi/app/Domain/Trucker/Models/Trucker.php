@@ -78,10 +78,10 @@ class Trucker extends Model
         return $this->isVetted() && $this->is_online && $this->activeVehicle() !== null;
     }
 
-    public function fittingVehicle(?int $weightKg, ?string $categoryId): ?TruckerVehicle
+    public function fittingVehicle(?int $weightKg, ?string $categoryId, ?string $sizeId = null): ?TruckerVehicle
     {
         return $this->vehicles
-            ->first(static fn (TruckerVehicle $vehicle): bool => $vehicle->canCarry($weightKg, $categoryId));
+            ->first(static fn (TruckerVehicle $vehicle): bool => $vehicle->canCarry($weightKg, $categoryId, $sizeId));
     }
 
     public function activeVehicle(): ?TruckerVehicle

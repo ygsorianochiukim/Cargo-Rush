@@ -144,7 +144,7 @@ class TruckerService
                 $unit = $this->unitFor($trucker, $vehicleId);
 
                 abort_unless(
-                    $unit->canCarry($locked->weight_kg, $locked->truck_category_id),
+                    $unit->canCarry($locked->weight_kg, $locked->truck_category_id, $locked->truck_size_id),
                     422,
                     "{$unit->plate} cannot carry that load.",
                 );
@@ -152,7 +152,7 @@ class TruckerService
                 $trucker->loadMissing('vehicles');
 
                 abort_if(
-                    $trucker->fittingVehicle($locked->weight_kg, $locked->truck_category_id) === null,
+                    $trucker->fittingVehicle($locked->weight_kg, $locked->truck_category_id, $locked->truck_size_id) === null,
                     422,
                     'None of that trucker\'s trucks on the road can carry this load.',
                 );

@@ -147,7 +147,7 @@ class PortalService
         $unit = $trucker->activeVehicle();
 
         abort_unless(
-            $unit !== null && $unit->canCarry($trip->weight_kg, $trip->truck_category_id),
+            $unit !== null && $unit->canCarry($trip->weight_kg, $trip->truck_category_id, $trip->truck_size_id),
             422,
             "{$trucker->name}'s truck cannot carry that load.",
         );

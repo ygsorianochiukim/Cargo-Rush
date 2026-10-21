@@ -65,6 +65,12 @@ class TripRequest extends ApiFormRequest
                     ->where('company_id', app(Tenant::class)->id())
                     ->whereNull('deleted_at'),
             ],
+            'truck_size_id' => [
+                'nullable', 'string',
+                Rule::exists('truck_sizes', 'id')
+                    ->where('company_id', app(Tenant::class)->id())
+                    ->whereNull('deleted_at'),
+            ],
             'pricing_zone_id' => [
                 'nullable', 'string',
                 Rule::exists('pricing_zones', 'id')

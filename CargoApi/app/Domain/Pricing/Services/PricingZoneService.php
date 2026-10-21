@@ -9,6 +9,7 @@ use App\Domain\Pricing\Models\DieselPrice;
 use App\Domain\Pricing\Models\PricingBracket;
 use App\Domain\Pricing\Models\PricingZone;
 use App\Domain\Pricing\Models\TruckCategory;
+use App\Domain\Pricing\Models\TruckSize;
 use App\Domain\Pricing\Repositories\DieselPriceRepository;
 use App\Domain\Pricing\Repositories\PricingZoneRepository;
 use App\Domain\Shared\DTO\Data;
@@ -73,14 +74,42 @@ class PricingZoneService extends CrudService
     {
         $name = (string) ($attributes['name'] ?? '');
 
-        $category = TruckCategory::create([
+        return TruckCategory::create([
             ...$attributes,
-            'key' => $this->uniqueCategoryKey(Str::slug($name) ?: 'category'),
+            'key' => $this->uniqueKey(TruckCategory::class, Str::slug($name) ?: 'category'),
+        ])->refresh();
+    }
+
+    /** @param array<string, mixed> $attributes */
+    public function createTruckSize(array $attributes): TruckSize
+    {
+        $name = (string) ($attributes['name'] ?? '');
+
+        $size = TruckSize::create([
+            ...$attributes,
+            'key' => $this->uniqueKey(TruckSize::class, Str::slug($name) ?: 'size'),
         ])->refresh();
 
-        $category->sizeUnsizedVehicles();
+        $size->sizeUnsizedVehicles();
 
-        return $category;
+        return $size;
+    }
+
+    public function deleteTruckSize(TruckSize $size): bool
+    {
+        $inUse = $size->vehicles()->exists()
+            || $size->truckerVehicles()->exists()
+            || $size->trips()->exists();
+
+        if ($inUse) {
+            $size->update(['status' => StatusValue::Inactive->value]);
+
+            return false;
+        }
+
+        $size->delete();
+
+        return true;
     }
 
     public function deleteTruckCategory(TruckCategory $category): bool
@@ -98,12 +127,13 @@ class PricingZoneService extends CrudService
         return true;
     }
 
-    private function uniqueCategoryKey(string $stem): string
+    /** @param class-string<TruckCategory|TruckSize> $model */
+    private function uniqueKey(string $model, string $stem): string
     {
         $key = $stem;
         $suffix = 1;
 
-        while (TruckCategory::withTrashed()->where('key', $key)->exists()) {
+        while ($model::withTrashed()->where('key', $key)->exists()) {
             $key = $stem.'-'.(++$suffix);
         }
 

@@ -14,6 +14,8 @@ import {
   QuoteRequest,
   TruckCategory,
   TruckCategoryPayload,
+  TruckSize,
+  TruckSizePayload,
 } from '../../models/pricing/pricing.model';
 import { Envelope, ListQuery } from '../../models/shared/envelope.model';
 
@@ -79,6 +81,27 @@ export class RateCardService {
 
   removeCategory(id: string): Observable<{ retired: TruckCategory | null; reason: string | null }> {
     return this.api.deleteEnvelope<TruckCategory>(`pricing/truck-categories/${id}`).pipe(
+      map((envelope) => ({
+        retired: envelope?.data ?? null,
+        reason: (envelope?.meta?.['reason'] as string | undefined) ?? null,
+      })),
+    );
+  }
+
+  truckSizes(activeOnly = false): Observable<Envelope<TruckSize[]>> {
+    return this.api.envelope<TruckSize[]>('pricing/truck-sizes', activeOnly ? { active: 1 } : undefined);
+  }
+
+  createSize(payload: TruckSizePayload): Observable<TruckSize> {
+    return this.api.post<TruckSize>('pricing/truck-sizes', payload);
+  }
+
+  updateSize(id: string, payload: Partial<TruckSizePayload>): Observable<TruckSize> {
+    return this.api.patch<TruckSize>(`pricing/truck-sizes/${id}`, payload);
+  }
+
+  removeSize(id: string): Observable<{ retired: TruckSize | null; reason: string | null }> {
+    return this.api.deleteEnvelope<TruckSize>(`pricing/truck-sizes/${id}`).pipe(
       map((envelope) => ({
         retired: envelope?.data ?? null,
         reason: (envelope?.meta?.['reason'] as string | undefined) ?? null,

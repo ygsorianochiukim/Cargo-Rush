@@ -552,13 +552,19 @@ export class TripForm {
     initialValue: this.form.controls.vehicle_id.value,
   });
 
-  private readonly truckSize = computed(() => {
+  private readonly truckClass = computed(() => {
     const id = this.vehicleId();
     const vehicle = id ? this.vehicles().find((v) => v.id === id) : undefined;
+    const trip = this.trip();
 
-    if (vehicle) return vehicle.truck_category_id ?? null;
+    if (vehicle) {
+      return {
+        category: vehicle.truck_category_id ?? trip?.truck_category_id ?? null,
+        size: vehicle.truck_size_id ?? null,
+      };
+    }
 
-    return this.trip()?.truck_category_id ?? null;
+    return { category: trip?.truck_category_id ?? null, size: trip?.truck_size_id ?? null };
   });
 
   private readonly typedKm = toSignal(this.form.controls.km.valueChanges, {
@@ -644,7 +650,7 @@ export class TripForm {
         open: this.open(),
         distance: this.previewDistance(),
         weight: Number(this.weight()) || 0,
-        category: this.truckSize(),
+        truck: this.truckClass(),
         zone: this.zoneId() || null,
       })),
     )
@@ -657,7 +663,8 @@ export class TripForm {
             .quote({
               distance_km: ask.distance.metres / 1000,
               weight_kg: ask.weight,
-              truck_category_id: ask.category,
+              truck_category_id: ask.truck.category,
+              truck_size_id: ask.truck.size,
               pricing_zone_id: ask.zone,
             })
             .pipe(catchError(() => of(null)));

@@ -21,6 +21,8 @@ class TruckerVehicleResource extends ApiResource
             'capacity_kg' => $this->capacity_kg,
             'truck_category_id' => $this->truck_category_id,
             'truck_category' => $this->whenLoaded('category', fn () => $this->category?->name),
+            'truck_size_id' => $this->truck_size_id,
+            'truck_size' => $this->whenLoaded('size', fn () => $this->size?->name),
             'status' => $this->status->value,
 
             'verification' => $this->verification->value,

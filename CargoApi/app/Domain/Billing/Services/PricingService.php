@@ -5,9 +5,9 @@ declare(strict_types=1);
 namespace App\Domain\Billing\Services;
 
 use App\Domain\Pricing\DTO\QuoteBreakdown;
-use App\Domain\Pricing\Models\PricingBracket;
 use App\Domain\Pricing\Models\PricingZone;
 use App\Domain\Pricing\Models\TruckCategory;
+use App\Domain\Pricing\Models\TruckSize;
 use App\Domain\Pricing\Services\BracketResolver;
 use App\Domain\Pricing\Services\FuelIndex;
 use App\Domain\Pricing\Services\ZoneResolver;
@@ -36,6 +36,7 @@ class PricingService
             distanceM: (int) $trip->distance_total_m,
             weightKg: (int) $trip->weight_kg,
             truckCategoryId: $trip->truck_category_id,
+            truckSizeId: $trip->truck_size_id,
             zoneId: $trip->pricing_zone_id,
             pinned: (bool) $trip->zone_pinned,
         );
@@ -45,6 +46,7 @@ class PricingService
         int $distanceM,
         int $weightKg,
         ?string $truckCategoryId = null,
+        ?string $truckSizeId = null,
         ?string $zoneId = null,
         bool $pinned = false,
     ): QuoteBreakdown {
@@ -88,7 +90,7 @@ class PricingService
         $card = $bracket->priceFor($cardKm, $weightKg);
         $fuel = $this->fuel->surchargeFor($bracket, $card, $zone);
         $step = (int) $bracket->diesel_step_cents;
-        $cbm = $this->scaledCbm($bracket, $truckCategoryId);
+        $cbm = $this->scaledCbm($truckSizeId);
         $cardCbm = $this->cardCbm();
 
         if ($cbm !== null) {
@@ -126,13 +128,13 @@ class PricingService
         );
     }
 
-    private function scaledCbm(PricingBracket $bracket, ?string $truckCategoryId): ?int
+    private function scaledCbm(?string $truckSizeId): ?int
     {
-        if ($bracket->truck_category_id !== null || $truckCategoryId === null) {
+        if ($truckSizeId === null) {
             return null;
         }
 
-        $cbm = TruckCategory::query()->whereKey($truckCategoryId)->value('cbm');
+        $cbm = TruckSize::query()->whereKey($truckSizeId)->value('cbm');
 
         return $cbm === null || (int) $cbm === $this->cardCbm() ? null : (int) $cbm;
     }

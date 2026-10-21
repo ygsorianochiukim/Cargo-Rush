@@ -60,6 +60,7 @@ class TripResource extends ApiResource
             'hauled_by' => $this->hauledByPartner() ? 'trucker' : 'company',
             'trucker_id' => $this->trucker_id,
             'truck_category_id' => $this->truck_category_id,
+            'truck_size_id' => $this->truck_size_id,
             'trucker_name' => $this->trucker?->name,
             'trucker_business_name' => $this->trucker?->business_name,
             'trucker_phone' => $this->trucker?->phone,

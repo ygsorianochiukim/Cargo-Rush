@@ -14,6 +14,7 @@ use App\Domain\Gps\Models\GpsPing;
 use App\Domain\Inspection\Models\Inspection;
 use App\Domain\Pricing\Models\PricingZone;
 use App\Domain\Pricing\Models\TruckCategory;
+use App\Domain\Pricing\Models\TruckSize;
 use App\Domain\Shared\Enums\BookingSource;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Support\Geo;
@@ -44,7 +45,7 @@ class Trip extends Model
         'reference', 'customer_id', 'origin', 'destination', 'cargo',
         'origin_lat', 'origin_lng', 'destination_lat', 'destination_lng',
         'weight_kg', 'pieces', 'handling', 'driver_id',
-        'vehicle_id', 'truck_category_id', 'status', 'pickup_place', 'dropoff_place',
+        'vehicle_id', 'truck_category_id', 'truck_size_id', 'status', 'pickup_place', 'dropoff_place',
         'scheduled_at', 'eta', 'distance_total_m',
         'price_cents', 'currency', 'billed_at', 'requested_by',
         'driver_allowance_cents', 'helper_allowance_cents', 'toll_cents',
@@ -144,6 +145,11 @@ class Trip extends Model
     public function truckCategory(): BelongsTo
     {
         return $this->belongsTo(TruckCategory::class, 'truck_category_id');
+    }
+
+    public function truckSize(): BelongsTo
+    {
+        return $this->belongsTo(TruckSize::class, 'truck_size_id');
     }
 
     public function hauledByPartner(): bool

@@ -38,7 +38,7 @@ class PartnerController extends ApiController
         $trucker = $this->me($request);
 
         return $this->item(
-            new TruckerResource($trucker->loadMissing('vehicles.category')),
+            new TruckerResource($trucker->loadMissing(['vehicles.category', 'vehicles.size'])),
             ['balance_cents' => $this->wallet->balance($trucker)],
         );
     }

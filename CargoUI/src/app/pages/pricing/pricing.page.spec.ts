@@ -37,7 +37,7 @@ const zone = (id: string, code: string, base: number, step: number): PricingZone
 
 const ZONES = [zone('a1', 'A1', 4_165, 14), zone('g', 'G', 17_766, 98)];
 
-function mount(categories: unknown[] = []) {
+function mount(sizes: unknown[] = []) {
   TestBed.configureTestingModule({
     providers: [
       {
@@ -59,7 +59,10 @@ function mount(categories: unknown[] = []) {
             }),
         },
       },
-      { provide: RateCardService, useValue: { truckCategories: () => of({ data: categories }) } },
+      {
+        provide: RateCardService,
+        useValue: { truckCategories: () => of({ data: [] }), truckSizes: () => of({ data: sizes }) },
+      },
       { provide: Confirm, useValue: { ask: async () => false } },
     ],
   });
@@ -111,11 +114,12 @@ describe('the rate card editor', () => {
   });
 });
 
-describe('a class with no rate of its own', () => {
+describe('the truck sizes on the diesel grid', () => {
   it('prints a 10 wheeler as the fleet line divided by 28 and times 54', () => {
     const { el, open } = mount([
+      { id: 'small', key: 'small-truck', name: 'Small Truck', cbm: 17, status: 'active' },
+      { id: 'standard', key: 'standard-truck', name: 'Standard Truck', cbm: 28, status: 'active' },
       { id: 'ten', key: '10-wheeler', name: '10 Wheeler', cbm: 54, status: 'active' },
-      { id: 'recon', key: 'recon-truck', name: 'Recon Truck', cbm: null, status: 'active' },
     ]);
 
     open('G');
@@ -126,7 +130,8 @@ describe('a class with no rate of its own', () => {
     const ten = rows.find((row) => row.textContent?.includes('10 Wheeler · 54 cbm'));
     const today = ten?.querySelector('td.font-semibold.bg-cr-tint')?.textContent ?? '';
 
-    expect(rows.some((row) => row.textContent?.includes('Recon Truck'))).toBe(false);
+    expect(rows.some((row) => row.textContent?.includes('Small Truck · 17 cbm'))).toBe(true);
+    expect(rows.some((row) => row.textContent?.includes('Standard Truck'))).toBe(false);
     expect(today.replace(/[^\d]/g, '')).toBe('42201');
   });
 });
