@@ -2,6 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { Observable, map } from 'rxjs';
 
+import { AssetService } from '../../services/asset/asset.service';
 import { ExpenseService } from '../../services/expense/expense.service';
 import { IdentityService } from '../../services/identity/identity.service';
 import { SupplierService } from '../../services/supplier/supplier.service';
@@ -16,7 +17,7 @@ interface CategoryRow {
 }
 
 interface CategoryList {
-  key: 'supplier' | 'expense';
+  key: 'supplier' | 'expense' | 'asset';
   label: string;
   noun: string;
   placeholder: string;
@@ -172,6 +173,7 @@ interface CategoryList {
 export class CategoriesCard {
   private readonly suppliers = inject(SupplierService);
   private readonly expenses = inject(ExpenseService);
+  private readonly assets = inject(AssetService);
   private readonly identity = inject(IdentityService);
 
   protected readonly lists: CategoryList[] = [
@@ -222,6 +224,31 @@ export class CategoriesCard {
             update: (id: string, changes: { name?: string; status?: string }) =>
               this.expenses.updateCategory(id, changes as never),
             remove: (id: string) => this.expenses.removeCategory(id),
+          },
+        ]
+      : []),
+    ...(this.identity.has('assets.manage')
+      ? [
+          {
+            key: 'asset' as const,
+            label: 'Asset categories',
+            noun: 'asset',
+            placeholder: 'IT EQUIPMENT, TOOLS, FURNITURE…',
+            load: () =>
+              this.assets.categories().pipe(
+                map((rows) =>
+                  rows.map((c) => ({
+                    id: c.id,
+                    name: c.name,
+                    active: c.status === 'active',
+                    used: c.assets_count ?? null,
+                  })),
+                ),
+              ),
+            create: (name: string) => this.assets.createCategory({ name }),
+            update: (id: string, changes: { name?: string; status?: string }) =>
+              this.assets.updateCategory(id, changes),
+            remove: (id: string) => this.assets.removeCategory(id),
           },
         ]
       : []),

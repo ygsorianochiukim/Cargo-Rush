@@ -76,7 +76,7 @@ export function expenseSpec(): RecordSpec<Expense> {
       },
       {
         key: 'supplier_id',
-        label: 'Bought from',
+        label: 'Supplier / biller',
         kind: 'select',
         options: () => shops,
       },

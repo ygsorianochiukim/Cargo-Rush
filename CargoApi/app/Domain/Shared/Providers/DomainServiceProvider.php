@@ -6,6 +6,8 @@ namespace App\Domain\Shared\Providers;
 
 use App\Domain\Accounting\Console\BackfillAutoPostingsCommand;
 use App\Domain\Accounting\Observers\AutoPostingObserver;
+use App\Domain\Asset\Models\Asset;
+use App\Domain\Asset\Models\AssetCategory;
 use App\Domain\Billing\Console\QuoteUnpricedTripsCommand;
 use App\Domain\Billing\Console\ReconcileOverdueInvoicesCommand;
 use App\Domain\Billing\Console\RequoteInvoicesCommand;
@@ -83,6 +85,8 @@ class DomainServiceProvider extends ServiceProvider
         'expense' => Expense::class,
         'category' => ExpenseCategory::class,
         'supplierCategory' => SupplierCategory::class,
+        'asset' => Asset::class,
+        'assetCategory' => AssetCategory::class,
         'truckCategory' => TruckCategory::class,
         'user' => User::class,
         'zone' => PricingZone::class,

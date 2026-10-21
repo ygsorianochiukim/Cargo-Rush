@@ -51,24 +51,30 @@ class NavigationSeeder extends Seeder
             ['performance', 'Performance', 'gauge', '/performance', 630, false, true, 'People', 'hr.view', null],
             ['payroll', 'Payroll', 'wallet', '/payroll', 640, false, true, 'People', 'payroll.view', null],
 
-            ['incidents', 'Incident Management', 'incident', '/incidents', 700, false, true, 'Support', 'incidents.view', 'incidents.open'],
-            ['notifications', 'Notifications', 'bell', '/notifications', 710, false, true, 'Support', 'notifications.view', 'notifications.unread'],
+            ['asset-inventory', 'Asset Inventory', 'shipments', '/asset-inventory', 700, false, true, 'Custodian', 'assets.view', null],
+            ['assets', 'Asset List', 'clipboard', '/assets', 710, false, true, 'Custodian', 'assets.view', null],
+            ['asset-monitoring', 'Asset Monitoring', 'profile', '/asset-monitoring', 720, false, true, 'Custodian', 'assets.view', null],
+            ['asset-reassignment', 'Asset Re-assignment', 'route', '/asset-reassignment', 730, false, true, 'Custodian', 'assets.view', null],
+            ['asset-report', 'Asset Report', 'trend', '/asset-report', 740, false, true, 'Custodian', 'assets.view', null],
 
-            ['access', 'Access Control', 'shield', '/access', 800, false, true, 'Administration', 'access.view', null],
+            ['incidents', 'Incident Management', 'incident', '/incidents', 800, false, true, 'Support', 'incidents.view', 'incidents.open'],
+            ['notifications', 'Notifications', 'bell', '/notifications', 810, false, true, 'Support', 'notifications.view', 'notifications.unread'],
 
-            ['cargo', 'Cargo', 'shipments', '/cargo', 900, true, false, 'Driver', 'delivery.view', null],
-            ['tracking', 'Tracking', 'map-pin', '/tracking', 910, true, false, 'Driver', 'gps.write', null],
-            ['inspect', 'Inspect', 'clipboard', '/inspect', 920, true, false, 'Driver', 'inspection.write', null],
-            ['more', 'More', 'profile', '/more', 930, true, false, 'Driver', null, null],
+            ['access', 'Access Control', 'shield', '/access', 900, false, true, 'Administration', 'access.view', null],
 
-            ['home', 'Home', 'dashboard', '/', 940, true, false, 'Customer', 'portal.view', null],
-            ['requests', 'Deliveries', 'shipments', '/orders', 950, true, false, 'Customer', 'portal.view', null],
-            ['request', 'Request', 'plus', '/request', 960, true, false, 'Customer', 'portal.request', null],
-            ['invoices', 'Invoices', 'billing', '/invoices', 970, true, false, 'Customer', 'portal.view', null],
+            ['cargo', 'Cargo', 'shipments', '/cargo', 1100, true, false, 'Driver', 'delivery.view', null],
+            ['tracking', 'Tracking', 'map-pin', '/tracking', 1110, true, false, 'Driver', 'gps.write', null],
+            ['inspect', 'Inspect', 'clipboard', '/inspect', 1120, true, false, 'Driver', 'inspection.write', null],
+            ['more', 'More', 'profile', '/more', 1130, true, false, 'Driver', null, null],
 
-            ['jobs', 'Jobs', 'shipments', '/jobs', 980, true, false, 'Trucker', 'partner.jobs', 'partner.jobs'],
-            ['my-trips', 'My Trips', 'route', '/my-trips', 990, true, false, 'Trucker', 'partner.jobs', null],
-            ['wallet', 'Wallet', 'wallet', '/wallet', 1000, true, false, 'Trucker', 'partner.view', null],
+            ['home', 'Home', 'dashboard', '/', 1140, true, false, 'Customer', 'portal.view', null],
+            ['requests', 'Deliveries', 'shipments', '/orders', 1150, true, false, 'Customer', 'portal.view', null],
+            ['request', 'Request', 'plus', '/request', 1160, true, false, 'Customer', 'portal.request', null],
+            ['invoices', 'Invoices', 'billing', '/invoices', 1170, true, false, 'Customer', 'portal.view', null],
+
+            ['jobs', 'Jobs', 'shipments', '/jobs', 1180, true, false, 'Trucker', 'partner.jobs', 'partner.jobs'],
+            ['my-trips', 'My Trips', 'route', '/my-trips', 1190, true, false, 'Trucker', 'partner.jobs', null],
+            ['wallet', 'Wallet', 'wallet', '/wallet', 1200, true, false, 'Trucker', 'partner.view', null],
         ];
 
         foreach ($items as [$key, $label, $icon, $route, $order, $mobile, $web, $group, $permission, $badge]) {

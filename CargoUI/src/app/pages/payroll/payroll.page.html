@@ -85,15 +85,32 @@
       Work out a new run
     </button>
 
-    <button
-      type="button"
-      class="ml-auto flex h-10 items-center gap-1.5 rounded-control px-4 text-[14px] font-semibold text-cr-blue ring-1 ring-cr-line transition-colors hover:bg-cr-tint"
-      (click)="print()"
-    >
-      <app-icon name="clipboard" [size]="16" />
-      Print or save as PDF
-    </button>
+    <div class="ml-auto flex items-center gap-2">
+      <button
+        type="button"
+        class="flex h-10 items-center gap-1.5 rounded-control px-4 text-[14px] font-semibold text-cr-blue ring-1 ring-cr-line transition-colors hover:bg-cr-tint"
+        (click)="print()"
+      >
+        <app-icon name="clipboard" [size]="16" />
+        Print
+      </button>
+
+      <button
+        type="button"
+        class="flex h-10 items-center gap-1.5 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
+        [disabled]="savingPdf() || run() === null"
+        [title]="run() === null ? 'Pick a run first' : payslip() ? 'This payslip' : 'The whole run'"
+        (click)="savePdf()"
+      >
+        <app-icon name="billing" [size]="16" />
+        {{ savingPdf() ? 'Preparing PDF…' : 'Save as PDF' }}
+      </button>
+    </div>
   </div>
+
+  @if (pdfError(); as message) {
+    <p role="alert" class="mt-3 text-[12px] font-medium text-cr-red">{{ message }}</p>
+  }
 
   @if (periodSummary(); as summary) {
     <p class="mt-3 text-[13px] text-cr-ink-muted">{{ summary }}</p>
@@ -464,8 +481,8 @@
                       Nobody on this run has SSS, PhilHealth or Pag-IBIG deducted.
                     </p>
                     <p class="mt-0.5 text-cr-ink-muted">
-                      Expected if the company has benefits switched off. Otherwise, tick each
-                      person on the Benefits card in Access Control, then work this run out again.
+                      Expected if the company has benefits switched off. Otherwise, tick each person
+                      on the Benefits card in Access Control, then work this run out again.
                     </p>
                   } @else {
                     <p class="font-semibold">
@@ -477,7 +494,9 @@
                       @for (person of missing.people; track person.name) {
                         <li>
                           {{ person.name }}
-                          <span class="text-cr-ink-muted">· no {{ person.missing.join(', ') }}</span>
+                          <span class="text-cr-ink-muted"
+                            >· no {{ person.missing.join(', ') }}</span
+                          >
                         </li>
                       }
                     </ul>

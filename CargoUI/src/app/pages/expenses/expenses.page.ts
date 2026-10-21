@@ -166,7 +166,7 @@ export class ExpensesPage {
     },
     { label: 'Date', kind: 'num', value: (e) => fmt.date(e.date) },
     {
-      label: 'Bought from',
+      label: 'Paid to',
       value: (e) => e.supplier_name ?? e.payee,
       sub: (e) => e.driver_name,
     },

@@ -7,10 +7,12 @@ import { Customer } from '../../models/customer/customer.model';
 import { AccountingService } from '../../services/accounting/accounting.service';
 import { BillingService } from '../../services/billing/billing.service';
 import { CustomerService } from '../../services/customer/customer.service';
+import { ApiService } from '../../services/shared/api.service';
 import { Card } from '../../shared/card';
 import { Field } from '../../shared/field';
 import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
+import { saveFile } from '../../shared/save-file';
 import { EmptyState, ErrorState } from '../../shared/states';
 
 type View = 'income' | 'sheet' | 'aging' | 'account';
@@ -25,6 +27,7 @@ export class StatementsPage {
   private readonly accounting = inject(AccountingService);
   private readonly billing = inject(BillingService);
   private readonly customers = inject(CustomerService);
+  private readonly api = inject(ApiService);
 
   protected readonly fmt = fmt;
 
@@ -38,6 +41,8 @@ export class StatementsPage {
   protected readonly aging = signal<Aging | null>(null);
   protected readonly account = signal<StatementOfAccount | null>(null);
   protected readonly error = signal<string | null>(null);
+  protected readonly saving = signal(false);
+  protected readonly pdfError = signal<string | null>(null);
 
   protected readonly from = signal<string>(startOfYear());
   protected readonly to = signal<string>(today());
@@ -148,6 +153,69 @@ export class StatementsPage {
 
   protected print(): void {
     window.print();
+  }
+
+  protected savePdf(): void {
+    const target = this.pdfTarget();
+    if (target === null) return;
+
+    this.saving.set(true);
+    this.pdfError.set(null);
+
+    this.api.blob(target.path, target.query as never).subscribe({
+      next: (blob) => {
+        saveFile(blob, target.filename);
+        this.saving.set(false);
+      },
+      error: () => {
+        this.saving.set(false);
+        this.pdfError.set('Could not prepare the PDF. Check the connection and try again.');
+      },
+    });
+  }
+
+  private pdfTarget(): { path: string; query: Record<string, string>; filename: string } | null {
+    const range = this.range();
+    const to = range.to ?? today();
+
+    switch (this.view()) {
+      case 'income':
+        return {
+          path: 'accounting/statements/income.pdf',
+          query: range,
+          filename: `income-statement-${range.from ?? 'start'}-to-${to}.pdf`,
+        };
+      case 'sheet': {
+        const asOf = this.asOf() || today();
+
+        return {
+          path: 'accounting/statements/balance-sheet.pdf',
+          query: { as_of: asOf },
+          filename: `balance-sheet-${asOf}.pdf`,
+        };
+      }
+      case 'aging':
+        return {
+          path: 'billing/aging.pdf',
+          query: { direction: this.direction() },
+          filename: `aging-${this.direction()}-${today()}.pdf`,
+        };
+      case 'account': {
+        if (this.customerId() === '') return null;
+
+        const name = this.roster().find((c) => c.id === this.customerId())?.name ?? 'account';
+        const slug = name
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, '-')
+          .replace(/^-|-$/g, '');
+
+        return {
+          path: `billing/statement/${this.customerId()}.pdf`,
+          query: { ...range, direction: this.direction() },
+          filename: `statement-of-account-${slug}-${to}.pdf`,
+        };
+      }
+    }
   }
 
   private range(): { from?: string; to?: string } {

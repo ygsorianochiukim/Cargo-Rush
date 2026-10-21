@@ -164,6 +164,40 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/expenses/expenses.page').then((m) => m.ExpensesPage),
       },
       {
+        path: 'asset-inventory',
+        title: 'Asset Inventory · Cargo Rush',
+        data: { title: 'Asset Inventory' },
+        loadComponent: () =>
+          import('./pages/assets/asset-inventory.page').then((m) => m.AssetInventoryPage),
+      },
+      {
+        path: 'assets',
+        title: 'Asset List · Cargo Rush',
+        data: { title: 'Asset List' },
+        loadComponent: () => import('./pages/assets/assets.page').then((m) => m.AssetsPage),
+      },
+      {
+        path: 'asset-monitoring',
+        title: 'Asset Monitoring · Cargo Rush',
+        data: { title: 'Asset Monitoring' },
+        loadComponent: () =>
+          import('./pages/assets/asset-monitoring.page').then((m) => m.AssetMonitoringPage),
+      },
+      {
+        path: 'asset-reassignment',
+        title: 'Asset Re-assignment · Cargo Rush',
+        data: { title: 'Asset Re-assignment' },
+        loadComponent: () =>
+          import('./pages/assets/asset-reassignment.page').then((m) => m.AssetReassignmentPage),
+      },
+      {
+        path: 'asset-report',
+        title: 'Asset Report · Cargo Rush',
+        data: { title: 'Asset Report' },
+        loadComponent: () =>
+          import('./pages/assets/asset-report.page').then((m) => m.AssetReportPage),
+      },
+      {
         path: 'billing/:invoice',
         title: 'Invoice · Cargo Rush',
         data: { title: 'Invoice' },

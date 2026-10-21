@@ -153,21 +153,34 @@
     <app-icon name="chevron-left" [size]="16" />
     Trip Management
   </a>
-  <div class="flex items-center gap-3">
-    <p class="hidden text-[12px] text-cr-ink-muted sm:block">
-      Prints on two A4 pages. Choose “Save as PDF” in the print dialog for a file.
-    </p>
+  <div class="flex items-center gap-2">
+    <p class="mr-1 hidden text-[12px] text-cr-ink-muted sm:block">Two A4 pages.</p>
     <button
       type="button"
-      class="inline-flex h-10 items-center gap-1.5 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
+      class="inline-flex h-10 items-center gap-1.5 rounded-control px-4 text-[14px] font-semibold text-cr-blue ring-1 ring-cr-line transition-colors hover:bg-cr-tint disabled:opacity-60"
       [disabled]="!ticket()"
       (click)="print()"
     >
       <app-icon name="clipboard" [size]="16" />
-      Print or save as PDF
+      Print
+    </button>
+    <button
+      type="button"
+      class="inline-flex h-10 items-center gap-1.5 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
+      [disabled]="!ticket() || saving()"
+      (click)="savePdf()"
+    >
+      <app-icon name="billing" [size]="16" />
+      {{ saving() ? 'Preparing PDF…' : 'Save as PDF' }}
     </button>
   </div>
 </div>
+
+@if (pdfError(); as message) {
+  <p role="alert" class="cr-no-print mb-3 text-right text-[12px] font-medium text-cr-red">
+    {{ message }}
+  </p>
+}
 
 @if (ticket(); as t) {
   <div class="tt-wrap overflow-x-auto">
@@ -209,7 +222,9 @@
         </tr>
         <tr>
           <td class="tt-label">Start-off Date:</td>
-          <td class="tt-value" colspan="3">{{ t.trip.start_off_at ? stamp(t.trip.start_off_at) : '' }}</td>
+          <td class="tt-value" colspan="3">
+            {{ t.trip.start_off_at ? stamp(t.trip.start_off_at) : '' }}
+          </td>
         </tr>
         <tr>
           <td class="tt-label">Driver:</td>
@@ -415,12 +430,16 @@
         </tr>
         <tr class="tt-row">
           <td class="tt-label">Toll</td>
-          <td class="tt-value">{{ t.toll_cents ? t.trip.origin + ' – ' + t.trip.destination : '' }}</td>
+          <td class="tt-value">
+            {{ t.toll_cents ? t.trip.origin + ' – ' + t.trip.destination : '' }}
+          </td>
           <td class="text-right">{{ amount(t.toll_cents) }}</td>
         </tr>
         <tr class="tt-row">
           <td colspan="2" class="text-right font-bold">TOTAL</td>
-          <td class="text-right font-bold">{{ amount((t.allowance_cents ?? 0) + (t.toll_cents ?? 0)) }}</td>
+          <td class="text-right font-bold">
+            {{ amount((t.allowance_cents ?? 0) + (t.toll_cents ?? 0)) }}
+          </td>
         </tr>
       </table>
 

@@ -10,6 +10,7 @@ import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 import { PaymentDialog } from '../../shared/payment-dialog';
 import { RecordDialog } from '../../shared/record-dialog';
+import { saveFile } from '../../shared/save-file';
 import { ErrorState } from '../../shared/states';
 import { StatusPill } from '../../shared/status-pill';
 import { StatusValue } from '../../models/shared/status.model';
@@ -36,6 +37,8 @@ export class InvoicePage {
 
   protected readonly document = signal<InvoiceDocument | null>(null);
   protected readonly error = signal<string | null>(null);
+  protected readonly saving = signal(false);
+  protected readonly pdfError = signal<string | null>(null);
 
   constructor() {
     queueMicrotask(() => this.load());
@@ -106,6 +109,22 @@ export class InvoicePage {
 
   protected print(): void {
     window.print();
+  }
+
+  protected savePdf(): void {
+    this.saving.set(true);
+    this.pdfError.set(null);
+
+    this.billing.documentPdf(this.invoiceId).subscribe({
+      next: (blob) => {
+        saveFile(blob, `${this.document()?.document.number ?? 'invoice'}.pdf`);
+        this.saving.set(false);
+      },
+      error: () => {
+        this.saving.set(false);
+        this.pdfError.set('Could not prepare the PDF. Check the connection and try again.');
+      },
+    });
   }
 
   protected back(): void {

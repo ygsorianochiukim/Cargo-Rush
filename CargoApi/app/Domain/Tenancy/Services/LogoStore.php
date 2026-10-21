@@ -63,6 +63,15 @@ class LogoStore
         return Storage::disk($this->disk())->url($path);
     }
 
+    public function dataUri(?string $path): ?string
+    {
+        if ($path === null || ! Storage::disk($this->disk())->exists($path)) {
+            return null;
+        }
+
+        return 'data:image/png;base64,'.base64_encode((string) Storage::disk($this->disk())->get($path));
+    }
+
     /** @throws ValidationException */
     private function decode(UploadedFile $file): GdImage
     {

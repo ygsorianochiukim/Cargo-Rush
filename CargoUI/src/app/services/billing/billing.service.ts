@@ -47,6 +47,10 @@ export class BillingService {
     return this.api.get<InvoiceDocument>(`billing/${id}/document`);
   }
 
+  documentPdf(id: string): Observable<Blob> {
+    return this.api.blob(`billing/${id}/document.pdf`);
+  }
+
   exportUrl(query: ListQuery = {}): string {
     const params = new URLSearchParams();
 

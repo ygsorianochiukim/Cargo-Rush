@@ -28,6 +28,10 @@ export class TripService {
     return this.api.get<TripTicket>(`trips/${id}/ticket`);
   }
 
+  ticketPdf(id: string): Observable<Blob> {
+    return this.api.blob(`trips/${id}/ticket.pdf`);
+  }
+
   history(id: string): Observable<TripHistoryEntry[]> {
     return this.api.get<TripHistoryEntry[]>(`trips/${id}/history`);
   }

@@ -113,6 +113,19 @@ it('needs trips.view', function (): void {
     ]);
 
     $this->actingAs($trucker)->getJson("/api/v1/trips/{$trip['id']}/ticket")->assertForbidden();
+    $this->actingAs($trucker)->get("/api/v1/trips/{$trip['id']}/ticket.pdf")->assertForbidden();
+});
+
+it('downloads the two-page ticket as a PDF named after the trip', function (): void {
+    $trip = ($this->trip)();
+
+    $response = $this->actingAs($this->admin)->get("/api/v1/trips/{$trip['id']}/ticket.pdf")->assertOk();
+    $pdf = (string) $response->getContent();
+
+    expect($response->headers->get('content-type'))->toBe('application/pdf')
+        ->and($response->headers->get('content-disposition'))->toContain("trip-ticket-{$trip['reference']}.pdf")
+        ->and(substr($pdf, 0, 5))->toBe('%PDF-')
+        ->and(preg_match_all('#/Type\s*/Page[^s]#', $pdf))->toBe(2);
 });
 
 describe('the dispatch checklist, answered on the phone', function (): void {
@@ -158,6 +171,19 @@ describe('the dispatch checklist, answered on the phone', function (): void {
             ->and($ticket['checked']['by'])->toBe('Marco Reyes')
             ->and($ticket['checked']['remarks'])->toBe('No chocks on board; borrowed at the depot.')
             ->and($ticket['checked']['at'])->not->toBeNull();
+    });
+
+    it('keeps an answered checklist on two PDF pages', function (): void {
+        $trip = ($this->trip)();
+
+        $this->actingAs($this->marco)->postJson("/api/v1/trips/{$trip['id']}/dispatch-checklist", [
+            'answers' => ($this->sheet)('yes', ['tire_chocks' => 'no']),
+            'remarks' => 'No chocks on board; borrowed at the depot.',
+        ])->assertOk();
+
+        $pdf = (string) $this->actingAs($this->admin)->get("/api/v1/trips/{$trip['id']}/ticket.pdf")->assertOk()->getContent();
+
+        expect(preg_match_all('#/Type\s*/Page[^s]#', $pdf))->toBe(2);
     });
 
     it('replaces the answers when the sheet is answered again', function (): void {

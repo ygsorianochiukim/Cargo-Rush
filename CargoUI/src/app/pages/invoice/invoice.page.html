@@ -84,14 +84,30 @@
 
     <button
       type="button"
-      class="flex h-10 items-center gap-1.5 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+      class="flex h-10 items-center gap-1.5 rounded-control px-4 text-[14px] font-semibold text-cr-blue ring-1 ring-cr-line transition-colors hover:bg-cr-tint"
       (click)="print()"
     >
       <app-icon name="clipboard" [size]="16" />
-      Print or save as PDF
+      Print
+    </button>
+
+    <button
+      type="button"
+      class="flex h-10 items-center gap-1.5 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover disabled:opacity-60"
+      [disabled]="saving() || document() === null"
+      (click)="savePdf()"
+    >
+      <app-icon name="billing" [size]="16" />
+      {{ saving() ? 'Preparing PDF…' : 'Save as PDF' }}
     </button>
   </div>
 </div>
+
+@if (pdfError(); as message) {
+  <p role="alert" class="cr-no-print mb-3 text-right text-[12px] font-medium text-cr-red">
+    {{ message }}
+  </p>
+}
 
 @if (error(); as message) {
   <app-error-state [message]="message" (retry)="load()" />

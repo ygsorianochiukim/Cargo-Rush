@@ -6,6 +6,7 @@ namespace App\Domain\Tenancy\Services;
 
 use App\Domain\Tenancy\Models\Company;
 use App\Domain\Tenancy\Support\Tenant;
+use Database\Seeders\AssetCategorySeeder;
 use Database\Seeders\ChartOfAccountsSeeder;
 use Database\Seeders\ExpenseCategorySeeder;
 use Database\Seeders\NavigationSeeder;
@@ -13,6 +14,7 @@ use Database\Seeders\PaymentSourceSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
+use Database\Seeders\SupplierCategorySeeder;
 use Database\Seeders\TruckCategorySeeder;
 use Database\Seeders\TruckSizeSeeder;
 
@@ -28,6 +30,8 @@ class CompanyProvisioner
             (new RoleSeeder)->run();
             (new PositionSeeder)->run();
             (new ExpenseCategorySeeder)->run();
+            (new SupplierCategorySeeder)->run();
+            (new AssetCategorySeeder)->run();
             (new TruckCategorySeeder)->run();
             (new TruckSizeSeeder)->run();
             (new ChartOfAccountsSeeder)->run();

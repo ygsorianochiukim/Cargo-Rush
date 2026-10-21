@@ -13,7 +13,7 @@ final class ChangeLog
     public const ACTIONS = ['created', 'updated', 'deleted', 'restored'];
 
     public const TABLES = [
-        'accounts', 'applicants', 'companies', 'contracts', 'customers', 'delivery_logs',
+        'accounts', 'applicants', 'asset_categories', 'asset_turnovers', 'assets', 'companies', 'contracts', 'customers', 'delivery_logs',
         'diesel_prices', 'dispatch_records', 'drivers', 'employee_pay_components', 'employees',
         'expense_categories', 'expenses', 'fuel_budgets', 'fuel_records', 'incidents',
         'inspections', 'invoices', 'journal_entries', 'journal_lines', 'leave_requests',

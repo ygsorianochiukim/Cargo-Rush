@@ -77,6 +77,12 @@ export class PayrollService {
     return this.api.post<PayRun>(`payroll/${id}/pay`, {});
   }
 
+  pdf(id: string, lineId?: string): Observable<Blob> {
+    const query = lineId ? `?line=${encodeURIComponent(lineId)}` : '';
+
+    return this.api.blob(`payroll/${id}/document.pdf${query}`);
+  }
+
   nextRemittanceNo(on?: string): Observable<string> {
     return this.api
       .get<{ remittance_no: string }>(

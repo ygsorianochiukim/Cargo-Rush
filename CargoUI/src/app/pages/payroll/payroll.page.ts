@@ -17,6 +17,7 @@ import { Card } from '../../shared/card';
 import { Confirm } from '../../shared/confirm';
 import { Field } from '../../shared/field';
 import { fmt } from '../../shared/format';
+import { saveFile } from '../../shared/save-file';
 import { Icon } from '../../shared/icon';
 import { EmptyState, ErrorState } from '../../shared/states';
 
@@ -56,6 +57,8 @@ export class PayrollPage {
   protected readonly error = signal<string | null>(null);
   protected readonly notice = signal<string | null>(null);
   protected readonly busy = signal(false);
+  protected readonly savingPdf = signal(false);
+  protected readonly pdfError = signal<string | null>(null);
 
   protected readonly view = signal<View>('simple');
 
@@ -394,8 +397,7 @@ export class PayrollPage {
         label: 'Withholding tax',
         why:
           line.withholding_tax_cents === 0
-            ?
-              'None. This salary is inside the range that pays no income tax — ₱250,000 a year is exempt.'
+            ? 'None. This salary is inside the range that pays no income tax — ₱250,000 a year is exempt.'
             : "Income tax, held back and sent to the BIR on the employee's behalf. Charged on what is " +
               'left after the funds above, using the BIR’s own table.',
         cents: line.withholding_tax_cents,
@@ -644,6 +646,31 @@ export class PayrollPage {
     window.print();
   }
 
+  protected savePdf(): void {
+    const run = this.run();
+    if (run === null) return;
+
+    const slip = this.payslip();
+
+    this.savingPdf.set(true);
+    this.pdfError.set(null);
+
+    this.payroll.pdf(run.id, slip?.id).subscribe({
+      next: (blob) => {
+        const name = slip
+          ? `payslip-${run.reference}-${slip.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`
+          : `payroll-${run.reference}.pdf`;
+
+        saveFile(blob, name);
+        this.savingPdf.set(false);
+      },
+      error: () => {
+        this.savingPdf.set(false);
+        this.pdfError.set('Could not prepare the PDF. Check the connection and try again.');
+      },
+    });
+  }
+
   protected pesos(cents: number): string {
     return (cents / 100).toFixed(2);
   }
@@ -679,4 +706,3 @@ export class PayrollPage {
     });
   }
 }
-
