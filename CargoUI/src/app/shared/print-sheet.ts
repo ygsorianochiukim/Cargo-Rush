@@ -120,6 +120,24 @@ type Drag =
     tr.striped td {
       background: #f6f8fa;
     }
+    tr.bold td {
+      font-weight: bold;
+    }
+    tr.muted td {
+      color: #6b7a8c;
+    }
+    tr.group td {
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #44546a;
+      border-bottom: 0;
+      padding-top: 2.6mm;
+    }
+    tr.subtotal td {
+      font-weight: bold;
+      border-top: 0.3mm solid #dfe4ea;
+    }
     .flow {
       position: relative;
     }
@@ -187,6 +205,7 @@ type Drag =
               <tr>
                 @for (c of visibleColumns(e); track c.key) {
                   <th
+                    [style.width.mm]="c.width"
                     [style.text-align]="c.align"
                     [style.font-size.pt]="(e.size ?? 8.5) - 1.5"
                     [style.border-bottom]="'0.4mm solid ' + (e.color ?? '#15589c')"
@@ -208,7 +227,7 @@ type Drag =
                 </tr>
               } @else {
                 @for (row of t.rows.slice(0, maxRows()); track $index; let i = $index) {
-                  <tr [class.striped]="e.striped && i % 2 === 1">
+                  <tr [class.striped]="e.striped && i % 2 === 1" [class]="rowStyle(row)">
                     @for (c of visibleColumns(e); track c.key) {
                       <td [style.text-align]="c.align">{{ row[c.key] || '' }}</td>
                     }
@@ -372,6 +391,12 @@ export class PrintSheet {
 
   protected fill(text: string): string {
     return fillText(text, this.page().values);
+  }
+
+  protected rowStyle(row: Record<string, string>): string {
+    const style = row['_style'] ?? '';
+
+    return ['bold', 'muted', 'group', 'subtotal'].includes(style) ? style : '';
   }
 
   protected visibleColumns(e: PrintElement) {

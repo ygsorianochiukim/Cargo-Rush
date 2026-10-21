@@ -96,7 +96,7 @@ class PayrollRegisterPrintable implements Printable
             L::text('state', 'Run status', 'top', 0, 7, 100, '{{run.state}}', ['size' => 7.5, 'bold' => true, 'upper' => true, 'color' => L::ACCENT]),
             L::text('details', 'Run details', 'top', 0, 11, 180, "{{run.reference}} · money out on {{run.pay_date}}\nApproved by {{run.approved}}\nIn the accounts as {{run.journal}}", $muted),
             L::text('company', 'Company name', 'top', 173, 0, 100, '{{company.name}}', ['size' => 9, 'color' => L::MUTED, 'align' => 'right']),
-            L::line('rule_top', 'Line under header', 'top', 0, 21, 273),
+            L::line('rule_top', 'Line under header', 'top', 0, 25, 273),
         ];
 
         $tiles = [
@@ -108,16 +108,16 @@ class PayrollRegisterPrintable implements Printable
 
         foreach ($tiles as $i => [$id, $label, $value, $sub]) {
             $x = $i * 68.5;
-            $elements[] = L::text("tile_{$id}_label", "{$label} label", 'top', $x, 24, 66, $label, $caption);
-            $elements[] = L::text("tile_{$id}", $label, 'top', $x, 28, 66, $value, ['size' => 13, 'bold' => true, 'color' => $id === 'net' ? L::ACCENT : L::INK]);
+            $elements[] = L::text("tile_{$id}_label", "{$label} label", 'top', $x, 28, 66, $label, $caption);
+            $elements[] = L::text("tile_{$id}", $label, 'top', $x, 32, 66, $value, ['size' => 13, 'bold' => true, 'color' => $id === 'net' ? L::ACCENT : L::INK]);
             if ($sub !== '') {
-                $elements[] = L::text("tile_{$id}_note", "{$label} note", 'top', $x, 34.5, 66, $sub, $small);
+                $elements[] = L::text("tile_{$id}_note", "{$label} note", 'top', $x, 38.5, 66, $sub, $small);
             }
         }
 
         $elements[] = L::table('register', 'Register', 'register', $this->tables()['register'], 1, ['title' => 'Register', 'size' => 7.5, 'space_before' => 0]);
 
-        $elements[] = self::box('held_box', 'Held-back box', 'bottom', 0, 2, 273, 28);
+        $elements[] = self::box('held_box', 'Held-back box', 'bottom', 0, 2, 272.4, 26.5);
         $elements[] = L::text('held_heading', 'Held-back heading', 'bottom', 3, 4, 266, 'Held back from the payslips — and who it goes to · {{run.deductions}}', $caption);
 
         $held = [
@@ -137,8 +137,8 @@ class PayrollRegisterPrintable implements Printable
 
         $elements[] = L::text('held_note', 'Held-back note', 'bottom', 3, 22.5, 266, '{{held.note}}', ['size' => 7.5]);
 
-        $elements[] = self::box('employer_box', 'Employer box', 'bottom', 0, 33, 273, 22);
-        $elements[] = L::text('employer_heading', 'Employer heading', 'bottom', 3, 35, 266, 'Employer contributions — paid by the company on top · {{employer.total}}', $caption);
+        $elements[] = self::box('employer_box', 'Employer box', 'bottom', 0, 31, 272.4, 21);
+        $elements[] = L::text('employer_heading', 'Employer heading', 'bottom', 3, 33, 266, 'Employer contributions — paid by the company on top · {{employer.total}}', $caption);
 
         $employer = [
             ['sss', 'SSS', 'to Social Security System'],
@@ -149,12 +149,12 @@ class PayrollRegisterPrintable implements Printable
 
         foreach ($employer as $i => [$key, $label, $to]) {
             $x = 3 + $i * 67;
-            $elements[] = L::text("employer_{$key}_label", "Employer {$label} label", 'bottom', $x, 40, 64, $label, $caption);
-            $elements[] = L::text("employer_{$key}", "Employer {$label}", 'bottom', $x, 43.5, 64, "{{employer.{$key}}}", ['size' => 10, 'bold' => true]);
-            $elements[] = L::text("employer_{$key}_to", "Employer {$label} goes to", 'bottom', $x, 48.5, 64, $to, $small);
+            $elements[] = L::text("employer_{$key}_label", "Employer {$label} label", 'bottom', $x, 38, 64, $label, $caption);
+            $elements[] = L::text("employer_{$key}", "Employer {$label}", 'bottom', $x, 41.5, 64, "{{employer.{$key}}}", ['size' => 10, 'bold' => true]);
+            $elements[] = L::text("employer_{$key}_to", "Employer {$label} goes to", 'bottom', $x, 46.5, 64, $to, $small);
         }
 
-        return L::make($elements, 42, 57, 12);
+        return L::make($elements, 46, 54, 12);
     }
 
     public function sample(): array

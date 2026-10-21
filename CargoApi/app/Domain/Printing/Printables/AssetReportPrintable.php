@@ -128,9 +128,9 @@ class AssetReportPrintable implements Printable
 
         foreach ($tiles as $i => [$id, $label, $value]) {
             $x = $i * 46.4;
-            $elements[] = self::box("tile_{$id}_box", "{$label} tile", 'top', $x, 15, 44.5, 16);
+            $elements[] = self::box("tile_{$id}_box", "{$label} tile", 'top', $x, 15, 44.5, 15);
             $elements[] = L::text("tile_{$id}_label", "{$label} label", 'top', $x + 2.5, 17.5, 40, $label, $caption);
-            $elements[] = L::text("tile_{$id}", $label, 'top', $x + 2.5, 22, 40, $value, ['size' => 12, 'bold' => true]);
+            $elements[] = L::text("tile_{$id}", $label, 'top', $x + 2.5, 21.5, 40, $value, ['size' => 12, 'bold' => true]);
         }
 
         $elements[] = L::table('categories', 'Stock by category', 'categories', $tables['categories'], 1, ['title' => 'Stock by category', 'space_before' => 0, 'size' => 8]);

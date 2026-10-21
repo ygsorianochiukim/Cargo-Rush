@@ -66,7 +66,7 @@ class BalanceSheetPrintable implements Printable
 
     public function defaults(): array
     {
-        $tables = $this->tables();
+        $tables = array_map(static fn (array $columns) => array_map(static fn (array $c) => $c + ['width' => ['code' => 22, 'amount' => 40][$c['key']] ?? null], $columns), $this->tables());
 
         return L::make([
             L::text('title', 'Title', 'top', 0, 0, 120, 'Balance Sheet', ['size' => 8, 'bold' => true, 'upper' => true, 'color' => L::ACCENT]),

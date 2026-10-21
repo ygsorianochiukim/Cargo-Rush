@@ -36,6 +36,10 @@
         table.grid td { border-bottom: 0.2mm solid #eef1f4; padding: 1.6mm 1.5mm 1.6mm 0; vertical-align: top; }
         table.grid tr.foot td { border-bottom: 0; border-top: 0.3mm solid #dfe4ea; font-weight: bold; }
         table.grid tr.striped td { background: #f6f8fa; }
+        table.grid tr.bold td { font-weight: bold; }
+        table.grid tr.muted td { color: #6b7a8c; }
+        table.grid tr.group td { font-weight: bold; text-transform: uppercase; letter-spacing: 0.04em; color: #44546a; border-bottom: 0; padding-top: 2.6mm; }
+        table.grid tr.subtotal td { font-weight: bold; border-top: 0.3mm solid #dfe4ea; }
         .caption { text-transform: uppercase; letter-spacing: 0.05em; color: #6b7a8c; margin-bottom: 1.5mm; }
     </style>
 </head>
@@ -68,13 +72,13 @@
                         <thead>
                             <tr>
                                 @foreach ($columns as $c)
-                                    <th style="text-align: {{ $c['align'] }}; font-size: {{ max(6, $e['size'] - 1.5) }}pt; border-bottom: 0.4mm solid {{ $e['color'] }};">{{ $c['label'] }}</th>
+                                    <th style="{{ ($c['width'] ?? null) ? 'width: '.$c['width'].'mm; ' : '' }}text-align: {{ $c['align'] }}; font-size: {{ max(6, $e['size'] - 1.5) }}pt; border-bottom: 0.4mm solid {{ $e['color'] }};">{{ $c['label'] }}</th>
                                 @endforeach
                             </tr>
                         </thead>
                         <tbody>
                             @foreach ($table['rows'] ?? [] as $i => $row)
-                                <tr class="{{ $e['striped'] && $i % 2 === 1 ? 'striped' : '' }}">
+                                <tr class="{{ $e['striped'] && $i % 2 === 1 ? 'striped' : '' }} {{ in_array($row['_style'] ?? '', ['bold', 'muted', 'group', 'subtotal'], true) ? $row['_style'] : '' }}">
                                     @foreach ($columns as $c)
                                         <td style="text-align: {{ $c['align'] }};">{!! nl2br(e($row[$c['key']] ?? '')) !!}</td>
                                     @endforeach

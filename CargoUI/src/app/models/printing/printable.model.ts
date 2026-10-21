@@ -6,6 +6,7 @@ export interface TableColumn {
   key: string;
   label: string;
   align: Align;
+  width?: number | null;
   hidden: boolean;
 }
 

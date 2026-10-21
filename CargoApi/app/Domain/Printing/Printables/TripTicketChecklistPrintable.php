@@ -82,11 +82,11 @@ class TripTicketChecklistPrintable implements Printable
         ];
 
         foreach ($info as $i => [$l1, $v1, $l2, $v2]) {
-            $y = 22.7 + $i * 5.6;
+            $y = 22.4 + $i * 5.6;
             $elements[] = L::text('info_l'.$i, trim($l1, ':'), 'top', 1.5, $y, 32, $l1, $label);
             $elements[] = L::text('info_v'.$i, trim($l1, ':').' value', 'top', 34, $y, 58, $v1, $value);
             $elements[] = L::text('info_l'.$i.'b', trim($l2, ':'), 'top', 94, $y, 24, $l2, $label);
-            $elements[] = L::text('info_v'.$i.'b', trim($l2, ':').' value', 'top', 118, $y, 71, $v2, $l2 === 'Route:' ? ['size' => 6.5] + $value : $value);
+            $elements[] = L::text('info_v'.$i.'b', trim($l2, ':').' value', 'top', 118, $l2 === 'Route:' ? $y + 0.5 : $y, 71, $v2, $l2 === 'Route:' ? ['size' => 6.5] + $value : $value);
             $elements[] = L::line('info_rule'.$i, 'Info row line', 'top', 0, 21.5 + ($i + 1) * 5.6, 190, '#333333');
         }
 
@@ -129,7 +129,8 @@ class TripTicketChecklistPrintable implements Printable
         $elements = [
             ...$elements,
             L::line('remarks_top', 'Remarks top', 'bottom', 0, $y, 190, '#333333'),
-            L::text('remarks', 'Remarks', 'bottom', 1.5, $y + 1.5, 187, 'REMARKS: {{checklist.remarks}}', ['size' => 8]),
+            L::text('remarks_label', 'Remarks heading', 'bottom', 1.5, $y + 1.5, 20, 'REMARKS:', ['size' => 8]),
+            L::text('remarks', 'Remarks', 'bottom', 18, $y + 1.5, 170.5, '{{checklist.remarks}}', ['size' => 8]),
             L::text('answered', 'Answered in the app note', 'bottom', 1.5, $y + 10.5, 187, '{{checklist.answered}}', ['size' => 7, 'italic' => true, 'color' => '#555555']),
             L::line('remarks_bottom', 'Remarks bottom', 'bottom', 0, $y + 15, 190, '#333333'),
         ];

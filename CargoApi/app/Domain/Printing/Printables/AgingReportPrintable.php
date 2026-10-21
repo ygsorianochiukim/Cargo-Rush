@@ -90,17 +90,17 @@ class AgingReportPrintable implements Printable
         $x = 0;
 
         foreach (self::BUCKETS as $bucket => $label) {
-            $elements[] = [...L::line('tile_'.$bucket.'_box', $label.' box', 'top', $x, 24, 34.4), 'type' => 'box', 'h' => 15, 'fill' => null, 'color' => L::RULE];
+            $elements[] = [...L::line('tile_'.$bucket.'_box', $label.' box', 'top', $x, 24, 33.8), 'type' => 'box', 'h' => 13, 'fill' => null, 'color' => L::RULE];
             $elements[] = L::text('tile_'.$bucket.'_label', $label.' label', 'top', $x + 2.5, 26, 30, $label, ['size' => 6.5, 'upper' => true, 'color' => L::MUTED]);
-            $elements[] = L::text('tile_'.$bucket, $label.' amount', 'top', $x + 2.5, 31, 31.5, '{{aging.'.$bucket.'}}', ['size' => 8.5, 'bold' => true]);
+            $elements[] = L::text('tile_'.$bucket, $label.' amount', 'top', $x + 2.5, 30.5, 31, '{{aging.'.$bucket.'}}', ['size' => 8.5, 'bold' => true]);
             $x += 36.9;
         }
 
-        $elements[] = L::text('by', 'Table heading', 'top', 0, 45, 182, '{{aging.by}}', ['size' => 7, 'upper' => true, 'color' => L::MUTED]);
+        $elements[] = L::text('by', 'Table heading', 'top', 0, 41, 182, '{{aging.by}}', ['size' => 7, 'upper' => true, 'color' => L::MUTED]);
         $elements[] = L::table('accounts', 'Outstanding by account', 'accounts', $this->tables()['accounts'], 1, ['space_before' => 0]);
         $elements[] = L::text('footer', 'Footer', 'bottom', 0, 2, 182, '{{company.name}} · Printed {{today}}', ['size' => 7, 'color' => L::MUTED, 'align' => 'center']);
 
-        return L::make($elements, 50, 8);
+        return L::make($elements, 46, 8);
     }
 
     public function sample(): array

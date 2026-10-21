@@ -471,6 +471,16 @@ function clone<T>(value: T): T {
                             <option [value]="a">{{ a }}</option>
                           }
                         </select>
+                        <input
+                          type="number"
+                          step="1"
+                          min="0"
+                          placeholder="auto"
+                          title="Column width in mm — empty for automatic"
+                          class="h-8 w-14 flex-none rounded-control border border-cr-line bg-cr-surface px-1 text-[12px]"
+                          [value]="col.width ?? ''"
+                          (change)="patchColumn(i, { width: num($any($event.target).value) })"
+                        />
                         <button
                           type="button"
                           class="h-8 px-1 text-cr-ink-muted hover:text-cr-blue"

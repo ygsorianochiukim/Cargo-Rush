@@ -31,7 +31,7 @@ trait AccountRows
         $rows = [];
 
         foreach ($groups as $group) {
-            $rows[] = ['code' => '', 'account' => mb_strtoupper((string) $group['group']), 'amount' => ''];
+            $rows[] = ['code' => '', 'account' => (string) $group['group'], 'amount' => '', '_style' => 'group'];
 
             foreach ($group['accounts'] as $account) {
                 $rows[] = [
@@ -42,7 +42,7 @@ trait AccountRows
             }
 
             if ($subtotals) {
-                $rows[] = ['code' => '', 'account' => $group['group'].' total', 'amount' => Format::money((int) $group['total_cents'])];
+                $rows[] = ['code' => '', 'account' => $group['group'].' total', 'amount' => Format::money((int) $group['total_cents']), '_style' => 'subtotal'];
             }
         }
 

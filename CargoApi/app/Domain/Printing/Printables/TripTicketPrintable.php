@@ -74,7 +74,7 @@ class TripTicketPrintable implements Printable
             $elements = [L::line($prefix.'_box_top', 'Box top', 'top', 0, $top, 190, '#333333')];
 
             foreach ($rows as $i => $row) {
-                $y = $top + 1.5 + $i * 6.5;
+                $y = $top + 1.2 + $i * 6.5;
                 [$l1, $v1, $l2, $v2] = $row + [null, null, null, null];
                 $name = str_contains((string) $l1, '{{') ? 'Partner / other helpers' : trim((string) $l1, ':');
                 $elements[] = L::text($prefix.'_l'.$i, $name, 'top', 1.5, $y, 32, $l1, $label);
@@ -126,7 +126,7 @@ class TripTicketPrintable implements Printable
             L::text('received_sign', 'Received by caption', 'bottom', 97, 33, 93, 'Operations or Admin Signature Over Printed Name', ['size' => 8, 'align' => 'center']),
             L::text('received_date', 'Received by date line', 'bottom', 101, 41, 85, 'Date & Time: ______________________', ['size' => 8.5]),
             L::line('cert_bottom', 'Certification bottom', 'bottom', 0, 48, 190, '#333333'),
-        ], 89, 50, 10);
+        ], 91, 50, 10);
     }
 
     public function sample(): array

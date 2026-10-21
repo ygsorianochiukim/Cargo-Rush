@@ -99,12 +99,12 @@ class StatementOfAccountPrintable implements Printable
             L::text('company_details', 'Company details', 'top', 20, 7, 95, "{{company.address}}\n{{company.phone}} {{company.email}}\nTIN {{company.tin}}", $muted),
             L::text('title', 'Title', 'top', 112, 0, 70, '{{statement.title}}', ['size' => 8, 'bold' => true, 'upper' => true, 'align' => 'right', 'color' => L::ACCENT]),
             L::text('period', 'Period', 'top', 92, 5, 90, '{{statement.period}}', ['size' => 11, 'bold' => true, 'align' => 'right']),
-            L::line('rule_top', 'Line under header', 'top', 0, 26, 182),
-            L::text('account_label', 'Account heading', 'top', 0, 30, 100, 'Account', $caption),
-            L::text('account_name', 'Account name', 'top', 0, 34, 100, '{{account.name}}', ['size' => 11, 'bold' => true]),
-            L::text('account_details', 'Account details', 'top', 0, 40, 100, "{{account.address}}\n{{account.contact}}\nTIN {{account.tin}}", $muted),
-            L::text('summary_labels', 'Summary labels', 'top', 105, 30, 42, "Opening balance\nCharges\nPayments and credits", ['size' => 8.5, 'color' => L::MUTED, 'line_height' => 1.7]),
-            L::text('summary', 'Summary', 'top', 147, 30, 35, "{{totals.opening}}\n{{totals.charges}}\n{{totals.credits}}", ['size' => 8.5, 'align' => 'right', 'line_height' => 1.7]),
+            L::line('rule_top', 'Line under header', 'top', 0, 23, 182),
+            L::text('account_label', 'Account heading', 'top', 0, 27, 100, 'Account', $caption),
+            L::text('account_name', 'Account name', 'top', 0, 31, 100, '{{account.name}}', ['size' => 11, 'bold' => true]),
+            L::text('account_details', 'Account details', 'top', 0, 37, 100, "{{account.address}}\n{{account.contact}}\nTIN {{account.tin}}", $muted),
+            L::text('summary_labels', 'Summary labels', 'top', 105, 27, 42, "Opening balance\nCharges\nPayments and credits", ['size' => 8.5, 'color' => L::MUTED, 'line_height' => 1.7]),
+            L::text('summary', 'Summary', 'top', 147, 27, 35, "{{totals.opening}}\n{{totals.charges}}\n{{totals.credits}}", ['size' => 8.5, 'align' => 'right', 'line_height' => 1.7]),
 
             L::table('lines', 'Account lines', 'lines', $this->tables()['lines'], 1, ['space_before' => 0]),
 
@@ -112,7 +112,7 @@ class StatementOfAccountPrintable implements Printable
             L::text('closing_label', 'Closing balance heading', 'bottom', 0, 4, 120, '{{totals.closing_label}}', $caption),
             L::text('closing_words', 'Closing balance in words', 'bottom', 0, 8, 120, '{{totals.in_words}}', $muted),
             L::text('closing', 'Closing balance', 'bottom', 112, 4, 70, '{{totals.closing}}', ['size' => 15, 'bold' => true, 'align' => 'right']),
-            [...L::line('aging_box', 'Aging panel', 'bottom', 0, 17, 182), 'type' => 'box', 'h' => 17, 'fill' => '#eef6ff', 'color' => '#eef6ff'],
+            [...L::line('aging_box', 'Aging panel', 'bottom', 0, 17, 181.4), 'type' => 'box', 'h' => 17, 'fill' => '#eef6ff', 'color' => '#eef6ff'],
             L::text('aging_label', 'Aging heading', 'bottom', 3, 19, 120, 'Aging of the balance', $caption),
         ];
 
@@ -125,7 +125,7 @@ class StatementOfAccountPrintable implements Printable
 
         $elements[] = L::text('footer', 'Footer', 'bottom', 0, 38, 182, '{{company.name}} · Printed {{today}}', ['size' => 7, 'color' => L::MUTED, 'align' => 'center']);
 
-        return L::make($elements, 58, 44);
+        return L::make($elements, 55, 44);
     }
 
     public function sample(): array
