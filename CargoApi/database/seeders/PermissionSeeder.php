@@ -28,6 +28,8 @@ class PermissionSeeder extends Seeder
         ['truckers.manage', 'Manage truckers', 'Assets', 'Approve partners, set their rate, assign work and pay them out.'],
         ['fuel.view', 'View fuel', 'Assets', 'Fuel records and the daily budget.'],
         ['fuel.manage', 'Manage fuel', 'Assets', 'Log and correct fuel receipts.'],
+        ['assets.view', 'View assets', 'Assets', 'The asset register and who holds each item.'],
+        ['assets.manage', 'Manage assets', 'Assets', 'Register assets and record every turnover between custodians.'],
 
         ['finance.view', 'View finance', 'Finance', 'Trip monitoring, profitability and the quarterly summary.'],
         ['finance.manage', 'Manage the ledger', 'Finance', 'Enter and correct daily sheets and units.'],

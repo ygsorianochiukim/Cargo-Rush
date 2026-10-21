@@ -53,6 +53,7 @@ describe('the groups', function (): void {
             'Reports',
             'Accounting',
             'People',
+            'Custodian',
             'Support',
             'Administration',
         ]);

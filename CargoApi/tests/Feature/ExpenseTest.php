@@ -44,6 +44,25 @@ describe('filing an expense', function (): void {
         expect(Expense::firstOrFail()->supplier_id)->toBe($supplier->id);
     });
 
+    it('files a utility bill against its biller, booked to rent and utilities', function (): void {
+        $electricity = ExpenseCategory::where('key', 'electricity')->firstOrFail();
+        $biller = Supplier::factory()->create(['name' => 'Davao Light & Power']);
+
+        $response = ($this->file)([
+            'category_id' => $electricity->id,
+            'supplier_id' => $biller->id,
+            'amount_cents' => 1_845_000,
+            'pay_schedule' => 'monthly',
+        ])->assertCreated();
+
+        expect($response->json('data.category_name'))->toBe('Electricity')
+            ->and($response->json('data.supplier_name'))->toBe('Davao Light & Power');
+
+        foreach (['electricity', 'water', 'internet-phone', 'rent'] as $key) {
+            expect(ExpenseCategory::where('key', $key)->firstOrFail()->accountCode())->toBe('5210');
+        }
+    });
+
     it('takes no truck, because what a unit costs is not filed here', function (): void {
         $response = ($this->file)(['truck_id' => $this->truck->id])->assertCreated();
 

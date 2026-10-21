@@ -29,6 +29,14 @@ export class ApiService {
     return this.envelope<T>(path, query, context).pipe(map((r) => r.data));
   }
 
+  blob(path: string, query?: ListQuery): Observable<Blob> {
+    return this.http.get(this.url(path), {
+      ...this.options,
+      params: this.params(query),
+      responseType: 'blob',
+    });
+  }
+
   post<T>(path: string, body: unknown): Observable<T> {
     return this.http.post<Envelope<T>>(this.url(path), body, this.options).pipe(map((r) => r.data));
   }

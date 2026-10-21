@@ -7,6 +7,9 @@ use App\Domain\Accounting\Controllers\GeneralLedgerController;
 use App\Domain\Accounting\Controllers\JournalController;
 use App\Domain\Accounting\Controllers\PaymentSourceController;
 use App\Domain\Accounting\Controllers\StatementController;
+use App\Domain\Accounting\Controllers\StatementPdfController;
+use App\Domain\Asset\Controllers\AssetCategoryController;
+use App\Domain\Asset\Controllers\AssetController;
 use App\Domain\Billing\Controllers\BillingController;
 use App\Domain\Billing\Controllers\PaymentController;
 use App\Domain\Customer\Controllers\CustomerController;
@@ -241,6 +244,7 @@ Route::prefix('v1')->group(function (): void {
         Route::get('trips/{trip}', [TripController::class, 'show'])->middleware('permission:trips.view');
         // The Official Trip Ticket and the dispatch checklist, filled in for printing.
         Route::get('trips/{trip}/ticket', [TripController::class, 'ticket'])->middleware('permission:trips.view');
+        Route::get('trips/{trip}/ticket.pdf', [TripController::class, 'ticketPdf'])->middleware('permission:trips.view');
         Route::get('trips/{trip}/history', [TripController::class, 'history'])->middleware('permission:trips.view');
         Route::get('trips/{trip}/costs', [TripController::class, 'costs'])->middleware('permission:finance.view,expenses.view');
 
@@ -382,6 +386,27 @@ Route::prefix('v1')->group(function (): void {
             Route::post('supplier-categories', [SupplierCategoryController::class, 'store']);
             Route::match(['put', 'patch'], 'supplier-categories/{supplierCategory}', [SupplierCategoryController::class, 'update']);
             Route::delete('supplier-categories/{supplierCategory}', [SupplierCategoryController::class, 'destroy']);
+        });
+
+        Route::middleware('permission:assets.view')->group(function (): void {
+            Route::get('asset-categories', [AssetCategoryController::class, 'index']);
+            Route::get('assets/custodians', [AssetController::class, 'custodians']);
+            Route::get('assets/report', [AssetController::class, 'report']);
+            Route::get('assets/report.pdf', [AssetController::class, 'reportPdf']);
+            Route::get('assets/turnovers', [AssetController::class, 'log']);
+            Route::get('assets', [AssetController::class, 'index']);
+            Route::get('assets/{asset}', [AssetController::class, 'show']);
+            Route::get('assets/{asset}/turnovers', [AssetController::class, 'turnovers']);
+        });
+
+        Route::middleware('permission:assets.manage')->group(function (): void {
+            Route::post('assets', [AssetController::class, 'store']);
+            Route::match(['put', 'patch'], 'assets/{asset}', [AssetController::class, 'update']);
+            Route::delete('assets/{asset}', [AssetController::class, 'destroy']);
+            Route::post('assets/{asset}/turnover', [AssetController::class, 'turnover']);
+            Route::post('asset-categories', [AssetCategoryController::class, 'store']);
+            Route::match(['put', 'patch'], 'asset-categories/{assetCategory}', [AssetCategoryController::class, 'update']);
+            Route::delete('asset-categories/{assetCategory}', [AssetCategoryController::class, 'destroy']);
         });
 
         Route::middleware('permission:accounting.view,expenses.view,fuel.view,finance.view,delivery.write')->group(function (): void {
@@ -693,6 +718,7 @@ Route::prefix('v1')->group(function (): void {
                 Route::get('cutoff-requests/pending', [PayrollCutoffRequestController::class, 'pending']);
 
                 Route::get('{run}', [PayrollController::class, 'show']);
+                Route::get('{run}/document.pdf', [PayrollController::class, 'pdf']);
             });
 
             /**
@@ -809,6 +835,8 @@ Route::prefix('v1')->group(function (): void {
                  */
                 Route::get('statements/income', [StatementController::class, 'income']);
                 Route::get('statements/balance-sheet', [StatementController::class, 'balanceSheet']);
+                Route::get('statements/income.pdf', [StatementPdfController::class, 'income']);
+                Route::get('statements/balance-sheet.pdf', [StatementPdfController::class, 'balanceSheet']);
 
                 /**
                  * The general ledger. Read-only, all of it: nothing is ever
@@ -1018,6 +1046,7 @@ Route::prefix('v1')->group(function (): void {
             // What is outstanding, by how late it is. The report a collections
             // call is made from.
             Route::get('billing/aging', [BillingController::class, 'aging']);
+            Route::get('billing/aging.pdf', [StatementPdfController::class, 'aging']);
             /**
              * The list as a spreadsheet, honouring the same filters as the
              * list itself — before `billing/{invoice}` so `export` is never
@@ -1032,6 +1061,7 @@ Route::prefix('v1')->group(function (): void {
              * invoice id, and it takes a *customer* rather than an invoice:
              * a statement is about the account, not about one document on it.
              */
+            Route::get('billing/statement/{customer}.pdf', [StatementPdfController::class, 'account']);
             Route::get('billing/statement/{customer}', [BillingController::class, 'statement']);
             Route::get('billing/{invoice}', [BillingController::class, 'show']);
             /**
@@ -1040,6 +1070,7 @@ Route::prefix('v1')->group(function (): void {
              * `billing.view`, because printing an invoice does not change it.
              */
             Route::get('billing/{invoice}/document', [BillingController::class, 'document']);
+            Route::get('billing/{invoice}/document.pdf', [BillingController::class, 'documentPdf']);
         });
 
         Route::middleware('permission:billing.manage')->group(function (): void {

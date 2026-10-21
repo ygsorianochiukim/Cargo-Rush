@@ -13,9 +13,12 @@ use App\Domain\Payroll\Services\PayrollService;
 use App\Domain\Payroll\Support\PayPeriod;
 use App\Domain\Shared\Http\Controllers\ApiController;
 use App\Domain\Tenancy\Support\Tenant;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -33,6 +36,35 @@ class PayrollController extends ApiController
     public function show(PayRun $run): JsonResponse
     {
         return $this->item(new PayRunResource($this->payroll->find($run->getKey())));
+    }
+
+    public function pdf(Request $request, PayRun $run): Response
+    {
+        $data = (new PayRunResource($this->payroll->find($run->getKey())))->resolve($request);
+
+        $lineId = $request->query('line');
+        $line = $lineId === null ? null : collect($data['lines'])->firstWhere('id', $lineId);
+
+        abort_if($lineId !== null && $line === null, 404, 'That person is not on this run.');
+
+        $pdf = Pdf::loadView('pdf.payroll', [
+            'company' => app(Tenant::class)->company()?->name ?? 'Cargo Rush',
+            'run' => $data,
+            'line' => $line,
+            'state' => match ($data['status']) {
+                'paid' => 'Paid',
+                'approved' => 'Approved · not yet paid',
+                default => 'Draft',
+            },
+            'peso' => static fn (?int $cents): string => '₱'.number_format(($cents ?? 0) / 100, 2),
+            'date' => static fn (?string $value): string => $value === null ? '—' : Carbon::parse($value)->format('M j, Y'),
+        ])->setPaper('a4', $line === null ? 'landscape' : 'portrait');
+
+        $name = $line === null
+            ? "payroll-{$data['reference']}.pdf"
+            : 'payslip-'.$data['reference'].'-'.Str::slug($line['name']).'.pdf';
+
+        return $pdf->download($name);
     }
 
     public function periods(Request $request): JsonResponse

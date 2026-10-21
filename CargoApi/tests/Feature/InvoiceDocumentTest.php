@@ -221,6 +221,32 @@ describe('the delivery invoice', function (): void {
     });
 });
 
+describe('saving the invoice as a PDF', function (): void {
+    it('downloads the invoice as a PDF named after its number', function (): void {
+        ($this->haul)();
+
+        $invoice = Invoice::query()->firstOrFail();
+
+        $response = $this->actingAs($this->admin)
+            ->get("/api/v1/billing/{$invoice->id}/document.pdf")
+            ->assertOk();
+
+        expect($response->headers->get('content-type'))->toBe('application/pdf')
+            ->and($response->headers->get('content-disposition'))->toContain($invoice->number.'.pdf')
+            ->and(substr((string) $response->getContent(), 0, 5))->toBe('%PDF-');
+    });
+
+    it('is refused to an account that cannot see billing', function (): void {
+        ($this->haul)();
+
+        $invoice = Invoice::query()->firstOrFail();
+
+        $this->actingAs($this->marco)
+            ->get("/api/v1/billing/{$invoice->id}/document.pdf")
+            ->assertForbidden();
+    });
+});
+
 describe('exporting the list', function (): void {
     it('gives back a spreadsheet of the invoices on screen', function (): void {
         ($this->haul)();

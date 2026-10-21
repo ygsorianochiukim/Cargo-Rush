@@ -34,8 +34,8 @@ it('adds, lists and renames categories', function (): void {
 
     $list = $this->actingAs($this->admin)->getJson('/api/v1/supplier-categories')->assertOk();
 
-    expect(array_column($list->json('data'), 'name'))->toBe(['FOODS', 'GARAGE', 'MALL', 'SUPPLIER'])
-        ->and($list->json('meta.total'))->toBe(4);
+    expect(array_column($list->json('data'), 'name'))->toBe(['FOODS', 'GARAGE', 'MALL', 'SUPPLIER', 'UTILITIES'])
+        ->and($list->json('meta.total'))->toBe(5);
 
     $garage = SupplierCategory::where('name', 'GARAGE')->firstOrFail();
 
@@ -93,5 +93,20 @@ it('deletes an unused category, and retires a used one', function (): void {
     expect(Supplier::where('name', 'Davao Lubes')->first()->category?->name)->toBe('GARAGE');
 
     $active = $this->actingAs($this->admin)->getJson('/api/v1/supplier-categories?active=1')->json('data');
-    expect($active)->toBe([]);
+    expect(array_column($active, 'name'))->toBe(['UTILITIES']);
+});
+
+it('starts every company with a utilities category for its billers', function (): void {
+    $utilities = SupplierCategory::where('name', 'UTILITIES')->firstOrFail();
+
+    $biller = $this->actingAs($this->admin)->postJson('/api/v1/suppliers', [
+        'name' => 'Davao Light & Power',
+        'category_id' => $utilities->id,
+    ])->assertCreated()->json('data');
+
+    expect($biller['category_name'])->toBe('UTILITIES');
+
+    app(CompanyProvisioner::class)->provision($this->company);
+
+    expect(SupplierCategory::where('name', 'UTILITIES')->count())->toBe(1);
 });

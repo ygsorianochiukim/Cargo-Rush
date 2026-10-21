@@ -4,6 +4,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TripTicket } from '../../models/trip/trip-ticket.model';
 import { TripService } from '../../services/trip/trip.service';
 import { fmt } from '../../shared/format';
+import { saveFile } from '../../shared/save-file';
 import { Icon } from '../../shared/icon';
 import { ErrorState, SkeletonRows } from '../../shared/states';
 
@@ -19,6 +20,8 @@ export class TripTicketPage {
 
   protected readonly ticket = signal<TripTicket | null>(null);
   protected readonly failure = signal<string | null>(null);
+  protected readonly saving = signal(false);
+  protected readonly pdfError = signal<string | null>(null);
 
   protected readonly logo = computed(() => this.ticket()?.issuer.logo_url ?? 'brand/logo-mark.png');
 
@@ -104,5 +107,23 @@ export class TripTicketPage {
 
   protected print(): void {
     window.print();
+  }
+
+  protected savePdf(): void {
+    const reference = this.ticket()?.trip.reference ?? this.id;
+
+    this.saving.set(true);
+    this.pdfError.set(null);
+
+    this.trips.ticketPdf(this.id).subscribe({
+      next: (blob) => {
+        saveFile(blob, `trip-ticket-${reference}.pdf`);
+        this.saving.set(false);
+      },
+      error: () => {
+        this.saving.set(false);
+        this.pdfError.set('Could not prepare the PDF. Check the connection and try again.');
+      },
+    });
   }
 }

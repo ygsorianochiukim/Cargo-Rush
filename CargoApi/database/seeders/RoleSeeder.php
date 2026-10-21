@@ -63,7 +63,7 @@ class RoleSeeder extends Seeder
                     'trips.view', 'trips.manage', 'gps.view', 'dispatch.view',
                     'delivery.view', 'vehicles.view', 'vehicles.manage',
                     'drivers.view', 'drivers.manage', 'fuel.view', 'fuel.manage',
-                    'truckers.view', 'truckers.manage',
+                    'truckers.view', 'truckers.manage', 'assets.view', 'assets.manage',
                     'finance.view', 'finance.manage', 'expenses.view', 'expenses.manage', 'suppliers.view', 'suppliers.manage',
                     'accounting.view', 'accounting.manage',
                     'payroll.view', 'payroll.manage',
@@ -121,7 +121,7 @@ class RoleSeeder extends Seeder
                 'system' => false,
                 'permissions' => [
                     'hr.view', 'hr.manage', 'drivers.view', 'notifications.view',
-                    'payroll.view',
+                    'payroll.view', 'assets.view', 'assets.manage',
                 ],
             ],
             [
