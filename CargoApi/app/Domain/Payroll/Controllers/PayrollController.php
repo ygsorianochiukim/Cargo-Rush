@@ -11,9 +11,11 @@ use App\Domain\Payroll\Models\PayRunLineComponent;
 use App\Domain\Payroll\Resources\PayRunResource;
 use App\Domain\Payroll\Services\PayrollService;
 use App\Domain\Payroll\Support\PayPeriod;
+use App\Domain\Printing\Printables\PayrollRegisterPrintable;
+use App\Domain\Printing\Printables\PayslipPrintable;
+use App\Domain\Printing\Services\PrintRenderer;
 use App\Domain\Shared\Http\Controllers\ApiController;
 use App\Domain\Tenancy\Support\Tenant;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -38,7 +40,7 @@ class PayrollController extends ApiController
         return $this->item(new PayRunResource($this->payroll->find($run->getKey())));
     }
 
-    public function pdf(Request $request, PayRun $run): Response
+    public function pdf(Request $request, PayRun $run, PrintRenderer $renderer): Response
     {
         $data = (new PayRunResource($this->payroll->find($run->getKey())))->resolve($request);
 
@@ -47,24 +49,19 @@ class PayrollController extends ApiController
 
         abort_if($lineId !== null && $line === null, 404, 'That person is not on this run.');
 
-        $pdf = Pdf::loadView('pdf.payroll', [
-            'company' => app(Tenant::class)->company()?->name ?? 'Cargo Rush',
-            'run' => $data,
-            'line' => $line,
-            'state' => match ($data['status']) {
-                'paid' => 'Paid',
-                'approved' => 'Approved · not yet paid',
-                default => 'Draft',
-            },
-            'peso' => static fn (?int $cents): string => '₱'.number_format(($cents ?? 0) / 100, 2),
-            'date' => static fn (?string $value): string => $value === null ? '—' : Carbon::parse($value)->format('M j, Y'),
-        ])->setPaper('a4', $line === null ? 'landscape' : 'portrait');
+        if ($line === null) {
+            $register = app(PayrollRegisterPrintable::class);
 
-        $name = $line === null
-            ? "payroll-{$data['reference']}.pdf"
-            : 'payslip-'.$data['reference'].'-'.Str::slug($line['name']).'.pdf';
+            return $renderer->download($register, $register->data($data), "payroll-{$data['reference']}.pdf");
+        }
 
-        return $pdf->download($name);
+        $payslip = app(PayslipPrintable::class);
+
+        return $renderer->download(
+            $payslip,
+            $payslip->data($data, [$line]),
+            'payslip-'.$data['reference'].'-'.Str::slug($line['name']).'.pdf',
+        );
     }
 
     public function periods(Request $request): JsonResponse

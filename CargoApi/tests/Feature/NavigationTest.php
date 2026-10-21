@@ -117,6 +117,13 @@ describe('what the rows point at', function (): void {
         expect($access->group)->toBe('Administration')
             ->and($access->permission)->toBe('access.view');
     });
+
+    it('gives each company setting its own page under Administration', function (): void {
+        $pages = NavItem::query()->where('group', 'Administration')->orderBy('order')->get();
+
+        expect($pages->pluck('label')->all())->toBe(['Roles', 'Zoning', 'Benefits', 'Categories', 'Printables'])
+            ->and($pages->where('key', '!=', 'access')->pluck('permission')->unique()->all())->toBe(['company.manage']);
+    });
 });
 
 describe('the handset tabs', function (): void {

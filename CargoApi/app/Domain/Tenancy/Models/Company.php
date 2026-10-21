@@ -26,8 +26,7 @@ class Company extends Model
         'tin', 'vat_registered', 'vat_rate_bp', 'withholding_rate_bp', 'prices_include_vat',
         'payroll_deduct_on', 'payroll_benefits_enabled', 'payroll_cutoff_days', 'payroll_release_lag_days',
         'trucker_commission_bp',
-        'billing_terms_days',
-    ];
+        'billing_terms_days',    ];
 
     protected function casts(): array
     {
@@ -44,8 +43,7 @@ class Company extends Model
             'tariff_per_km_cents' => 'integer',
             'tariff_per_kg_cents' => 'integer',
             'tariff_minimum_cents' => 'integer',
-            'billing_terms_days' => 'integer',
-            'payroll_deduct_on' => DeductionSchedule::class,
+            'billing_terms_days' => 'integer',            'payroll_deduct_on' => DeductionSchedule::class,
 
             'payroll_benefits_enabled' => 'boolean',
 

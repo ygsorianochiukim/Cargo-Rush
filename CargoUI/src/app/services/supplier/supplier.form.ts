@@ -34,7 +34,7 @@ export function supplierSpec(): RecordSpec<Supplier> {
         kind: 'select',
         wide: true,
         options: () => categories,
-        hint: 'Garage, mall, food… Add or rename categories on Access Control.',
+        hint: 'Garage, mall, food… Add or rename them on the Categories page.',
       },
       {
         key: 'contact',

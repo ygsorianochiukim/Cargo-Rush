@@ -73,7 +73,7 @@ export function assetSpec(): RecordSpec<Asset> {
         label: 'Category',
         kind: 'select',
         options: () => categories,
-        hint: 'Add or rename categories on Access Control.',
+        hint: 'Add or rename them on the Categories page.',
       },
       { key: 'serial_no', label: 'Serial no.', kind: 'text', placeholder: 'PF3XK2LM' },
       { key: 'purchased_on', label: 'Date purchased', kind: 'date' },

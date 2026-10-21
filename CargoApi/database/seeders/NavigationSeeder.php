@@ -60,7 +60,11 @@ class NavigationSeeder extends Seeder
             ['incidents', 'Incident Management', 'incident', '/incidents', 800, false, true, 'Support', 'incidents.view', 'incidents.open'],
             ['notifications', 'Notifications', 'bell', '/notifications', 810, false, true, 'Support', 'notifications.view', 'notifications.unread'],
 
-            ['access', 'Access Control', 'shield', '/access', 900, false, true, 'Administration', 'access.view', null],
+            ['access', 'Roles', 'shield', '/access', 900, false, true, 'Administration', 'access.view', null],
+            ['zoning', 'Zoning', 'map-pin', '/zoning', 910, false, true, 'Administration', 'company.manage', null],
+            ['benefits', 'Benefits', 'badge', '/benefits', 920, false, true, 'Administration', 'company.manage', null],
+            ['categories', 'Categories', 'tag', '/categories', 930, false, true, 'Administration', 'company.manage', null],
+            ['printables', 'Printables', 'billing', '/printables', 940, false, true, 'Administration', 'company.manage', null],
 
             ['cargo', 'Cargo', 'shipments', '/cargo', 1100, true, false, 'Driver', 'delivery.view', null],
             ['tracking', 'Tracking', 'map-pin', '/tracking', 1110, true, false, 'Driver', 'gps.write', null],

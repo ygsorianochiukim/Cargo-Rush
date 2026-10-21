@@ -6,6 +6,7 @@ namespace App\Domain\Billing\Services;
 
 use App\Domain\Billing\Models\Invoice;
 use App\Domain\Billing\Models\Payment;
+use App\Domain\Billing\Support\InvoiceTemplate;
 use App\Domain\Shared\Support\Money;
 use App\Domain\Tenancy\Services\LogoStore;
 use App\Domain\Tenancy\Support\Tenant;
@@ -30,8 +31,11 @@ class InvoiceDocumentService
         ]);
 
         $company = $this->tenant->company();
+        $template = InvoiceTemplate::defaults();
 
         return [
+            'template' => $template,
+
             'issuer' => [
                 'name' => $company?->name,
                 'code' => $company?->code,
@@ -41,7 +45,7 @@ class InvoiceDocumentService
                 'contact_name' => $company?->contact_name,
                 'contact_phone' => $company?->contact_phone,
                 'contact_email' => $company?->contact_email,
-                'logo_url' => $this->logos->url($company?->logo_path),
+                'logo_url' => $this->logos->url($this->logoPath()),
             ],
 
             'bill_to' => [
@@ -58,7 +62,8 @@ class InvoiceDocumentService
             'document' => [
                 'id' => $invoice->id,
                 'number' => $invoice->number,
-                'title' => $this->title($invoice),
+                'title' => $template['titles'][$this->titleKey($invoice)],
+                'title_key' => $this->titleKey($invoice),
                 'direction' => $invoice->direction->value,
                 'issued_at' => $invoice->issued_at?->toDateString(),
                 'due_at' => $invoice->due_at?->toDateString(),
@@ -91,13 +96,103 @@ class InvoiceDocumentService
         ];
     }
 
-    private function title(Invoice $invoice): string
+    public function logoPath(): ?string
     {
-        if ($invoice->direction->value === 'payable') {
-            return 'Bill';
+        $company = $this->tenant->company();
+
+        return $company?->logo_path;
+    }
+
+    /** @return array<string, mixed> */
+    public function sample(): array
+    {
+        $latest = Invoice::query()
+            ->where('direction', 'receivable')
+            ->whereNotNull('trip_id')
+            ->latest('issued_at')
+            ->first();
+
+        if ($latest !== null) {
+            return $this->build($latest);
         }
 
-        return $invoice->trip_id === null ? 'Sales Invoice' : 'Delivery Invoice';
+        $company = $this->tenant->company();
+        $template = InvoiceTemplate::defaults();
+        $today = now();
+
+        return [
+            'template' => $template,
+            'issuer' => [
+                'name' => $company?->name,
+                'code' => $company?->code,
+                'tin' => $company?->tin,
+                'vat_registered' => (bool) ($company?->vat_registered ?? false),
+                'address' => $company?->address,
+                'contact_name' => $company?->contact_name,
+                'contact_phone' => $company?->contact_phone,
+                'contact_email' => $company?->contact_email,
+                'logo_url' => $this->logos->url($this->logoPath()),
+            ],
+            'bill_to' => [
+                'name' => 'Sample Customer Trading',
+                'customer_id' => null,
+                'address' => 'J.P. Laurel Ave, Davao City',
+                'contact' => '0917 555 0101',
+                'tin' => '123-456-789-000',
+                'vat_treatment' => 'vatable',
+                'vat_treatment_label' => 'VAT-able',
+                'withholds_tax' => false,
+            ],
+            'document' => [
+                'id' => 'sample',
+                'number' => 'INV-'.$today->year.'-0001',
+                'title' => $template['titles']['delivery'],
+                'title_key' => 'delivery',
+                'direction' => 'receivable',
+                'issued_at' => $today->toDateString(),
+                'due_at' => $today->copy()->addDays(30)->toDateString(),
+                'terms_days' => 30,
+                'status' => 'pending',
+                'overdue' => false,
+                'currency' => 'PHP',
+            ],
+            'lines' => [[
+                'description' => 'Hauling: Davao City to Tagum City',
+                'reference' => 'CTS-'.$today->format('mdy').'-00001',
+                'origin' => 'Davao City',
+                'destination' => 'Tagum City',
+                'cargo' => 'Bagged rice, 200 sacks',
+                'weight_kg' => 10000,
+                'delivered_at' => $today->toDateString(),
+                'driver' => 'Juan Dela Cruz',
+                'plate' => 'NCR 4412',
+                'amount_cents' => 1_250_000,
+            ]],
+            'totals' => [
+                'net_amount_cents' => 1_250_000,
+                'vat_cents' => 150_000,
+                'amount_cents' => 1_400_000,
+                'withholding_cents' => 0,
+                'due_cents' => 1_400_000,
+                'paid_cents' => 0,
+                'balance_cents' => 1_400_000,
+                'vat_rate_bp' => 1200,
+                'withholding_rate_bp' => 0,
+                'vat_treatment' => 'vatable',
+                'vat_label' => 'VAT-able',
+                'amount_in_words' => Money::inWords(1_400_000, 'PHP'),
+            ],
+            'payments' => [],
+        ];
+    }
+
+    private function titleKey(Invoice $invoice): string
+    {
+        if ($invoice->direction->value === 'payable') {
+            return 'bill';
+        }
+
+        return $invoice->trip_id === null ? 'sales' : 'delivery';
     }
 
     /** @return array<int, array<string, mixed>> */

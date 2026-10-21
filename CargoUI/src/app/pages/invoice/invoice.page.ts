@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -6,19 +6,17 @@ import { Invoice } from '../../models/billing/billing.model';
 import { InvoiceDocument } from '../../models/billing/invoice-document.model';
 import { invoiceSpec } from '../../services/billing/billing.form';
 import { BillingService } from '../../services/billing/billing.service';
-import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
+import { InvoiceSheet } from '../../shared/invoice-sheet';
 import { PaymentDialog } from '../../shared/payment-dialog';
 import { RecordDialog } from '../../shared/record-dialog';
-import { saveFile } from '../../shared/save-file';
+import { FileDelivery, deliverFile } from '../../shared/save-file';
 import { ErrorState } from '../../shared/states';
-import { StatusPill } from '../../shared/status-pill';
-import { StatusValue } from '../../models/shared/status.model';
 
 @Component({
   selector: 'app-invoice',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, ErrorState, StatusPill],
+  imports: [Icon, ErrorState, InvoiceSheet],
   templateUrl: './invoice.page.html',
 })
 export class InvoicePage {
@@ -32,8 +30,6 @@ export class InvoicePage {
   private readonly route = inject(ActivatedRoute);
 
   private readonly invoiceId = this.route.snapshot.paramMap.get('invoice') ?? '';
-
-  protected readonly fmt = fmt;
 
   protected readonly document = signal<InvoiceDocument | null>(null);
   protected readonly error = signal<string | null>(null);
@@ -86,38 +82,17 @@ export class InvoicePage {
     });
   }
 
-  protected readonly status = computed<StatusValue>(
-    () => (this.document()?.document.status ?? 'pending') as StatusValue,
-  );
-
-  protected readonly vatRate = computed(() => (this.document()?.totals.vat_rate_bp ?? 0) / 100);
-
-  protected readonly withholdingRate = computed(
-    () => (this.document()?.totals.withholding_rate_bp ?? 0) / 100,
-  );
-
-  protected readonly initials = computed(() => {
-    const name = this.document()?.issuer.name ?? '';
-
-    return name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((word) => word[0]?.toUpperCase() ?? '')
-      .join('');
-  });
-
   protected print(): void {
-    window.print();
+    this.savePdf('print');
   }
 
-  protected savePdf(): void {
+  protected savePdf(mode: FileDelivery = 'save'): void {
     this.saving.set(true);
     this.pdfError.set(null);
 
     this.billing.documentPdf(this.invoiceId).subscribe({
       next: (blob) => {
-        saveFile(blob, `${this.document()?.document.number ?? 'invoice'}.pdf`);
+        deliverFile(mode, blob, `${this.document()?.document.number ?? 'invoice'}.pdf`);
         this.saving.set(false);
       },
       error: () => {

@@ -20,7 +20,7 @@ final class ChangeLog
         'ledger_entries', 'ledger_entry_helpers', 'maintenance_jobs', 'nav_items',
         'notification_items', 'pay_components', 'pay_run_line_components', 'pay_run_line_trips',
         'pay_run_lines', 'pay_runs', 'payment_allocations', 'payment_sources', 'payments', 'payroll_cutoff_requests',
-        'permissions', 'positions', 'pricing_brackets', 'pricing_zones', 'roles', 'store_credits',
+        'permissions', 'positions', 'pricing_brackets', 'pricing_zones', 'print_templates', 'roles', 'store_credits',
         'supplier_categories', 'suppliers', 'trips', 'truck_categories', 'truck_sizes', 'trucker_drivers',
         'trucker_vehicles', 'trucker_wallet_entries', 'truckers', 'trucks', 'undertime_requests',
         'users', 'vehicles',

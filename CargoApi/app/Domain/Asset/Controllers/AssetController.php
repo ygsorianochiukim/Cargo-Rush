@@ -13,9 +13,9 @@ use App\Domain\Asset\Resources\AssetTurnoverResource;
 use App\Domain\Asset\Services\AssetReportService;
 use App\Domain\Asset\Services\AssetService;
 use App\Domain\Hr\Models\Employee;
+use App\Domain\Printing\Printables\AssetReportPrintable;
+use App\Domain\Printing\Services\PrintRenderer;
 use App\Domain\Shared\Http\Controllers\ApiController;
-use App\Domain\Tenancy\Support\Tenant;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -79,20 +79,15 @@ class AssetController extends ApiController
         return $this->payload($reports->report());
     }
 
-    public function reportPdf(AssetReportService $reports): Response
+    public function reportPdf(AssetReportService $reports, AssetReportPrintable $printable, PrintRenderer $renderer): Response
     {
-        $labels = ['assigned' => 'Issued', 'available' => 'In stock', 'maintenance' => 'Under repair', 'inactive' => 'Retired / lost'];
+        $assets = Asset::query()->with(['category', 'custodian'])->orderBy('tag')->orderBy('name')->get();
 
-        $pdf = Pdf::loadView('pdf.asset-report', [
-            'company' => app(Tenant::class)->company()?->name ?? 'Cargo Rush',
-            'asOf' => now()->format('M j, Y'),
-            'report' => $reports->report(),
-            'assets' => Asset::query()->with(['category', 'custodian'])->orderBy('tag')->orderBy('name')->get(),
-            'peso' => static fn (int $cents): string => 'PHP '.number_format($cents / 100, 2),
-            'statusLabel' => static fn (string $status): string => $labels[$status] ?? ucfirst($status),
-        ])->setPaper('a4', 'landscape');
-
-        return $pdf->download('asset-report-'.now()->format('Y-m-d').'.pdf');
+        return $renderer->download(
+            $printable,
+            $printable->data($reports->report(), $assets),
+            'asset-report-'.now()->format('Y-m-d').'.pdf',
+        );
     }
 
     public function log(Request $request): JsonResponse

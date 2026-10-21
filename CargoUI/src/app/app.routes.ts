@@ -304,9 +304,35 @@ export const routes: Routes = [
       },
       {
         path: 'access',
-        title: 'Access Control · Cargo Rush',
-        data: { title: 'Access Control' },
+        title: 'Roles · Cargo Rush',
+        data: { title: 'Roles' },
         loadComponent: () => import('./pages/access/access.page').then((m) => m.AccessPage),
+      },
+      {
+        path: 'zoning',
+        title: 'Zoning · Cargo Rush',
+        data: { title: 'Zoning' },
+        loadComponent: () => import('./pages/settings/zoning.page').then((m) => m.ZoningPage),
+      },
+      {
+        path: 'benefits',
+        title: 'Benefits · Cargo Rush',
+        data: { title: 'Benefits' },
+        loadComponent: () => import('./pages/settings/benefits.page').then((m) => m.BenefitsPage),
+      },
+      {
+        path: 'categories',
+        title: 'Categories · Cargo Rush',
+        data: { title: 'Categories' },
+        loadComponent: () =>
+          import('./pages/settings/categories.page').then((m) => m.CategoriesPage),
+      },
+      {
+        path: 'printables',
+        title: 'Printables · Cargo Rush',
+        data: { title: 'Printables' },
+        loadComponent: () =>
+          import('./pages/settings/printables.page').then((m) => m.PrintablesPage),
       },
 
       {

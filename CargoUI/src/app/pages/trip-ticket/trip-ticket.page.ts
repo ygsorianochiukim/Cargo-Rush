@@ -4,7 +4,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TripTicket } from '../../models/trip/trip-ticket.model';
 import { TripService } from '../../services/trip/trip.service';
 import { fmt } from '../../shared/format';
-import { saveFile } from '../../shared/save-file';
+import { FileDelivery, deliverFile } from '../../shared/save-file';
 import { Icon } from '../../shared/icon';
 import { ErrorState, SkeletonRows } from '../../shared/states';
 
@@ -106,10 +106,10 @@ export class TripTicketPage {
   }
 
   protected print(): void {
-    window.print();
+    this.savePdf('print');
   }
 
-  protected savePdf(): void {
+  protected savePdf(mode: FileDelivery = 'save'): void {
     const reference = this.ticket()?.trip.reference ?? this.id;
 
     this.saving.set(true);
@@ -117,7 +117,7 @@ export class TripTicketPage {
 
     this.trips.ticketPdf(this.id).subscribe({
       next: (blob) => {
-        saveFile(blob, `trip-ticket-${reference}.pdf`);
+        deliverFile(mode, blob, `trip-ticket-${reference}.pdf`);
         this.saving.set(false);
       },
       error: () => {

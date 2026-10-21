@@ -24,10 +24,14 @@ export class CompanyService {
     const form = new FormData();
     form.append('logo', file);
 
-    return this.api.postForm<Company>('company/logo', form).pipe(tap((c) => this.identity.applyCompany(c)));
+    return this.api
+      .postForm<Company>('company/logo', form)
+      .pipe(tap((c) => this.identity.applyCompany(c)));
   }
 
   removeLogo(): Observable<Company> {
-    return this.api.deleteItem<Company>('company/logo').pipe(tap((c) => this.identity.applyCompany(c)));
+    return this.api
+      .deleteItem<Company>('company/logo')
+      .pipe(tap((c) => this.identity.applyCompany(c)));
   }
 }
