@@ -34,6 +34,28 @@ class LogoStore
         return $path;
     }
 
+    /** @throws ValidationException */
+    public function storeFitted(UploadedFile $file, int $maxWidth, int $maxHeight): string
+    {
+        $source = $this->decode($file);
+
+        try {
+            $fitted = $this->fit($source, $maxWidth, $maxHeight);
+        } finally {
+            imagedestroy($source);
+        }
+
+        try {
+            $path = sprintf('%s/%s.png', $this->directory(), Str::ulid());
+
+            Storage::disk($this->disk())->put($path, $this->encode($fitted));
+        } finally {
+            imagedestroy($fitted);
+        }
+
+        return $path;
+    }
+
     public function replace(?string $existing, UploadedFile $file): string
     {
         $path = $this->store($file);
@@ -61,6 +83,11 @@ class LogoStore
         }
 
         return Storage::disk($this->disk())->url($path);
+    }
+
+    public function contents(string $path): ?string
+    {
+        return Storage::disk($this->disk())->exists($path) ? Storage::disk($this->disk())->get($path) : null;
     }
 
     public function dataUri(?string $path): ?string
@@ -110,6 +137,24 @@ class LogoStore
             $size, $size,
             $side, $side,
         );
+
+        return $canvas;
+    }
+
+    private function fit(GdImage $source, int $maxWidth, int $maxHeight): GdImage
+    {
+        $width = imagesx($source);
+        $height = imagesy($source);
+        $scale = min(1, $maxWidth / $width, $maxHeight / $height);
+        $w = max(1, (int) round($width * $scale));
+        $h = max(1, (int) round($height * $scale));
+
+        $canvas = imagecreatetruecolor($w, $h);
+
+        imagealphablending($canvas, false);
+        imagesavealpha($canvas, true);
+        imagefilledrectangle($canvas, 0, 0, $w - 1, $h - 1, (int) imagecolorallocatealpha($canvas, 255, 255, 255, 127));
+        imagecopyresampled($canvas, $source, 0, 0, 0, 0, $w, $h, $width, $height);
 
         return $canvas;
     }

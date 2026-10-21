@@ -75,7 +75,7 @@ cannot touch it.
 
 ### Your rates
 
-**Access Control → Rates.** Everything the business charges, keeps or pays tax on is set here, in
+**Zoning → Rates.** Everything the business charges, keeps or pays tax on is set here, in
 one card, and nowhere else. It opens with sensible figures already in it, so you can leave it
 alone until something is wrong.
 
@@ -194,7 +194,7 @@ they cannot use.
 
 **These five are a starting point, not a fixed list.** They are your company's own rows: rename
 them, re-tick what each reaches, and add the ones your office actually has — a Treasury Officer, a
-General Manager, a Yard Boss. **Access Control** is where that is done, and nothing you change
+General Manager, a Yard Boss. **Roles** (under Administration) is where that is done, and nothing you change
 there affects any other company on the system.
 
 **A customer is not a cut-down member of staff.** They reach a different set of
@@ -303,7 +303,7 @@ nothing to skip past.
 
 That is the whole rule, and it is read off the position, not off the words in
 the title. A job counts as driving when its **default role is Driver**, which is
-what you set when you added the position in Access Control. So a company that
+what you set when you added the position on the Roles page. So a company that
 adds "Long-haul Driver" or "Yard Marshal" gets the licence fields on those too,
 without anybody having to tick a second box — because giving somebody the
 driver's access is the same decision as saying they need a driver record.
@@ -551,7 +551,7 @@ Amounts are entered in pesos, the ordinary way: type `30721` for ₱30,721.00.
 
 **The Truck Report's cutoff is your payroll cutoff.** Pick any day and it shows the whole cutoff that
 day falls in — the 1st to the 15th and the 16th to the month's end, unless you changed the cutoff days
-on Access Control. The arrows step to the period before or after. Spend that belongs to no truck —
+on the Benefits page. The arrows step to the period before or after. Spend that belongs to no truck —
 office costs, payroll, supplier bills — is listed separately under **Not charged to a truck**, so the
 trucks add up to what they really cost and the bottom line still counts everything. Each truck's
 figures are the same ones Profitability shows for the same dates.
@@ -689,7 +689,7 @@ can add or change one.
 
 Tick **VAT receipt** on an Other Expense when the official receipt shows VAT. The list marks each
 entry **VAT-able** or **Non-VAT**, shows the input VAT inside a VAT-able one (at your VAT rate on
-Access Control → Rates), and the spend card splits the period into VAT-able, its input VAT, and
+Zoning → Rates), and the spend card splits the period into VAT-able, its input VAT, and
 non-VAT. Nothing is ticked unless you tick it.
 
 ---
@@ -1038,7 +1038,7 @@ same trip may read differently on a phone set to another one.
 | The reset link says it is no longer valid | It has been used, or it is more than an hour old. Ask for a new one — links are single-use on purpose. |
 | The reset email never arrives | Check spam first. Then check the address: a mistyped one produces the same screen as a correct one, because the system will not say which addresses exist. |
 | A driver sees no trips | Nothing *confirmed* to that driver — an unconfirmed request does not appear in the cab, by design. Or their account is not linked to a driver record. Check both on Trip Management and Drivers Management. |
-| Registering somebody does not ask for a licence, and it should | Their position is not a driving one. A job counts as driving when its default role is **Driver** — set that in **Access Control → Positions**, or pick Driver or Helper from the list instead of typing a custom title. |
+| Registering somebody does not ask for a licence, and it should | Their position is not a driving one. A job counts as driving when its default role is **Driver** — set that in **Roles → Positions**, or pick Driver or Helper from the list instead of typing a custom title. |
 | "That licence is already on employee EMP-00xx's record" | The number is on somebody else's record. Either it is a typo, or that person is already registered under a different name. One licence belongs to one employee. |
 | A driver was registered twice | They were entered once in Drivers Management and again in Employees with a *different* licence number, so the system had no way to tell they were the same person. Retype the licence to match and the two link up. |
 | A customer sees nothing at all | Their account is not linked to a customer record. Recreate it with `php artisan cargo:user --role=customer`, which asks which firm it acts for. |
@@ -1068,7 +1068,7 @@ same trip may read differently on a phone set to another one.
 - [ ] **Your company registered**, and its name correct in the sidebar — it is what appears on
       every screen your people open
 - [ ] Your logo uploaded, and checked at sidebar size (**Access Control → Company**)
-- [ ] The roles renamed and re-ticked to match the office you actually run (**Access Control**)
+- [ ] The roles renamed and re-ticked to match the office you actually run (**Roles**)
 - [ ] Every vehicle entered, with today's odometer reading
 - [ ] Every driver **and helper** entered, with licence expiry
 - [ ] Every customer entered

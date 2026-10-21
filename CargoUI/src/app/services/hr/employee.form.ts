@@ -52,7 +52,7 @@ export function employeeSpec(): RecordSpec<Employee> {
         label: 'Position',
         kind: 'select',
         options: () => jobs,
-        hint: 'Manage the list in Access Control.',
+        hint: 'Manage the list on the Roles page.',
       },
       {
         key: 'position',

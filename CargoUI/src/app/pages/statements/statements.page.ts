@@ -12,7 +12,7 @@ import { Card } from '../../shared/card';
 import { Field } from '../../shared/field';
 import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
-import { saveFile } from '../../shared/save-file';
+import { FileDelivery, deliverFile } from '../../shared/save-file';
 import { EmptyState, ErrorState } from '../../shared/states';
 
 type View = 'income' | 'sheet' | 'aging' | 'account';
@@ -152,10 +152,10 @@ export class StatementsPage {
   }
 
   protected print(): void {
-    window.print();
+    this.savePdf('print');
   }
 
-  protected savePdf(): void {
+  protected savePdf(mode: FileDelivery = 'save'): void {
     const target = this.pdfTarget();
     if (target === null) return;
 
@@ -164,7 +164,7 @@ export class StatementsPage {
 
     this.api.blob(target.path, target.query as never).subscribe({
       next: (blob) => {
-        saveFile(blob, target.filename);
+        deliverFile(mode, blob, target.filename);
         this.saving.set(false);
       },
       error: () => {

@@ -8,10 +8,11 @@ use App\Domain\Customer\DTO\CustomerData;
 use App\Domain\Customer\Models\Customer;
 use App\Domain\Customer\Services\CustomerService;
 use App\Domain\Delivery\DTO\ProofData;
+use App\Domain\Printing\Printables\TripTicketChecklistPrintable;
+use App\Domain\Printing\Printables\TripTicketPrintable;
+use App\Domain\Printing\Services\PrintRenderer;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Http\Controllers\ApiController;
-use App\Domain\Tenancy\Services\LogoStore;
-use App\Domain\Tenancy\Support\Tenant;
 use App\Domain\Trip\DTO\TripData;
 use App\Domain\Trip\Models\Trip;
 use App\Domain\Trip\Requests\ConfirmTripRequest;
@@ -22,7 +23,6 @@ use App\Domain\Trip\Services\TripCostService;
 use App\Domain\Trip\Services\TripHistoryService;
 use App\Domain\Trip\Services\TripService;
 use App\Domain\Trip\Services\TripTicketService;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -63,20 +63,19 @@ class TripController extends ApiController
         return $this->payload($tickets->build($trip));
     }
 
-    public function ticketPdf(Trip $trip, TripTicketService $tickets, LogoStore $logos, Tenant $tenant): Response
-    {
+    public function ticketPdf(
+        Trip $trip,
+        TripTicketService $tickets,
+        TripTicketPrintable $front,
+        TripTicketChecklistPrintable $checklist,
+        PrintRenderer $renderer,
+    ): Response {
         $ticket = $tickets->build($trip);
-        $zone = Trip::REFERENCE_TIMEZONE;
 
-        $pdf = Pdf::loadView('pdf.trip-ticket', [
-            't' => $ticket,
-            'logo' => $logos->dataUri($tenant->company()?->logo_path),
-            'date' => static fn (?string $v, string $format = 'F j, Y'): string => $v ? Carbon::parse($v)->format($format) : '',
-            'stamp' => static fn (?string $v): string => $v ? Carbon::parse($v)->timezone($zone)->format('M j, Y, g:i A') : '',
-            'amount' => static fn (?int $cents): string => $cents ? number_format($cents / 100, 2) : '',
-        ])->setPaper('a4', 'portrait');
-
-        return $pdf->download('trip-ticket-'.$ticket['trip']['reference'].'.pdf');
+        return $renderer->downloadParts(
+            [[$front, $front->data($ticket)], [$checklist, $checklist->data($ticket)]],
+            'trip-ticket-'.$ticket['trip']['reference'].'.pdf',
+        );
     }
 
     public function store(TripRequest $request): JsonResponse

@@ -5,7 +5,7 @@ import { AssetService } from '../../services/asset/asset.service';
 import { BarRow, BarRows } from '../../shared/bar-rows';
 import { Card } from '../../shared/card';
 import { fmt } from '../../shared/format';
-import { saveFile } from '../../shared/save-file';
+import { FileDelivery, deliverFile } from '../../shared/save-file';
 import { ErrorState } from '../../shared/states';
 import { AssetStats } from './asset-stats';
 
@@ -204,16 +204,16 @@ export class AssetReportPage {
   }
 
   protected print(): void {
-    window.print();
+    this.savePdf('print');
   }
 
-  protected savePdf(): void {
+  protected savePdf(mode: FileDelivery = 'save'): void {
     this.saving.set(true);
     this.pdfError.set(null);
 
     this.assets.reportPdf().subscribe({
       next: (blob) => {
-        saveFile(blob, `asset-report-${new Date().toLocaleDateString('en-CA')}.pdf`);
+        deliverFile(mode, blob, `asset-report-${new Date().toLocaleDateString('en-CA')}.pdf`);
         this.saving.set(false);
       },
       error: () => {

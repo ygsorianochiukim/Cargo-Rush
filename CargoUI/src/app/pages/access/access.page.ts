@@ -12,12 +12,6 @@ import {
   Role,
 } from '../../models/identity/access.model';
 import { AccessService } from '../../services/identity/access.service';
-import { IdentityService } from '../../services/identity/identity.service';
-import { PayrollCutoffCard } from './payroll-cutoff-card';
-import { BenefitsCard } from './benefits-card';
-import { CategoriesCard } from './categories-card';
-import { RatesCard } from './rates-card';
-import { YardCard } from './yard-card';
 import { Card } from '../../shared/card';
 import { Confirm } from '../../shared/confirm';
 import { Field } from '../../shared/field';
@@ -29,30 +23,13 @@ import { StatusPill } from '../../shared/status-pill';
 @Component({
   selector: 'app-access',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [
-    Card,
-    PayrollCutoffCard,
-    BenefitsCard,
-    CategoriesCard,
-    RatesCard,
-    YardCard,
-    Field,
-    Icon,
-    Modal,
-    ErrorState,
-    SkeletonRows,
-    StatusPill,
-    ReactiveFormsModule,
-  ],
+  imports: [Card, Field, Icon, Modal, ErrorState, SkeletonRows, StatusPill, ReactiveFormsModule],
   templateUrl: './access.page.html',
 })
 export class AccessPage {
   private readonly accessApi = inject(AccessService);
   private readonly confirm = inject(Confirm);
   private readonly fb = inject(FormBuilder);
-  private readonly identity = inject(IdentityService);
-
-  protected readonly canManageCompany = signal(this.identity.has('company.manage'));
 
   protected readonly inputClass =
     'h-10 w-full rounded-control border border-cr-line bg-cr-surface px-3 text-[14px] text-cr-ink placeholder:text-cr-ink-muted focus:border-cr-blue focus:outline-none';

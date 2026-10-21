@@ -17,7 +17,7 @@ import { Card } from '../../shared/card';
 import { Confirm } from '../../shared/confirm';
 import { Field } from '../../shared/field';
 import { fmt } from '../../shared/format';
-import { saveFile } from '../../shared/save-file';
+import { FileDelivery, deliverFile } from '../../shared/save-file';
 import { Icon } from '../../shared/icon';
 import { EmptyState, ErrorState } from '../../shared/states';
 
@@ -363,7 +363,7 @@ export class PayrollPage {
       : `Nothing on this payslip — this firm takes the whole month on the ${run.is_first_cutoff ? 'second' : 'first'} cutoff.`;
 
     const notEnrolled = (agency: string) =>
-      `Not deducted — this person is not enrolled with ${agency}. Change that on the Benefits card in Access Control.`;
+      `Not deducted — this person is not enrolled with ${agency}. Change that on the Benefits page.`;
 
     const parts: Part[] = [
       {
@@ -643,10 +643,10 @@ export class PayrollPage {
   }
 
   protected print(): void {
-    window.print();
+    this.savePdf('print');
   }
 
-  protected savePdf(): void {
+  protected savePdf(mode: FileDelivery = 'save'): void {
     const run = this.run();
     if (run === null) return;
 
@@ -661,7 +661,7 @@ export class PayrollPage {
           ? `payslip-${run.reference}-${slip.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.pdf`
           : `payroll-${run.reference}.pdf`;
 
-        saveFile(blob, name);
+        deliverFile(mode, blob, name);
         this.savingPdf.set(false);
       },
       error: () => {

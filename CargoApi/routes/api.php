@@ -43,6 +43,7 @@ use App\Domain\Payroll\Controllers\PayrollController;
 use App\Domain\Payroll\Controllers\PayrollCutoffRequestController;
 use App\Domain\Payroll\Controllers\StoreCreditController;
 use App\Domain\Pricing\Controllers\PricingController;
+use App\Domain\Printing\Controllers\PrintableController;
 use App\Domain\Supplier\Controllers\SupplierCategoryController;
 use App\Domain\Supplier\Controllers\SupplierController;
 use App\Domain\Tenancy\Controllers\CarrierController;
@@ -1112,6 +1113,13 @@ Route::prefix('v1')->group(function (): void {
              * way past.
              */
             Route::match(['put', 'patch'], '/', [CompanyController::class, 'update']);
+
+            Route::get('printables', [PrintableController::class, 'index']);
+            Route::get('printables/{printable}', [PrintableController::class, 'show']);
+            Route::put('printables/{printable}', [PrintableController::class, 'update']);
+            Route::delete('printables/{printable}', [PrintableController::class, 'reset']);
+            Route::post('printables/{printable}/preview.pdf', [PrintableController::class, 'preview']);
+            Route::post('printables/images', [PrintableController::class, 'storeImage']);
 
             Route::post('logo', [CompanyController::class, 'storeLogo']);
             Route::delete('logo', [CompanyController::class, 'destroyLogo']);

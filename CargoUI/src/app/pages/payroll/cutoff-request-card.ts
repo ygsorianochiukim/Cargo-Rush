@@ -36,7 +36,7 @@ import { Modal } from '../../shared/modal';
           }
 
           @if (canDecide()) {
-            <p class="cr-meta mt-2">Approve or decline it on Access Control.</p>
+            <p class="cr-meta mt-2">Approve or decline it on the Benefits page.</p>
           } @else if (mine(request)) {
             <button
               type="button"
@@ -50,7 +50,7 @@ import { Modal } from '../../shared/modal';
         </div>
       } @else if (canDecide()) {
         <p class="cr-meta mt-2">
-          You can change this yourself on Access Control, under Payroll cutoff.
+          You can change this yourself on the Benefits page, under Payroll cutoff.
         </p>
       } @else {
         <button

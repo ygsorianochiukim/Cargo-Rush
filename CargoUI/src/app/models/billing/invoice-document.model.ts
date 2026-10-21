@@ -25,6 +25,7 @@ export interface InvoiceDocumentHead {
   id: string;
   number: string;
   title: string;
+  title_key: InvoiceTitleKey;
   direction: string;
   issued_at: string | null;
   due_at: string | null;
@@ -74,10 +75,64 @@ export interface InvoiceDocumentPayment {
 }
 
 export interface InvoiceDocument {
+  template: InvoiceTemplate;
   issuer: InvoiceIssuer;
   bill_to: InvoiceBillTo;
   document: InvoiceDocumentHead;
   lines: InvoiceDocumentLine[];
   totals: InvoiceDocumentTotals;
   payments: InvoiceDocumentPayment[];
+}
+
+export type InvoiceTitleKey = 'sales' | 'delivery' | 'bill';
+
+export type InvoiceLabelKey =
+  | 'billed_to'
+  | 'issued'
+  | 'due'
+  | 'terms'
+  | 'currency'
+  | 'lines_heading'
+  | 'col_description'
+  | 'col_reference'
+  | 'col_delivered'
+  | 'col_weight'
+  | 'col_amount'
+  | 'amount_in_words'
+  | 'net_of_vat'
+  | 'vat'
+  | 'invoice_total'
+  | 'amount_payable'
+  | 'received'
+  | 'balance_due'
+  | 'payments_heading'
+  | 'issued_by'
+  | 'received_by'
+  | 'received_by_hint';
+
+export type InvoiceShowKey =
+  | 'logo'
+  | 'address'
+  | 'contact'
+  | 'tin'
+  | 'status'
+  | 'terms'
+  | 'currency'
+  | 'reference'
+  | 'delivered'
+  | 'weight'
+  | 'unit_driver'
+  | 'amount_in_words'
+  | 'payments'
+  | 'signatures'
+  | 'footer';
+
+export interface InvoiceTemplate {
+  accent: string;
+  titles: Record<InvoiceTitleKey, string>;
+  labels: Record<InvoiceLabelKey, string>;
+  show: Record<InvoiceShowKey, boolean>;
+  fields: { label: string; value: string }[];
+  blocks: { title: string; body: string }[];
+  footer: string | null;
 }

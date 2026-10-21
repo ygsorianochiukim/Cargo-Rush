@@ -11,11 +11,10 @@ use App\Domain\Billing\Services\BillingService;
 use App\Domain\Billing\Services\InvoiceDocumentService;
 use App\Domain\Billing\Services\StatementOfAccountService;
 use App\Domain\Customer\Models\Customer;
+use App\Domain\Printing\Printables\InvoicePrintable;
+use App\Domain\Printing\Services\PrintRenderer;
 use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Http\Controllers\ApiController;
-use App\Domain\Tenancy\Services\LogoStore;
-use App\Domain\Tenancy\Support\Tenant;
-use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -64,19 +63,11 @@ class BillingController extends ApiController
         return $this->payload($this->documents->build($invoice));
     }
 
-    public function documentPdf(Invoice $invoice, Tenant $tenant, LogoStore $logos): Response
+    public function documentPdf(Invoice $invoice, InvoicePrintable $printable, PrintRenderer $renderer): Response
     {
         $doc = $this->documents->build($invoice);
 
-        $pdf = Pdf::loadView('pdf.invoice', [
-            'doc' => $doc,
-            'logo' => $logos->dataUri($tenant->company()?->logo_path),
-            'money' => static fn (?int $cents): string => ($doc['document']['currency'] ?? 'PHP').' '
-                .number_format(($cents ?? 0) / 100, 2),
-            'date' => static fn (?string $value): string => $value === null ? '—' : Carbon::parse($value)->format('M j, Y'),
-        ])->setPaper('a4', 'portrait');
-
-        return $pdf->download(($doc['document']['number'] ?? 'invoice').'.pdf');
+        return $renderer->download($printable, $printable->data($doc), ($doc['document']['number'] ?? 'invoice').'.pdf');
     }
 
     public function export(Request $request): StreamedResponse
