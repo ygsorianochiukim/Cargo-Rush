@@ -7,6 +7,8 @@ namespace App\Domain\Asset\Services;
 use App\Domain\Asset\Models\Asset;
 use App\Domain\Asset\Models\AssetTurnover;
 use App\Domain\Asset\Repositories\AssetRepository;
+use App\Domain\Finance\Models\Expense;
+use App\Domain\Finance\Models\ExpenseCategory;
 use App\Domain\Shared\DTO\Data;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Repositories\Repository;
@@ -17,6 +19,8 @@ use Illuminate\Validation\ValidationException;
 
 class AssetService extends CrudService
 {
+    public const EXPENSE_CATEGORY_KEY = 'assets';
+
     public function __construct(
         private readonly AssetRepository $assets,
         private readonly AssetTagger $tagger,
@@ -61,7 +65,11 @@ class AssetService extends CrudService
                 ]);
             }
 
-            return $this->assets->findOrFail($asset->id);
+            /** @var Asset $asset */
+            $asset = $this->assets->findOrFail($asset->id);
+            $this->syncPurchase($asset);
+
+            return $asset;
         });
     }
 
@@ -82,9 +90,76 @@ class AssetService extends CrudService
             ]);
         }
 
-        $model->update($attributes);
+        return DB::transaction(function () use ($model, $attributes): Asset {
+            $model->update($attributes);
 
-        return $this->assets->findOrFail($model->id);
+            /** @var Asset $asset */
+            $asset = $this->assets->findOrFail($model->id);
+            $this->syncPurchase($asset);
+
+            return $asset;
+        });
+    }
+
+    public function delete(Model $model): void
+    {
+        DB::transaction(function () use ($model): void {
+            Expense::query()->where('asset_id', $model->getKey())->get()->each->delete();
+            parent::delete($model);
+        });
+    }
+
+    private function syncPurchase(Asset $asset): void
+    {
+        $expense = Expense::withTrashed()->where('asset_id', $asset->id)->latest()->first();
+        $cost = (int) ($asset->cost_cents ?? 0);
+
+        if ($cost <= 0) {
+            if ($expense !== null && ! $expense->trashed()) {
+                $expense->delete();
+            }
+
+            return;
+        }
+
+        $attributes = [
+            'category_id' => $this->purchaseCategory()->getKey(),
+            'supplier_id' => $asset->supplier_id,
+            'date' => ($asset->purchased_on ?? $asset->created_at ?? now())->toDateString(),
+            'amount_cents' => $cost,
+            'currency' => 'PHP',
+            'payee' => $asset->supplier?->name,
+            'reference' => $asset->tag,
+            'note' => sprintf('Purchase of %s', $asset->name),
+        ];
+
+        if ($expense === null) {
+            Expense::create([
+                ...$attributes,
+                'asset_id' => $asset->id,
+                'status' => StatusValue::Active->value,
+                'recorded_by' => auth()->id(),
+            ]);
+
+            return;
+        }
+
+        if ($expense->trashed()) {
+            $expense->restore();
+        }
+
+        $expense->update($attributes);
+    }
+
+    private function purchaseCategory(): ExpenseCategory
+    {
+        return ExpenseCategory::firstOrCreate(['key' => self::EXPENSE_CATEGORY_KEY], [
+            'name' => 'Assets & Equipment',
+            'description' => 'Laptops, radios, tools and furniture entered in the asset register.',
+            'icon' => 'clipboard',
+            'account_code' => '1600',
+            'position' => 85,
+        ]);
     }
 
     /** @param array<string, mixed> $input */

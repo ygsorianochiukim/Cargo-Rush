@@ -28,6 +28,7 @@ class ExpenseCategory extends Model
         'internet-phone' => '5210',
         'rent' => '5210',
         'truck-rental' => '5215',
+        'assets' => '1600',
         'repairs' => '5050',
         'fuel' => '5010',
         'supplies' => '5900',

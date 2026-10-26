@@ -56,6 +56,11 @@ class TripResource extends ApiResource
                 ->all(),
             'vehicle_id' => $this->vehicle_id,
             'vehicle_plate' => $this->vehicle?->plate,
+            'vehicle_driver_id' => $this->vehicle?->driver_id,
+            'vehicle_driver_name' => $this->vehicle?->driver?->name,
+            'driver_swapped' => $this->vehicle?->driver_id !== null
+                && $this->driver_id !== null
+                && $this->driver_id !== $this->vehicle->driver_id,
 
             'hauled_by' => $this->hauledByPartner() ? 'trucker' : 'company',
             'trucker_id' => $this->trucker_id,

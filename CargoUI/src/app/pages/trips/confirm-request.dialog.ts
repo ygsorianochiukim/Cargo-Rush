@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, model, output, signal } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { Driver } from '../../models/driver/driver.model';
@@ -82,21 +82,6 @@ import { Modal } from '../../shared/modal';
       }
 
       <form [formGroup]="form" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <app-field label="Driver" required [error]="errorFor('driver_id')">
-          <select formControlName="driver_id" [class]="inputClass">
-            <option value="">Select a driver…</option>
-            @for (d of drivers(); track d.id) {
-              <option [value]="d.id">{{ d.name }}</option>
-            }
-          </select>
-        </app-field>
-
-        <app-helper-picker
-          hint="Optional — add as many as the load needs."
-          [drivers]="helperChoices()"
-          [driverId]="driverId()"
-          [(value)]="helpers" />
-
         <app-field label="Vehicle" required [error]="errorFor('vehicle_id')">
           <select formControlName="vehicle_id" [class]="inputClass">
             <option value="">Select a vehicle…</option>
@@ -105,6 +90,65 @@ import { Modal } from '../../shared/modal';
             }
           </select>
         </app-field>
+
+        @if (assignedDriver(); as assigned) {
+          <app-field
+            label="Driver"
+            required
+            [error]="errorFor('driver_id')"
+            [hint]="
+              swapping()
+                ? 'For this trip only. ' + assigned.name + ' stays assigned to ' + vehicleLabel() + '.'
+                : 'Assigned to ' + vehicleLabel() + '. Swapping changes this trip only.'
+            ">
+            @if (swapping()) {
+              <div class="flex items-center gap-2">
+                <select formControlName="driver_id" [class]="inputClass">
+                  <option value="">Select a driver…</option>
+                  @for (d of drivers(); track d.id) {
+                    <option [value]="d.id">{{ d.name }}</option>
+                  }
+                </select>
+                <button
+                  type="button"
+                  class="h-10 flex-none rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+                  (click)="keepAssigned()">
+                  Use {{ assigned.name }}
+                </button>
+              </div>
+            } @else {
+              <div
+                class="flex h-10 items-center justify-between gap-2 rounded-control border border-cr-line bg-cr-tint px-3 text-[14px]">
+                <span class="truncate font-semibold">{{ assigned.name }}</span>
+                <button
+                  type="button"
+                  class="flex-none text-[12px] font-semibold text-cr-blue hover:underline"
+                  (click)="swapping.set(true)">
+                  Swap driver for this trip
+                </button>
+              </div>
+            }
+          </app-field>
+        } @else {
+          <app-field
+            label="Driver"
+            required
+            [error]="errorFor('driver_id')"
+            [hint]="vehicleId() ? 'This truck has no driver assigned, so name one here.' : ''">
+            <select formControlName="driver_id" [class]="inputClass">
+              <option value="">Select a driver…</option>
+              @for (d of drivers(); track d.id) {
+                <option [value]="d.id">{{ d.name }}</option>
+              }
+            </select>
+          </app-field>
+        }
+
+        <app-helper-picker
+          hint="Optional — add as many as the load needs."
+          [drivers]="helperChoices()"
+          [driverId]="driverId()"
+          [(value)]="helpers" />
 
         <app-field
           label="Scheduled"
@@ -196,6 +240,39 @@ export class ConfirmRequestDialog {
     initialValue: this.form.controls.driver_id.value,
   });
 
+  protected readonly vehicleId = toSignal(this.form.controls.vehicle_id.valueChanges, {
+    initialValue: this.form.controls.vehicle_id.value,
+  });
+
+  protected readonly swapping = signal(false);
+
+  private readonly chosenVehicle = computed(() => {
+    const id = this.vehicleId();
+
+    return id ? (this.vehicles().find((v) => v.id === id) ?? null) : null;
+  });
+
+  protected readonly assignedDriver = computed(() => {
+    const vehicle = this.chosenVehicle();
+
+    if (!vehicle?.driver_id) return null;
+
+    return { id: vehicle.driver_id, name: vehicle.driver_name ?? 'the assigned driver' };
+  });
+
+  protected readonly vehicleLabel = computed(() => this.chosenVehicle()?.plate ?? 'this truck');
+
+  private resetting = false;
+
+  protected keepAssigned(): void {
+    const assigned = this.assignedDriver();
+
+    if (assigned === null) return;
+
+    this.form.controls.driver_id.setValue(assigned.id);
+    this.swapping.set(false);
+  }
+
   protected kilometres(metres: number): number {
     return Math.ceil(metres / 1000);
   }
@@ -229,12 +306,26 @@ export class ConfirmRequestDialog {
         .subscribe((res) => this.zones.set(res.data));
     }
 
+    this.form.controls.vehicle_id.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe((id) => {
+        if (this.resetting) return;
+
+        const vehicle = this.vehicles().find((v) => v.id === id);
+
+        if (vehicle?.driver_id) {
+          this.form.controls.driver_id.setValue(vehicle.driver_id);
+          this.swapping.set(false);
+        }
+      });
+
     effect(() => {
       if (!this.open()) return;
 
       const request = this.trip();
 
       this.error.set(null);
+      this.resetting = true;
       this.form.reset({
         driver_id: request?.driver_id ?? '',
         vehicle_id: request?.vehicle_id ?? '',
@@ -242,6 +333,12 @@ export class ConfirmRequestDialog {
         weight_kg: request?.weight_kg ?? 0,
         zone_id: request?.zone_pinned ? (request.pricing_zone_id ?? '') : '',
       });
+      this.resetting = false;
+
+      const assigned = this.assignedDriver();
+      this.swapping.set(assigned !== null && !!request?.driver_id && request.driver_id !== assigned.id);
+
+      if (assigned !== null && !request?.driver_id) this.form.controls.driver_id.setValue(assigned.id);
 
       this.helpers.set(request?.helper_ids ?? []);
     });

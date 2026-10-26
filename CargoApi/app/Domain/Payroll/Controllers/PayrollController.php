@@ -14,6 +14,7 @@ use App\Domain\Payroll\Support\PayPeriod;
 use App\Domain\Printing\Printables\PayrollRegisterPrintable;
 use App\Domain\Printing\Printables\PayslipPrintable;
 use App\Domain\Printing\Services\PrintRenderer;
+use App\Domain\Shared\Enums\PayrollScope;
 use App\Domain\Shared\Http\Controllers\ApiController;
 use App\Domain\Tenancy\Support\Tenant;
 use Illuminate\Http\JsonResponse;
@@ -30,7 +31,12 @@ class PayrollController extends ApiController
 
     public function index(Request $request): JsonResponse
     {
-        $runs = $this->payroll->paginate($this->filters($request), $this->perPage($request));
+        $scope = $request->query('scope');
+
+        $runs = $this->payroll->paginate([
+            ...$this->filters($request),
+            ...(in_array($scope, PayrollScope::values(), true) ? ['scope' => $scope] : []),
+        ], $this->perPage($request));
 
         return $this->collection(PayRunResource::collection($runs), $runs);
     }
@@ -90,6 +96,7 @@ class PayrollController extends ApiController
     public function store(Request $request): JsonResponse
     {
         $validated = $request->validate([
+            'scope' => ['sometimes', Rule::in(PayrollScope::values())],
             'period_start' => ['required', 'date'],
             'period_end' => ['required', 'date', 'after_or_equal:period_start'],
             'pay_date' => ['sometimes', 'date'],
@@ -115,6 +122,7 @@ class PayrollController extends ApiController
             $period->end,
             $payDate,
             $this->user($request),
+            scope: PayrollScope::from($validated['scope'] ?? PayrollScope::Office->value),
         );
 
         return $this->item(new PayRunResource($run), status: 201);

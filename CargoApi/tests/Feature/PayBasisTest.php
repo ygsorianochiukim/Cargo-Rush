@@ -87,6 +87,7 @@ beforeEach(function (): void {
 
     $this->open = fn (array $overrides = []) => $this->actingAs($this->admin)
         ->postJson('/api/v1/payroll', [
+            'scope' => 'crew',
             'period_start' => '2026-09-01',
             'period_end' => '2026-09-15',
             'pay_date' => '2026-09-15',
@@ -304,7 +305,7 @@ describe('paying a daily rate', function (): void {
 });
 
 describe('alongside the salaried', function (): void {
-    it('puts both kinds on one run, each worked out its own way', function (): void {
+    it('keeps the office and the crew on runs of their own, each worked out its own way', function (): void {
         $this->actingAs($this->admin)->postJson('/api/v1/employees', [
             'first_name' => 'Elena', 'last_name' => 'Bautista', 'position' => 'Office Staff',
             'contact' => '0917 555 0199', 'hired_on' => '2026-01-05',
@@ -314,14 +315,16 @@ describe('alongside the salaried', function (): void {
         $driver = ($this->hireDriver)();
         ($this->haul)('2026-09-03', $driver->driver_id);
 
-        $lines = collect(($this->open)()->assertCreated()->json('data.lines'))->keyBy('name');
+        $office = collect(($this->open)(['scope' => 'office'])->assertCreated()->json('data.lines'))->keyBy('name');
+        $crew = collect(($this->open)()->assertCreated()->json('data.lines'))->keyBy('name');
 
-        expect($lines)->toHaveCount(2)
-            ->and($lines['Elena Bautista']['basic_cents'])->toBe(1_500_000)
-            ->and($lines['Elena Bautista']['pay_basis'])->toBe('monthly')
-            ->and($lines['Elena Bautista']['trips'])->toBe(0)
-            ->and($lines['Marco Villanueva']['basic_cents'])->toBe(150_000)
-            ->and($lines['Marco Villanueva']['pay_basis'])->toBe('per_trip');
+        expect($office)->toHaveCount(1)
+            ->and($office['Elena Bautista']['basic_cents'])->toBe(1_500_000)
+            ->and($office['Elena Bautista']['pay_basis'])->toBe('monthly')
+            ->and($office['Elena Bautista']['trips'])->toBe(0)
+            ->and($crew)->toHaveCount(1)
+            ->and($crew['Marco Villanueva']['basic_cents'])->toBe(150_000)
+            ->and($crew['Marco Villanueva']['pay_basis'])->toBe('per_trip');
     });
 
     it('keeps a monthly employee with no figure off the run', function (): void {

@@ -1,0 +1,337 @@
+<div class="grid grid-cols-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+  <app-card heading="Drivers and helpers" icon="profile" [padded]="false">
+    <div class="border-b border-cr-line/70 p-3">
+      <input
+        type="search"
+        [class]="inputClass"
+        placeholder="Search by name or number…"
+        [value]="search()"
+        (input)="search.set($any($event.target).value)"
+      />
+    </div>
+
+    @if (rosterError(); as message) {
+      <div class="p-4"><app-error-state [message]="message" (retry)="loadRoster()" /></div>
+    } @else if (roster() === null) {
+      <div class="p-4"><app-skeleton-rows [count]="6" /></div>
+    } @else if (shown().length === 0) {
+      <div class="p-4">
+        <app-empty-state
+          icon="profile"
+          title="Nobody on the crew"
+          body="Only company personnel on Drivers and Helpers appear here. A sub-contractor’s driver is paid by them, so they are never listed."
+        />
+      </div>
+    } @else {
+      <div class="flex flex-col divide-y divide-cr-line/70">
+        @for (row of shown(); track row.employee_id) {
+          <button
+            type="button"
+            class="flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-cr-tint"
+            [class.bg-cr-tint]="chosen()?.employee_id === row.employee_id"
+            (click)="choose(row)"
+          >
+            <span
+              class="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-cr-blue/10 text-[12px] font-bold text-cr-blue"
+            >
+              {{ initials(row.name) }}
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-[14px] font-semibold">{{ row.name }}</span>
+              <span class="block text-[12px] text-cr-ink-muted">
+                {{ row.role_label }} · {{ row.pay_basis_label }}
+                @if (row.rate_cents > 0) {
+                  <span class="cr-num">· {{ fmt.pesos(row.rate_cents) }}</span>
+                }
+              </span>
+              <span class="block text-[12px] text-cr-ink-muted">
+                {{ row.last_cutoff.label }}:
+                <span class="cr-num">{{ row.last_cutoff.trips }}</span>
+                {{ row.last_cutoff.trips === 1 ? 'trip' : 'trips' }}
+                @if (row.pay_basis === 'daily') {
+                  · <span class="cr-num">{{ row.last_cutoff.days }}</span>
+                  {{ row.last_cutoff.days === 1 ? 'day' : 'days' }}
+                }
+              </span>
+              @if (row.holding_plate) {
+                <span
+                  class="mt-1 inline-flex items-center gap-1 rounded-full bg-cr-warning-bg px-2 py-[2px] text-[10px] font-semibold tracking-[0.04em] text-cr-warning uppercase"
+                >
+                  <app-icon name="fleet" [size]="11" />
+                  On {{ row.holding_plate }} · {{ row.holding_arrangement_label }}
+                </span>
+              }
+            </span>
+          </button>
+        }
+      </div>
+    }
+  </app-card>
+
+  <div class="flex flex-col gap-4">
+    <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+      <div class="flex flex-wrap items-end gap-3">
+        <app-field label="From month">
+          <input
+            type="month"
+            [class]="inputClass"
+            [value]="fromMonth()"
+            (change)="setRange('from', $any($event.target).value)"
+          />
+        </app-field>
+        <app-field label="To month">
+          <input
+            type="month"
+            [class]="inputClass"
+            [value]="toMonth()"
+            (change)="setRange('to', $any($event.target).value)"
+          />
+        </app-field>
+
+        @if (report(); as current) {
+          <div class="ml-auto grid grid-cols-3 gap-4 text-right">
+            <div>
+              <p class="cr-meta">Trips counted</p>
+              <p class="cr-num text-[20px] leading-none font-semibold">{{ current.totals.trips }}</p>
+              @if (current.totals.withheld_trips > 0) {
+                <p class="text-[11px] text-cr-ink-muted">
+                  {{ current.totals.withheld_trips }} withheld
+                </p>
+              }
+            </div>
+            @if (current.employee.pay_basis === 'daily') {
+              <div>
+                <p class="cr-meta">Days counted</p>
+                <p class="cr-num text-[20px] leading-none font-semibold">{{ current.totals.days }}</p>
+              </div>
+            } @else {
+              <div></div>
+            }
+            <div>
+              <p class="cr-meta">Pay due by the rate</p>
+              <p class="cr-num text-[20px] leading-none font-semibold text-cr-blue">
+                {{ fmt.pesos(current.totals.expected_cents) }}
+              </p>
+            </div>
+          </div>
+        }
+      </div>
+
+      @if (chosen(); as person) {
+        <p class="mt-3 text-[13px] text-cr-ink-muted">
+          <span class="font-semibold text-cr-ink">{{ person.name }}</span> · {{ person.role_label }} ·
+          {{ person.pay_basis_label }}
+          @if (person.rate_cents > 0) {
+            at <span class="cr-num">{{ fmt.pesos(person.rate_cents) }}</span>
+            {{ person.pay_basis === 'per_trip' ? 'a trip' : person.pay_basis === 'daily' ? 'a day' : 'a month' }}
+          }
+          @if (summary(); as s) {
+            · {{ s.cutoffs }} {{ s.cutoffs === 1 ? 'cutoff' : 'cutoffs' }}, {{ s.onRuns }} on a crew run
+            @if (s.disagree > 0) {
+              <span class="font-semibold text-cr-red">· {{ s.disagree }} differ from the run</span>
+            }
+          }
+        </p>
+      }
+    </div>
+
+    @if (error(); as message) {
+      <app-error-state [message]="message" (retry)="load()" />
+    } @else if (chosen() === null) {
+      <app-card>
+        <app-empty-state
+          icon="profile"
+          title="Pick somebody"
+          body="Choose a driver or helper on the left to see their trips, cutoff by cutoff, and what the rate says they are owed."
+        />
+      </app-card>
+    } @else if (loading() && report() === null) {
+      <app-card><app-skeleton-rows [count]="5" /></app-card>
+    } @else if (report(); as current) {
+      @for (cutoff of current.cutoffs; track cutoff.start) {
+        <article class="rounded-card bg-cr-surface shadow-card ring-1 ring-cr-line/60">
+          <button
+            type="button"
+            class="flex w-full flex-wrap items-center gap-x-4 gap-y-2 p-4 text-left"
+            [attr.aria-expanded]="isOpen(cutoff)"
+            (click)="toggle(cutoff)"
+          >
+            <app-icon
+              [name]="isOpen(cutoff) ? 'chevron-left' : 'chevron-right'"
+              [size]="16"
+              class="flex-none text-cr-ink-muted"
+            />
+            <span class="min-w-[180px] flex-1">
+              <span class="block text-[15px] font-semibold">{{ cutoff.label }}</span>
+              <span class="block text-[12px] text-cr-ink-muted">{{ formula(cutoff) }}</span>
+            </span>
+
+            <span class="text-right">
+              <span class="cr-meta block">Trips</span>
+              <span class="cr-num text-[15px] font-semibold">
+                {{ cutoff.counted_trips }}
+                @if (cutoff.withheld_trips > 0) {
+                  <span class="text-[12px] font-normal text-cr-ink-muted">+{{ cutoff.withheld_trips }} withheld</span>
+                }
+              </span>
+            </span>
+
+            <span class="text-right">
+              <span class="cr-meta block">Due by the rate</span>
+              <span class="cr-num text-[17px] font-bold text-cr-blue">{{ fmt.pesos(cutoff.expected_cents) }}</span>
+            </span>
+
+            <span class="text-right">
+              <span class="cr-meta block">On the run</span>
+              @if (cutoff.run?.on_run) {
+                <span class="cr-num text-[15px] font-semibold">{{ fmt.pesos(cutoff.run!.basic_cents ?? 0) }}</span>
+              } @else {
+                <span class="text-[13px] text-cr-ink-muted">—</span>
+              }
+            </span>
+
+            <span
+              class="rounded-full px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] uppercase"
+              [class]="runState(cutoff).tone"
+            >
+              {{ runState(cutoff).label }}
+            </span>
+          </button>
+
+          @if (isOpen(cutoff)) {
+            <div class="border-t border-cr-line/70 p-4">
+              @for (span of cutoff.hired_out; track span.from + span.plate) {
+                <p class="mb-3 flex items-start gap-2 rounded-control bg-cr-warning-bg px-3 py-2 text-[12px]">
+                  <app-icon name="fleet" [size]="14" class="mt-0.5 flex-none text-cr-warning" />
+                  <span class="min-w-0 flex-1">
+                    Assigned to <span class="cr-num font-semibold">{{ span.plate ?? 'a truck' }}</span>
+                    ({{ span.arrangement_label }}) from {{ fmt.date(span.from) }} to {{ fmt.date(span.to) }}.
+                    Trips and sheet days in that stretch are withheld — whoever hires the truck pays them.
+                  </span>
+                </p>
+              }
+
+              @if (cutoff.run; as run) {
+                @if (run.on_run && run.agrees === false) {
+                  <p class="mb-3 rounded-control bg-cr-red-bg px-3 py-2 text-[12px] text-cr-ink">
+                    <span class="font-semibold">{{ run.reference }} pays {{ fmt.pesos(run.basic_cents ?? 0) }}</span>
+                    for {{ run.trips }} {{ run.trips === 1 ? 'trip' : 'trips' }}, but the rate on the
+                    contract says {{ fmt.pesos(cutoff.expected_cents) }}. Trips were recorded or the
+                    assignment changed after the run was worked out — open the run and
+                    <em>Work out again</em>.
+                  </p>
+                }
+              }
+
+              <h3 class="cr-meta">Trips</h3>
+              @if (cutoff.trips.length === 0) {
+                <p class="mt-1 text-[13px] text-cr-ink-muted">No delivered trip names this person in this cutoff.</p>
+              } @else {
+                <table class="mt-2 w-full text-[13px]">
+                  <thead>
+                    <tr class="border-b border-cr-line/70 text-left">
+                      <th class="cr-meta py-1.5">Date</th>
+                      <th class="cr-meta py-1.5">Trip</th>
+                      <th class="cr-meta py-1.5">Route</th>
+                      <th class="cr-meta py-1.5">Truck</th>
+                      <th class="cr-meta py-1.5">Seat</th>
+                      <th class="cr-meta py-1.5 text-right">Rate</th>
+                      <th class="cr-meta py-1.5">Paid on</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-cr-line/50">
+                    @for (trip of cutoff.trips; track trip.id) {
+                      <tr [class.opacity-60]="!trip.counted">
+                        <td class="cr-num py-1.5">{{ fmt.date(trip.on) }}</td>
+                        <td class="cr-num py-1.5 font-semibold">{{ trip.reference }}</td>
+                        <td class="py-1.5">
+                          {{ trip.origin }} → {{ trip.destination }}
+                          @if (!trip.counted) {
+                            <span class="block text-[11px] text-cr-warning">Withheld · {{ trip.withheld_reason }}</span>
+                          }
+                        </td>
+                        <td class="cr-num py-1.5">{{ trip.plate ?? '—' }}</td>
+                        <td class="py-1.5">{{ seat(trip) }}</td>
+                        <td class="cr-num py-1.5 text-right">
+                          @if (cutoff.pay_basis === 'per_trip') {
+                            {{ trip.counted ? fmt.pesos(cutoff.rate_cents) : '—' }}
+                          } @else {
+                            —
+                          }
+                        </td>
+                        <td class="cr-num py-1.5 text-[12px]">
+                          @if (trip.paid_on_run) {
+                            {{ trip.paid_on_run }}
+                            <span class="text-cr-ink-muted">· {{ trip.paid_on_run_status }}</span>
+                          } @else {
+                            <span class="text-cr-ink-muted">not yet</span>
+                          }
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                  @if (cutoff.pay_basis === 'per_trip') {
+                    <tfoot>
+                      <tr class="border-t-2 border-cr-ink/20">
+                        <td class="py-2 font-bold" colspan="5">{{ formula(cutoff) }}</td>
+                        <td class="cr-num py-2 text-right font-bold">{{ fmt.pesos(cutoff.expected_cents) }}</td>
+                        <td></td>
+                      </tr>
+                    </tfoot>
+                  }
+                </table>
+              }
+
+              @if (cutoff.pay_basis === 'daily' || cutoff.sheet_days.length > 0) {
+                <h3 class="cr-meta mt-4">Truck sheet days</h3>
+                @if (cutoff.sheet_days.length === 0) {
+                  <p class="mt-1 text-[13px] text-cr-ink-muted">No sheet row names this person in this cutoff.</p>
+                } @else {
+                  <table class="mt-2 w-full text-[13px]">
+                    <thead>
+                      <tr class="border-b border-cr-line/70 text-left">
+                        <th class="cr-meta py-1.5">Date</th>
+                        <th class="cr-meta py-1.5">Unit</th>
+                        <th class="cr-meta py-1.5">Seat</th>
+                        <th class="cr-meta py-1.5 text-right">On the sheet</th>
+                        <th class="cr-meta py-1.5 text-right">Counted</th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-cr-line/50">
+                      @for (day of cutoff.sheet_days; track day.on + day.truck) {
+                        <tr [class.opacity-60]="!day.counted">
+                          <td class="cr-num py-1.5">{{ fmt.date(day.on) }}</td>
+                          <td class="py-1.5">{{ day.truck ?? '—' }}</td>
+                          <td class="py-1.5">{{ day.seat === 'driver' ? 'Drove' : 'Helper' }}</td>
+                          <td class="cr-num py-1.5 text-right">{{ fmt.pesos(day.salary_cents) }}</td>
+                          <td class="py-1.5 text-right">{{ day.counted ? 'Yes' : 'Withheld' }}</td>
+                        </tr>
+                      }
+                    </tbody>
+                    @if (cutoff.pay_basis === 'daily') {
+                      <tfoot>
+                        <tr class="border-t-2 border-cr-ink/20">
+                          <td class="py-2 font-bold" colspan="3">{{ formula(cutoff) }}</td>
+                          <td class="cr-num py-2 text-right font-bold">{{ fmt.pesos(cutoff.expected_cents) }}</td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    }
+                  </table>
+                }
+              }
+            </div>
+          }
+        </article>
+      } @empty {
+        <app-card>
+          <app-empty-state
+            icon="calendar"
+            title="No cutoffs in that range"
+            body="Widen the months above."
+          />
+        </app-card>
+      }
+    }
+  </div>
+</div>

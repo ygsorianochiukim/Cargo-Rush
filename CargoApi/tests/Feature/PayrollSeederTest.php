@@ -29,26 +29,35 @@ beforeEach(function (): void {
     $this->admin = User::where('email', 'admin@cargorush.ph')->firstOrFail();
 });
 
-it('builds a run every seeded person appears on', function (): void {
+it('builds an office run and a crew run every seeded person appears on', function (): void {
     $period = PayrollCalendar::default()->justClosed();
 
-    $run = $this->actingAs($this->admin)->postJson('/api/v1/payroll', [
+    $open = fn (string $scope): array => $this->actingAs($this->admin)->postJson('/api/v1/payroll', [
+        'scope' => $scope,
         'period_start' => $period->start->toDateString(),
         'period_end' => $period->end->toDateString(),
         'pay_date' => $period->cutoff()->toDateString(),
     ])->assertCreated()->json('data');
 
-    $lines = collect($run['lines'])->keyBy('name');
+    $office = $open('office');
+    $crew = $open('crew');
 
-    expect($run['staff_count'])->toBe(4)
-        ->and($lines['Elena Bautista']['basic_cents'])->toBe(750_000)
-        ->and($lines['Elena Bautista']['pay_basis'])->toBe('monthly')
-        ->and($lines['Rosa Lim']['basic_cents'])->toBe(1_100_000);
+    $staff = collect($office['lines'])->keyBy('name');
+    $lines = collect($crew['lines'])->keyBy('name');
 
-    expect($lines['Marco Villanueva']['pay_basis'])->toBe('per_trip')
+    expect($office['staff_count'])->toBe(2)
+        ->and($office['reference'])->toStartWith('PR-')
+        ->and($staff['Elena Bautista']['basic_cents'])->toBe(750_000)
+        ->and($staff['Elena Bautista']['pay_basis'])->toBe('monthly')
+        ->and($staff['Rosa Lim']['basic_cents'])->toBe(1_100_000);
+
+    expect($crew['staff_count'])->toBe(2)
+        ->and($crew['reference'])->toStartWith('CP-')
+        ->and($lines['Marco Villanueva']['pay_basis'])->toBe('per_trip')
         ->and($lines['Marco Villanueva']['basic_cents'])->toBe(750_000)
         ->and($lines['Marco Villanueva']['trips'])->toBe(5)
         ->and($lines['Marco Villanueva']['sheet_days'])->toBe(5)
+        ->and($lines['Marco Villanueva']['trip_details'])->toHaveCount(5)
         ->and($lines['Jun Santos']['basic_cents'])->toBe(750_000)
         ->and($lines['Jun Santos']['trips'])->toBe(5)
         ->and($lines['Jun Santos']['sheet_days'])->toBe(5);

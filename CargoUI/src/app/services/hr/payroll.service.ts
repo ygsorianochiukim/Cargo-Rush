@@ -14,6 +14,7 @@ import {
   PayRunPayload,
   PayrollCutoffRequest,
   PayrollCutoffRequestPayload,
+  PayrollScope,
   StoreCredit,
   StoreCreditPayload,
   StoreCreditState,
@@ -21,6 +22,7 @@ import {
 import { Envelope, ListQuery } from '../../models/shared/envelope.model';
 
 export interface PayrollQuery extends ListQuery {
+  scope?: PayrollScope;
   status?: string;
   from?: string;
   to?: string;

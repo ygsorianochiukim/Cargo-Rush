@@ -43,8 +43,9 @@ beforeEach(function (): void {
             'pagibig_enrolled' => true,
         ])->assertCreated()->json('data');
 
-    $this->open = fn (string $start = '2026-09-01', string $end = '2026-09-15') => $this->actingAs($this->admin)
+    $this->open = fn (string $start = '2026-09-01', string $end = '2026-09-15', string $scope = 'office') => $this->actingAs($this->admin)
         ->postJson('/api/v1/payroll', [
+            'scope' => $scope,
             'period_start' => $start,
             'period_end' => $end,
             'pay_date' => $end,
@@ -166,7 +167,7 @@ describe('on the run', function (): void {
         ]);
         payContract($employee, 'monthly', 3_000_000);
 
-        $paid = ($this->payRun)(($this->open)());
+        $paid = ($this->payRun)(($this->open)('2026-09-01', '2026-09-15', 'crew'));
 
         $lines = collect(
             $this->actingAs($this->admin)
@@ -219,7 +220,7 @@ describe('in Finance', function (): void {
             'trip_income_cents' => 0, 'driver_salary_cents' => 600_000,
         ]);
 
-        $run = ($this->open)();
+        $run = ($this->open)('2026-09-01', '2026-09-15', 'crew');
 
         expect($run['employer_contributions']['total'])->toBe(73_000);
 

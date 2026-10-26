@@ -80,6 +80,7 @@ class PayrollCostService
                         $sheet[$line->getKey()] ?? 0,
                     )),
                     'due_on' => $run->pay_date?->toDateString(),
+                    'settle_at' => $run->scope()->route(),
                 ];
             }
 

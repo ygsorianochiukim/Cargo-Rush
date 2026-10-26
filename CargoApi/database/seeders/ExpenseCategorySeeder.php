@@ -23,6 +23,7 @@ class ExpenseCategorySeeder extends Seeder
             ['water', 'Water', 'Water district bill and delivered drinking water.', 'gauge', 82],
             ['internet-phone', 'Internet & Phone', 'Internet, landline and mobile load or postpaid plans.', 'bell', 83],
             ['rent', 'Rent', 'Office, yard or garage rent.', 'dashboard', 84],
+            ['assets', 'Assets & Equipment', 'Laptops, radios, tools and furniture entered in the asset register.', 'clipboard', 85],
             ['other', 'Other', 'Anything the list above has no place for yet.', 'wallet', 90],
         ];
 

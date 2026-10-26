@@ -38,6 +38,7 @@ class NavigationSeeder extends Seeder
             ['summary', 'Quarterly Summary', 'calendar', '/summary', 420, false, true, 'Reports', 'finance.view', null],
             ['truck-report', 'Truck Report', 'fleet', '/truck-report', 425, false, true, 'Reports', 'finance.view', null],
             ['sales', 'Sales Report', 'trend', '/sales', 430, false, true, 'Reports', 'sales.view', null],
+            ['crew-pay-report', 'Crew Pay Report', 'profile', '/crew-pay-report', 435, false, true, 'Reports', 'payroll.view', null],
 
             ['statements', 'Financial Statements', 'trend', '/statements', 500, false, true, 'Accounting', 'accounting.view', null],
             ['journal', 'General Journal', 'clipboard', '/journal', 510, false, true, 'Accounting', 'accounting.view', null],
@@ -49,7 +50,8 @@ class NavigationSeeder extends Seeder
             ['applicants', 'Applicants', 'inbox', '/applicants', 610, false, true, 'People', 'hr.view', 'applicants.open'],
             ['time-off', 'Leave & Undertime', 'calendar', '/time-off', 620, false, true, 'People', 'hr.view', 'timeoff.open'],
             ['performance', 'Performance', 'gauge', '/performance', 630, false, true, 'People', 'hr.view', null],
-            ['payroll', 'Payroll', 'wallet', '/payroll', 640, false, true, 'People', 'payroll.view', null],
+            ['payroll', 'Office Payroll', 'wallet', '/payroll', 640, false, true, 'People', 'payroll.view', null],
+            ['crew-payroll', 'Crew Payroll', 'route', '/payroll/crew', 645, false, true, 'People', 'payroll.view', null],
 
             ['asset-inventory', 'Asset Inventory', 'shipments', '/asset-inventory', 700, false, true, 'Custodian', 'assets.view', null],
             ['assets', 'Asset List', 'clipboard', '/assets', 710, false, true, 'Custodian', 'assets.view', null],

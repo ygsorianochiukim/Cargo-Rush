@@ -38,6 +38,7 @@ use App\Domain\Incident\Controllers\DriverIncidentController;
 use App\Domain\Incident\Controllers\IncidentController;
 use App\Domain\Inspection\Controllers\InspectionController;
 use App\Domain\Notification\Controllers\NotificationController;
+use App\Domain\Payroll\Controllers\CrewPayReportController;
 use App\Domain\Payroll\Controllers\PayComponentController;
 use App\Domain\Payroll\Controllers\PayrollController;
 use App\Domain\Payroll\Controllers\PayrollCutoffRequestController;
@@ -717,6 +718,9 @@ Route::prefix('v1')->group(function (): void {
                  */
                 Route::get('cutoff-requests', [PayrollCutoffRequestController::class, 'index']);
                 Route::get('cutoff-requests/pending', [PayrollCutoffRequestController::class, 'pending']);
+
+                Route::get('crew-report', [CrewPayReportController::class, 'index']);
+                Route::get('crew-report/{employee}', [CrewPayReportController::class, 'show']);
 
                 Route::get('{run}', [PayrollController::class, 'show']);
                 Route::get('{run}/document.pdf', [PayrollController::class, 'pdf']);

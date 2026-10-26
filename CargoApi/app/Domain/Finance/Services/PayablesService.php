@@ -268,7 +268,7 @@ class PayablesService
             'amount_cents' => $line['amount_cents'],
             'in_flight_cents' => 0,
             'due_on' => $line['due_on'],
-            'settle_at' => '/payroll',
+            'settle_at' => $line['settle_at'] ?? '/payroll',
         ], $this->payroll->owedAsOf(now()));
 
         return $this->group('payroll', 'Payroll', 'badge', $lines);

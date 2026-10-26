@@ -112,6 +112,16 @@
     <p role="alert" class="mt-3 text-[12px] font-medium text-cr-red">{{ message }}</p>
   }
 
+  <p class="mt-3 flex flex-wrap items-center gap-2 text-[13px] text-cr-ink-muted">
+    <span
+      class="rounded-full px-2 py-[2px] text-[10px] font-semibold tracking-[0.06em] uppercase"
+      [class]="isCrew() ? 'bg-cr-tint text-cr-blue' : 'bg-cr-success-bg text-cr-success'"
+    >
+      {{ scopeLabel() }}
+    </span>
+    <span class="min-w-0 flex-1">{{ scopeBlurb() }}</span>
+  </p>
+
   @if (periodSummary(); as summary) {
     <p class="mt-3 text-[13px] text-cr-ink-muted">{{ summary }}</p>
   }
@@ -351,6 +361,34 @@
             </div>
           </section>
 
+          @if (slip.crew && trips(slip).length > 0) {
+            <section class="border-t border-cr-ink/10 py-5">
+              <h2 class="cr-meta">Hauls this cutoff</h2>
+              <table class="mt-2 w-full text-[13px]">
+                <thead>
+                  <tr class="border-b border-cr-ink/10 text-left">
+                    <th class="cr-meta py-1.5">Date</th>
+                    <th class="cr-meta py-1.5">Trip</th>
+                    <th class="cr-meta py-1.5">Route</th>
+                    <th class="cr-meta py-1.5">Truck</th>
+                    <th class="cr-meta py-1.5 text-right">Seat</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-cr-ink/5">
+                  @for (trip of trips(slip); track trip.id) {
+                    <tr>
+                      <td class="cr-num py-1.5">{{ trip.on ? fmt.date(trip.on) : '—' }}</td>
+                      <td class="cr-num py-1.5 font-semibold">{{ trip.reference }}</td>
+                      <td class="py-1.5">{{ trip.origin }} → {{ trip.destination }}</td>
+                      <td class="cr-num py-1.5">{{ trip.plate ?? '—' }}</td>
+                      <td class="py-1.5 text-right">{{ seatLabel(trip) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </section>
+          }
+
           <section class="cr-totals border-t-2 border-cr-ink/20 pt-5">
             <div class="flex flex-wrap items-end justify-between gap-4">
               <p class="cr-meta">Take-home pay</p>
@@ -389,7 +427,8 @@
             >
               <div>
                 <h1 class="flex flex-wrap items-center gap-2 text-[20px] leading-tight font-bold">
-                  Pay for {{ current.period_label }}
+                  {{ current.scope === 'crew' ? 'Crew pay' : 'Office pay' }} for
+                  {{ current.period_label }}
                   <span
                     class="rounded-full px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] uppercase"
                     [class]="stateClass(current)"
@@ -866,6 +905,59 @@
                         </div>
                       </div>
 
+                      @if (line.crew) {
+                        <div class="border-t border-cr-line/70 px-4 py-4">
+                          <h3 class="cr-meta">
+                            Hauls this cutoff
+                            <span class="ml-1 font-normal normal-case tracking-normal">
+                              · {{ trips(line).length }}
+                              {{ trips(line).length === 1 ? 'trip' : 'trips' }} on record
+                            </span>
+                          </h3>
+                          @for (span of line.hired_out; track span.from + span.plate) {
+                            <p
+                              class="mt-2 flex items-start gap-2 rounded-control bg-cr-warning-bg px-3 py-2 text-[12px]"
+                            >
+                              <app-icon name="fleet" [size]="14" class="mt-0.5 flex-none text-cr-warning" />
+                              <span class="min-w-0 flex-1">
+                                Assigned to <span class="cr-num font-semibold">{{ span.plate ?? 'a truck' }}</span>
+                                ({{ span.arrangement_label }}) from {{ fmt.date(span.from) }} to
+                                {{ fmt.date(span.to) }}. Hauls and sheet days in that stretch are not paid
+                                here — whoever hires the truck pays them.
+                              </span>
+                            </p>
+                          }
+                          @if (trips(line).length > 0) {
+                            <table class="mt-2 w-full text-[13px]">
+                              <thead>
+                                <tr class="border-b border-cr-line/70 text-left">
+                                  <th class="cr-meta py-1.5">Date</th>
+                                  <th class="cr-meta py-1.5">Trip</th>
+                                  <th class="cr-meta py-1.5">Route</th>
+                                  <th class="cr-meta py-1.5">Truck</th>
+                                  <th class="cr-meta py-1.5 text-right">Seat</th>
+                                </tr>
+                              </thead>
+                              <tbody class="divide-y divide-cr-line/50">
+                                @for (trip of trips(line); track trip.id) {
+                                  <tr>
+                                    <td class="cr-num py-1.5">{{ trip.on ? fmt.date(trip.on) : '—' }}</td>
+                                    <td class="cr-num py-1.5 font-semibold">{{ trip.reference }}</td>
+                                    <td class="py-1.5">{{ trip.origin }} → {{ trip.destination }}</td>
+                                    <td class="cr-num py-1.5">{{ trip.plate ?? '—' }}</td>
+                                    <td class="py-1.5 text-right">{{ seatLabel(trip) }}</td>
+                                  </tr>
+                                }
+                              </tbody>
+                            </table>
+                          } @else {
+                            <p class="mt-1 text-[12px] text-cr-ink-muted">
+                              No delivered trip names this person between these two dates.
+                            </p>
+                          }
+                        </div>
+                      }
+
                       @if (current.can_edit) {
                         <p
                           class="cr-no-print border-t border-cr-line/70 px-4 py-2.5 text-[12px] text-cr-ink-muted"
@@ -882,7 +974,7 @@
                   <app-empty-state
                     icon="wallet"
                     title="Nobody is on this run"
-                    body="Only active employees with a monthly salary on record are paid here. A driver paid per trip is already in the daily truck sheet, so paying them here would pay them twice."
+                    [body]="nobodyCopy()"
                   />
                 }
               </section>
@@ -1088,9 +1180,7 @@
                     } @empty {
                       <tr>
                         <td class="py-8 text-center text-cr-ink-muted" colspan="13">
-                          Nobody is on this run. Only active employees with a monthly salary on
-                          record are paid here — a driver paid per trip is already in the daily
-                          truck sheet.
+                          Nobody is on this run. {{ nobodyCopy() }}
                         </td>
                       </tr>
                     }

@@ -221,7 +221,13 @@ a helper is a driver record without the keys. There is no separate helper screen
 | Licence number | Exactly as printed |
 | Licence expiry | The system warns you 90 days out |
 | LTMS violations | On record. Leave at 0 if none. |
+| Who they work for | **Company personnel** are yours and go on the Crew Payroll. **Sub-contractor's crew** drive a sub-contracted truck and are paid by the sub-contractor, not by you. |
 | Status | **Available** means free to be assigned a trip |
+
+**Who they work for decides who pays them.** Company personnel get an employee record the moment
+they are added, so Employees and the Crew Payroll know them. A sub-contractor's driver gets no
+employee record at all: they can be put on a truck and sent out on trips, but they never appear on
+a pay run — their boss pays them out of the share the system credits to the sub-contractor's wallet.
 
 > **Or register them in Employees instead, and skip this screen.** Registering
 > somebody into the **Driver** or **Helper** position asks for their licence and
@@ -242,10 +248,48 @@ a helper is a driver record without the keys. There is no separate helper screen
 | Capacity (kg) | Maximum load |
 | Odometer (km) | The reading **today** |
 | Next service at (km) | The reading at which it is next due |
-| Assigned driver | Who holds the keys. Leave empty if unassigned. |
+| Assigned driver | Who holds the keys. Leave empty if unassigned. On a sub-contracted truck, the sub-contractor's own driver, if they always send the same one. |
 
 Get the odometer right at this point. Everything about service intervals and fuel consumption is
 measured from it.
+
+**The assigned driver follows the truck onto a trip.** Pick the truck on a new trip and the driver
+box fills in with whoever is assigned to it, so a sub-contracted unit that always comes with its own
+driver needs no second choice. **Swap driver for this trip** lets the office put somebody else at the
+wheel for that one run — the truck keeps its assigned driver, and the next trip on it goes back to
+them. A truck with nobody assigned asks for a driver as before.
+
+### Paying your own crew — the Crew Payroll
+
+**Crew Payroll** sits beside **Office Payroll** under People, and the two are worked out, approved
+and paid separately, on runs of their own:
+
+| | Who is on it | Reference |
+| --- | --- | --- |
+| **Office Payroll** | Office and admin staff on a monthly salary | `PR-` |
+| **Crew Payroll** | Your own drivers and helpers — the ones marked *Company personnel* — paid per trip or per day on the truck sheet | `CP-` |
+
+**A driver holding a hired truck is not paid here for those days.** The system keeps a record of
+who was assigned to each truck and from when. While a company driver is the assigned driver of a
+rented, revenue-share or sub-contracted truck, the hauls and sheet days inside that stretch are left
+off their crew payslip — whoever hires the truck pays them for it. Days before they were assigned and
+after they were taken off still count, so moving somebody onto a hired unit mid-cutoff pays them for
+the part of the cutoff they drove for you. A driver who held a hired truck for the whole cutoff is
+left off the run altogether. The payslip says which truck and which dates were left out. Holding one
+of the fleet's own trucks changes nothing.
+
+**Checking a payslip against the rate — Reports → Crew Pay Report.** Every company driver and
+helper is listed with their rate and which hired truck they are holding, if any. Pick one and the
+page lays out their trips cutoff by cutoff: each haul with its date, route, truck and seat, the ones
+withheld (and why), the sheet days for somebody paid daily, and the pay the contract rate works out
+to — *3 trips × ₱1,500 = ₱4,500*. Where a crew run covers the cutoff it shows what the run actually
+paid and says **matches** or **differs**; a difference means trips were recorded or an assignment
+changed after the run was worked out, so open the run and *Work out again*.
+
+Both can cover the same cutoff; only two runs of the same kind cannot. Every crew payslip lists the
+hauls it is paying for — the date, the trip number, the route, the truck and whether the person
+drove or rode as helper — so the cutoff's trips are on record with the pay. A sub-contractor's driver
+is never on either run, whatever trips they drove.
 
 ### Step 3 — Customers
 

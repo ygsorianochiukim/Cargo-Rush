@@ -65,7 +65,7 @@ const CONDITION_LABEL: Record<string, string> = { good: 'Good', fair: 'Fair', da
         <app-data-table
           [columns]="columns"
           [rows]="shown()"
-          [minWidth]="960"
+          [minWidth]="1080"
           searchPlaceholder="Search tag, item, serial or location…"
           rowAction="Open asset"
           [deletable]="canManage"
@@ -238,7 +238,8 @@ export class AssetsPage {
   protected readonly label = (a: Asset) => (a.tag ? `${a.tag} · ${a.name}` : a.name);
 
   protected readonly columns: Column<Asset>[] = [
-    { label: 'Item', kind: 'strong', value: (a) => a.name, sub: (a) => a.tag },
+    { label: 'Asset ID', kind: 'strong', value: (a) => a.tag ?? '—' },
+    { label: 'Item', kind: 'strong', value: (a) => a.name },
     { label: 'Category', value: (a) => a.category_name },
     {
       label: 'Held by',

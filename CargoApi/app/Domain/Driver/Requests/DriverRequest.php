@@ -6,6 +6,7 @@ namespace App\Domain\Driver\Requests;
 
 use App\Domain\Driver\DTO\DriverData;
 use App\Domain\Driver\Models\Driver;
+use App\Domain\Shared\Enums\CrewEmployment;
 use App\Domain\Shared\Enums\CrewRole;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Http\Requests\ApiFormRequest;
@@ -21,6 +22,7 @@ class DriverRequest extends ApiFormRequest
         return [
             'user_id' => ['nullable', 'integer', 'exists:users,id'],
             'role' => ['sometimes', Rule::in(CrewRole::values())],
+            'employment' => ['sometimes', Rule::in(CrewEmployment::values())],
             'name' => [$required, 'string', 'max:120'],
             'contact' => ['nullable', 'string', 'max:40'],
             'licence_no' => [

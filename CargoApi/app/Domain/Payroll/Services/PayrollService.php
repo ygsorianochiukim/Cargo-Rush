@@ -18,10 +18,12 @@ use App\Domain\Payroll\Models\PayRunLineComponent;
 use App\Domain\Payroll\Models\PayRunLineTrip;
 use App\Domain\Payroll\Support\MonthlyShare;
 use App\Domain\Payroll\Support\PayrollCalendar;
+use App\Domain\Shared\Enums\CrewEmployment;
 use App\Domain\Shared\Enums\DeductionSchedule;
 use App\Domain\Shared\Enums\JournalCategory;
 use App\Domain\Shared\Enums\PayBasis;
 use App\Domain\Shared\Enums\PayComponentKind;
+use App\Domain\Shared\Enums\PayrollScope;
 use App\Domain\Shared\Enums\Role;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\Tone;
@@ -42,6 +44,7 @@ class PayrollService
         private readonly JournalService $journal,
         private readonly NotificationService $notifications,
         private readonly Tenant $tenant,
+        private readonly HiredOutCrew $hiredOut,
     ) {}
 
     /** @param array<string, mixed> $filters */
@@ -49,6 +52,10 @@ class PayrollService
     {
         return PayRun::query()
             ->with(['lines.components', 'approvedBy:id,name', 'journalEntry:id,reference'])
+            ->when(
+                ! empty($filters['scope']),
+                fn ($query) => $query->ofScope(PayrollScope::from((string) $filters['scope'])),
+            )
             ->when(
                 ! empty($filters['status']),
                 fn ($query) => $query->whereIn('status', (array) $filters['status']),
@@ -68,7 +75,15 @@ class PayrollService
     public function find(string $id): PayRun
     {
         return PayRun::query()
-            ->with(['lines.components', 'lines.employee:id,employee_no,first_name,last_name', 'approvedBy:id,name', 'journalEntry:id,reference'])
+            ->with([
+                'lines.components',
+                'lines.employee:id,employee_no,first_name,last_name,driver_id',
+                'lines.tripLinks.trip:id,reference,origin,destination,scheduled_at,driver_id,vehicle_id',
+                'lines.tripLinks.trip.vehicle:id,plate',
+                'lines.tripLinks.trip.deliveryLog:id,trip_id,delivered_at',
+                'approvedBy:id,name',
+                'journalEntry:id,reference',
+            ])
             ->findOrFail($id);
     }
 
@@ -78,21 +93,24 @@ class PayrollService
         Carbon $payDate,
         ?User $author = null,
         ?PayRun $existing = null,
+        PayrollScope $scope = PayrollScope::Office,
     ): PayRun {
         if ($existing !== null) {
             $this->mustBeOpen($existing);
+            $scope = $existing->scope();
         }
 
-        return DB::transaction(function () use ($periodStart, $periodEnd, $payDate, $author, $existing): PayRun {
+        return DB::transaction(function () use ($periodStart, $periodEnd, $payDate, $author, $existing, $scope): PayRun {
             $this->lockPayroll();
 
             if ($existing === null) {
-                $this->mustNotOverlap($periodStart, $periodEnd);
+                $this->mustNotOverlap($periodStart, $periodEnd, $scope);
             }
 
             $run = $existing ?? new PayRun;
 
             $run->fill([
+                'scope' => $scope->value,
                 'period_start' => $periodStart->toDateString(),
                 'period_end' => $periodEnd->toDateString(),
                 'pay_date' => $payDate->toDateString(),
@@ -116,7 +134,7 @@ class PayrollService
             $cutoff = $this->calendar()->classify($run->period_start, $run->period_end);
             $schedule = $this->schedule();
 
-            $payable = $this->payable($run->period_end);
+            $payable = $this->payable($run->period_end, $scope, $run->period_start);
             $sheet = $this->tripPay->forEmployees($payable, $run->period_start, $run->period_end);
 
             $earnings = [];
@@ -163,15 +181,37 @@ class PayrollService
                 );
             }
 
-            return $run->refresh()->load('lines.components');
+            return $this->find($run->getKey());
         });
     }
 
     /** @return Collection<int, Employee> */
-    public function payable(Carbon|string|null $on = null)
+    public function payable(Carbon|string|null $on = null, ?PayrollScope $scope = null, Carbon|string|null $from = null)
+    {
+        $people = $this->onTheBooks($on, $scope);
+
+        if ($scope !== PayrollScope::Crew || $from === null || $on === null) {
+            return $people;
+        }
+
+        $start = Carbon::parse($from);
+        $end = Carbon::parse($on);
+        $spans = $this->hiredOut->spansFor($people->pluck('driver_id')->filter()->all(), $start, $end);
+
+        return $people
+            ->reject(static fn (Employee $employee): bool => HiredOutCrew::coversWhole($spans[$employee->driver_id] ?? [], $start, $end))
+            ->values();
+    }
+
+    /** @return Collection<int, Employee> */
+    private function onTheBooks(Carbon|string|null $on, ?PayrollScope $scope)
     {
         return Employee::query()
             ->where('status', StatusValue::Active->value)
+            ->when($scope === PayrollScope::Office, fn ($query) => $query->whereNull('driver_id'))
+            ->when($scope === PayrollScope::Crew, fn ($query) => $query
+                ->whereNotNull('driver_id')
+                ->whereHas('driver', fn ($driver) => $driver->where('employment', CrewEmployment::Company->value)))
             ->with(['contracts' => fn ($contracts) => $contracts->inForceOn($on)])
             ->orderBy('last_name')
             ->get()
@@ -546,10 +586,12 @@ class PayrollService
         abort_if(
             $run->lines->isEmpty(),
             422,
-            'This run has nobody on it. Build it again — only active employees with a basic salary on record are paid here.',
+            $run->isCrewRun()
+                ? 'This run has nobody on it. Build it again — only the company’s own drivers and helpers, active and with a rate on their contract, are paid here.'
+                : 'This run has nobody on it. Build it again — only active office staff with a basic salary on record are paid here.',
         );
 
-        $this->mustNotOverlap($run->period_start, $run->period_end, $run);
+        $this->mustNotOverlap($run->period_start, $run->period_end, $run->scope(), $run);
         $this->mustNotRepayTrips($run);
         $this->capStoreAtApproval($run);
 
@@ -583,7 +625,7 @@ class PayrollService
             tone: Tone::Info,
         );
 
-        return $run->refresh()->load('lines.components');
+        return $this->find($run->getKey());
     }
 
     public function markPaid(PayRun $run, ?User $author = null): PayRun
@@ -607,7 +649,7 @@ class PayrollService
                 'journal_entry_id' => $entry?->getKey(),
             ])->save();
 
-            return $run->refresh()->load(['lines.components', 'journalEntry']);
+            return $this->find($run->getKey());
         });
     }
 
@@ -732,7 +774,7 @@ class PayrollService
                 'remittance_entry_id' => $entry?->getKey(),
             ])->save();
 
-            return $run->refresh()->load(['lines.components', 'journalEntry']);
+            return $this->find($run->getKey());
         });
     }
 
@@ -810,9 +852,10 @@ class PayrollService
         }
     }
 
-    private function mustNotOverlap(Carbon $start, Carbon $end, ?PayRun $approving = null): void
+    private function mustNotOverlap(Carbon $start, Carbon $end, PayrollScope $scope, ?PayRun $approving = null): void
     {
         $clash = PayRun::query()
+            ->ofScope($scope)
             ->when($approving !== null, fn ($query) => $query
                 ->whereKeyNot($approving->getKey())
                 ->whereIn('status', [PayRun::APPROVED, PayRun::PAID]))

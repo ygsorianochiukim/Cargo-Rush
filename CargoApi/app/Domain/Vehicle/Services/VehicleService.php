@@ -23,6 +23,7 @@ class VehicleService extends CrudService
         private readonly VehicleRepository $vehicles,
         private readonly NotificationService $notifications,
         private readonly TruckRentService $rent,
+        private readonly DriverAssignmentService $assignments,
     ) {}
 
     protected function repository(): Repository
@@ -36,6 +37,7 @@ class VehicleService extends CrudService
 
         if ($vehicle instanceof Vehicle) {
             $this->sizeFromWheels($vehicle);
+            $this->assignments->sync($vehicle);
             $this->rent->chargeDueFor($vehicle, now());
         }
 
@@ -48,10 +50,20 @@ class VehicleService extends CrudService
 
         if ($vehicle instanceof Vehicle) {
             $this->sizeFromWheels($vehicle);
+            $this->assignments->sync($vehicle);
             $this->rent->chargeDueFor($vehicle, now());
         }
 
         return $vehicle;
+    }
+
+    public function delete(Model $model): void
+    {
+        if ($model instanceof Vehicle) {
+            $this->assignments->release($model);
+        }
+
+        parent::delete($model);
     }
 
     private function sizeFromWheels(Vehicle $vehicle): void
@@ -75,6 +87,8 @@ class VehicleService extends CrudService
                 ? null
                 : $vehicle->driver_id,
         ]);
+
+        $this->assignments->sync($vehicle->refresh());
 
         return $vehicle->refresh();
     }

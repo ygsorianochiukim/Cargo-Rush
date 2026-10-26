@@ -8,6 +8,7 @@ use App\Domain\Accounting\Models\JournalEntry;
 use App\Domain\Identity\Models\User;
 use App\Domain\Payroll\Services\PayrollService;
 use App\Domain\Payroll\Support\PayPeriod;
+use App\Domain\Shared\Enums\PayrollScope;
 use App\Domain\Shared\Support\NumberOrder;
 use App\Domain\Tenancy\Models\Concerns\BelongsToCompany;
 use Illuminate\Database\Eloquent\Builder;
@@ -29,12 +30,17 @@ class PayRun extends Model
     public const PAID = 'paid';
 
     protected $fillable = [
-        'reference', 'period_start', 'period_end', 'pay_date', 'status', 'notes', 'links_trips',
+        'reference', 'scope', 'period_start', 'period_end', 'pay_date', 'status', 'notes', 'links_trips',
+    ];
+
+    protected $attributes = [
+        'scope' => 'office',
     ];
 
     protected function casts(): array
     {
         return [
+            'scope' => PayrollScope::class,
             'period_start' => 'date',
             'period_end' => 'date',
             'pay_date' => 'date',
@@ -58,6 +64,21 @@ class PayRun extends Model
     public function journalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class);
+    }
+
+    public function scope(): PayrollScope
+    {
+        return $this->scope ?? PayrollScope::Office;
+    }
+
+    public function isCrewRun(): bool
+    {
+        return $this->scope() === PayrollScope::Crew;
+    }
+
+    public function scopeOfScope(Builder $query, PayrollScope $scope): Builder
+    {
+        return $query->where('scope', $scope->value);
     }
 
     public function isDraft(): bool
@@ -193,14 +214,14 @@ class PayRun extends Model
     protected static function booted(): void
     {
         static::creating(function (self $run): void {
-            $run->reference ??= static::nextReference();
+            $run->reference ??= static::nextReference(null, $run->scope());
         });
     }
 
-    public static function nextReference(?int $year = null): string
+    public static function nextReference(?int $year = null, PayrollScope $scope = PayrollScope::Office): string
     {
         $year ??= (int) now()->format('Y');
-        $prefix = "PR-{$year}-";
+        $prefix = "{$scope->referencePrefix()}-{$year}-";
 
         $last = static::withTrashed()
             ->where('reference', 'like', $prefix.'%')

@@ -98,7 +98,12 @@ export function vehicleSpec(
         label: 'Assigned driver (optional)',
         kind: 'select',
         options: () => roster,
-        hint: 'Who currently holds the keys. Leave it empty until somebody does.',
+        hint: (values) =>
+          values['arrangement'] === 'subcontracted'
+            ? 'The sub-contractor’s own driver, if they always send the same one. Add them on Drivers as sub-contractor’s crew first. A trip on this truck takes them by default, and the office can swap in somebody else for that trip. A company driver assigned here is not paid on the Crew Payroll for the days of the assignment.'
+            : isHired(values)
+              ? 'Who currently holds the keys. A trip on this truck takes them by default, and the office can swap in somebody else for that trip. While assigned to this hired truck, a company driver is not paid on the Crew Payroll — the dates of the assignment are kept, so days before and after still count.'
+              : 'Who currently holds the keys. A trip on this truck takes them by default, and the office can swap in somebody else for that trip. Leave it empty until somebody does.',
       },
       {
         key: 'status',

@@ -298,9 +298,22 @@ export const routes: Routes = [
       },
       {
         path: 'payroll',
-        title: 'Payroll · Cargo Rush',
-        data: { title: 'Payroll' },
+        title: 'Office Payroll · Cargo Rush',
+        data: { title: 'Office Payroll', scope: 'office' },
         loadComponent: () => import('./pages/payroll/payroll.page').then((m) => m.PayrollPage),
+      },
+      {
+        path: 'payroll/crew',
+        title: 'Crew Payroll · Cargo Rush',
+        data: { title: 'Crew Payroll', scope: 'crew' },
+        loadComponent: () => import('./pages/payroll/payroll.page').then((m) => m.PayrollPage),
+      },
+      {
+        path: 'crew-pay-report',
+        title: 'Crew Pay Report · Cargo Rush',
+        data: { title: 'Crew Pay Report' },
+        loadComponent: () =>
+          import('./pages/crew-pay-report/crew-pay-report.page').then((m) => m.CrewPayReportPage),
       },
       {
         path: 'access',
