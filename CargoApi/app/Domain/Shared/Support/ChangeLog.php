@@ -23,7 +23,7 @@ final class ChangeLog
         'permissions', 'positions', 'pricing_brackets', 'pricing_zones', 'print_templates', 'roles', 'store_credits',
         'supplier_categories', 'suppliers', 'trips', 'truck_categories', 'truck_sizes', 'trucker_drivers',
         'trucker_vehicles', 'trucker_wallet_entries', 'truckers', 'trucks', 'undertime_requests',
-        'users', 'vehicles',
+        'users', 'vehicle_driver_assignments', 'vehicles',
     ];
 
     /** @var array<string, bool> */

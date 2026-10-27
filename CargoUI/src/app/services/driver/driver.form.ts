@@ -1,8 +1,13 @@
 import { inject } from '@angular/core';
 
-import { Driver } from '../../models/driver/driver.model';
+import { CrewEmployment, Driver } from '../../models/driver/driver.model';
 import { RecordSpec, statusOptions } from '../../shared/record-form-spec';
 import { DriverService } from './driver.service';
+
+export const employmentOptions = () => [
+  { value: 'company', label: 'Company personnel — on our crew payroll' },
+  { value: 'subcontractor', label: 'Sub-contractor’s crew — paid by the sub-contractor' },
+];
 
 export function driverSpec(): RecordSpec<Driver> {
   const drivers = inject(DriverService);
@@ -25,6 +30,13 @@ export function driverSpec(): RecordSpec<Driver> {
         hint: 'Violations on record. Leave at 0 if none.',
       },
       {
+        key: 'employment',
+        label: 'Who they work for',
+        kind: 'select',
+        options: employmentOptions,
+        hint: 'Company personnel go on the crew payroll. A sub-contractor’s driver only drives their truck and is paid by them.',
+      },
+      {
         key: 'status',
         label: 'Status',
         kind: 'select',
@@ -41,11 +53,13 @@ export function driverSpec(): RecordSpec<Driver> {
       licence_no: driver.licence_no,
       licence_expiry: driver.licence_expiry,
       violations: driver.violations,
+      employment: driver.employment ?? 'company',
       status: driver.status,
     }),
 
     toPayload: (values) => ({
       role: 'driver',
+      employment: (values['employment'] || 'company') as CrewEmployment,
       name: values['name'],
       contact: values['contact'] || null,
       licence_no: values['licence_no'],

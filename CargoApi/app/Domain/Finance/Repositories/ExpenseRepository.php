@@ -28,6 +28,7 @@ class ExpenseRepository extends Repository
                 'supplier:id,name',
                 'paymentSource:id,name,kind,last_four',
                 'trip:id,reference',
+                'asset:id,tag,name',
             ])
             ->orderByDesc('date')
             ->orderByDesc('created_at');
@@ -56,6 +57,10 @@ class ExpenseRepository extends Repository
 
         if (! empty($filters['trip_id'])) {
             $query->where('trip_id', $filters['trip_id']);
+        }
+
+        if (! empty($filters['asset_id'])) {
+            $query->where('asset_id', $filters['asset_id']);
         }
 
         if (! empty($filters['pay_schedule'])) {

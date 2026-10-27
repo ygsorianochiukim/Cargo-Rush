@@ -35,7 +35,9 @@ class DriverService extends CrudService
             /** @var Driver $driver */
             $driver = $this->drivers->create($data);
 
-            $this->employees->enrolCrew($driver);
+            if ($driver->isOnPayroll()) {
+                $this->employees->enrolCrew($driver);
+            }
 
             return $driver->load('employee');
         });
@@ -47,7 +49,9 @@ class DriverService extends CrudService
             /** @var Driver $driver */
             $driver = $this->drivers->update($model, $data);
 
-            $this->employees->syncCrew($driver);
+            if ($driver->isOnPayroll()) {
+                $this->employees->syncCrew($driver);
+            }
 
             return $driver->load('employee');
         });

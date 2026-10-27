@@ -19,6 +19,7 @@ class AssetRepository extends Repository
     {
         return Asset::query()
             ->with(['category', 'supplier', 'custodian'])
+            ->orderByDesc('created_at')
             ->orderBy('name');
     }
 

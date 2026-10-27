@@ -29,6 +29,9 @@ export interface Expense extends Timestamped {
   truck_label: string | null;
   trip_id: string | null;
   trip_reference: string | null;
+  asset_id: string | null;
+  asset_tag: string | null;
+  asset_name: string | null;
   vehicle_id: string | null;
   driver_id: string | null;
   supplier_id: string | null;

@@ -242,6 +242,7 @@ describe('payroll counting every helper', function (): void {
         };
 
         $this->open = fn () => collect($this->actingAs($this->admin)->postJson('/api/v1/payroll', [
+            'scope' => 'crew',
             'period_start' => '2026-09-01',
             'period_end' => '2026-09-15',
             'pay_date' => '2026-09-15',

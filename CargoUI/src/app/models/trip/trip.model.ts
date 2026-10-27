@@ -59,6 +59,9 @@ export interface Trip extends Timestamped {
   helpers: { id: string; name: string }[];
   vehicle_id: string | null;
   vehicle_plate: string | null;
+  vehicle_driver_id: string | null;
+  vehicle_driver_name: string | null;
+  driver_swapped: boolean;
 
   hauled_by: 'company' | 'trucker';
 

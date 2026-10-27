@@ -3,9 +3,14 @@ import { Timestamped } from '../shared/envelope.model';
 
 export type CrewRole = 'driver' | 'helper';
 
+export type CrewEmployment = 'company' | 'subcontractor';
+
 export interface Driver extends Timestamped {
   id: string;
   role: CrewRole;
+  employment: CrewEmployment;
+  employment_label: string;
+  on_payroll: boolean;
   name: string;
   contact: string | null;
   licence_no: string | null;
@@ -22,12 +27,13 @@ export interface Driver extends Timestamped {
 }
 
 export interface DriverEmployer {
-  kind: 'fleet' | 'trucker';
+  kind: 'fleet' | 'trucker' | 'subcontractor';
   label: string;
 }
 
 export interface DriverPayload {
   role?: CrewRole;
+  employment?: CrewEmployment;
   name: string;
   contact?: string | null;
   licence_no?: string | null;

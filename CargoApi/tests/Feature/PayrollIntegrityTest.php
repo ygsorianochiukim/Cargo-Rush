@@ -16,6 +16,7 @@ use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\PositionSeeder;
 use Database\Seeders\RoleSeeder;
+use Illuminate\Support\Collection;
 
 beforeEach(function (): void {
     $this->seed(NavigationSeeder::class);
@@ -336,6 +337,9 @@ describe('a payslip never pays less than nothing', function (): void {
 describe('every trip paid exactly once', function (): void {
     beforeEach(function (): void {
         $this->driver = ($this->hireDriver)();
+
+        $office = $this->open;
+        $this->open = fn (array $overrides = []) => $office(['scope' => 'crew', ...$overrides]);
     });
 
     it('pays a back-dated trip on the next run, and nothing twice', function (): void {
@@ -396,22 +400,30 @@ describe('where the wages post', function (): void {
         ($this->hire)();
         ($this->haul)('2026-09-05', $driver->driver_id);
 
-        $run = ($this->open)()->assertCreated()->json('data');
-        ($this->approve)($run['id'])->assertOk();
-        $paid = ($this->pay)($run['id'])->assertOk()->json('data');
+        $journal = function (array $run): Collection {
+            ($this->approve)($run['id'])->assertOk();
+            $paid = ($this->pay)($run['id'])->assertOk()->json('data');
 
-        $lines = collect(
-            $this->actingAs($this->admin)
-                ->getJson("/api/v1/accounting/journal/{$paid['journal_entry_id']}")
-                ->json('data.lines')
-        );
+            return collect(
+                $this->actingAs($this->admin)
+                    ->getJson("/api/v1/accounting/journal/{$paid['journal_entry_id']}")
+                    ->json('data.lines')
+            );
+        };
 
-        $wages = $lines->reject(fn (array $line): bool => str_contains((string) $line['memo'], 'employer share'));
+        $crew = $journal(($this->open)(['scope' => 'crew'])->assertCreated()->json('data'));
+        $office = $journal(($this->open)()->assertCreated()->json('data'));
 
-        expect($wages->where('account_code', '5020')->sum('debit_cents'))->toBe(150_000)
-            ->and($wages->where('account_code', '5200')->sum('debit_cents'))->toBe(1_500_000)
-            ->and($lines->where('account_code', '5020')->sum('debit_cents'))->toBe(150_000 + 41_000)
-            ->and($lines->where('account_code', '5200')->sum('debit_cents'))->toBe(1_500_000 + 199_000)
-            ->and($lines->sum('debit_cents'))->toBe($lines->sum('credit_cents'));
+        $notEmployer = fn (array $line): bool => str_contains((string) $line['memo'], 'employer share');
+
+        expect($crew->reject($notEmployer)->where('account_code', '5020')->sum('debit_cents'))->toBe(150_000)
+            ->and($crew->where('account_code', '5200')->sum('debit_cents'))->toBe(0)
+            ->and($crew->where('account_code', '5020')->sum('debit_cents'))->toBe(150_000 + 41_000)
+            ->and($crew->sum('debit_cents'))->toBe($crew->sum('credit_cents'));
+
+        expect($office->reject($notEmployer)->where('account_code', '5200')->sum('debit_cents'))->toBe(1_500_000)
+            ->and($office->where('account_code', '5020')->sum('debit_cents'))->toBe(0)
+            ->and($office->where('account_code', '5200')->sum('debit_cents'))->toBe(1_500_000 + 199_000)
+            ->and($office->sum('debit_cents'))->toBe($office->sum('credit_cents'));
     });
 });

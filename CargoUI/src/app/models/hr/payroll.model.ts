@@ -2,6 +2,114 @@ import { Timestamped } from '../shared/envelope.model';
 
 export type PayRunStatus = 'draft' | 'approved' | 'paid';
 
+export type PayrollScope = 'office' | 'crew';
+
+export interface PayslipHiredOut {
+  plate: string | null;
+  arrangement: string;
+  arrangement_label: string;
+  from: string;
+  to: string;
+}
+
+export interface CrewPayRosterRow {
+  employee_id: string;
+  driver_id: string;
+  employee_no: string | null;
+  name: string;
+  role: 'driver' | 'helper';
+  role_label: string;
+  status: string | null;
+  pay_basis: 'monthly' | 'daily' | 'per_trip';
+  pay_basis_label: string;
+  rate_cents: number;
+  holding_plate: string | null;
+  holding_arrangement_label: string | null;
+  holding_since: string | null;
+  last_cutoff: { label: string; trips: number; days: number };
+}
+
+export interface CrewPayTripRow {
+  id: string;
+  reference: string;
+  on: string;
+  origin: string;
+  destination: string;
+  plate: string | null;
+  seat: 'driver' | 'helper';
+  driver_allowance_cents: number;
+  helper_allowance_cents: number;
+  counted: boolean;
+  withheld_reason: string | null;
+  paid_on_run: string | null;
+  paid_on_run_status: PayRunStatus | null;
+}
+
+export interface CrewPaySheetDay {
+  on: string;
+  truck: string | null;
+  salary_cents: number;
+  seat: 'driver' | 'helper';
+  counted: boolean;
+}
+
+export interface CrewPayCutoff {
+  label: string;
+  short: string;
+  start: string;
+  end: string;
+  pay_basis: 'monthly' | 'daily' | 'per_trip';
+  pay_basis_label: string;
+  rate_cents: number;
+  trips: CrewPayTripRow[];
+  sheet_days: CrewPaySheetDay[];
+  counted_trips: number;
+  withheld_trips: number;
+  counted_days: number;
+  expected_cents: number;
+  held_whole_cutoff: boolean;
+  hired_out: PayslipHiredOut[];
+  run: {
+    id: string;
+    reference: string;
+    status: PayRunStatus;
+    on_run: boolean;
+    basic_cents: number | null;
+    gross_cents: number | null;
+    net_cents: number | null;
+    trips: number | null;
+    days_worked: number | null;
+    agrees: boolean | null;
+  } | null;
+}
+
+export interface CrewPayReport {
+  employee: {
+    employee_id: string;
+    driver_id: string | null;
+    employee_no: string | null;
+    name: string;
+    role_label: string;
+    pay_basis: 'monthly' | 'daily' | 'per_trip';
+    pay_basis_label: string;
+    rate_cents: number;
+  };
+  from: string;
+  to: string;
+  cutoffs: CrewPayCutoff[];
+  totals: { trips: number; withheld_trips: number; days: number; expected_cents: number };
+}
+
+export interface PayslipTrip {
+  id: string;
+  reference: string;
+  origin: string;
+  destination: string;
+  plate: string | null;
+  seat: 'driver' | 'helper';
+  on: string | null;
+}
+
 export interface PayRunStatutory {
   sss: number;
   philhealth: number;
@@ -25,11 +133,15 @@ export interface PayRunLine {
   name: string;
   position: string | null;
 
+  crew: boolean;
+
   pay_basis: 'monthly' | 'daily' | 'per_trip';
   pay_basis_label: string;
   days_worked: number;
   sheet_days: number;
   trips: number;
+  trip_details: PayslipTrip[] | null;
+  hired_out: PayslipHiredOut[];
 
   basic_cents: number;
   allowance_cents: number;
@@ -113,6 +225,8 @@ export interface PayslipComponent {
 export interface PayRun extends Timestamped {
   id: string;
   reference: string;
+  scope: PayrollScope;
+  scope_label: string;
 
   period_start: string;
   period_end: string;
@@ -170,6 +284,7 @@ export interface PayPeriodOption {
 }
 
 export interface PayRunPayload {
+  scope?: PayrollScope;
   period_start: string;
   period_end: string;
   pay_date: string;

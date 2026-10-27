@@ -162,7 +162,7 @@ export class ExpensesPage {
       label: 'Category',
       kind: 'strong',
       value: (e) => e.category_name,
-      sub: (e) => e.trip_reference ?? e.note,
+      sub: (e) => e.trip_reference ?? e.asset_tag ?? e.note,
     },
     { label: 'Date', kind: 'num', value: (e) => fmt.date(e.date) },
     {

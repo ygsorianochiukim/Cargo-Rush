@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Finance\Models;
 
 use App\Domain\Accounting\Models\PaymentSource;
+use App\Domain\Asset\Models\Asset;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Identity\Models\User;
 use App\Domain\Shared\Enums\PaySchedule;
@@ -24,7 +25,7 @@ class Expense extends Model
     use BelongsToCompany, HasUlids, SoftDeletes;
 
     protected $fillable = [
-        'category_id', 'truck_id', 'trip_id', 'vehicle_id', 'driver_id', 'supplier_id',
+        'category_id', 'truck_id', 'trip_id', 'vehicle_id', 'driver_id', 'supplier_id', 'asset_id',
         'payment_source_id', 'pay_schedule', 'ledger_entry_id', 'date', 'amount_cents', 'currency', 'is_vatable',
         'payee', 'reference', 'note', 'status', 'recorded_by',
     ];
@@ -84,6 +85,11 @@ class Expense extends Model
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);
+    }
+
+    public function asset(): BelongsTo
+    {
+        return $this->belongsTo(Asset::class)->withTrashed();
     }
 
     public function recorder(): BelongsTo

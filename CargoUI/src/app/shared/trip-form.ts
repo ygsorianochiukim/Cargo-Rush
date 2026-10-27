@@ -183,14 +183,63 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
           </select>
         </app-field>
 
-        <app-field label="Driver" required [error]="errorFor('driver_id')">
-          <select formControlName="driver_id" [class]="inputClass">
-            <option value="">Select a driver…</option>
-            @for (d of drivers(); track d.id) {
-              <option [value]="d.id">{{ d.name }}</option>
+        @if (assignedDriver(); as assigned) {
+          <app-field
+            label="Driver"
+            required
+            [error]="errorFor('driver_id')"
+            [hint]="
+              swapping()
+                ? 'For this trip only. ' + assigned.name + ' stays assigned to ' + vehicleLabel() + '.'
+                : 'Assigned to ' + vehicleLabel() + '. Swapping changes this trip only.'
+            "
+          >
+            @if (swapping()) {
+              <div class="flex items-center gap-2">
+                <select formControlName="driver_id" [class]="inputClass">
+                  <option value="">Select a driver…</option>
+                  @for (d of drivers(); track d.id) {
+                    <option [value]="d.id">{{ d.name }}</option>
+                  }
+                </select>
+                <button
+                  type="button"
+                  class="h-10 flex-none rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+                  (click)="keepAssigned()"
+                >
+                  Use {{ assigned.name }}
+                </button>
+              </div>
+            } @else {
+              <div
+                class="flex h-10 items-center justify-between gap-2 rounded-control border border-cr-line bg-cr-tint px-3 text-[14px]"
+              >
+                <span class="truncate font-semibold">{{ assigned.name }}</span>
+                <button
+                  type="button"
+                  class="flex-none text-[12px] font-semibold text-cr-blue hover:underline"
+                  (click)="swapping.set(true)"
+                >
+                  Swap driver for this trip
+                </button>
+              </div>
             }
-          </select>
-        </app-field>
+          </app-field>
+        } @else {
+          <app-field
+            label="Driver"
+            required
+            [error]="errorFor('driver_id')"
+            [hint]="vehicleId() ? 'This truck has no driver assigned, so name one here.' : ''"
+          >
+            <select formControlName="driver_id" [class]="inputClass">
+              <option value="">Select a driver…</option>
+              @for (d of drivers(); track d.id) {
+                <option [value]="d.id">{{ d.name }}</option>
+              }
+            </select>
+          </app-field>
+        }
 
         <app-helper-picker
           hint="Optional — add as many as the load needs."
@@ -548,9 +597,38 @@ export class TripForm {
     initialValue: this.form.controls.weight_kg.value,
   });
 
-  private readonly vehicleId = toSignal(this.form.controls.vehicle_id.valueChanges, {
+  protected readonly vehicleId = toSignal(this.form.controls.vehicle_id.valueChanges, {
     initialValue: this.form.controls.vehicle_id.value,
   });
+
+  protected readonly swapping = signal(false);
+
+  private readonly chosenVehicle = computed(() => {
+    const id = this.vehicleId();
+
+    return id ? (this.vehicles().find((v) => v.id === id) ?? null) : null;
+  });
+
+  protected readonly assignedDriver = computed(() => {
+    const vehicle = this.chosenVehicle();
+
+    if (!vehicle?.driver_id) return null;
+
+    return { id: vehicle.driver_id, name: vehicle.driver_name ?? 'the assigned driver' };
+  });
+
+  protected readonly vehicleLabel = computed(() => this.chosenVehicle()?.plate ?? 'this truck');
+
+  private resetting = false;
+
+  protected keepAssigned(): void {
+    const assigned = this.assignedDriver();
+
+    if (assigned === null) return;
+
+    this.form.controls.driver_id.setValue(assigned.id);
+    this.swapping.set(false);
+  }
 
   private readonly truckClass = computed(() => {
     const id = this.vehicleId();
@@ -624,6 +702,19 @@ export class TripForm {
     this.vehiclesApi.list().subscribe((res) => this.vehicles.set(res.data));
     this.driversApi.crew().subscribe((res) => this.crew.set(res.data));
 
+    this.form.controls.vehicle_id.valueChanges
+      .pipe(takeUntilDestroyed())
+      .subscribe((id) => {
+        if (this.resetting) return;
+
+        const vehicle = this.vehicles().find((v) => v.id === id);
+
+        if (vehicle?.driver_id) {
+          this.form.controls.driver_id.setValue(vehicle.driver_id);
+          this.swapping.set(false);
+        }
+      });
+
     this.customersApi
       .list({ per_page: 100 })
       .pipe(catchError(() => of(null)))
@@ -688,6 +779,7 @@ export class TripForm {
         lng: t?.destination_lng ?? null,
       });
 
+      this.resetting = true;
       this.form.reset({
         origin: t?.origin ?? '',
         destination: t?.destination ?? '',
@@ -719,6 +811,13 @@ export class TripForm {
       if (known && t.customer && !this.customers().some((c) => c.id === known)) {
         this.customers.update((list) => [...list, { id: known, name: t.customer } as Customer]);
       }
+
+      this.resetting = false;
+
+      const assigned = this.assignedDriver();
+      this.swapping.set(assigned !== null && !!t?.driver_id && t.driver_id !== assigned.id);
+
+      if (assigned !== null && !t?.driver_id) this.form.controls.driver_id.setValue(assigned.id);
 
       this.helpers.set(t?.helper_ids ?? []);
       this.preview.set(null);

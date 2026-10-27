@@ -30,10 +30,19 @@ class DriverResource extends ApiResource
             'employee_id' => $this->employee?->id,
             'employee_no' => $this->employee?->employee_no,
 
-            'employer' => [
-                'kind' => 'fleet',
-                'label' => app(Tenant::class)->company()?->name ?? 'Cargo Rush',
-            ],
+            'employment' => $this->employment()->value,
+            'employment_label' => $this->employment()->label(),
+            'on_payroll' => $this->isOnPayroll(),
+
+            'employer' => $this->isOnPayroll()
+                ? [
+                    'kind' => 'fleet',
+                    'label' => app(Tenant::class)->company()?->name ?? 'Cargo Rush',
+                ]
+                : [
+                    'kind' => 'subcontractor',
+                    'label' => 'Sub-contractor’s crew',
+                ],
 
             ...$this->stamps(),
         ];

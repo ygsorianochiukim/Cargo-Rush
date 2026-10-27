@@ -1,14 +1,19 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { ActivatedRoute } from '@angular/router';
+import { map } from 'rxjs';
 
 import {
   PayComponent,
   PayPeriodOption,
   PayrollCalendar,
+  PayrollScope,
   PayRun,
   PayRunLine,
   PayRunLinePayload,
   PayslipComponent,
+  PayslipTrip,
 } from '../../models/hr/payroll.model';
 import { CompanyService } from '../../services/identity/company.service';
 import { IdentityService } from '../../services/identity/identity.service';
@@ -43,8 +48,30 @@ export class PayrollPage {
   private readonly confirm = inject(Confirm);
   private readonly company = inject(CompanyService);
   private readonly identity = inject(IdentityService);
+  private readonly route = inject(ActivatedRoute);
 
   protected readonly fmt = fmt;
+
+  protected readonly scope = toSignal(
+    this.route.data.pipe(map((data) => (data['scope'] === 'crew' ? 'crew' : 'office') as PayrollScope)),
+    { initialValue: (this.route.snapshot.data['scope'] === 'crew' ? 'crew' : 'office') as PayrollScope },
+  );
+
+  protected readonly isCrew = computed(() => this.scope() === 'crew');
+
+  protected readonly scopeLabel = computed(() => (this.isCrew() ? 'Crew payroll' : 'Office payroll'));
+
+  protected readonly scopeBlurb = computed(() =>
+    this.isCrew()
+      ? 'The company’s own drivers and helpers, paid for the trips and days they worked each cutoff. A sub-contractor’s driver is never on it — they are paid by the sub-contractor.'
+      : 'The office and admin staff on a monthly salary. Drivers and helpers are paid on the Crew Payroll, on a run of their own.',
+  );
+
+  protected readonly nobodyCopy = computed(() =>
+    this.isCrew()
+      ? 'Only the company’s own drivers and helpers are paid here — active, with a rate on their contract, and marked as company personnel on Drivers or Helpers.'
+      : 'Only active office staff with a monthly salary on record are paid here. Drivers and helpers go on the Crew Payroll.',
+  );
 
   protected readonly inputClass =
     'h-10 w-full rounded-control border border-cr-line bg-cr-surface px-3 text-[14px] text-cr-ink placeholder:text-cr-ink-muted focus:border-cr-blue focus:outline-none';
@@ -139,7 +166,7 @@ export class PayrollPage {
 
     if (run.status === 'draft') {
       return run.staff_count === 0
-        ? 'Nobody is on this run. Only active employees with a monthly salary on record are paid here — check the roster, then rebuild.'
+        ? `Nobody is on this run. ${this.nobodyCopy()} Check the roster, then rebuild.`
         : 'Check the payslips below. When they are right, approve the run.';
     }
 
@@ -214,7 +241,14 @@ export class PayrollPage {
   });
 
   constructor() {
-    this.load();
+    effect(() => {
+      this.scope();
+      this.run.set(null);
+      this.payslip.set(null);
+      this.notice.set(null);
+      this.load();
+    });
+
     this.loadPeriods();
 
     this.components.list(true).subscribe({
@@ -273,8 +307,12 @@ export class PayrollPage {
   }
 
   protected load(): void {
-    this.payroll.list({ per_page: 50 }).subscribe({
+    const scope = this.scope();
+
+    this.payroll.list({ per_page: 50, scope }).subscribe({
       next: (page) => {
+        if (scope !== this.scope()) return;
+
         this.runs.set(page.data);
         this.error.set(null);
 
@@ -322,15 +360,32 @@ export class PayrollPage {
   }
 
   protected earnings(run: PayRun, line: PayRunLine): Part[] {
+    const basic: Part =
+      line.pay_basis === 'per_trip'
+        ? {
+            label: `Trip pay for ${run.period_label}`,
+            why: `${line.trips} ${line.trips === 1 ? 'haul' : 'hauls'} delivered in the period, times the trip rate on their contract. The hauls are listed below.`,
+            cents: line.basic_cents,
+            field: null,
+          }
+        : line.pay_basis === 'daily'
+          ? {
+              label: `Daily pay for ${run.period_label}`,
+              why: `${line.days_worked} ${line.days_worked === 1 ? 'day' : 'days'} on the truck sheet, times the daily rate on their contract.`,
+              cents: line.basic_cents,
+              field: null,
+            }
+          : {
+              label: `Basic pay for ${run.period_label}`,
+              why: run.is_first_cutoff
+                ? 'Half of the monthly salary. The other half is on the 16th-to-end payslip, and the two add up to the salary exactly.'
+                : 'The other half of the monthly salary — including the odd centavo, so the two payslips add up to the salary exactly.',
+              cents: line.basic_cents,
+              field: null,
+            };
+
     const parts: Part[] = [
-      {
-        label: `Basic pay for ${run.period_label}`,
-        why: run.is_first_cutoff
-          ? 'Half of the monthly salary. The other half is on the 16th-to-end payslip, and the two add up to the salary exactly.'
-          : 'The other half of the monthly salary — including the odd centavo, so the two payslips add up to the salary exactly.',
-        cents: line.basic_cents,
-        field: null,
-      },
+      basic,
       {
         label: 'Allowance',
         why: 'Meal, transport or any other allowance for this period.',
@@ -433,6 +488,7 @@ export class PayrollPage {
 
     this.payroll
       .create({
+        scope: this.scope(),
         period_start: period.start,
         period_end: period.end,
         pay_date: this.payDate(),
@@ -443,8 +499,8 @@ export class PayrollPage {
           this.run.set(run);
           this.notice.set(
             run.staff_count === 0
-              ? `${run.reference} opened, with nobody on it — only active employees with a monthly salary on record are paid here.`
-              : `${run.reference} built · ${run.staff_count} on the payroll · take-home ${fmt.pesos(run.net_cents)}.`,
+              ? `${run.reference} opened, with nobody on it. ${this.nobodyCopy()}`
+              : `${run.reference} built · ${run.staff_count} on the ${this.isCrew() ? 'crew' : 'office'} payroll · take-home ${fmt.pesos(run.net_cents)}.`,
           );
           this.load();
         },
@@ -640,6 +696,14 @@ export class PayrollPage {
 
   protected charges(line: PayRunLine): PayslipComponent[] {
     return line.components.filter((component) => component.kind === 'deduction');
+  }
+
+  protected trips(line: PayRunLine): PayslipTrip[] {
+    return line.trip_details ?? [];
+  }
+
+  protected seatLabel(trip: PayslipTrip): string {
+    return trip.seat === 'driver' ? 'Drove' : 'Helper';
   }
 
   protected print(): void {

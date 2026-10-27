@@ -25,7 +25,7 @@ class TripRepository extends Repository
         return Trip::query()
             ->with([
                 ...TripCostService::RELATIONS,
-                'driver:id,name', 'helpers', 'vehicle:id,plate',
+                'driver:id,name', 'helpers', 'vehicle:id,plate,driver_id', 'vehicle.driver:id,name',
                 'trucker:id,name,business_name,phone', 'truckerVehicle:id,plate',
                 'truckerDriver:id,name',
                 'pricingZone:id,name',

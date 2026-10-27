@@ -82,6 +82,11 @@ class Vehicle extends Model
         return $this->hasMany(Trip::class);
     }
 
+    public function driverAssignments(): HasMany
+    {
+        return $this->hasMany(VehicleDriverAssignment::class);
+    }
+
     public function fuelRecords(): HasMany
     {
         return $this->hasMany(FuelRecord::class);

@@ -16,6 +16,8 @@ use Illuminate\Support\Collection as SupportCollection;
 
 class TripPayService
 {
+    public function __construct(private readonly HiredOutCrew $hiredOut) {}
+
     /** @return array{earned_cents: int, days: int, trips: int, trip_ids: list<string>} */
     public function forEmployee(Employee $employee, Carbon $periodStart, Carbon $periodEnd): array
     {
@@ -49,18 +51,38 @@ class TripPayService
 
         $driverIds = array_keys($byDriver);
 
-        $this->addSheet($totals, $byDriver, $driverIds, $periodStart, $periodEnd);
-        $this->addTrips($totals, $byDriver, $driverIds, $periodStart, $periodEnd);
+        $floor = $this->floor($periodStart);
+        $hired = $this->hiredOut->spansFor($driverIds, $floor ?? $periodStart, $periodEnd);
+
+        $this->addSheet($totals, $byDriver, $driverIds, $periodStart, $periodEnd, $hired);
+        $this->addTrips($totals, $byDriver, $driverIds, $periodStart, $periodEnd, $floor, $hired);
 
         return $this->countDays($totals);
+    }
+
+    private function floor(Carbon $periodStart): ?Carbon
+    {
+        $floor = PayRun::query()
+            ->where('links_trips', true)
+            ->whereIn('status', [PayRun::APPROVED, PayRun::PAID])
+            ->min('period_start');
+
+        if ($floor === null) {
+            return null;
+        }
+
+        $floor = Carbon::parse($floor)->startOfDay();
+
+        return $floor->lt($periodStart->copy()->startOfDay()) ? $floor : null;
     }
 
     /**
      * @param  array<string, array{earned_cents: int, days: array<string, bool>, trips: int, trip_ids: list<string>}>  $totals
      * @param  array<string, string>  $byDriver
      * @param  string[]  $driverIds
+     * @param  array<string, list<array{from: Carbon, to: Carbon}>>  $hired
      */
-    private function addSheet(array &$totals, array $byDriver, array $driverIds, Carbon $periodStart, Carbon $periodEnd): void
+    private function addSheet(array &$totals, array $byDriver, array $driverIds, Carbon $periodStart, Carbon $periodEnd, array $hired): void
     {
         $rows = LedgerEntry::query()
             ->whereDate('date', '>=', $periodStart->toDateString())
@@ -83,7 +105,7 @@ class TripPayService
             foreach ($seats as [$driverId, $amount]) {
                 $employeeId = $driverId === null ? null : ($byDriver[$driverId] ?? null);
 
-                if ($employeeId === null) {
+                if ($employeeId === null || HiredOutCrew::covers($hired[$driverId] ?? [], $row->date)) {
                     continue;
                 }
 
@@ -97,27 +119,19 @@ class TripPayService
      * @param  array<string, array{earned_cents: int, days: array<string, bool>, trips: int, trip_ids: list<string>}>  $totals
      * @param  array<string, string>  $byDriver
      * @param  string[]  $driverIds
+     * @param  array<string, list<array{from: Carbon, to: Carbon}>>  $hired
      */
-    private function addTrips(array &$totals, array $byDriver, array $driverIds, Carbon $periodStart, Carbon $periodEnd): void
+    private function addTrips(array &$totals, array $byDriver, array $driverIds, Carbon $periodStart, Carbon $periodEnd, ?Carbon $floor, array $hired): void
     {
         $from = $periodStart->copy()->startOfDay();
         $to = $periodEnd->copy()->endOfDay();
 
         $trips = $this->deliveredBetween($driverIds, $from, $to);
 
-        $floor = PayRun::query()
-            ->where('links_trips', true)
-            ->whereIn('status', [PayRun::APPROVED, PayRun::PAID])
-            ->min('period_start');
-
         if ($floor !== null) {
-            $floor = Carbon::parse($floor)->startOfDay();
-
-            if ($floor->lt($from)) {
-                $trips = $trips->merge(
-                    $this->deliveredBetween($driverIds, $floor, $from->copy()->subSecond()),
-                )->unique('id');
-            }
+            $trips = $trips->merge(
+                $this->deliveredBetween($driverIds, $floor, $from->copy()->subSecond()),
+            )->unique('id');
         }
 
         $paid = [];
@@ -132,10 +146,16 @@ class TripPayService
             });
 
         foreach ($trips as $trip) {
+            $day = Carbon::parse($trip->deliveryLog?->delivered_at ?? $trip->scheduled_at);
+
             foreach (array_unique([$trip->driver_id, ...$trip->helperIds()]) as $driverId) {
                 $employeeId = $driverId === null ? null : ($byDriver[$driverId] ?? null);
 
                 if ($employeeId === null || isset($paid[$employeeId][$trip->getKey()])) {
+                    continue;
+                }
+
+                if (HiredOutCrew::covers($hired[$driverId] ?? [], $day)) {
                     continue;
                 }
 
@@ -167,8 +187,8 @@ class TripPayService
                         ->whereBetween('scheduled_at', [$from, $to]);
                 });
             })
-            ->with('helpers:drivers.id')
-            ->get(['id', 'driver_id']);
+            ->with(['helpers:drivers.id', 'deliveryLog:id,trip_id,delivered_at'])
+            ->get(['id', 'driver_id', 'scheduled_at']);
     }
 
     /**

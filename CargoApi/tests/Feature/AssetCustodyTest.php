@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Domain\Asset\Models\Asset;
 use App\Domain\Asset\Models\AssetTurnover;
+use App\Domain\Finance\Models\Expense;
 use App\Domain\Hr\Models\Employee;
 use App\Domain\Identity\Models\User;
 use App\Domain\Supplier\Models\Supplier;
@@ -116,6 +117,97 @@ describe('registering an asset', function (): void {
     });
 });
 
+describe('the purchase expense', function (): void {
+    it('files the purchase under Assets & Equipment with the tag as reference', function (): void {
+        $supplier = Supplier::factory()->create(['name' => 'Octagon Davao']);
+
+        $asset = ($this->register)(['supplier_id' => $supplier->id])->assertCreated()->json('data');
+
+        $expense = Expense::query()->where('asset_id', $asset['id'])->firstOrFail();
+
+        expect($expense->category->key)->toBe('assets')
+            ->and($expense->category->accountCode())->toBe('1600')
+            ->and($expense->amount_cents)->toBe(4_250_000)
+            ->and($expense->date->toDateString())->toBe('2026-02-10')
+            ->and($expense->supplier_id)->toBe($supplier->id)
+            ->and($expense->payee)->toBe('Octagon Davao')
+            ->and($expense->reference)->toBe('IT-0001')
+            ->and($expense->note)->toBe('Purchase of Lenovo ThinkPad E14')
+            ->and($expense->status->value)->toBe('active')
+            ->and($expense->recorded_by)->toBe($this->admin->id);
+
+        $listed = $this->actingAs($this->admin)->getJson('/api/v1/expenses')->assertOk()->json('data');
+
+        expect($listed)->toHaveCount(1)
+            ->and($listed[0]['asset_id'])->toBe($asset['id'])
+            ->and($listed[0]['asset_tag'])->toBe('IT-0001')
+            ->and($listed[0]['asset_name'])->toBe('Lenovo ThinkPad E14');
+    });
+
+    it('files nothing for an asset without a cost, and dates a costed one today when the purchase date is blank', function (): void {
+        $this->travelTo('2026-10-21');
+
+        $free = ($this->register)(['cost_cents' => null])->assertCreated()->json('data');
+        $undated = ($this->register)(['tag' => 'IT-0002', 'purchased_on' => null])->assertCreated()->json('data');
+
+        expect(Expense::query()->where('asset_id', $free['id'])->exists())->toBeFalse()
+            ->and(Expense::query()->where('asset_id', $undated['id'])->firstOrFail()->date->toDateString())->toBe('2026-10-21');
+    });
+
+    it('follows the cost, date and supplier through edits and drops the expense when the cost is cleared', function (): void {
+        $asset = ($this->register)()->assertCreated()->json('data');
+        $supplier = Supplier::factory()->create(['name' => 'PC Express']);
+
+        $this->actingAs($this->admin)->patchJson("/api/v1/assets/{$asset['id']}", [
+            'cost_cents' => 3_900_000, 'purchased_on' => '2026-03-01', 'supplier_id' => $supplier->id,
+        ])->assertOk();
+
+        $expense = Expense::query()->where('asset_id', $asset['id'])->firstOrFail();
+
+        expect(Expense::query()->where('asset_id', $asset['id'])->count())->toBe(1)
+            ->and($expense->amount_cents)->toBe(3_900_000)
+            ->and($expense->date->toDateString())->toBe('2026-03-01')
+            ->and($expense->payee)->toBe('PC Express');
+
+        $this->actingAs($this->admin)->patchJson("/api/v1/assets/{$asset['id']}", ['cost_cents' => 0])->assertOk();
+
+        expect(Expense::query()->where('asset_id', $asset['id'])->exists())->toBeFalse();
+
+        $this->actingAs($this->admin)->patchJson("/api/v1/assets/{$asset['id']}", ['cost_cents' => 100_000])->assertOk();
+
+        expect(Expense::query()->where('asset_id', $asset['id'])->count())->toBe(1)
+            ->and(Expense::query()->where('asset_id', $asset['id'])->value('amount_cents'))->toBe(100_000);
+    });
+
+    it('removes the expense with the asset', function (): void {
+        $asset = ($this->register)()->assertCreated()->json('data');
+
+        $this->actingAs($this->admin)->deleteJson("/api/v1/assets/{$asset['id']}")->assertNoContent();
+
+        expect(Expense::query()->where('asset_id', $asset['id'])->exists())->toBeFalse()
+            ->and(Expense::withTrashed()->where('asset_id', $asset['id'])->exists())->toBeTrue();
+    });
+
+    it('files the assets registered before purchases were expensed', function (): void {
+        $supplier = Supplier::factory()->create(['name' => 'Octagon Davao']);
+        $old = Asset::create(['name' => 'Old desk', 'tag' => 'FUR-01', 'purchased_on' => '2025-01-15', 'cost_cents' => 850_000, 'supplier_id' => $supplier->id]);
+        $free = Asset::create(['name' => 'Donated chair', 'tag' => 'FUR-02']);
+        $done = ($this->register)()->assertCreated()->json('data');
+
+        (require database_path('migrations/2026_10_26_000100_file_asset_purchases_as_expenses.php'))->up();
+
+        $expense = Expense::query()->where('asset_id', $old->id)->firstOrFail();
+
+        expect($expense->amount_cents)->toBe(850_000)
+            ->and($expense->date->toDateString())->toBe('2025-01-15')
+            ->and($expense->payee)->toBe('Octagon Davao')
+            ->and($expense->reference)->toBe('FUR-01')
+            ->and($expense->category->key)->toBe('assets')
+            ->and(Expense::query()->where('asset_id', $free->id)->exists())->toBeFalse()
+            ->and(Expense::query()->where('asset_id', $done['id'])->count())->toBe(1);
+    });
+});
+
 describe('turnover', function (): void {
     it('moves an asset between custodians and keeps every step', function (): void {
         $asset = ($this->register)(['custodian_id' => $this->marco->id])->json('data');
@@ -182,6 +274,19 @@ describe('turnover', function (): void {
 });
 
 describe('the register', function (): void {
+    it('lists the newest registration first', function (): void {
+        $this->travelTo('2026-10-01 09:00');
+        ($this->register)(['name' => 'Zebra printer', 'tag' => 'IT-0001']);
+        $this->travelTo('2026-10-02 09:00');
+        ($this->register)(['name' => 'Alpha radio', 'tag' => 'RAD-01']);
+        $this->travelTo('2026-10-03 09:00');
+        ($this->register)(['name' => 'Mid jack', 'tag' => 'TL-01']);
+
+        $rows = $this->actingAs($this->admin)->getJson('/api/v1/assets')->json('data');
+
+        expect(array_column($rows, 'tag'))->toBe(['TL-01', 'RAD-01', 'IT-0001']);
+    });
+
     it('filters by who holds what', function (): void {
         ($this->register)(['custodian_id' => $this->marco->id]);
         ($this->register)(['name' => 'Two-way radio', 'tag' => 'RAD-01', 'custodian_id' => $this->liza->id]);

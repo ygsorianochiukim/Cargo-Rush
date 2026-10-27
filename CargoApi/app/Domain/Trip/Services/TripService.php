@@ -67,6 +67,7 @@ class TripService
     {
         return DB::transaction(function () use ($data): Trip {
             $trip = $this->trips->create($data);
+            $this->fillDriverFromVehicle($trip, $data);
             $this->fillHelpers($trip, $data);
             $this->fillDistance($trip, $data);
             $this->fillTruckSize($trip, $data);
@@ -95,6 +96,7 @@ class TripService
 
             try {
                 $updated = $this->trips->update($trip, $data);
+                $this->fillDriverFromVehicle($updated, $data);
                 $this->fillHelpers($updated, $data);
                 $this->fillDistance($updated, $data);
                 $this->fillTruckSize($updated, $data);
@@ -191,6 +193,7 @@ class TripService
 
         $confirmed = DB::transaction(function () use ($trip, $data): Trip {
             $updated = $this->trips->update($trip, $data);
+            $this->fillDriverFromVehicle($updated, $data);
             $this->fillHelpers($updated, $data);
             $this->fillDistance($updated, $data);
             $this->fillTruckSize($updated, $data);
@@ -213,6 +216,23 @@ class TripService
         }
 
         return $confirmed;
+    }
+
+    private function fillDriverFromVehicle(Trip $trip, TripData $data): void
+    {
+        if ($data->wasGiven('driver_id') || $trip->driver_id !== null || $trip->vehicle_id === null) {
+            return;
+        }
+
+        if (! $data->wasGiven('vehicle_id') && ! $trip->wasRecentlyCreated) {
+            return;
+        }
+
+        $assigned = Vehicle::query()->whereKey($trip->vehicle_id)->value('driver_id');
+
+        if ($assigned !== null) {
+            $trip->forceFill(['driver_id' => $assigned])->save();
+        }
     }
 
     private function fillHelpers(Trip $trip, TripData $data): void
