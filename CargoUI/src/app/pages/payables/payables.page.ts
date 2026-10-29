@@ -16,6 +16,7 @@ import { PaymentDialog } from '../../shared/payment-dialog';
 import { RecordDialog } from '../../shared/record-dialog';
 import { EmptyState, ErrorState, SkeletonRows } from '../../shared/states';
 import { WalletPanel } from '../../shared/wallet-panel';
+import { OwnerCutoffDialog } from './owner-cutoff-dialog';
 import { PayrollSettleDialog } from './payroll-settle-dialog';
 
 @Component({
@@ -28,6 +29,7 @@ import { PayrollSettleDialog } from './payroll-settle-dialog';
     EmptyState,
     ErrorState,
     SkeletonRows,
+    OwnerCutoffDialog,
     PayrollSettleDialog,
     WalletPanel,
   ],
@@ -72,12 +74,19 @@ export class PayablesPage {
 
   protected readonly payrollFor = signal<PayableLine | null>(null);
 
+  protected readonly ownerFor = signal<PayableLine | null>(null);
+
   protected settle(line: PayableLine): void {
     this.failure.set(null);
 
     switch (line.settle_at) {
       case '/truckers':
         this.walletFor.set(line);
+
+        return;
+
+      case '/payables/owners':
+        this.ownerFor.set(line);
 
         return;
 
@@ -109,6 +118,11 @@ export class PayablesPage {
 
   protected payrollSettled(): void {
     this.payrollFor.set(null);
+    this.reload();
+  }
+
+  protected ownerSettled(): void {
+    this.ownerFor.set(null);
     this.reload();
   }
 

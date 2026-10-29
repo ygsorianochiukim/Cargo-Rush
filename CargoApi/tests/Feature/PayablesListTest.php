@@ -7,6 +7,7 @@ use App\Domain\Driver\Models\Driver;
 use App\Domain\Finance\Models\Expense;
 use App\Domain\Finance\Models\ExpenseCategory;
 use App\Domain\Identity\Models\User;
+use App\Domain\Payroll\Support\PayrollCalendar;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\VehicleArrangement;
 use App\Domain\Shared\Enums\WalletEntryKind;
@@ -144,7 +145,7 @@ describe('what it gathers', function (): void {
 });
 
 describe('what each line says', function (): void {
-    it('names the arrangement a partner is owed under', function (): void {
+    it('hands a sub-contracted truck\'s owner to the truck owners group', function (): void {
         $operator = ($this->owed)('Jun Abad', 880_000);
 
         Vehicle::create([
@@ -154,8 +155,10 @@ describe('what each line says', function (): void {
             'share_bp' => 1200, 'owner_trucker_id' => $operator->getKey(),
         ]);
 
-        expect(($this->group)(($this->payables)()->assertOk()->json('data'), 'truckers')['lines'][0]['detail'])
-            ->toBe('Sub-contractor · SUB-1');
+        $body = ($this->payables)()->assertOk()->json('data');
+
+        expect(($this->group)($body, 'truckers')['count'])->toBe(0)
+            ->and(($this->group)($body, 'truck_owners')['key'])->toBe('truck_owners');
     });
 
     it('calls an ordinary partner a partner', function (): void {
@@ -192,7 +195,11 @@ describe('rented trucks', function (): void {
             'owner_name' => 'Delfin Uy', 'owner_trucker_id' => $this->shareOwner->getKey(),
         ]);
 
+        $this->closed = PayrollCalendar::default()->justClosed();
+
         $this->haul = function (Vehicle $vehicle, int $priceCents): void {
+            $this->travelTo($this->closed->start->copy()->addDays(2)->setTime(14, 0));
+
             $trip = Trip::create([
                 'customer_id' => $this->customer->getKey(),
                 'origin' => 'Iponan',
@@ -200,7 +207,7 @@ describe('rented trucks', function (): void {
                 'cargo' => 'Rice',
                 'weight_kg' => 10_000,
                 'status' => StatusValue::Assigned->value,
-                'scheduled_at' => now()->addDay(),
+                'scheduled_at' => now()->addHour(),
                 'price_cents' => $priceCents,
                 'currency' => 'PHP',
                 'vehicle_id' => $vehicle->getKey(),
@@ -212,6 +219,8 @@ describe('rented trucks', function (): void {
             $this->actingAs($this->admin)
                 ->postJson("/api/v1/trips/{$trip->id}/complete", ['receiver_name' => 'Mrs Uy'])
                 ->assertOk();
+
+            $this->travelBack();
         };
     });
 
@@ -219,28 +228,30 @@ describe('rented trucks', function (): void {
         $body = ($this->payables)()->assertOk()->json('data');
 
         expect($body['total_cents'])->toBe(0)
-            ->and(($this->group)($body, 'rented_trucks')['count'])->toBe(0);
+            ->and(($this->group)($body, 'rented_trucks')['count'])->toBe(0)
+            ->and(($this->group)($body, 'truck_owners')['count'])->toBe(0);
     });
 
-    it('owes a share truck its cut of each delivered run', function (): void {
+    it('owes a share truck owner its cut of each delivered run once the cutoff closes', function (): void {
         ($this->haul)($this->shareTruck, 1_000_000);
         ($this->haul)($this->shareTruck, 600_000);
 
         $body = ($this->payables)()->assertOk()->json('data');
-        $rented = ($this->group)($body, 'rented_trucks');
+        $owners = ($this->group)($body, 'truck_owners');
 
-        expect($rented['count'])->toBe(1)
-            ->and($rented['total_cents'])->toBe(1_360_000)
-            ->and($rented['lines'][0]['name'])->toBe('TEN-1')
-            ->and($rented['lines'][0]['detail'])->toBe('Delfin Uy · revenue share, fleet keeps 15% · 2 unpaid runs')
-            ->and($rented['lines'][0]['settle_at'])->toBe('/truckers')
-            ->and($rented['lines'][0]['id'])->toBe($this->shareOwner->getKey());
+        expect($owners['count'])->toBe(1)
+            ->and($owners['total_cents'])->toBe(1_360_000)
+            ->and($owners['lines'][0]['name'])->toBe('Delfin Uy')
+            ->and($owners['lines'][0]['detail'])->toBe("TEN-1 · {$this->closed->label()} · 2 runs ₱13,600.00")
+            ->and($owners['lines'][0]['settle_at'])->toBe('/payables/owners')
+            ->and($owners['lines'][0]['trucker_id'])->toBe($this->shareOwner->getKey());
 
         expect(($this->group)($body, 'truckers')['count'])->toBe(0)
+            ->and(($this->group)($body, 'rented_trucks')['count'])->toBe(0)
             ->and($body['total_cents'])->toBe(1_360_000);
     });
 
-    it('lists flat rent and shares side by side', function (): void {
+    it('keeps flat rent under truck rent and shares under truck owners', function (): void {
         Vehicle::create([
             'plate' => 'RENT-1', 'model' => 'Hino', 'registration_no' => 'R1',
             'capacity_kg' => 15_000, 'status' => StatusValue::Available->value,
@@ -251,21 +262,29 @@ describe('rented trucks', function (): void {
 
         ($this->haul)($this->shareTruck, 1_000_000);
 
-        $rented = ($this->group)(($this->payables)()->assertOk()->json('data'), 'rented_trucks');
+        $body = ($this->payables)()->assertOk()->json('data');
+        $rent = ($this->group)($body, 'rented_trucks');
+        $owners = ($this->group)($body, 'truck_owners');
 
-        expect($rented['count'])->toBe(2)
-            ->and($rented['total_cents'])->toBe(5_000_000 + 850_000)
-            ->and(collect($rented['lines'])->pluck('settle_at')->all())->toBe(['/expenses', '/truckers']);
+        expect($rent['count'])->toBe(1)
+            ->and($rent['total_cents'])->toBe(5_000_000)
+            ->and($rent['lines'][0]['settle_at'])->toBe('/expenses')
+            ->and($owners['count'])->toBe(1)
+            ->and($owners['total_cents'])->toBe(850_000)
+            ->and($body['total_cents'])->toBe(5_850_000);
     });
 
-    it('drops the share line once the owner is paid', function (): void {
+    it('drops the share line once the cutoff is settled', function (): void {
         ($this->haul)($this->shareTruck, 1_000_000);
 
-        $this->actingAs($this->admin)->postJson("/api/v1/truckers/{$this->shareOwner->id}/wallet", [
-            'kind' => WalletEntryKind::Payout->value,
-            'method' => 'cash',
-            'cleared' => true,
-        ])->assertCreated();
+        $this->actingAs($this->admin)
+            ->postJson("/api/v1/finance/payables/owners/{$this->shareOwner->id}/settle", [
+                'start' => $this->closed->start->toDateString(),
+                'end' => $this->closed->end->toDateString(),
+                'method' => 'cash',
+                'cleared' => true,
+            ])
+            ->assertCreated();
 
         expect(($this->payables)()->assertOk()->json('data.total_cents'))->toBe(0);
     });

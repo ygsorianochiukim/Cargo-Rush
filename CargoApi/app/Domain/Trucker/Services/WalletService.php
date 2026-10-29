@@ -312,6 +312,109 @@ class WalletService
         });
     }
 
+    /** @param string[] $entryIds */
+    public function payOutCutoff(
+        Trucker $trucker,
+        array $entryIds,
+        int $costsCents,
+        string $costsNote,
+        CarbonInterface $periodStart,
+        CarbonInterface $periodEnd,
+        string $periodLabel,
+        ?string $reference = null,
+        ?string $note = null,
+        ?int $recordedBy = null,
+        ?CarbonInterface $occurredOn = null,
+        string $method = self::DEFAULT_METHOD,
+        bool $cleared = false,
+    ): WalletEntry {
+        return DB::transaction(function () use (
+            $trucker, $entryIds, $costsCents, $costsNote, $periodStart, $periodEnd, $periodLabel,
+            $reference, $note, $recordedBy, $occurredOn, $method, $cleared
+        ): WalletEntry {
+            abort_if(
+                WalletEntry::query()->forCutoff($trucker->getKey(), $periodStart->toDateString(), $periodEnd->toDateString())->exists(),
+                422,
+                "The {$periodLabel} cutoff has already been settled for {$trucker->name}.",
+            );
+
+            $earnings = WalletEntry::query()
+                ->where('trucker_id', $trucker->getKey())
+                ->where('kind', WalletEntryKind::Earning->value)
+                ->landed()
+                ->whereNull('settled_by')
+                ->whereIn('id', $entryIds)
+                ->lockForUpdate()
+                ->get();
+
+            abort_if(
+                $earnings->count() !== count(array_unique($entryIds)),
+                422,
+                'Some of those runs have already been settled. Reload and try again.',
+            );
+
+            $share = (int) $earnings->sum('amount_cents');
+            $costs = max(0, $costsCents);
+
+            abort_if($share === 0 && $costs === 0, 422, "There is nothing to settle for the {$periodLabel} cutoff.");
+
+            $on = $occurredOn ?? now();
+
+            $deduction = $costs === 0 ? null : $this->post(
+                trucker: $trucker,
+                kind: WalletEntryKind::Adjustment,
+                magnitude: -$costs,
+                occurredOn: $on,
+                note: $costsNote,
+                recordedBy: $recordedBy,
+                periodStart: $periodStart,
+                periodEnd: $periodEnd,
+            );
+
+            $net = $share - $costs;
+
+            if ($net <= 0) {
+                WalletEntry::query()
+                    ->whereIn('id', $earnings->modelKeys())
+                    ->update(['settled_by' => $deduction?->getKey(), 'settled_at' => now()]);
+
+                return $deduction;
+            }
+
+            abort_if(
+                $net > $this->balance($trucker) - $this->inFlightDirected($trucker, WalletEntryKind::Payout),
+                422,
+                'That is more than the account stands at once earlier costs, adjustments and payments already on the way are taken off. Pay everything from their wallet instead.',
+            );
+
+            $payout = $this->post(
+                trucker: $trucker,
+                kind: WalletEntryKind::Payout,
+                magnitude: $net,
+                occurredOn: $on,
+                reference: $reference,
+                note: $note ?? "Cutoff {$periodLabel}",
+                recordedBy: $recordedBy,
+                status: $cleared ? StatusValue::Paid : StatusValue::Pending,
+                method: $method,
+                periodStart: $periodStart,
+                periodEnd: $periodEnd,
+            );
+
+            $settled = $earnings->modelKeys();
+
+            if ($deduction !== null) {
+                $settled[] = $deduction->getKey();
+            }
+
+            WalletEntry::query()
+                ->whereIn('id', $settled)
+                ->update(['settled_by' => $payout->getKey(), 'settled_at' => now()]);
+
+            return $payout;
+        });
+    }
+
     public function adjust(
         Trucker $trucker,
         int $amountCents,
@@ -529,6 +632,8 @@ class WalletService
         ?int $recordedBy = null,
         StatusValue $status = StatusValue::Paid,
         ?string $method = null,
+        ?CarbonInterface $periodStart = null,
+        ?CarbonInterface $periodEnd = null,
     ): WalletEntry {
         $sign = $kind->signFor();
         $amount = $sign === 0 ? $magnitude : abs($magnitude) * $sign;
@@ -546,6 +651,8 @@ class WalletService
             'reference' => $reference,
             'note' => $note,
             'occurred_on' => $occurredOn->toDateString(),
+            'period_start' => $periodStart?->toDateString(),
+            'period_end' => $periodEnd?->toDateString(),
             'recorded_by' => $recordedBy,
         ]));
     }

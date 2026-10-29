@@ -14,6 +14,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class WalletEntry extends Model
@@ -25,7 +26,7 @@ class WalletEntry extends Model
     protected $fillable = [
         'trucker_id', 'trip_id', 'kind', 'status', 'method', 'source', 'amount_cents',
         'gross_cents', 'rate_bp', 'reference', 'note', 'occurred_on', 'recorded_by',
-        'settled_by', 'settled_at',
+        'settled_by', 'settled_at', 'period_start', 'period_end',
     ];
 
     protected function casts(): array
@@ -35,6 +36,8 @@ class WalletEntry extends Model
             'gross_cents' => 'integer',
             'rate_bp' => 'integer',
             'occurred_on' => 'date',
+            'period_start' => 'date',
+            'period_end' => 'date',
             'settled_at' => 'datetime',
             'kind' => WalletEntryKind::class,
             'status' => StatusValue::class,
@@ -118,6 +121,11 @@ class WalletEntry extends Model
         return $this->belongsTo(self::class, 'settled_by');
     }
 
+    public function settles(): HasMany
+    {
+        return $this->hasMany(self::class, 'settled_by');
+    }
+
     public function isSettled(): bool
     {
         return $this->settled_by !== null;
@@ -126,6 +134,19 @@ class WalletEntry extends Model
     public function scopeOutstanding(Builder $query): Builder
     {
         return $query->fromWork()->whereNull('settled_by');
+    }
+
+    public function scopeForCutoff(Builder $query, string $truckerId, string $start, string $end): Builder
+    {
+        return $query
+            ->where('trucker_id', $truckerId)
+            ->whereDate('period_start', $start)
+            ->whereDate('period_end', $end);
+    }
+
+    public function coversCutoff(): bool
+    {
+        return $this->period_start !== null && $this->period_end !== null;
     }
 
     public function paymentState(): ?string

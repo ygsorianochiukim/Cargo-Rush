@@ -39,6 +39,7 @@ class NavigationSeeder extends Seeder
             ['truck-report', 'Truck Report', 'fleet', '/truck-report', 425, false, true, 'Reports', 'finance.view', null],
             ['sales', 'Sales Report', 'trend', '/sales', 430, false, true, 'Reports', 'sales.view', null],
             ['crew-pay-report', 'Crew Pay Report', 'profile', '/crew-pay-report', 435, false, true, 'Reports', 'payroll.view', null],
+            ['owner-pay-report', 'Truck Owner Pay', 'fleet', '/owner-pay-report', 436, false, true, 'Reports', 'finance.view', null],
 
             ['statements', 'Financial Statements', 'trend', '/statements', 500, false, true, 'Accounting', 'accounting.view', null],
             ['journal', 'General Journal', 'clipboard', '/journal', 510, false, true, 'Accounting', 'accounting.view', null],

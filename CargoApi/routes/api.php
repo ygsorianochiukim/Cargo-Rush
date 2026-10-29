@@ -21,6 +21,7 @@ use App\Domain\Dispatch\Controllers\DispatchController;
 use App\Domain\Driver\Controllers\DriverController;
 use App\Domain\Finance\Controllers\ExpenseController;
 use App\Domain\Finance\Controllers\FinanceController;
+use App\Domain\Finance\Controllers\OwnerPayablesController;
 use App\Domain\Finance\Controllers\PayablesController;
 use App\Domain\Fuel\Controllers\FuelController;
 use App\Domain\Gps\Controllers\GpsController;
@@ -650,7 +651,20 @@ Route::prefix('v1')->group(function (): void {
                  * what the week costs without being able to pay any of it.
                  */
                 Route::get('payables', PayablesController::class);
+
+                /**
+                 * What each rented-share or sub-contracted truck's owner is
+                 * due per cutoff: their share of every run, less the fuel,
+                 * allowances and maintenance the fleet put into their truck.
+                 * Paying it is a wallet payout, so it sits under
+                 * `truckers.manage` like the rest of the wallet.
+                 */
+                Route::get('payables/owners', [OwnerPayablesController::class, 'index']);
+                Route::get('payables/owners/{trucker}/history', [OwnerPayablesController::class, 'history']);
             });
+
+            Route::post('payables/owners/{trucker}/settle', [OwnerPayablesController::class, 'settle'])
+                ->middleware('permission:truckers.manage');
 
             Route::middleware('permission:finance.manage')->group(function (): void {
                 Route::post('trucks', [FinanceController::class, 'storeTruck']);

@@ -1,7 +1,13 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
-import { Payables } from '../../models/finance/payables.model';
+import {
+  OwnerCutoffSettlePayload,
+  OwnerStatement,
+  OwnerTransaction,
+  Payables,
+} from '../../models/finance/payables.model';
+import { WalletEntry } from '../../models/trucker/trucker.model';
 import { ApiService } from '../shared/api.service';
 import {
   DateRange,
@@ -26,7 +32,11 @@ export class FinanceService {
     return this.api.get<Truck[]>('finance/trucks');
   }
 
-  createTruck(payload: { label: string; plate?: string | null; vehicle_id?: string | null }): Observable<Truck> {
+  createTruck(payload: {
+    label: string;
+    plate?: string | null;
+    vehicle_id?: string | null;
+  }): Observable<Truck> {
     return this.api.post<Truck>('finance/trucks', payload);
   }
 
@@ -64,6 +74,20 @@ export class FinanceService {
 
   payables(): Observable<Payables> {
     return this.api.get<Payables>('finance/payables');
+  }
+
+  ownerPayables(
+    query: { from?: string; to?: string; trucker?: string } = {},
+  ): Observable<OwnerStatement> {
+    return this.api.get<OwnerStatement>('finance/payables/owners', query);
+  }
+
+  ownerHistory(truckerId: string): Observable<OwnerTransaction[]> {
+    return this.api.get<OwnerTransaction[]>(`finance/payables/owners/${truckerId}/history`);
+  }
+
+  settleOwnerCutoff(truckerId: string, payload: OwnerCutoffSettlePayload): Observable<WalletEntry> {
+    return this.api.post<WalletEntry>(`finance/payables/owners/${truckerId}/settle`, payload);
   }
 
   sales(granularity: Granularity, range?: { from: string; to: string }): Observable<SalesReport> {

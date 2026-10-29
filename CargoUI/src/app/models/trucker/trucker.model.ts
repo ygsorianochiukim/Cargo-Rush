@@ -96,6 +96,8 @@ export interface WalletEntry {
   reference: string | null;
   note: string | null;
   occurred_on: string | null;
+  period_start?: string | null;
+  period_end?: string | null;
 
   settleable: boolean;
 

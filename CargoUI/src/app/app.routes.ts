@@ -316,6 +316,15 @@ export const routes: Routes = [
           import('./pages/crew-pay-report/crew-pay-report.page').then((m) => m.CrewPayReportPage),
       },
       {
+        path: 'owner-pay-report',
+        title: 'Truck Owner Pay · Cargo Rush',
+        data: { title: 'Truck Owner Pay' },
+        loadComponent: () =>
+          import('./pages/owner-pay-report/owner-pay-report.page').then(
+            (m) => m.OwnerPayReportPage,
+          ),
+      },
+      {
         path: 'access',
         title: 'Roles · Cargo Rush',
         data: { title: 'Roles' },
