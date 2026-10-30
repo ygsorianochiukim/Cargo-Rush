@@ -33,6 +33,8 @@ class WalletEntryResource extends ApiResource
             'reference' => $this->reference,
             'note' => $this->note,
             'occurred_on' => $this->occurred_on?->toDateString(),
+            'period_start' => $this->period_start?->toDateString(),
+            'period_end' => $this->period_end?->toDateString(),
 
             'settleable' => $this->kind->isFromWork(),
             'settled' => $this->isSettled(),

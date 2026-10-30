@@ -228,25 +228,9 @@ class CrewPayReportService
     }
 
     /** @return list<PayPeriod> */
-    private function periodsBetween($calendar, Carbon $from, Carbon $to): array
+    private function periodsBetween(PayrollCalendar $calendar, Carbon $from, Carbon $to): array
     {
-        $periods = [];
-        $cursor = $from->copy()->startOfMonth()->subMonth();
-        $last = $to->copy()->endOfMonth()->addMonth();
-
-        while ($cursor->lte($last)) {
-            foreach ($calendar->inMonth((int) $cursor->year, (int) $cursor->month) as $period) {
-                if ($period->end->gte($from->copy()->startOfDay()) && $period->start->lte($to->copy()->endOfDay())) {
-                    $periods[$period->start->toDateString()] = $period;
-                }
-            }
-
-            $cursor->addMonth();
-        }
-
-        ksort($periods);
-
-        return array_values($periods);
+        return $calendar->between($from, $to);
     }
 
     /** @return Collection<int, Trip> */

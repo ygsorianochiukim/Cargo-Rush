@@ -83,6 +83,30 @@ final class PayrollCalendar
         return $periods;
     }
 
+    /** @return list<PayPeriod> */
+    public function between(Carbon $from, Carbon $to): array
+    {
+        $periods = [];
+        $cursor = $from->copy()->startOfMonth()->subMonth();
+        $last = $to->copy()->endOfMonth()->addMonth();
+        $first = $from->copy()->startOfDay();
+        $final = $to->copy()->endOfDay();
+
+        while ($cursor->lte($last)) {
+            foreach ($this->inMonth((int) $cursor->year, (int) $cursor->month) as $period) {
+                if ($period->end->gte($first) && $period->start->lte($final)) {
+                    $periods[$period->start->toDateString()] = $period;
+                }
+            }
+
+            $cursor->addMonth();
+        }
+
+        ksort($periods);
+
+        return array_values($periods);
+    }
+
     public function matching(Carbon $start, Carbon $end): ?PayPeriod
     {
         foreach ($this->inMonth((int) $end->year, (int) $end->month) as $period) {

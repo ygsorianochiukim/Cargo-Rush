@@ -9,7 +9,6 @@ use App\Domain\Finance\Models\Expense;
 use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\VehicleArrangement;
-use App\Domain\Shared\Enums\WalletEntryKind;
 use App\Domain\Trucker\Models\Trucker;
 use App\Domain\Trucker\Models\WalletEntry;
 use App\Domain\Trucker\Services\WalletService;
@@ -25,6 +24,7 @@ class PayablesService
     public function __construct(
         private readonly WalletService $wallet,
         private readonly PayrollCostService $payroll,
+        private readonly OwnerPayablesService $owners,
     ) {}
 
     /** @return array<string, mixed> */
@@ -32,6 +32,7 @@ class PayablesService
     {
         $groups = [
             $this->truckers(),
+            $this->truckOwners(),
             $this->rentedTrucks(),
             $this->supplierBills(),
             $this->payrollOwed(),
@@ -149,10 +150,10 @@ class PayablesService
 
         $byPartner = $this->arrangementsByPartner();
 
-        $rentalOwners = $this->shareRentalsByOwner();
+        $truckOwners = array_flip($this->owners->ownerIds());
 
         $lines = $partners
-            ->reject(static fn (Trucker $trucker): bool => isset($rentalOwners[$trucker->getKey()]))
+            ->reject(static fn (Trucker $trucker): bool => isset($truckOwners[$trucker->getKey()]))
             ->map(function (Trucker $trucker) use ($byPartner): ?array {
                 $balance = WalletEntry::balanceFor($trucker->getKey());
 
@@ -180,9 +181,15 @@ class PayablesService
     }
 
     /** @return array<string, mixed> */
+    private function truckOwners(): array
+    {
+        return $this->group('truck_owners', 'Rented & sub-contracted trucks', 'fleet', $this->owners->owed());
+    }
+
+    /** @return array<string, mixed> */
     private function rentedTrucks(): array
     {
-        $monthly = Expense::query()
+        $lines = Expense::query()
             ->with('vehicle:id,plate,owner_name')
             ->whereHas('category', static fn ($query) => $query->where('key', TruckRentService::CATEGORY_KEY))
             ->where('status', StatusValue::Pending->value)
@@ -196,47 +203,11 @@ class PayablesService
                 'in_flight_cents' => 0,
                 'due_on' => $expense->date?->toDateString(),
                 'settle_at' => '/expenses',
-            ]);
+            ])
+            ->values()
+            ->all();
 
-        $shared = collect($this->shareRentalsByOwner())
-            ->map(static function (array $trucks, string $ownerId): ?array {
-                $balance = WalletEntry::balanceFor($ownerId);
-
-                if ($balance <= 0) {
-                    return null;
-                }
-
-                $runs = WalletEntry::query()
-                    ->where('trucker_id', $ownerId)
-                    ->where('kind', WalletEntryKind::Earning->value)
-                    ->outstanding()
-                    ->count();
-
-                $rates = collect($trucks)
-                    ->map(static fn (Vehicle $vehicle): string => rtrim(rtrim(number_format($vehicle->shareRateBp() / 100, 2), '0'), '.').'%')
-                    ->unique()
-                    ->implode(' / ');
-
-                return [
-                    'id' => $ownerId,
-                    'name' => collect($trucks)->pluck('plate')->implode(', '),
-                    'detail' => sprintf(
-                        '%s · revenue share, fleet keeps %s · %d unpaid %s',
-                        $trucks[0]->ownerPartner?->name ?? 'Owner not recorded',
-                        $rates,
-                        $runs,
-                        $runs === 1 ? 'run' : 'runs',
-                    ),
-                    'amount_cents' => $balance,
-                    'in_flight_cents' => WalletEntry::inFlightFor($ownerId),
-                    'due_on' => null,
-                    'settle_at' => '/truckers',
-                ];
-            })
-            ->filter()
-            ->values();
-
-        return $this->group('rented_trucks', 'Rented trucks', 'fleet', $monthly->concat($shared)->values()->all());
+        return $this->group('rented_trucks', 'Truck rent', 'fleet', $lines);
     }
 
     /** @return array<string, mixed> */
@@ -316,20 +287,6 @@ class PayablesService
 
                 return [(string) $vehicle->owner_trucker_id => "{$what} · {$vehicle->plate}"];
             })
-            ->all();
-    }
-
-    /** @return array<string, array<int, Vehicle>> */
-    private function shareRentalsByOwner(): array
-    {
-        return Vehicle::query()
-            ->with('ownerPartner:id,name')
-            ->where('arrangement', VehicleArrangement::RentedShare->value)
-            ->whereNotNull('owner_trucker_id')
-            ->orderBy('plate')
-            ->get()
-            ->groupBy('owner_trucker_id')
-            ->map(static fn ($trucks): array => $trucks->all())
             ->all();
     }
 

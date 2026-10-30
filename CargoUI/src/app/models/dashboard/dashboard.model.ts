@@ -47,6 +47,16 @@ export interface Receivables {
   };
 }
 
+export interface AssetSummary {
+  count: number;
+  cost_cents: number;
+  assigned: number;
+  available: number;
+  maintenance: number;
+  inactive: number;
+  currency: string;
+}
+
 export type DashboardPeriod = 'month' | 'quarter' | 'year';
 
 export interface MoneyKpi {
@@ -92,10 +102,23 @@ export interface BusinessDashboard {
     in_flight_cents: number;
     overdue_count: number;
     paid_cents: number;
-    groups: { key: string; label: string; icon: string; count: number; total_cents: number; overdue_count: number }[];
+    groups: {
+      key: string;
+      label: string;
+      icon: string;
+      count: number;
+      total_cents: number;
+      overdue_count: number;
+    }[];
     bill_aging: AgingBucket[];
   };
-  trend: { key: string; label: string; year: number; sales_cents: number; expenses_cents: number }[];
+  trend: {
+    key: string;
+    label: string;
+    year: number;
+    sales_cents: number;
+    expenses_cents: number;
+  }[];
   expense_mix: { kind: string; amount_cents: number }[];
   top_customers: { name: string; billed_cents: number; invoices: number }[];
   paid_from: { name: string; kind: string; amount_cents: number }[];

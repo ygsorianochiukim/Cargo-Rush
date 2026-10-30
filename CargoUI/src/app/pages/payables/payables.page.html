@@ -43,7 +43,8 @@
       [heading]="group.label"
       [icon]="group.icon"
       [hint]="
-        money(group.total_cents) + (group.overdue_count > 0 ? ' · ' + group.overdue_count + ' overdue' : '')
+        money(group.total_cents) +
+        (group.overdue_count > 0 ? ' · ' + group.overdue_count + ' overdue' : '')
       "
       [padded]="false"
     >
@@ -125,4 +126,8 @@
     (settled)="payrollSettled()"
     (closed)="payrollFor.set(null)"
   />
+}
+
+@if (ownerFor(); as line) {
+  <app-owner-cutoff-dialog [line]="line" (settled)="ownerSettled()" (closed)="ownerFor.set(null)" />
 }

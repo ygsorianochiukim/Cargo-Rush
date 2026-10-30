@@ -1,0 +1,444 @@
+<div class="grid grid-cols-1 gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
+  <app-card heading="Truck owners" icon="fleet" [padded]="false">
+    <div class="border-b border-cr-line/70 p-3">
+      <input
+        type="search"
+        [class]="inputClass"
+        placeholder="Search by name or plate…"
+        [value]="search()"
+        (input)="search.set($any($event.target).value)"
+      />
+    </div>
+
+    @if (error(); as message) {
+      <div class="p-4"><app-error-state [message]="message" (retry)="load()" /></div>
+    } @else if (statement() === null) {
+      <div class="p-4"><app-skeleton-rows [count]="6" /></div>
+    } @else if (owners().length === 0) {
+      <div class="p-4">
+        <app-empty-state
+          icon="fleet"
+          title="No rented or sub-contracted trucks"
+          body="Only the owners of rented-share and sub-contracted trucks appear here. Set a truck’s arrangement and name its owner on the Fleet screen."
+        />
+      </div>
+    } @else {
+      <div class="flex flex-col divide-y divide-cr-line/70">
+        @for (owner of owners(); track owner.id) {
+          <button
+            type="button"
+            class="flex items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-cr-tint"
+            [class.bg-cr-tint]="chosen()?.id === owner.id"
+            (click)="choose(owner)"
+          >
+            <span
+              class="flex h-9 w-9 flex-none items-center justify-center rounded-full bg-cr-blue/10 text-[12px] font-bold text-cr-blue"
+            >
+              {{ initials(owner.name) }}
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-[14px] font-semibold">{{ owner.name }}</span>
+              <span class="block text-[12px] text-cr-ink-muted">
+                {{ owner.plates.join(', ') }}
+                @for (truck of owner.trucks; track truck.id) {
+                  @if ($first) {
+                    · {{ truck.arrangement_label }} · keeps {{ percent(truck.owner_keeps_bp) }}
+                  }
+                }
+              </span>
+              @if (owner.totals.unpaid_cents > 0) {
+                <span class="cr-num block text-[12px] font-semibold text-cr-warning">
+                  {{ fmt.pesos(owner.totals.unpaid_cents) }} unpaid
+                </span>
+              }
+            </span>
+          </button>
+        }
+      </div>
+    }
+  </app-card>
+
+  <div class="flex flex-col gap-4">
+    <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+      <div class="flex flex-wrap items-end gap-3">
+        <app-field label="From month">
+          <input
+            type="month"
+            [class]="inputClass"
+            [value]="fromMonth()"
+            (change)="setRange('from', $any($event.target).value)"
+          />
+        </app-field>
+        <app-field label="To month">
+          <input
+            type="month"
+            [class]="inputClass"
+            [value]="toMonth()"
+            (change)="setRange('to', $any($event.target).value)"
+          />
+        </app-field>
+
+        @if (chosen(); as owner) {
+          <div class="ml-auto grid grid-cols-3 gap-x-5 gap-y-2 text-right sm:grid-cols-6">
+            <div>
+              <p class="cr-meta">Runs</p>
+              <p class="cr-num text-[18px] leading-none font-semibold">{{ owner.totals.runs }}</p>
+            </div>
+            <div>
+              <p class="cr-meta">Income</p>
+              <p class="cr-num text-[18px] leading-none font-semibold">
+                {{ fmt.pesos(owner.totals.gross_cents) }}
+              </p>
+            </div>
+            <div>
+              <p class="cr-meta">Company share</p>
+              <p class="cr-num text-[18px] leading-none font-semibold text-cr-ink-muted">
+                − {{ fmt.pesos(owner.totals.commission_cents) }}
+              </p>
+            </div>
+            <div>
+              <p class="cr-meta">Their share</p>
+              <p class="cr-num text-[18px] leading-none font-semibold">
+                {{ fmt.pesos(owner.totals.share_cents) }}
+              </p>
+            </div>
+            <div>
+              <p class="cr-meta">Less costs</p>
+              <p class="cr-num text-[18px] leading-none font-semibold text-cr-red">
+                − {{ fmt.pesos(owner.totals.costs_cents) }}
+              </p>
+            </div>
+            <div>
+              <p class="cr-meta">Due to them</p>
+              <p class="cr-num text-[18px] leading-none font-semibold text-cr-blue">
+                {{ fmt.pesos(owner.totals.net_cents) }}
+              </p>
+            </div>
+          </div>
+        }
+      </div>
+
+      @if (chosen(); as owner) {
+        <p class="mt-3 text-[13px] text-cr-ink-muted">
+          <span class="font-semibold text-cr-ink">{{ owner.name }}</span>
+          @if (owner.business_name) {
+            · {{ owner.business_name }}
+          }
+          @for (truck of owner.trucks; track truck.id) {
+            · <span class="cr-num">{{ truck.plate }}</span> ({{ truck.arrangement_label }}) keeps
+            {{ percent(truck.owner_keeps_bp) }} of each run’s VAT-exclusive income, the company
+            keeps {{ percent(truck.fleet_keeps_bp) }}
+          }
+          · fuel, driver and helper allowances and maintenance the fleet puts into their truck come
+          off at every cutoff.
+        </p>
+        @if (statement(); as s) {
+          <p class="mt-1 text-[12px] text-cr-ink-muted">{{ s.calendar }}</p>
+        }
+      }
+    </div>
+
+    @if (error(); as message) {
+      <app-error-state [message]="message" (retry)="load()" />
+    } @else if (loading() && statement() === null) {
+      <app-card><app-skeleton-rows [count]="5" /></app-card>
+    } @else if (chosen() === null) {
+      <app-card>
+        <app-empty-state
+          icon="fleet"
+          title="Pick an owner"
+          body="Choose a truck owner on the left to see every run and every peso of cost behind what they are due, cutoff by cutoff."
+        />
+      </app-card>
+    } @else {
+      <div class="flex flex-wrap items-center gap-2" role="tablist">
+        @for (
+          option of [
+            { key: 'cutoffs', label: 'Cutoffs' },
+            { key: 'history', label: 'Transaction history' },
+          ];
+          track option.key
+        ) {
+          <button
+            type="button"
+            role="tab"
+            [attr.aria-selected]="tab() === option.key"
+            class="inline-flex h-9 items-center gap-2 rounded-full border px-3.5 text-[13px] transition-colors"
+            [class]="
+              tab() === option.key
+                ? 'border-cr-blue bg-cr-tint font-semibold text-cr-blue'
+                : 'border-cr-line bg-cr-surface text-cr-ink hover:bg-cr-tint'
+            "
+            (click)="tab.set($any(option.key))"
+          >
+            {{ option.label }}
+          </button>
+        }
+      </div>
+
+      @if (tab() === 'history') {
+        <app-card>
+          <app-owner-history-list [truckerId]="chosen()!.id" />
+        </app-card>
+      } @else {
+        @for (cutoff of cutoffs(); track cutoff.start) {
+          <article class="rounded-card bg-cr-surface shadow-card ring-1 ring-cr-line/60">
+            <button
+              type="button"
+              class="flex w-full flex-wrap items-center gap-x-4 gap-y-2 p-4 text-left"
+              [attr.aria-expanded]="isOpen(cutoff)"
+              (click)="toggle(cutoff)"
+            >
+              <app-icon
+                [name]="isOpen(cutoff) ? 'chevron-left' : 'chevron-right'"
+                [size]="16"
+                class="flex-none text-cr-ink-muted"
+              />
+              <span class="min-w-[220px] flex-1">
+                <span class="block text-[15px] font-semibold">{{ cutoff.label }}</span>
+                <span class="cr-num block text-[12px] text-cr-ink-muted">{{
+                  formula(cutoff)
+                }}</span>
+              </span>
+
+              <span class="text-right">
+                <span class="cr-meta block">Runs</span>
+                <span class="cr-num text-[15px] font-semibold">{{ cutoff.runs_count }}</span>
+              </span>
+
+              <span class="text-right">
+                <span class="cr-meta block">Share</span>
+                <span class="cr-num text-[15px] font-semibold">{{
+                  fmt.pesos(cutoff.share_cents)
+                }}</span>
+              </span>
+
+              <span class="text-right">
+                <span class="cr-meta block">Costs</span>
+                <span class="cr-num text-[15px] font-semibold text-cr-red"
+                  >− {{ fmt.pesos(cutoff.costs_cents) }}</span
+                >
+              </span>
+
+              <span class="text-right">
+                <span class="cr-meta block">{{
+                  cutoff.net_cents < 0 ? 'Owner owes' : 'Settled to owner'
+                }}</span>
+                <span
+                  class="cr-num text-[17px] font-bold"
+                  [class.text-cr-blue]="cutoff.net_cents >= 0"
+                  [class.text-cr-red]="cutoff.net_cents < 0"
+                >
+                  {{ fmt.pesos(cutoff.net_cents < 0 ? -cutoff.net_cents : cutoff.net_cents) }}
+                </span>
+              </span>
+
+              <span
+                class="rounded-full px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] uppercase"
+                [class]="state(cutoff).tone"
+              >
+                {{ state(cutoff).label }}
+              </span>
+            </button>
+
+            @if (isOpen(cutoff)) {
+              <div class="border-t border-cr-line/70 p-4">
+                @if (cutoff.paid_elsewhere_cents > 0) {
+                  <p class="mb-3 rounded-control bg-cr-warning-bg px-3 py-2 text-[12px]">
+                    {{ fmt.pesos(cutoff.paid_elsewhere_cents) }} of this cutoff’s runs were paid
+                    straight from the wallet, so they are shown greyed out and left out of the
+                    share.
+                  </p>
+                }
+
+                <h3 class="cr-meta">Runs · how each share comes about</h3>
+                @if (cutoff.runs.length === 0) {
+                  <p class="mt-1 text-[13px] text-cr-ink-muted">
+                    No delivered run on their truck in this cutoff.
+                  </p>
+                } @else {
+                  <div class="overflow-x-auto">
+                    <table class="mt-2 w-full text-[13px]">
+                      <thead>
+                        <tr class="border-b border-cr-line/70 text-left">
+                          <th class="cr-meta py-1.5">Delivered</th>
+                          <th class="cr-meta py-1.5">Run</th>
+                          <th class="cr-meta py-1.5">Customer · route</th>
+                          <th class="cr-meta py-1.5 text-right">Price</th>
+                          <th class="cr-meta py-1.5 text-right">VAT out</th>
+                          <th class="cr-meta py-1.5 text-right">Income</th>
+                          <th class="cr-meta py-1.5 text-right">Company share</th>
+                          <th class="cr-meta py-1.5 text-right">Owner share</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-cr-line/50">
+                        @for (run of cutoff.runs; track run.id) {
+                          <tr [class.opacity-60]="!run.counted">
+                            <td class="cr-num py-1.5">
+                              {{ fmt.date(run.on) }}
+                              <span class="block text-[11px] text-cr-ink-muted">{{
+                                run.plate ?? '—'
+                              }}</span>
+                            </td>
+                            <td class="cr-num py-1.5 font-semibold">
+                              {{ run.reference ?? '—' }}
+                              @if (run.paid_elsewhere) {
+                                <span class="block text-[11px] font-normal text-cr-warning"
+                                  >paid · {{ run.paid_elsewhere }}</span
+                                >
+                              }
+                            </td>
+                            <td class="py-1.5">
+                              {{ run.customer ?? '—' }}
+                              <span class="block text-[11px] text-cr-ink-muted"
+                                >{{ run.origin }} → {{ run.destination }}</span
+                              >
+                            </td>
+                            <td class="cr-num py-1.5 text-right">
+                              {{ fmt.pesos(run.price_cents) }}
+                              @if (run.vat_treatment_label) {
+                                <span class="block text-[11px] text-cr-ink-muted">{{
+                                  run.vat_treatment_label
+                                }}</span>
+                              }
+                            </td>
+                            <td class="cr-num py-1.5 text-right text-cr-ink-muted">
+                              {{
+                                run.vat_in_price_cents > 0
+                                  ? '− ' + fmt.pesos(run.vat_in_price_cents)
+                                  : '—'
+                              }}
+                            </td>
+                            <td class="cr-num py-1.5 text-right">
+                              {{ fmt.pesos(run.gross_cents) }}
+                            </td>
+                            <td class="cr-num py-1.5 text-right text-cr-ink-muted">
+                              − {{ fmt.pesos(run.commission_cents) }}
+                              <span class="block text-[11px]">{{
+                                percent(run.fleet_keeps_bp)
+                              }}</span>
+                            </td>
+                            <td class="cr-num py-1.5 text-right font-semibold">
+                              {{ fmt.pesos(run.share_cents) }}
+                              <span class="block text-[11px] font-normal text-cr-ink-muted">{{
+                                keeps(run.fleet_keeps_bp)
+                              }}</span>
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                      <tfoot>
+                        <tr class="border-t-2 border-cr-ink/20">
+                          <td class="py-2 font-bold" colspan="5">
+                            {{ cutoff.runs_count }} {{ cutoff.runs_count === 1 ? 'run' : 'runs' }}
+                          </td>
+                          <td class="cr-num py-2 text-right font-bold">
+                            {{ fmt.pesos(cutoff.gross_cents) }}
+                          </td>
+                          <td class="cr-num py-2 text-right font-bold text-cr-ink-muted">
+                            − {{ fmt.pesos(cutoff.commission_cents) }}
+                          </td>
+                          <td class="cr-num py-2 text-right font-bold">
+                            {{ fmt.pesos(cutoff.share_cents) }}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                }
+
+                <h3 class="cr-meta mt-4">Costs · what the fleet put into their truck</h3>
+                @if (cutoff.costs.length === 0) {
+                  <p class="mt-1 text-[13px] text-cr-ink-muted">
+                    No fuel, allowance or maintenance was charged to their truck in this cutoff.
+                  </p>
+                } @else {
+                  <div class="overflow-x-auto">
+                    <table class="mt-2 w-full text-[13px]">
+                      <thead>
+                        <tr class="border-b border-cr-line/70 text-left">
+                          <th class="cr-meta py-1.5">Date</th>
+                          <th class="cr-meta py-1.5">Cost</th>
+                          <th class="cr-meta py-1.5">Where it came from</th>
+                          <th class="cr-meta py-1.5">Truck</th>
+                          <th class="cr-meta py-1.5 text-right">Litres</th>
+                          <th class="cr-meta py-1.5">Paid with</th>
+                          <th class="cr-meta py-1.5 text-right">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody class="divide-y divide-cr-line/50">
+                        @for (cost of cutoff.costs; track $index) {
+                          <tr>
+                            <td class="cr-num py-1.5">{{ cost.on ? fmt.date(cost.on) : '—' }}</td>
+                            <td class="py-1.5 font-semibold">{{ costWord(cost.kind) }}</td>
+                            <td class="py-1.5">
+                              {{ cost.label }}
+                              @if (cost.detail) {
+                                <span class="block text-[11px] text-cr-ink-muted">{{
+                                  cost.detail
+                                }}</span>
+                              }
+                            </td>
+                            <td class="cr-num py-1.5">{{ cost.plate ?? '—' }}</td>
+                            <td class="cr-num py-1.5 text-right">
+                              {{ litres(cost.litres) || '—' }}
+                            </td>
+                            <td class="py-1.5">{{ cost.paid_with ?? '—' }}</td>
+                            <td class="cr-num py-1.5 text-right font-semibold text-cr-red">
+                              − {{ fmt.pesos(cost.cents) }}
+                            </td>
+                          </tr>
+                        }
+                      </tbody>
+                      <tfoot>
+                        @for (kind of costKinds; track kind) {
+                          @if (costOf(cutoff, kind) > 0) {
+                            <tr class="border-t border-cr-line/70">
+                              <td class="py-1 text-cr-ink-muted" colspan="6">
+                                {{ costWord(kind) }} taken off
+                              </td>
+                              <td class="cr-num py-1 text-right font-semibold text-cr-red">
+                                − {{ fmt.pesos(costOf(cutoff, kind)) }}
+                              </td>
+                            </tr>
+                          }
+                        }
+                        <tr>
+                          <td class="py-2 font-bold" colspan="6">
+                            {{
+                              cutoff.net_cents < 0 ? 'Owner owes the fleet' : 'Settled to the owner'
+                            }}
+                            <span class="cr-num block text-[11px] font-normal text-cr-ink-muted">{{
+                              formula(cutoff)
+                            }}</span>
+                          </td>
+                          <td
+                            class="cr-num py-2 text-right text-[15px] font-bold"
+                            [class.text-cr-blue]="cutoff.net_cents >= 0"
+                            [class.text-cr-red]="cutoff.net_cents < 0"
+                          >
+                            {{
+                              fmt.pesos(cutoff.net_cents < 0 ? -cutoff.net_cents : cutoff.net_cents)
+                            }}
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                }
+              </div>
+            }
+          </article>
+        } @empty {
+          <app-card>
+            <app-empty-state
+              icon="calendar"
+              title="Nothing in that range"
+              body="No run on their truck and no cost against it in those months. Widen the months above."
+            />
+          </app-card>
+        }
+      }
+    }
+  </div>
+</div>
