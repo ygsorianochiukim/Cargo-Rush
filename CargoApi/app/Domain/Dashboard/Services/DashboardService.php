@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Dashboard\Services;
 
+use App\Domain\Asset\Models\Asset;
 use App\Domain\Billing\Repositories\InvoiceRepository;
 use App\Domain\Delivery\Repositories\DeliveryLogRepository;
 use App\Domain\Driver\Repositories\DriverRepository;
@@ -72,6 +73,28 @@ class DashboardService
                 'delta' => null,
                 'higher_is_better' => false,
             ],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    public function assets(): array
+    {
+        $byStatus = Asset::query()
+            ->selectRaw('status, count(*) as items, coalesce(sum(cost_cents), 0) as cost_cents')
+            ->groupBy('status')
+            ->get()
+            ->keyBy('status');
+
+        $count = fn (StatusValue $status): int => (int) ($byStatus[$status->value]->items ?? 0);
+
+        return [
+            'count' => (int) $byStatus->sum('items'),
+            'cost_cents' => (int) $byStatus->sum('cost_cents'),
+            'assigned' => $count(StatusValue::Assigned),
+            'available' => $count(StatusValue::Available),
+            'maintenance' => $count(StatusValue::Maintenance),
+            'inactive' => $count(StatusValue::Inactive),
+            'currency' => 'PHP',
         ];
     }
 

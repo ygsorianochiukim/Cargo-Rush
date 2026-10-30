@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { map } from 'rxjs';
+import { map, of } from 'rxjs';
 
 import { DashboardService } from '../../services/dashboard/dashboard.service';
 import { IdentityService } from '../../services/identity/identity.service';
@@ -28,14 +28,18 @@ export class DashboardPage {
   private readonly identity = inject(IdentityService);
 
   protected readonly canSeeMoney = this.identity.can('finance.view');
+  protected readonly canSeeAssets = this.identity.can('assets.view');
 
   protected readonly kpis = toSignal(this.dashboard.kpis(), {
     initialValue: null,
   });
 
-  protected readonly shipments = toSignal(this.trips.list({ per_page: 6 }).pipe(map((r) => r.data)), {
-    initialValue: null,
-  });
+  protected readonly shipments = toSignal(
+    this.trips.list({ per_page: 6 }).pipe(map((r) => r.data)),
+    {
+      initialValue: null,
+    },
+  );
 
   protected readonly fleet = toSignal(this.dashboard.fleet(), {
     initialValue: null,
@@ -51,6 +55,23 @@ export class DashboardPage {
 
   protected readonly receivables = toSignal(this.dashboard.receivables(), {
     initialValue: null,
+  });
+
+  protected readonly assets = toSignal(this.canSeeAssets ? this.dashboard.assets() : of(null), {
+    initialValue: null,
+  });
+
+  protected readonly assetRows = computed(() => {
+    const a = this.assets();
+
+    return a === null
+      ? []
+      : [
+          { label: 'Issued', hint: 'Held by an employee', count: a.assigned },
+          { label: 'In stock', hint: 'On the shelf', count: a.available },
+          { label: 'Under repair', hint: 'Out for service', count: a.maintenance },
+          { label: 'Retired / lost', hint: 'No longer in use', count: a.inactive },
+        ];
   });
 
   protected readonly collectedPct = computed<number | null>(() => {

@@ -35,7 +35,9 @@
               </thead>
               <tbody>
                 @for (row of rows; track row.id) {
-                  <tr class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint">
+                  <tr
+                    class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint"
+                  >
                     <td class="cr-num px-4 py-3 text-[13px] font-semibold">{{ row.reference }}</td>
                     <td class="px-4 py-3 text-[13px]">
                       <span class="flex items-center gap-1.5">
@@ -76,77 +78,82 @@
 
   <div class="flex flex-col gap-4">
     @if (!canSeeMoney) {
-    <app-card heading="Receivables" icon="billing" [hint]="receivablesHint()">
-      @if (receivables(); as money) {
-        <p class="cr-meta">Invoices awaiting payment</p>
-        <p class="cr-num mt-1 text-[28px] leading-none font-semibold">
-          {{ fmt.money(money.pending_payment_cents, money.currency) }}
-        </p>
-        <p class="mt-1 text-[12px] text-cr-ink-muted">
-          {{ money.pending_count }} invoice{{ money.pending_count === 1 ? '' : 's' }} unpaid
-          @if (money.overdue_cents > 0) {
-            <span class="font-semibold text-cr-red">
-              · {{ fmt.money(money.overdue_cents, money.currency) }} overdue
-            </span>
-          }
-        </p>
-
-        <div
-          class="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-cr-line"
-          role="img"
-          [attr.aria-label]="
-            collectedPct() === null
-              ? 'Nothing billed in the last ' + money.window_days + ' days'
-              : collectedPct() + ' percent of billing in the last ' + money.window_days + ' days collected'
-          ">
-          <span
-            class="block h-full rounded-full bg-cr-success transition-[width] duration-200"
-            [style.width.%]="collectedPct() ?? 0"></span>
-        </div>
-
-        <dl class="mt-3 flex flex-col gap-2">
-          <div class="flex items-baseline gap-2">
-            <dt class="min-w-0 flex-1 truncate text-[13px]">
-              Collected
-              <span class="block text-[11px] text-cr-ink-muted">
-                Of invoices raised in the last {{ money.window_days }} days
+      <app-card heading="Receivables" icon="billing" [hint]="receivablesHint()">
+        @if (receivables(); as money) {
+          <p class="cr-meta">Invoices awaiting payment</p>
+          <p class="cr-num mt-1 text-[28px] leading-none font-semibold">
+            {{ fmt.money(money.pending_payment_cents, money.currency) }}
+          </p>
+          <p class="mt-1 text-[12px] text-cr-ink-muted">
+            {{ money.pending_count }} invoice{{ money.pending_count === 1 ? '' : 's' }} unpaid
+            @if (money.overdue_cents > 0) {
+              <span class="font-semibold text-cr-red">
+                · {{ fmt.money(money.overdue_cents, money.currency) }} overdue
               </span>
-            </dt>
-            <dd class="cr-num text-[13px] font-semibold text-cr-success">
-              {{ collectedPct() === null ? '—' : collectedPct() + '%' }}
-            </dd>
+            }
+          </p>
+
+          <div
+            class="mt-4 h-2.5 w-full overflow-hidden rounded-full bg-cr-line"
+            role="img"
+            [attr.aria-label]="
+              collectedPct() === null
+                ? 'Nothing billed in the last ' + money.window_days + ' days'
+                : collectedPct() +
+                  ' percent of billing in the last ' +
+                  money.window_days +
+                  ' days collected'
+            "
+          >
+            <span
+              class="block h-full rounded-full bg-cr-success transition-[width] duration-200"
+              [style.width.%]="collectedPct() ?? 0"
+            ></span>
           </div>
-          <div class="flex items-baseline gap-2 border-t border-cr-line/70 pt-2">
-            <dt class="min-w-0 flex-1 truncate text-[13px]">
-              Successful payments
-              <span class="block text-[11px] text-cr-ink-muted">All time</span>
-            </dt>
-            <dd class="cr-num text-[13px] font-semibold text-cr-success">
-              {{ fmt.money(money.successful_payment_cents, money.currency) }}
-            </dd>
+
+          <dl class="mt-3 flex flex-col gap-2">
+            <div class="flex items-baseline gap-2">
+              <dt class="min-w-0 flex-1 truncate text-[13px]">
+                Collected
+                <span class="block text-[11px] text-cr-ink-muted">
+                  Of invoices raised in the last {{ money.window_days }} days
+                </span>
+              </dt>
+              <dd class="cr-num text-[13px] font-semibold text-cr-success">
+                {{ collectedPct() === null ? '—' : collectedPct() + '%' }}
+              </dd>
+            </div>
+            <div class="flex items-baseline gap-2 border-t border-cr-line/70 pt-2">
+              <dt class="min-w-0 flex-1 truncate text-[13px]">
+                Successful payments
+                <span class="block text-[11px] text-cr-ink-muted">All time</span>
+              </dt>
+              <dd class="cr-num text-[13px] font-semibold text-cr-success">
+                {{ fmt.money(money.successful_payment_cents, money.currency) }}
+              </dd>
+            </div>
+            <div class="flex items-baseline gap-2 border-t border-cr-line/70 pt-2">
+              <dt class="min-w-0 flex-1 truncate text-[13px]">
+                Income earned
+                <span class="block text-[11px] text-cr-ink-muted">
+                  Last {{ money.window_days }} days, from the ledger
+                </span>
+              </dt>
+              <dd class="cr-num text-[13px] font-semibold">
+                {{ fmt.money(money.income_cents, money.currency) }}
+              </dd>
+            </div>
+          </dl>
+        } @else {
+          <div class="flex flex-col gap-3">
+            <div class="cr-skeleton h-2 w-24"></div>
+            <div class="cr-skeleton h-7 w-32"></div>
+            <div class="cr-skeleton h-2.5 w-full rounded-full"></div>
+            <div class="cr-skeleton h-3 w-full"></div>
+            <div class="cr-skeleton h-3 w-full"></div>
           </div>
-          <div class="flex items-baseline gap-2 border-t border-cr-line/70 pt-2">
-            <dt class="min-w-0 flex-1 truncate text-[13px]">
-              Income earned
-              <span class="block text-[11px] text-cr-ink-muted">
-                Last {{ money.window_days }} days, from the ledger
-              </span>
-            </dt>
-            <dd class="cr-num text-[13px] font-semibold">
-              {{ fmt.money(money.income_cents, money.currency) }}
-            </dd>
-          </div>
-        </dl>
-      } @else {
-        <div class="flex flex-col gap-3">
-          <div class="cr-skeleton h-2 w-24"></div>
-          <div class="cr-skeleton h-7 w-32"></div>
-          <div class="cr-skeleton h-2.5 w-full rounded-full"></div>
-          <div class="cr-skeleton h-3 w-full"></div>
-          <div class="cr-skeleton h-3 w-full"></div>
-        </div>
-      }
-    </app-card>
+        }
+      </app-card>
     }
 
     <app-card heading="Fleet status" icon="fleet">
@@ -160,7 +167,8 @@
               class="h-full transition-opacity duration-150 first:rounded-l-full last:rounded-r-full"
               [class]="toneDot[tone(seg.status)]"
               [style.opacity]="segment() && segment() !== seg.status ? 0.3 : 1"
-              [style.width.%]="sharePct(seg.count)"></span>
+              [style.width.%]="sharePct(seg.count)"
+            ></span>
           }
         </div>
 
@@ -169,19 +177,24 @@
             <li class="relative">
               <button
                 type="button"
-                class="flex w-full items-center gap-2.5 rounded-control px-1.5 py-1.5 text-left
-                       transition-colors hover:bg-cr-tint focus:outline-none
-                       focus-visible:ring-2 focus-visible:ring-cr-blue focus-visible:ring-offset-2"
+                class="flex w-full items-center gap-2.5 rounded-control px-1.5 py-1.5 text-left transition-colors hover:bg-cr-tint focus:outline-none focus-visible:ring-2 focus-visible:ring-cr-blue focus-visible:ring-offset-2"
                 [attr.aria-label]="
-                  seg.label + ', ' + seg.count + ' vehicles, ' + sharePct(seg.count) + ' percent of the fleet'
+                  seg.label +
+                  ', ' +
+                  seg.count +
+                  ' vehicles, ' +
+                  sharePct(seg.count) +
+                  ' percent of the fleet'
                 "
                 (mouseenter)="segment.set(seg.status)"
                 (mouseleave)="segment.set(null)"
                 (focus)="segment.set(seg.status)"
-                (blur)="segment.set(null)">
+                (blur)="segment.set(null)"
+              >
                 <span
                   class="h-2.5 w-2.5 flex-none rounded-full"
-                  [class]="toneDot[tone(seg.status)]"></span>
+                  [class]="toneDot[tone(seg.status)]"
+                ></span>
                 <span class="min-w-0 flex-1 truncate text-[13px]">{{ seg.label }}</span>
                 <span class="cr-num text-[13px] font-semibold">{{ seg.count }}</span>
                 <span class="cr-num w-10 text-right text-[12px] text-cr-ink-muted">
@@ -206,6 +219,41 @@
       }
     </app-card>
 
+    @if (canSeeAssets) {
+      <app-card heading="Assets" icon="shipments" hint="Purchase cost">
+        @if (assets(); as summary) {
+          <p class="cr-meta">Total asset cost</p>
+          <p class="cr-num mt-1 text-[28px] leading-none font-semibold">
+            {{ fmt.pesos(summary.cost_cents, summary.currency) }}
+          </p>
+          <p class="mt-1 text-[12px] text-cr-ink-muted">
+            {{ summary.count }} item{{ summary.count === 1 ? '' : 's' }} on the register
+          </p>
+
+          <dl class="mt-4 flex flex-col gap-2">
+            @for (row of assetRows(); track row.label) {
+              <div
+                class="flex items-baseline gap-2 border-t border-cr-line/70 pt-2 first:border-0 first:pt-0"
+              >
+                <dt class="min-w-0 flex-1 truncate text-[13px]">
+                  {{ row.label }}
+                  <span class="block text-[11px] text-cr-ink-muted">{{ row.hint }}</span>
+                </dt>
+                <dd class="cr-num text-[13px] font-semibold">{{ row.count }}</dd>
+              </div>
+            }
+          </dl>
+        } @else {
+          <div class="flex flex-col gap-3">
+            <div class="cr-skeleton h-2 w-24"></div>
+            <div class="cr-skeleton h-7 w-32"></div>
+            <div class="cr-skeleton h-3 w-full"></div>
+            <div class="cr-skeleton h-3 w-full"></div>
+          </div>
+        }
+      </app-card>
+    }
+
     <app-card heading="Recent activity" icon="bell" [padded]="false">
       @if (activity(); as entries) {
         <ul class="flex flex-col">
@@ -213,7 +261,8 @@
             <li class="flex gap-3 border-b border-cr-line/70 px-4 py-3 last:border-0">
               <span
                 class="flex h-8 w-8 flex-none items-center justify-center rounded-full"
-                [class]="toneClass[entry.tone]">
+                [class]="toneClass[entry.tone]"
+              >
                 <app-icon [name]="entry.icon" [size]="16" />
               </span>
               <span class="min-w-0 flex-1">

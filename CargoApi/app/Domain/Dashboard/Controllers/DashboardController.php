@@ -21,6 +21,11 @@ class DashboardController extends ApiController
         return $this->payload($this->dashboard->kpis());
     }
 
+    public function assets(): JsonResponse
+    {
+        return $this->payload($this->dashboard->assets());
+    }
+
     public function fleet(): JsonResponse
     {
         return $this->payload($this->dashboard->fleetBreakdown());

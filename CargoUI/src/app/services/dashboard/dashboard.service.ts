@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import { ApiService } from '../shared/api.service';
 import {
   ActivityEntry,
+  AssetSummary,
   BusinessDashboard,
   DashboardPeriod,
   DeliveryPoint,
@@ -35,6 +36,10 @@ export class DashboardService {
 
   receivables(days?: number): Observable<Receivables> {
     return this.api.get<Receivables>('dashboard/receivables', days ? { days } : undefined);
+  }
+
+  assets(): Observable<AssetSummary> {
+    return this.api.get<AssetSummary>('dashboard/assets');
   }
 
   business(period: DashboardPeriod, date: string): Observable<BusinessDashboard> {

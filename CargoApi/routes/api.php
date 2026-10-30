@@ -214,6 +214,7 @@ Route::prefix('v1')->group(function (): void {
             Route::get('receivables', [DashboardController::class, 'receivables']);
             Route::get('business', [DashboardController::class, 'business'])->middleware('permission:finance.view');
             Route::get('trucks', [DashboardController::class, 'trucks'])->middleware('permission:finance.view');
+            Route::get('assets', [DashboardController::class, 'assets'])->middleware('permission:assets.view');
         });
 
         // The driver's own work. Declared before the `trips/{trip}` resource so
