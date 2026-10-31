@@ -164,7 +164,7 @@ export class ExpensesPage {
       value: (e) => e.category_name,
       sub: (e) => e.trip_reference ?? e.asset_tag ?? e.note,
     },
-    { label: 'Date', kind: 'num', value: (e) => fmt.date(e.date) },
+    { label: 'Date', kind: 'num', value: (e) => fmt.date(e.date), date: (e) => e.date },
     {
       label: 'Paid to',
       value: (e) => e.supplier_name ?? e.payee,

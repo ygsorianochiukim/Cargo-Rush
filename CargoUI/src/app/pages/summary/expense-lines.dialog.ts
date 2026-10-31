@@ -64,7 +64,7 @@ export class ExpenseLinesDialog {
   );
 
   protected readonly columns: Column<ExpenseLine>[] = [
-    { label: 'Date', kind: 'num', value: (l) => fmt.date(l.date) },
+    { label: 'Date', kind: 'num', value: (l) => fmt.date(l.date), date: (l) => l.date },
     { label: 'Type', kind: 'strong', value: (l) => l.kind, sub: (l) => l.description },
     { label: 'Truck', kind: 'muted', value: (l) => l.truck ?? (l.source === 'sheet' ? null : 'No truck') },
     { label: 'Amount', kind: 'num', value: (l) => fmt.pesos(l.amount_cents) },

@@ -66,7 +66,12 @@ export class ReceivableLinesDialog {
       value: (l) => l.counterparty,
       sub: (l) => l.reference ?? (l.source === 'trucker' ? 'Partner trucker' : null),
     },
-    { label: 'Issued', kind: 'num', value: (l) => (l.issued_at ? fmt.date(l.issued_at) : null) },
+    {
+      label: 'Issued',
+      kind: 'num',
+      value: (l) => (l.issued_at ? fmt.date(l.issued_at) : null),
+      date: (l) => l.issued_at,
+    },
     {
       label: 'Due',
       kind: 'num',

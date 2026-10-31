@@ -62,7 +62,12 @@ export class IncidentsPage {
     { label: 'Incident', value: (i) => i.kind, sub: (i) => i.place },
     { label: 'Driver', value: (i) => i.driver_name },
     { label: 'Vehicle', kind: 'muted', value: (i) => i.vehicle_plate },
-    { label: 'Occurred', kind: 'num', value: (i) => fmt.dateTime(i.occurred_at) },
+    {
+      label: 'Occurred',
+      kind: 'num',
+      value: (i) => fmt.dateTime(i.occurred_at),
+      date: (i) => i.occurred_at,
+    },
     { label: 'Status', kind: 'status', status: (i) => i.status },
   ];
 }

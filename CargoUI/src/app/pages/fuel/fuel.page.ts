@@ -67,7 +67,12 @@ export class FuelPage {
     { label: 'Vehicle', value: (t) => t.vehicle_plate, sub: (t) => t.driver_name },
     { label: 'Litres', kind: 'num', value: (t) => (t.litres === null ? '—' : fmt.litres(t.litres)) },
     { label: 'Fuel expense', kind: 'num', value: (t) => fmt.money(t.amount_cents, t.currency) },
-    { label: 'Delivered', kind: 'num', value: (t) => fmt.dateTime(t.delivered_at) },
+    {
+      label: 'Delivered',
+      kind: 'num',
+      value: (t) => fmt.dateTime(t.delivered_at),
+      date: (t) => t.delivered_at,
+    },
   ];
 
   protected openTrip(): void {
@@ -83,7 +88,7 @@ export class FuelPage {
     { label: 'Paid with', value: (f) => f.payment_source_label },
     { label: 'Odometer', kind: 'num', value: (f) => fmt.km(f.odometer_km) },
     { label: 'Receipt', kind: 'muted', value: (f) => f.receipt_no },
-    { label: 'Logged', kind: 'num', value: (f) => fmt.dateTime(f.logged_at) },
+    { label: 'Logged', kind: 'num', value: (f) => fmt.dateTime(f.logged_at), date: (f) => f.logged_at },
     { label: 'Status', kind: 'status', status: (f) => f.status },
   ];
 }

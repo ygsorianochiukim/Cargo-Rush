@@ -112,6 +112,7 @@ export class MaintenancePage {
       label: 'Due',
       kind: 'num',
       value: (job) => fmt.date(job.due_at),
+      date: (job) => job.due_at,
     },
     {
       label: 'Done',
