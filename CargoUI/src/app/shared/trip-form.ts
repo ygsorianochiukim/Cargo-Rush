@@ -51,9 +51,6 @@ function straightLineMetres(lat1: number, lng1: number, lat2: number, lng2: numb
 const NEW_CUSTOMER = '__new__';
 
 const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered', 'cancelled'];
-
-type PriceMode = 'zone' | 'custom';
-
 @Component({
   selector: 'app-trip-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -290,41 +287,6 @@ type PriceMode = 'zone' | 'custom';
             }
           </div>
 
-          @if (canPrice()) {
-            <div class="mt-3 inline-flex rounded-control bg-cr-tint p-1" role="radiogroup" aria-label="How this trip is priced">
-              <button
-                type="button"
-                role="radio"
-                [attr.aria-checked]="priceMode() === 'zone'"
-                class="h-8 rounded-control px-3 text-[13px] font-semibold transition-colors"
-                [class.bg-cr-surface]="priceMode() === 'zone'"
-                [class.text-cr-blue]="priceMode() === 'zone'"
-                [class.shadow-card]="priceMode() === 'zone'"
-                [class.text-cr-ink-muted]="priceMode() !== 'zone'"
-                (click)="setPriceMode('zone')"
-              >
-                Zone price
-              </button>
-              <button
-                type="button"
-                role="radio"
-                [attr.aria-checked]="priceMode() === 'custom'"
-                class="h-8 rounded-control px-3 text-[13px] font-semibold transition-colors"
-                [class.bg-cr-surface]="priceMode() === 'custom'"
-                [class.text-cr-blue]="priceMode() === 'custom'"
-                [class.shadow-card]="priceMode() === 'custom'"
-                [class.text-cr-ink-muted]="priceMode() !== 'custom'"
-                (click)="setPriceMode('custom')"
-              >
-                Custom price
-              </button>
-            </div>
-          } @else if (manuallyPriced()) {
-            <p class="mt-2 text-[12px] text-cr-ink-muted">
-              This trip has a custom price. Only someone who manages Pricing can change it.
-            </p>
-          }
-
           @if (trip(); as t) {
             @if (t.price_cents !== null) {
               <p class="mt-2 text-[13px]">
@@ -334,11 +296,33 @@ type PriceMode = 'zone' | 'custom';
             }
           }
 
-          @if (canPrice() && priceMode() === 'custom') {
+          <div class="mt-3 grid gap-3 sm:grid-cols-2">
             <app-field
-              label="Custom price (₱)"
-              class="mt-3 block max-w-[240px]"
-              hint="Charged as typed. Zones and diesel do not change it."
+              label="Kilometers"
+              [hint]="
+                customTyped()
+                  ? 'Recorded for the trip. It does not change a custom price.'
+                  : 'Picks the zone, and the zone sets the price.'
+              "
+            >
+              <input
+                type="number"
+                min="0"
+                step="1"
+                formControlName="km"
+                [class]="inputClass + ' cr-num'"
+                placeholder="0"
+              />
+            </app-field>
+            <app-field
+              label="Price (₱)"
+              [hint]="
+                !canPrice()
+                  ? 'Only someone who manages Pricing can type a price.'
+                  : customTyped()
+                    ? 'Custom price. Clear it to use the zone price.'
+                    : 'Leave blank to use the zone price.'
+              "
               [error]="errorFor('custom_price')"
             >
               <input
@@ -347,49 +331,30 @@ type PriceMode = 'zone' | 'custom';
                 step="0.01"
                 formControlName="custom_price"
                 [class]="inputClass + ' cr-num'"
-                placeholder="0.00"
+                [placeholder]="pricePlaceholder()"
               />
             </app-field>
-          }
+          </div>
 
-          <app-field
-            label="Kilometers"
-            class="mt-3 block max-w-[240px]"
-            [hint]="
-              priceMode() === 'custom' || (!canPrice() && manuallyPriced())
-                ? 'Recorded for the trip only. It does not change a custom price.'
-                : 'Picks the zone, and the zone sets the price.'
-            "
-          >
-            <input
-              type="number"
-              min="0"
-              step="1"
-              formControlName="km"
-              [class]="inputClass + ' cr-num'"
-              placeholder="0"
-            />
-          </app-field>
-
-          @if (priceMode() === 'zone' && (canPrice() || !manuallyPriced())) {
-            <div class="mt-2 flex flex-wrap items-center gap-2 text-[13px]" role="status">
-              <span class="text-cr-ink-muted">Zone price</span>
-              @if (preview(); as q) {
-                @if (q.cents !== null) {
-                  <span class="cr-num font-semibold">{{ money(q.cents, q.currency) }}</span>
-                  <span class="text-[12px] text-cr-ink-muted">
-                    · {{ q.km }} km{{ q.zone ? ' · ' + q.zone.name : '' }}
-                  </span>
-                } @else {
-                  <span class="text-[12px] text-cr-ink-muted">
-                    {{ q.reason ?? 'No zone covers this distance yet.' }}
-                  </span>
-                }
+          <div class="mt-2 flex flex-wrap items-center gap-2 text-[13px]" role="status">
+            <span class="text-cr-ink-muted">Zone price</span>
+            @if (preview(); as q) {
+              @if (q.cents !== null) {
+                <span class="cr-num font-semibold" [class.line-through]="customTyped()" [class.text-cr-ink-muted]="customTyped()">
+                  {{ money(q.cents, q.currency) }}
+                </span>
+                <span class="text-[12px] text-cr-ink-muted">
+                  · {{ q.km }} km{{ q.zone ? ' · ' + q.zone.name : '' }}{{ customTyped() ? ' · not used, the custom price applies' : '' }}
+                </span>
               } @else {
-                <span class="text-[12px] text-cr-ink-muted">Type the kilometers to see it.</span>
+                <span class="text-[12px] text-cr-ink-muted">
+                  {{ q.reason ?? 'No zone covers this distance yet.' }}
+                </span>
               }
-            </div>
-          }
+            } @else {
+              <span class="text-[12px] text-cr-ink-muted">Type the kilometers to see it.</span>
+            }
+          </div>
 
           <div class="mt-3 grid gap-3 sm:grid-cols-2">
             <app-field label="Driver allowance (₱)" hint="Optional">
@@ -610,7 +575,6 @@ export class TripForm {
     delivered_at: [''],
     receiver_name: [''],
     km: ['', Validators.min(0)],
-    price_mode: ['zone' as PriceMode],
     custom_price: ['', Validators.min(0)],
     zone_id: [''],
     driver_allowance: ['', Validators.min(0)],
@@ -654,22 +618,17 @@ export class TripForm {
 
   protected readonly manuallyPriced = computed(() => !!this.trip()?.manually_priced);
 
-  protected readonly priceMode = toSignal(this.form.controls.price_mode.valueChanges, {
-    initialValue: this.form.controls.price_mode.value,
+  private readonly typedPrice = toSignal(this.form.controls.custom_price.valueChanges, {
+    initialValue: this.form.controls.custom_price.value,
   });
 
-  protected setPriceMode(mode: PriceMode): void {
-    const control = this.form.controls.price_mode;
-    if (control.value === mode) return;
+  protected readonly customTyped = computed(() => String(this.typedPrice() ?? '').trim() !== '');
 
-    control.setValue(mode);
-    control.markAsDirty();
+  protected readonly pricePlaceholder = computed(() => {
+    const cents = this.preview()?.cents ?? null;
 
-    if (mode === 'custom' && this.form.controls.custom_price.value === '') {
-      const quoted = this.preview()?.cents ?? this.trip()?.price_cents ?? null;
-      if (quoted !== null) this.form.controls.custom_price.setValue(String(quoted / 100));
-    }
-  }
+    return cents === null ? '0.00' : (cents / 100).toFixed(2);
+  });
 
   protected readonly preview = signal<QuoteBreakdown | null>(null);
 
@@ -776,6 +735,12 @@ export class TripForm {
   });
 
   constructor() {
+    effect(() => {
+      const control = this.form.controls.custom_price;
+
+      if (this.canPrice()) control.enable({ emitEvent: false });
+      else control.disable({ emitEvent: false });
+    });
     effect(() => this.form.get('origin')?.setValue(this.origin().place));
     effect(() => this.form.get('destination')?.setValue(this.destination().place));
 
@@ -872,7 +837,6 @@ export class TripForm {
         delivered_at: '',
         receiver_name: '',
         km: t && t.distance_total_m > 0 ? String(Math.ceil(t.distance_total_m / 1000)) : '',
-        price_mode: t?.manually_priced ? 'custom' : 'zone',
         custom_price: t?.manually_priced && t.price_cents !== null ? String(t.price_cents / 100) : '',
         zone_id: t?.zone_pinned ? (t.pricing_zone_id ?? '') : '',
         driver_allowance: this.pesos(t?.driver_allowance_cents),
@@ -945,14 +909,14 @@ export class TripForm {
     return { distance_total_m: Math.round(km * 1000) };
   }
 
-  private pricePayload(mode: PriceMode, typed: string): { price_cents?: number | null } {
-    if (!this.canPrice()) return {};
+  private pricePayload(typed: string): { price_cents?: number | null } {
+    if (!this.canPrice() || !this.form.controls.custom_price.dirty) return {};
 
-    if (mode === 'zone') return this.manuallyPriced() ? { price_cents: null } : {};
+    const cents = this.cents(typed);
 
-    const changed = this.form.controls.custom_price.dirty || this.form.controls.price_mode.dirty;
+    if (cents === null) return this.manuallyPriced() ? { price_cents: null } : {};
 
-    return changed ? { price_cents: this.cents(typed) } : {};
+    return { price_cents: cents };
   }
 
   private paymentPayload(raw: ReturnType<TripForm['form']['getRawValue']>): Partial<TripPayload> {
@@ -983,13 +947,6 @@ export class TripForm {
   }
 
   protected submit(): void {
-    const custom = this.form.controls.custom_price;
-
-    if (this.canPrice() && this.priceMode() === 'custom' && String(custom.value ?? '').trim() === '') {
-      custom.setErrors({ required: true });
-      custom.markAsTouched();
-    }
-
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
@@ -1033,7 +990,7 @@ export class TripForm {
         : {}),
       eta: existing?.eta ?? null,
       ...this.kmPayload(raw.km),
-      ...this.pricePayload(raw.price_mode, raw.custom_price),
+      ...this.pricePayload(raw.custom_price),
       ...(this.form.controls.zone_id.dirty ? { pricing_zone_id: raw.zone_id || null } : {}),
       driver_allowance_cents: this.cents(raw.driver_allowance),
       helper_allowance_cents: this.cents(raw.helper_allowance),
