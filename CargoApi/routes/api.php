@@ -10,6 +10,7 @@ use App\Domain\Accounting\Controllers\StatementController;
 use App\Domain\Accounting\Controllers\StatementPdfController;
 use App\Domain\Asset\Controllers\AssetCategoryController;
 use App\Domain\Asset\Controllers\AssetController;
+use App\Domain\Assistant\Controllers\AssistantController;
 use App\Domain\Billing\Controllers\BillingController;
 use App\Domain\Billing\Controllers\PaymentController;
 use App\Domain\Customer\Controllers\CustomerController;
@@ -142,6 +143,9 @@ Route::prefix('v1')->group(function (): void {
      * already deal with.
      */
     Route::get('carriers', CarrierController::class)->middleware('throttle:carriers');
+
+    Route::post('assistant/pairings', [AssistantController::class, 'requestPairing'])->middleware('throttle:register');
+    Route::get('assistant/pairings/{pairing}', [AssistantController::class, 'pollPairing'])->middleware(['throttle:60,1', 'bindings']);
 
     // Throttled on the address being tried *and* the caller's IP — see the
     // `login` limiter for why neither works on its own.
@@ -1143,6 +1147,21 @@ Route::prefix('v1')->group(function (): void {
 
             Route::post('logo', [CompanyController::class, 'storeLogo']);
             Route::delete('logo', [CompanyController::class, 'destroyLogo']);
+        });
+
+        Route::prefix('assistant')->group(function (): void {
+            Route::get('bot-config', [AssistantController::class, 'botConfig']);
+
+            Route::middleware('permission:company.manage')->group(function (): void {
+                Route::get('settings', [AssistantController::class, 'show']);
+                Route::put('settings', [AssistantController::class, 'update']);
+                Route::post('discord-users', [AssistantController::class, 'storeDiscordUser']);
+                Route::delete('discord-users/{discordUser}', [AssistantController::class, 'destroyDiscordUser']);
+                Route::post('token', [AssistantController::class, 'issueToken']);
+                Route::delete('token', [AssistantController::class, 'revokeToken']);
+                Route::post('pairings/{pairing}/approve', [AssistantController::class, 'approvePairing']);
+                Route::delete('pairings/{pairing}', [AssistantController::class, 'dismissPairing']);
+            });
         });
 
         /* -------------------------------------------------- Access control */
