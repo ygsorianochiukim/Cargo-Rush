@@ -51,7 +51,6 @@ function straightLineMetres(lat1: number, lng1: number, lat2: number, lng2: numb
 const NEW_CUSTOMER = '__new__';
 
 const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered', 'cancelled'];
-
 @Component({
   selector: 'app-trip-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -283,7 +282,7 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
               <span
                 class="inline-flex items-center rounded-full bg-cr-tint px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] text-cr-blue uppercase"
               >
-                Manual price
+                Custom price
               </span>
             }
           </div>
@@ -297,28 +296,55 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
             }
           }
 
-          <app-field
-            label="Kilometers"
-            class="mt-3 block max-w-[240px]"
-            hint="Picks the zone, and the zone sets the price."
-          >
-            <input
-              type="number"
-              min="0"
-              step="1"
-              formControlName="km"
-              [class]="inputClass + ' cr-num'"
-              placeholder="0"
-            />
-          </app-field>
+          <div class="mt-3 grid gap-3 sm:grid-cols-2">
+            <app-field
+              label="Kilometers"
+              [hint]="
+                customTyped()
+                  ? 'Recorded for the trip. It does not change a custom price.'
+                  : 'Picks the zone, and the zone sets the price.'
+              "
+            >
+              <input
+                type="number"
+                min="0"
+                step="1"
+                formControlName="km"
+                [class]="inputClass + ' cr-num'"
+                placeholder="0"
+              />
+            </app-field>
+            <app-field
+              label="Price (₱)"
+              [hint]="
+                !canPrice()
+                  ? 'Only someone who manages Pricing can type a price.'
+                  : customTyped()
+                    ? 'Custom price. Clear it to use the zone price.'
+                    : 'Leave blank to use the zone price.'
+              "
+              [error]="errorFor('custom_price')"
+            >
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                formControlName="custom_price"
+                [class]="inputClass + ' cr-num'"
+                [placeholder]="pricePlaceholder()"
+              />
+            </app-field>
+          </div>
 
           <div class="mt-2 flex flex-wrap items-center gap-2 text-[13px]" role="status">
             <span class="text-cr-ink-muted">Zone price</span>
             @if (preview(); as q) {
               @if (q.cents !== null) {
-                <span class="cr-num font-semibold">{{ money(q.cents, q.currency) }}</span>
+                <span class="cr-num font-semibold" [class.line-through]="customTyped()" [class.text-cr-ink-muted]="customTyped()">
+                  {{ money(q.cents, q.currency) }}
+                </span>
                 <span class="text-[12px] text-cr-ink-muted">
-                  · {{ q.km }} km{{ q.zone ? ' · ' + q.zone.name : '' }}
+                  · {{ q.km }} km{{ q.zone ? ' · ' + q.zone.name : '' }}{{ customTyped() ? ' · not used, the custom price applies' : '' }}
                 </span>
               } @else {
                 <span class="text-[12px] text-cr-ink-muted">
@@ -549,6 +575,7 @@ export class TripForm {
     delivered_at: [''],
     receiver_name: [''],
     km: ['', Validators.min(0)],
+    custom_price: ['', Validators.min(0)],
     zone_id: [''],
     driver_allowance: ['', Validators.min(0)],
     helper_allowance: ['', Validators.min(0)],
@@ -590,6 +617,18 @@ export class TripForm {
   protected readonly canPrice = computed(() => this.identity.can('pricing.manage'));
 
   protected readonly manuallyPriced = computed(() => !!this.trip()?.manually_priced);
+
+  private readonly typedPrice = toSignal(this.form.controls.custom_price.valueChanges, {
+    initialValue: this.form.controls.custom_price.value,
+  });
+
+  protected readonly customTyped = computed(() => String(this.typedPrice() ?? '').trim() !== '');
+
+  protected readonly pricePlaceholder = computed(() => {
+    const cents = this.preview()?.cents ?? null;
+
+    return cents === null ? '0.00' : (cents / 100).toFixed(2);
+  });
 
   protected readonly preview = signal<QuoteBreakdown | null>(null);
 
@@ -696,6 +735,12 @@ export class TripForm {
   });
 
   constructor() {
+    effect(() => {
+      const control = this.form.controls.custom_price;
+
+      if (this.canPrice()) control.enable({ emitEvent: false });
+      else control.disable({ emitEvent: false });
+    });
     effect(() => this.form.get('origin')?.setValue(this.origin().place));
     effect(() => this.form.get('destination')?.setValue(this.destination().place));
 
@@ -792,6 +837,7 @@ export class TripForm {
         delivered_at: '',
         receiver_name: '',
         km: t && t.distance_total_m > 0 ? String(Math.ceil(t.distance_total_m / 1000)) : '',
+        custom_price: t?.manually_priced && t.price_cents !== null ? String(t.price_cents / 100) : '',
         zone_id: t?.zone_pinned ? (t.pricing_zone_id ?? '') : '',
         driver_allowance: this.pesos(t?.driver_allowance_cents),
         helper_allowance: this.pesos(t?.helper_allowance_cents),
@@ -855,15 +901,22 @@ export class TripForm {
     return typed === '' ? null : Math.round(Number(typed) * 100);
   }
 
-  private kmPayload(raw: string): { distance_total_m?: number; price_cents?: null } {
+  private kmPayload(raw: string): { distance_total_m?: number } {
     const km = Number(String(raw ?? '').trim());
 
     if (!this.form.controls.km.dirty || !(km > 0)) return {};
 
-    return {
-      distance_total_m: Math.round(km * 1000),
-      ...(this.manuallyPriced() && this.canPrice() ? { price_cents: null } : {}),
-    };
+    return { distance_total_m: Math.round(km * 1000) };
+  }
+
+  private pricePayload(typed: string): { price_cents?: number | null } {
+    if (!this.canPrice() || !this.form.controls.custom_price.dirty) return {};
+
+    const cents = this.cents(typed);
+
+    if (cents === null) return this.manuallyPriced() ? { price_cents: null } : {};
+
+    return { price_cents: cents };
   }
 
   private paymentPayload(raw: ReturnType<TripForm['form']['getRawValue']>): Partial<TripPayload> {
@@ -937,6 +990,7 @@ export class TripForm {
         : {}),
       eta: existing?.eta ?? null,
       ...this.kmPayload(raw.km),
+      ...this.pricePayload(raw.custom_price),
       ...(this.form.controls.zone_id.dirty ? { pricing_zone_id: raw.zone_id || null } : {}),
       driver_allowance_cents: this.cents(raw.driver_allowance),
       helper_allowance_cents: this.cents(raw.helper_allowance),

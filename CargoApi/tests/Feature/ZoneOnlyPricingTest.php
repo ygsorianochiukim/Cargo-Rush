@@ -302,6 +302,18 @@ describe('a price typed by hand', function (): void {
         expect(Trip::findOrFail($id)->price_cents)->toBe(777_700);
     });
 
+    it('keeps the custom price when the kilometers or the zone change', function (): void {
+        $zone = ($this->card)();
+        $id = ($this->book)(120, ['price_cents' => 777_700])->assertCreated()->json('data.id');
+
+        $this->actingAs($this->admin)
+            ->patchJson("/api/v1/trips/{$id}", ['distance_total_m' => 450_000, 'pricing_zone_id' => $zone->id])
+            ->assertOk()
+            ->assertJsonPath('data.price_cents', 777_700)
+            ->assertJsonPath('data.distance_total_m', 450_000)
+            ->assertJsonPath('data.pricing_source', 'manual');
+    });
+
     it('goes back to the card when the price is cleared', function (): void {
         ($this->card)();
         $id = ($this->book)(120, ['price_cents' => 777_700])->assertCreated()->json('data.id');
