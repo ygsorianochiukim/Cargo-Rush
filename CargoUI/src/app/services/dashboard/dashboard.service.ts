@@ -9,6 +9,7 @@ import {
   DashboardPeriod,
   DeliveryPoint,
   TruckDashboard,
+  TruckDetail,
   FleetBreakdown,
   Kpi,
   Receivables,
@@ -48,5 +49,9 @@ export class DashboardService {
 
   trucks(period: 'day' | 'cutoff' | 'month', date: string): Observable<TruckDashboard> {
     return this.api.get<TruckDashboard>('dashboard/trucks', { period, date });
+  }
+
+  truck(id: string, period: DashboardPeriod, date: string): Observable<TruckDetail> {
+    return this.api.get<TruckDetail>(`dashboard/trucks/${id}`, { period, date });
   }
 }

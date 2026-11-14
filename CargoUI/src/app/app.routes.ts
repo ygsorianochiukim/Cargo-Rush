@@ -54,6 +54,13 @@ export const routes: Routes = [
           import('./pages/dashboard/dashboard.page').then((m) => m.DashboardPage),
       },
       {
+        path: 'truck-dashboard',
+        title: 'Truck Dashboard · Cargo Rush',
+        data: { title: 'Truck Dashboard' },
+        loadComponent: () =>
+          import('./pages/truck-dashboard/truck-dashboard.page').then((m) => m.TruckDashboardPage),
+      },
+      {
         path: 'gps',
         title: 'GPS Dashboard · Cargo Rush',
         data: { title: 'GPS Dashboard' },

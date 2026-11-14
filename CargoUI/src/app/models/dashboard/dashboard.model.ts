@@ -154,3 +154,25 @@ export interface TruckDashboard {
   };
   currency: string;
 }
+
+export interface TruckDetail {
+  truck: { id: string; label: string; plate: string | null };
+  trucks: { id: string; label: string; plate: string | null }[];
+  period: DashboardPeriod;
+  label: string;
+  range: { from: string; to: string };
+  previous_range: { from: string; to: string };
+  kpis: MoneyKpi[];
+  trips: number;
+  customers: { name: string; income_cents: number; trips: number }[];
+  trend: {
+    key: string;
+    label: string;
+    year: number;
+    sales_cents: number;
+    expenses_cents: number;
+  }[];
+  costs: { kind: string; current_cents: number; previous_cents: number; variance_cents: number }[];
+  destinations: { name: string; trips: number; income_cents: number }[];
+  currency: string;
+}

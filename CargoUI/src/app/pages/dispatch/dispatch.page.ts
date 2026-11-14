@@ -35,7 +35,12 @@ export class DispatchPage {
     { label: 'Reference', kind: 'strong', value: (d) => d.reference },
     { label: 'Vehicle', kind: 'muted', value: (d) => d.vehicle_plate },
     { label: 'Dispatched from', value: (d) => d.location },
-    { label: 'Dispatched at', kind: 'num', value: (d) => fmt.dateTime(d.dispatched_at) },
+    {
+      label: 'Dispatched at',
+      kind: 'num',
+      value: (d) => fmt.dateTime(d.dispatched_at),
+      date: (d) => d.dispatched_at,
+    },
     { label: 'Arrived at', kind: 'num', value: (d) => fmt.dateTime(d.arrived_at) },
     { label: 'Status', kind: 'status', status: (d) => d.status },
   ];

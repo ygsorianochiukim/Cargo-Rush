@@ -83,7 +83,7 @@ describe('the running account', function (): void {
     });
 
     it('opens a period with what the one before it left owing', function (): void {
-        $this->travelTo(now()->subMonth(), function (): void {
+        $this->travelTo(now()->subMonthNoOverflow(), function (): void {
             $invoice = ($this->raise)();
             ($this->settle)($invoice['id'], 120_000);
         });

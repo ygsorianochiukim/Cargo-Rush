@@ -130,7 +130,7 @@ export class BillingPage {
       sub: (i) => (i.direction === 'receivable' ? 'Receivable' : 'Payable'),
     },
     { label: 'Trip', kind: 'muted', value: (i) => i.trip_reference },
-    { label: 'Issued', kind: 'num', value: (i) => fmt.date(i.issued_at) },
+    { label: 'Issued', kind: 'num', value: (i) => fmt.date(i.issued_at), date: (i) => i.issued_at },
     { label: 'Due', kind: 'num', value: (i) => fmt.date(i.due_at) },
     {
       label: 'Invoiced',

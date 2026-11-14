@@ -323,7 +323,12 @@ export class TripsPage {
           },
         ] satisfies Column<Trip>[])
       : []),
-    { label: 'Scheduled', kind: 'num', value: (t) => fmt.dateTime(t.scheduled_at) },
+    {
+      label: 'Scheduled',
+      kind: 'num',
+      value: (t) => fmt.dateTime(t.scheduled_at),
+      date: (t) => t.scheduled_at,
+    },
     { label: 'Status', kind: 'status', status: (t) => t.status },
   ];
 }

@@ -30,7 +30,7 @@ class CrewPayReportController extends ApiController
         ]);
 
         $to = isset($validated['to']) ? Carbon::parse($validated['to']) : now();
-        $from = isset($validated['from']) ? Carbon::parse($validated['from']) : $to->copy()->subMonths(2)->startOfMonth();
+        $from = isset($validated['from']) ? Carbon::parse($validated['from']) : $to->copy()->startOfMonth()->subMonthsNoOverflow(2);
 
         return $this->payload($this->report->forEmployee($employee->load('driver'), $from, $to));
     }

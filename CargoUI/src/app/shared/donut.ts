@@ -82,6 +82,8 @@ const STEPS = [1, 0.78, 0.6, 0.45, 0.33, 0.24, 0.17, 0.12];
 })
 export class Donut {
   readonly slices = input.required<DonutSlice[]>();
+  readonly noun = input('net income');
+  readonly detailLabel = input('Net');
 
   protected readonly radius = RADIUS;
   protected readonly circumference = CIRC;
@@ -121,14 +123,14 @@ export class Donut {
   protected rowsFor(arc: Arc) {
     return [
       { label: 'Share', value: `${(arc.share * 100).toFixed(1)}%`, negative: arc.negative },
-      ...(arc.detail ? [{ label: 'Net', value: arc.detail, negative: arc.negative }] : []),
+      ...(arc.detail ? [{ label: this.detailLabel(), value: arc.detail, negative: arc.negative }] : []),
     ];
   }
 
   protected spoken(arc: Arc): string {
     const detail = arc.detail ? `, ${arc.detail}` : '';
 
-    return `${arc.label}, ${(arc.share * 100).toFixed(1)} percent of net income${detail}`;
+    return `${arc.label}, ${(arc.share * 100).toFixed(1)} percent of ${this.noun()}${detail}`;
   }
 
   protected readonly summary = computed(() =>

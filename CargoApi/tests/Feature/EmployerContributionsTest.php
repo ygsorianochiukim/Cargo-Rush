@@ -230,6 +230,7 @@ describe('in Finance', function (): void {
     });
 
     it('owes the agencies the share until remitted, already costed', function (): void {
+        $this->travelTo(Carbon::parse('2026-10-20 10:00:00'));
         ($this->hire)();
         $paid = ($this->payRun)(($this->open)());
 

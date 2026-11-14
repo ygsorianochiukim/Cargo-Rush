@@ -21,6 +21,16 @@ export interface Column<T = any> {
   sub?: (row: T) => string | null;
   badge?: (row: T) => string | null;
   pill?: (row: T) => { label: string; on: boolean };
+  date?: (row: T) => string | null | undefined;
+}
+
+export function dayOf(value: string | null | undefined): string | null {
+  if (!value) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+
+  const parsed = new Date(value);
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toLocaleDateString('en-CA');
 }
 
 @Component({
@@ -29,25 +39,61 @@ export interface Column<T = any> {
   imports: [Icon, StatusPill, SkeletonRows],
   template: `
     @if (rows(); as loaded) {
-      @if (searchable() && loaded.length > 0) {
+      @if ((searchable() || dated()) && loaded.length > 0) {
         <div class="flex flex-wrap items-center gap-2 px-4 py-3">
-          <label class="relative min-w-[200px] flex-1">
-            <span class="sr-only">Search this list</span>
-            <app-icon
-              name="search"
-              [size]="15"
-              class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-cr-ink-muted"
-            />
-            <input
-              type="search"
-              [value]="term()"
-              (input)="setTerm($event)"
-              [attr.placeholder]="searchPlaceholder()"
-              class="h-9 w-full rounded-control border border-cr-line bg-cr-surface pr-3 pl-9 text-[13px] text-cr-ink placeholder:text-cr-ink-muted focus:border-cr-blue focus:outline-none"
-            />
-          </label>
+          @if (searchable()) {
+            <label class="relative min-w-[200px] flex-1">
+              <span class="sr-only">Search this list</span>
+              <app-icon
+                name="search"
+                [size]="15"
+                class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-cr-ink-muted"
+              />
+              <input
+                type="search"
+                [value]="term()"
+                (input)="setTerm($event)"
+                [attr.placeholder]="searchPlaceholder()"
+                class="h-9 w-full rounded-control border border-cr-line bg-cr-surface pr-3 pl-9 text-[13px] text-cr-ink placeholder:text-cr-ink-muted focus:border-cr-blue focus:outline-none"
+              />
+            </label>
+          }
 
-          @if (term()) {
+          @if (dated()) {
+            <div class="flex items-center gap-1.5" role="group" [attr.aria-label]="dateLabel()">
+              <label class="flex items-center gap-1.5 text-[12px] text-cr-ink-muted">
+                <span>From</span>
+                <input
+                  type="date"
+                  [value]="from()"
+                  [max]="to() || null"
+                  (change)="setFrom($event)"
+                  class="h-9 rounded-control border border-cr-line bg-cr-surface px-2 text-[13px] text-cr-ink focus:border-cr-blue focus:outline-none"
+                />
+              </label>
+              <label class="flex items-center gap-1.5 text-[12px] text-cr-ink-muted">
+                <span>To</span>
+                <input
+                  type="date"
+                  [value]="to()"
+                  [min]="from() || null"
+                  (change)="setTo($event)"
+                  class="h-9 rounded-control border border-cr-line bg-cr-surface px-2 text-[13px] text-cr-ink focus:border-cr-blue focus:outline-none"
+                />
+              </label>
+              @if (ranged()) {
+                <button
+                  type="button"
+                  class="h-9 rounded-control px-2 text-[12px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+                  (click)="clearDates()"
+                >
+                  All dates
+                </button>
+              }
+            </div>
+          }
+
+          @if (term() || ranged()) {
             <p class="cr-num text-[12px] text-cr-ink-muted">
               {{ matched().length }} of {{ loaded.length }}
             </p>
@@ -56,20 +102,31 @@ export interface Column<T = any> {
       }
 
       @if (matched().length === 0) {
-        @if (term()) {
+        @if (term() || ranged()) {
           <div class="flex flex-col items-center gap-2 px-6 py-12 text-center">
             <app-icon name="search" [size]="32" class="text-cr-ink-muted" />
-            <h3 class="mt-1 text-[16px] font-semibold">Nothing matched “{{ term() }}”</h3>
+            <h3 class="mt-1 text-[16px] font-semibold">
+              @if (term()) {
+                Nothing matched “{{ term() }}”
+              } @else {
+                Nothing in this date range
+              }
+            </h3>
             <p class="max-w-sm text-[14px] text-cr-ink-muted">
-              {{ loaded.length }} rows here, none of them this. Check the spelling, or clear the
-              search to see them all.
+              @if (term()) {
+                {{ loaded.length }} rows here, none of them this. Check the spelling, or clear
+                the search to see them all.
+              } @else {
+                {{ loaded.length }} rows here, none between those dates. Widen the range, or clear
+                it to see them all.
+              }
             </p>
             <button
               type="button"
               class="mt-1 h-9 rounded-control border border-cr-line px-3 text-[13px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint"
               (click)="clear()"
             >
-              Clear search
+              {{ term() && ranged() ? 'Clear filters' : term() ? 'Clear search' : 'Clear dates' }}
             </button>
           </div>
         } @else {
@@ -258,18 +315,43 @@ export class DataTable {
   protected readonly sizes = [5, 10, 15, 20] as const;
 
   protected readonly term = signal('');
+  protected readonly from = signal('');
+  protected readonly to = signal('');
   protected readonly pageIndex = signal(0);
   private readonly chosenSize = signal<number | null>(null);
 
   protected readonly size = computed(() => this.chosenSize() ?? this.pageSize());
 
+  private readonly dateColumn = computed(() => this.columns().find((col) => col.date) ?? null);
+
+  protected readonly dated = computed(() => this.dateColumn() !== null);
+
+  protected readonly dateLabel = computed(() => `Filter by ${this.dateColumn()?.label ?? 'date'}`);
+
+  protected readonly ranged = computed(() => this.from() !== '' || this.to() !== '');
+
   protected readonly matched = computed(() => {
     const loaded = this.rows() ?? [];
-    const needle = this.term().trim().toLowerCase();
+    const needle = this.searchable() ? this.term().trim().toLowerCase() : '';
+    const from = this.from();
+    const to = this.to();
+    const dateOf = this.dateColumn()?.date;
 
-    if (needle === '' || !this.searchable()) return loaded;
+    if (needle === '' && (from === '' && to === '')) return loaded;
 
-    return loaded.filter((row) => this.haystack(row).includes(needle));
+    return loaded.filter((row) => {
+      if (needle !== '' && !this.haystack(row).includes(needle)) return false;
+
+      if (dateOf && (from !== '' || to !== '')) {
+        const day = dayOf(dateOf(row));
+
+        if (day === null) return false;
+        if (from !== '' && day < from) return false;
+        if (to !== '' && day > to) return false;
+      }
+
+      return true;
+    });
   });
 
   protected readonly pageCount = computed(() =>
@@ -305,8 +387,26 @@ export class DataTable {
     this.pageIndex.set(0);
   }
 
+  protected setFrom(event: Event): void {
+    this.from.set((event.target as HTMLInputElement).value);
+    this.pageIndex.set(0);
+  }
+
+  protected setTo(event: Event): void {
+    this.to.set((event.target as HTMLInputElement).value);
+    this.pageIndex.set(0);
+  }
+
+  protected clearDates(): void {
+    this.from.set('');
+    this.to.set('');
+    this.pageIndex.set(0);
+  }
+
   protected clear(): void {
     this.term.set('');
+    this.from.set('');
+    this.to.set('');
     this.pageIndex.set(0);
   }
 

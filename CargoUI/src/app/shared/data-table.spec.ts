@@ -149,6 +149,109 @@ describe('paging', () => {
   });
 });
 
+describe('a date range', () => {
+  interface Dated {
+    id: string;
+    name: string;
+    when: string | null;
+  }
+
+  const datedColumns: Column<Dated>[] = [
+    { label: 'Name', value: (row) => row.name },
+    { label: 'When', value: (row) => row.when, date: (row) => row.when },
+  ];
+
+  const dated: Dated[] = [
+    { id: '1', name: 'January fill', when: '2026-01-15' },
+    { id: '2', name: 'February fill', when: '2026-02-10T09:30:00+08:00' },
+    { id: '3', name: 'March fill', when: '2026-03-01' },
+    { id: '4', name: 'Undated fill', when: null },
+  ];
+
+  function render(list: Dated[] | null, cols: Column[] = datedColumns) {
+    const fixture = TestBed.createComponent(DataTable);
+
+    fixture.componentRef.setInput('columns', cols);
+    fixture.componentRef.setInput('rows', list);
+    fixture.detectChanges();
+
+    return {
+      el: fixture.nativeElement as HTMLElement,
+      t: fixture.componentInstance as unknown as {
+        term: { set(value: string): void };
+        from: { set(value: string): void };
+        to: { set(value: string): void };
+        dated(): boolean;
+        ranged(): boolean;
+        matched(): Dated[];
+        clear(): void;
+        clearDates(): void;
+      },
+    };
+  }
+
+  it('offers the range only when a column carries a date', () => {
+    expect(render(dated).t.dated()).toBe(true);
+    expect(render(dated, [{ label: 'Name', value: (row) => row.name }]).t.dated()).toBe(false);
+
+    expect(render(dated).el.querySelectorAll('input[type="date"]')).toHaveLength(2);
+  });
+
+  it('keeps rows on or after the start', () => {
+    const { t } = render(dated);
+
+    t.from.set('2026-02-10');
+    expect(t.matched().map((r) => r.id)).toEqual(['2', '3']);
+  });
+
+  it('keeps rows on or before the end', () => {
+    const { t } = render(dated);
+
+    t.to.set('2026-02-10');
+    expect(t.matched().map((r) => r.id)).toEqual(['1', '2']);
+  });
+
+  it('narrows to both ends and drops rows with no date', () => {
+    const { t } = render(dated);
+
+    t.from.set('2026-01-16');
+    t.to.set('2026-02-28');
+    expect(t.matched().map((r) => r.id)).toEqual(['2']);
+  });
+
+  it('stacks with the search box', () => {
+    const { t } = render(dated);
+
+    t.from.set('2026-01-01');
+    t.term.set('march');
+    expect(t.matched().map((r) => r.id)).toEqual(['3']);
+  });
+
+  it('clears the dates on their own, or everything at once', () => {
+    const { t } = render(dated);
+
+    t.from.set('2026-03-01');
+    t.term.set('fill');
+    expect(t.ranged()).toBe(true);
+
+    t.clearDates();
+    expect(t.ranged()).toBe(false);
+    expect(t.matched()).toHaveLength(4);
+
+    t.to.set('2026-01-31');
+    t.clear();
+    expect(t.ranged()).toBe(false);
+    expect(t.matched()).toHaveLength(4);
+  });
+
+  it('ignores the range when no column carries a date', () => {
+    const { t } = render(dated, [{ label: 'Name', value: (row) => row.name }]);
+
+    t.from.set('2030-01-01');
+    expect(t.matched()).toHaveLength(4);
+  });
+});
+
 describe('a badge in place of a value', () => {
   interface Priced {
     id: string;

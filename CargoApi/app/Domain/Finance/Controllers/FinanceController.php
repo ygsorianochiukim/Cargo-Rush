@@ -108,7 +108,7 @@ class FinanceController extends ApiController
         $from = $request->filled('from')
             ? Carbon::parse($request->string('from')->toString())
             : match ($granularity) {
-                'monthly' => $to->copy()->subYear()->startOfMonth(),
+                'monthly' => $to->copy()->startOfMonth()->subYearNoOverflow(),
                 'weekly' => $to->copy()->subWeeks(12)->startOfWeek(),
                 default => $to->copy()->subDays(29)->startOfDay(),
             };

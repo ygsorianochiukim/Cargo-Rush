@@ -249,6 +249,7 @@ export class AssetsPage {
     {
       label: 'Purchased',
       value: (a) => (a.purchased_on ? fmt.date(a.purchased_on) : null),
+      date: (a) => a.purchased_on,
       sub: (a) => a.supplier_name,
     },
     {

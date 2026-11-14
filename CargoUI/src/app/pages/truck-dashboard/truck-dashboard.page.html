@@ -1,0 +1,231 @@
+<header class="rounded-card bg-cr-surface p-5 shadow-card ring-1 ring-cr-line/60">
+  <div class="flex flex-wrap items-center gap-x-6 gap-y-4">
+    <div class="flex items-center gap-3">
+      <span class="flex h-11 w-11 flex-none items-center justify-center rounded-control bg-cr-tint text-cr-blue">
+        <app-icon name="fleet" [size]="22" />
+      </span>
+      <div>
+        <h2 class="text-[11px] font-semibold tracking-[0.08em] text-cr-ink-muted uppercase">Truck overview</h2>
+        <p class="text-[18px] leading-tight font-semibold">{{ data()?.label ?? '…' }}</p>
+      </div>
+    </div>
+
+    <label class="flex items-center gap-2">
+      <span class="sr-only">Truck</span>
+      <select
+        class="h-9 min-w-[200px] rounded-control border border-cr-line bg-cr-surface px-3 text-[13px] font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-cr-blue"
+        [value]="truckId() ?? ''"
+        [disabled]="!trucks()?.length"
+        (change)="pick($any($event.target).value)">
+        @for (t of trucks() ?? []; track t.id) {
+          <option [value]="t.id" [selected]="t.id === truckId()">
+            {{ t.label }}{{ t.plate ? ' · ' + t.plate : '' }}
+          </option>
+        }
+      </select>
+    </label>
+
+    <div class="flex rounded-control bg-cr-tint p-1" role="tablist" aria-label="Period">
+      @for (p of periods; track p.value) {
+        <button
+          type="button"
+          role="tab"
+          [attr.aria-selected]="period() === p.value"
+          class="h-8 rounded-control px-3 text-[13px] font-semibold transition-colors"
+          [class.bg-cr-surface]="period() === p.value"
+          [class.text-cr-blue]="period() === p.value"
+          [class.shadow-card]="period() === p.value"
+          [class.text-cr-ink-muted]="period() !== p.value"
+          (click)="period.set(p.value)">
+          {{ p.label }}
+        </button>
+      }
+    </div>
+
+    <div class="flex items-center gap-1">
+      <button
+        type="button"
+        class="flex h-9 w-9 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
+        aria-label="Previous period"
+        (click)="step(-1)">
+        <app-icon name="chevron-left" [size]="16" />
+      </button>
+      <button
+        type="button"
+        class="flex h-9 w-9 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
+        aria-label="Next period"
+        (click)="step(1)">
+        <app-icon name="chevron-right" [size]="16" />
+      </button>
+    </div>
+
+    <a
+      routerLink="/fleet-dashboard"
+      class="ml-auto flex h-9 items-center gap-2 rounded-control px-3 text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint">
+      <app-icon name="fleet" [size]="16" />
+      Fleet dashboard
+    </a>
+  </div>
+</header>
+
+@if (empty()) {
+  <div class="mt-4 rounded-card bg-cr-surface px-4 py-10 text-center shadow-card ring-1 ring-cr-line/60">
+    <p class="text-[14px] font-semibold">No trucks on the books yet.</p>
+    <p class="mt-1 text-[13px] text-cr-ink-muted">Trucks show here once they are on the books in Trip Monitoring.</p>
+  </div>
+} @else if (failed()) {
+  <div class="mt-4 rounded-card bg-cr-red-bg px-4 py-3 text-[13px] font-medium text-cr-red" role="alert">
+    Could not load this truck. Check the connection and try again.
+  </div>
+} @else if (data(); as d) {
+  <section aria-label="Headline figures" class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    @for (k of d.kpis; track k.key) {
+      <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+        <div class="flex items-center gap-2">
+          <span class="flex h-8 w-8 items-center justify-center rounded-control bg-cr-tint text-cr-blue">
+            <app-icon [name]="kpiIcon(k)" [size]="16" />
+          </span>
+          <p class="cr-meta text-cr-ink-muted">{{ k.label }}</p>
+        </div>
+        <p class="cr-num mt-3 text-[26px] leading-none font-semibold" [class.text-cr-red]="kpiNegative(k)">
+          {{ kpiValue(k) }}
+        </p>
+        @if (kpiChange(k); as c) {
+          <p class="mt-2 flex items-center gap-1.5 text-[12px]">
+            <span
+              class="cr-num rounded-full px-1.5 py-0.5 font-semibold"
+              [class.bg-cr-success-bg]="c.good === true"
+              [class.text-cr-success]="c.good === true"
+              [class.bg-cr-red-bg]="c.good === false"
+              [class.text-cr-red]="c.good === false"
+              [class.bg-cr-tint]="c.good === null"
+              [class.text-cr-ink-muted]="c.good === null">
+              {{ c.up ? '▲' : c.good === null ? '■' : '▼' }} {{ c.text }}
+            </span>
+            <span class="text-cr-ink-muted">vs {{ previousLabel() }}</span>
+          </p>
+        } @else {
+          <p class="mt-2 text-[12px] text-cr-ink-muted">Nothing to compare in {{ previousLabel() }}</p>
+        }
+      </div>
+    }
+  </section>
+
+  <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+    <app-card heading="Income per customer" icon="customers" [hint]="d.label">
+      @if (customerSlices().length > 0) {
+        <div class="text-center">
+          <p class="cr-num text-[22px] leading-none font-semibold">{{ fmt.pesos(incomeTotal()) }}</p>
+          <p class="mt-1 text-[12px] text-cr-ink-muted">
+            from {{ d.trips }} {{ d.trips === 1 ? 'trip' : 'trips' }}
+          </p>
+        </div>
+        <div class="mt-4">
+          <app-donut [slices]="customerSlices()" noun="this truck's income" detailLabel="Income" />
+        </div>
+      } @else {
+        <p class="py-10 text-center text-[13px] text-cr-ink-muted">No trips earned income in {{ d.label }}.</p>
+      }
+    </app-card>
+
+    <app-card heading="Income vs expenses" icon="trend" hint="Last 12 months" class="xl:col-span-2">
+      <app-income-trend [points]="d.trend" />
+    </app-card>
+  </div>
+
+  <div class="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-5">
+    <app-card heading="Cost overview" icon="wallet" [hint]="d.label + ' vs ' + previousLabel()" class="xl:col-span-3">
+      @if (d.costs.length > 0) {
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[520px] text-[13px]">
+            <thead>
+              <tr class="border-b border-cr-line text-left text-[11px] font-semibold tracking-[0.06em] text-cr-ink-muted uppercase">
+                <th class="py-2 pr-3 font-semibold">Cost</th>
+                <th class="py-2 pr-3 text-right font-semibold">{{ previousLabel() }}</th>
+                <th class="py-2 pr-3 text-right font-semibold">{{ d.label }}</th>
+                <th class="py-2 pr-3 text-right font-semibold">Variance</th>
+                <th class="py-2 text-right font-semibold">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-cr-line/70">
+              @for (row of costRows(); track row.kind) {
+                @let s = costStatus(row);
+                <tr>
+                  <td class="py-2 pr-3 font-medium">{{ row.kind }}</td>
+                  <td class="cr-num py-2 pr-3 text-right text-cr-ink-muted">{{ fmt.pesos(row.previous_cents) }}</td>
+                  <td class="cr-num py-2 pr-3 text-right font-semibold">{{ fmt.pesos(row.current_cents) }}</td>
+                  <td
+                    class="cr-num py-2 pr-3 text-right"
+                    [class.text-cr-red]="row.variance_cents > 0"
+                    [class.text-cr-success]="row.variance_cents < 0">
+                    {{ row.variance_cents > 0 ? '+' : '' }}{{ fmt.pesos(row.variance_cents) }}
+                  </td>
+                  <td class="py-2 text-right">
+                    <span
+                      class="rounded-full px-2 py-0.5 text-[11px] font-semibold"
+                      [class.bg-cr-red-bg]="s.tone === 'up'"
+                      [class.text-cr-red]="s.tone === 'up'"
+                      [class.bg-cr-success-bg]="s.tone === 'down'"
+                      [class.text-cr-success]="s.tone === 'down'"
+                      [class.bg-cr-warning-bg]="s.tone === 'new'"
+                      [class.text-cr-warning]="s.tone === 'new'"
+                      [class.bg-cr-tint]="s.tone === 'flat'"
+                      [class.text-cr-ink-muted]="s.tone === 'flat'">
+                      {{ s.label }}
+                    </span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+
+        @if (costPages() > 1) {
+          <div class="mt-3 flex items-center justify-center gap-2">
+            <button
+              type="button"
+              class="flex h-8 items-center gap-1 rounded-control px-3 text-[12px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint disabled:text-cr-ink-muted disabled:hover:bg-transparent"
+              [disabled]="costPage() === 0"
+              (click)="costPage.set(costPage() - 1)">
+              <app-icon name="chevron-left" [size]="14" /> Prev
+            </button>
+            <span class="cr-num text-[12px] text-cr-ink-muted">{{ costPage() + 1 }} / {{ costPages() }}</span>
+            <button
+              type="button"
+              class="flex h-8 items-center gap-1 rounded-control px-3 text-[12px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint disabled:text-cr-ink-muted disabled:hover:bg-transparent"
+              [disabled]="costPage() >= costPages() - 1"
+              (click)="costPage.set(costPage() + 1)">
+              Next <app-icon name="chevron-right" [size]="14" />
+            </button>
+          </div>
+        }
+      } @else {
+        <p class="py-10 text-center text-[13px] text-cr-ink-muted">No costs recorded in {{ d.label }} or {{ previousLabel() }}.</p>
+      }
+      <a routerLink="/truck-report" class="mt-3 inline-block text-[13px] font-semibold text-cr-blue hover:underline">
+        Every expense in the Truck Report →
+      </a>
+    </app-card>
+
+    <app-card heading="Top 5 destinations" icon="map-pin" [hint]="d.label" class="xl:col-span-2">
+      @if (destinationBars().length > 0) {
+        <app-bar-rows [bars]="destinationBars()" align="top" />
+      } @else {
+        <p class="py-10 text-center text-[13px] text-cr-ink-muted">No trips in {{ d.label }}.</p>
+      }
+    </app-card>
+  </div>
+} @else {
+  <div class="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    @for (s of kpiSkeletons; track s) {
+      <div class="rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+        <div class="cr-skeleton h-2 w-24"></div>
+        <div class="cr-skeleton mt-3 h-7 w-32"></div>
+        <div class="cr-skeleton mt-3 h-3 w-20"></div>
+      </div>
+    }
+  </div>
+  <div class="mt-4 rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
+    <div class="cr-skeleton h-[180px] w-full"></div>
+  </div>
+}

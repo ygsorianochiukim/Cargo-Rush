@@ -138,7 +138,11 @@ export class AssetMonitoringPage {
     { label: 'Items held', kind: 'num', value: (p) => p.count },
     { label: 'Value held', kind: 'num', value: (p) => fmt.pesos(p.cost_cents) },
     { label: 'Damaged', kind: 'num', value: (p) => p.damaged },
-    { label: 'Holding since', value: (p) => (p.held_since ? fmt.date(p.held_since) : null) },
+    {
+      label: 'Holding since',
+      value: (p) => (p.held_since ? fmt.date(p.held_since) : null),
+      date: (p) => p.held_since,
+    },
   ];
 
   constructor() {

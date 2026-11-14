@@ -7,6 +7,8 @@ namespace App\Domain\Dashboard\Controllers;
 use App\Domain\Dashboard\Services\BusinessDashboardService;
 use App\Domain\Dashboard\Services\DashboardService;
 use App\Domain\Dashboard\Services\TruckDashboardService;
+use App\Domain\Dashboard\Services\TruckDetailService;
+use App\Domain\Finance\Models\Truck;
 use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -52,6 +54,15 @@ class DashboardController extends ApiController
     public function trucks(Request $request, TruckDashboardService $trucks): JsonResponse
     {
         return $this->payload($trucks->overview(
+            $request->string('period', 'month')->toString(),
+            $this->dateFrom($request),
+        ));
+    }
+
+    public function truck(Request $request, Truck $truck, TruckDetailService $detail): JsonResponse
+    {
+        return $this->payload($detail->overview(
+            $truck,
             $request->string('period', 'month')->toString(),
             $this->dateFrom($request),
         ));

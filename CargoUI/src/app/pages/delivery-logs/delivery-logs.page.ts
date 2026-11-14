@@ -156,7 +156,12 @@ export class DeliveryLogsPage {
     { label: 'Reference', kind: 'strong', value: (l) => l.reference },
     { label: 'Customer', value: (l) => l.customer },
     { label: 'Driver', value: (l) => l.driver_name, sub: (l) => (l.helper_names.length > 0 ? l.helper_names.join(', ') : 'No helper') },
-    { label: 'Delivered', kind: 'num', value: (l) => fmt.dateTime(l.delivered_at) },
+    {
+      label: 'Delivered',
+      kind: 'num',
+      value: (l) => fmt.dateTime(l.delivered_at),
+      date: (l) => l.delivered_at,
+    },
     { label: 'Proof of delivery', kind: 'muted', value: (l) => l.pod_ref ?? 'Not uploaded' },
     { label: 'Fuel used', kind: 'num', value: (l) => (l.fuel_litres === null ? '—' : `${l.fuel_litres} L`) },
     {

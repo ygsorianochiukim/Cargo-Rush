@@ -80,7 +80,7 @@ export class SalesPage {
   );
 
   protected readonly columns: Column<SalesBucket>[] = [
-    { label: 'Period', kind: 'strong', value: (b) => b.label },
+    { label: 'Period', kind: 'strong', value: (b) => b.label, date: (b) => b.from },
     { label: 'Entries', kind: 'num', value: (b) => b.entry_count },
     { label: 'Sales', kind: 'num', value: (b) => fmt.money(b.sales_cents, this.currency()) },
     { label: 'Expenses', kind: 'num', value: (b) => fmt.money(b.expenses_cents, this.currency()) },
