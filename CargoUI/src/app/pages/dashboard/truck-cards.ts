@@ -96,7 +96,12 @@ function today(): string {
             <article class="flex flex-col rounded-card bg-cr-surface p-4 shadow-card ring-1 ring-cr-line/60">
               <header class="flex items-start justify-between gap-3">
                 <div class="min-w-0">
-                  <h3 class="truncate text-[15px] font-semibold">{{ t.truck.label }}</h3>
+                  <h3 class="truncate text-[15px] font-semibold">
+                    <a
+                      routerLink="/truck-dashboard"
+                      [queryParams]="{ truck: t.truck.id }"
+                      class="hover:text-cr-blue hover:underline">{{ t.truck.label }}</a>
+                  </h3>
                   <p class="cr-num text-[12px] text-cr-ink-muted">{{ t.truck.plate ?? 'No plate' }}</p>
                 </div>
                 @if (t.status) {
