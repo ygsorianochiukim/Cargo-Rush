@@ -344,6 +344,13 @@ export const routes: Routes = [
         loadComponent: () => import('./pages/settings/zoning.page').then((m) => m.ZoningPage),
       },
       {
+        path: 'assistant-settings',
+        title: 'Assistant Settings · Cargo Rush',
+        data: { title: 'Assistant Settings' },
+        loadComponent: () =>
+          import('./pages/settings/assistant.page').then((m) => m.AssistantPage),
+      },
+      {
         path: 'benefits',
         title: 'Benefits · Cargo Rush',
         data: { title: 'Benefits' },
