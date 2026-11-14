@@ -186,7 +186,7 @@ describe('the balance sheet', function (): void {
         ($this->bill)(10_000_00, ['entry_date' => now()->subMonths(2)->toDateString()]);
         ($this->bill)(3_000_00);
 
-        $sheet = ($this->sheet)(['as_of' => now()->subMonth()->endOfMonth()->toDateString()]);
+        $sheet = ($this->sheet)(['as_of' => now()->subMonthNoOverflow()->endOfMonth()->toDateString()]);
 
         expect($sheet['assets']['total_cents'])->toBe(10_000_00)
             ->and($sheet['balanced'])->toBeTrue();
