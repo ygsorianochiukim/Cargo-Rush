@@ -80,12 +80,32 @@ jobs:
           grep -rho 'https://[a-z0-9.-]*' dist/CargoUI/browser/*.js \
             | sort -u | grep -i 'cargorush-logistics' || true
 
+      # The Discord assistant ships with its own Node runtime: the official
+      # linux-x64 build, which targets an old glibc and so runs on any current
+      # Ubuntu, unlike the runner's own binary. The server installs nothing.
+      - name: Build Discord assistant
+        working-directory: discord-bot
+        run: |
+          set -euo pipefail
+          npm ci
+          npm run build
+          npm prune --omit=dev
+
+          version="$(node -p 'process.version')"
+          curl -fsSL "https://nodejs.org/dist/$version/node-$version-linux-x64.tar.xz" -o node.tar.xz
+          curl -fsSL "https://nodejs.org/dist/$version/SHASUMS256.txt" \
+            | grep " node-$version-linux-x64.tar.xz\$" | sed 's/node-.*/node.tar.xz/' | sha256sum -c -
+          mkdir -p bin
+          tar -xJf node.tar.xz --strip-components=2 -C bin "node-$version-linux-x64/bin/node"
+          rm node.tar.xz
+          bin/node --version
+
       # Assemble exactly what the server gets. Building here rather than on the
       # VPS means the box needs no Composer, no Node and no build toolchain.
       - name: Assemble release payload
         run: |
           set -euo pipefail
-          mkdir -p release/CargoApi release/CargoUI release/bin
+          mkdir -p release/CargoApi release/CargoUI release/bin release/discord-bot
 
           rsync -a \
             --exclude='.git' \
@@ -106,6 +126,8 @@ jobs:
                    release/skel/storage/logs
 
           cp -r CargoUI/dist/CargoUI/browser release/CargoUI/browser
+
+          cp -r discord-bot/dist discord-bot/node_modules discord-bot/bin discord-bot/package.json release/discord-bot/
 
           # Both scripts ride along with the release, so the script that
           # activates a build is always the one committed beside it — and
@@ -231,6 +253,20 @@ jobs:
           echo "Keys set from GitHub on this deploy:"
           grep -oE '^[A-Za-z_][A-Za-z0-9_]*=' env.overrides | tr -d '=' | sort -u | sed 's/^/  /'
 
+      # The assistant's only setting is where Cargo Rush is. Its AI key,
+      # Discord token and who may message it are on the Assistant Settings
+      # page, and it pairs itself from there, so nothing secret is written here.
+      - name: Render Discord assistant settings
+        env:
+          API_URL: ${{ vars.API_URL }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+          {
+            echo "CARGO_API_URL=${API_URL%/}/api/v1"
+            echo "DATA_DIR=$DEPLOY_PATH/shared/discord-bot/data"
+          } > bot.env
+
       - name: Upload and release
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -238,6 +274,7 @@ jobs:
           SSH_PORT: ${{ vars.SSH_PORT || '22' }}
           DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
           RELEASE: ${{ github.run_number }}-${{ github.sha }}
+          DISCORD_BOT: ${{ vars.DISCORD_BOT || 'off' }}
         run: |
           set -euo pipefail
           # `-o Port=`, not `-p`. ssh spells the port `-p`, but scp spells it
@@ -250,12 +287,12 @@ jobs:
           target="$SSH_USER@$SSH_HOST"
 
           ssh $ssh_opts "$target" "mkdir -p '$DEPLOY_PATH/releases/$RELEASE'"
-          scp $ssh_opts release.tar.gz env.overrides "$target:$DEPLOY_PATH/releases/$RELEASE/"
+          scp $ssh_opts release.tar.gz env.overrides bot.env "$target:$DEPLOY_PATH/releases/$RELEASE/"
           ssh $ssh_opts "$target" "
             set -euo pipefail
             cd '$DEPLOY_PATH/releases/$RELEASE'
             tar -xzf release.tar.gz && rm release.tar.gz
-            bin/release.sh '$DEPLOY_PATH' '$RELEASE'
+            DISCORD_BOT='$DISCORD_BOT' bin/release.sh '$DEPLOY_PATH' '$RELEASE'
           "
 
       # Two hosts, so two checks — plus the one thing that is only true when

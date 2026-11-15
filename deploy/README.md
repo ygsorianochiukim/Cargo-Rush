@@ -178,6 +178,7 @@ Variables, per environment — `staging` shown, production takes the other pair:
 | `API_URL`     | `https://staging.cargorush-logistics.com` |
 | `APP_URL`     | `https://staging-app.cargorush-logistics.com` |
 | `SSH_PORT`    | Only if not 22 |
+| `DISCORD_BOT` | `on` to run the Discord assistant from this environment. Leave it unset (off) everywhere else |
 
 `API_URL` and `APP_URL` are both needed because the smoke test checks each
 host and then checks that the API actually allows the SPA's origin — a CORS
@@ -226,6 +227,21 @@ Until an environment has all six, its deploy job fails on the first step and
 names what is missing. Tests and the release build still run, so a push before
 the server exists tells you whether the code is good — it just has nowhere to
 put it.
+
+### The Discord assistant
+
+Set `DISCORD_BOT=on` on **one** environment only. Both environments' bots
+would otherwise log in with the same Discord token and answer every message
+twice. Nothing else goes into GitHub: the bot's only setting is `API_URL`,
+which the deploy already has.
+
+Each deploy ships the bot with its own Node runtime, keeps it running from a
+crontab line as the deploy user (no root, no systemd unit, back within a minute
+after a crash or reboot), and restarts it on the new release. The first time it
+starts it asks to connect: approve the code under **Administration → Assistant
+Settings**, then paste the Discord bot token and the AI key on the same page.
+Its log is `shared/discord-bot/bot.log`; its saved credentials and memory are in
+`shared/discord-bot/data/`.
 
 ### 5. Push
 
