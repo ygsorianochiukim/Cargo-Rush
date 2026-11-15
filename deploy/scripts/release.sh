@@ -182,6 +182,72 @@ log "Reloading nginx"
 sudo -n /usr/bin/systemctl reload nginx
 
 # ---------------------------------------------------------------------------
+# Discord assistant
+# ---------------------------------------------------------------------------
+# Runs as this user, not as a systemd unit, so it needs no root: a crontab line
+# tries to start it every minute and flock lets only one copy run, which also
+# brings it back after a crash or a reboot. It runs from `current`, so a
+# restart is all it takes to move it onto this release. DISCORD_BOT=on in the
+# GitHub environment turns it on; anything else stops it and removes the line.
+BOT_SHARED="$SHARED_DIR/discord-bot"
+BOT_TAG="cargo-discord-bot-$ENV_NAME"
+BOT_RUN="cd '$DEPLOY_PATH/current/discord-bot' && flock -n '$BOT_SHARED/bot.lock' '$BOT_SHARED/node' --env-file='$BOT_SHARED/.env' dist/index.js --instance=$BOT_TAG >> '$BOT_SHARED/bot.log' 2>&1"
+
+stop_bot() {
+  pkill -TERM -f -- "--instance=$BOT_TAG" 2>/dev/null || true
+  for _ in $(seq 1 20); do
+    pgrep -f -- "--instance=$BOT_TAG" >/dev/null 2>&1 || return 0
+    sleep 1
+  done
+  pkill -KILL -f -- "--instance=$BOT_TAG" 2>/dev/null || true
+}
+
+mkdir -p "$BOT_SHARED/data"
+chmod 700 "$BOT_SHARED/data"
+
+if [ -f "$RELEASE_DIR/bot.env" ]; then
+  install -m 600 "$RELEASE_DIR/bot.env" "$BOT_SHARED/.env"
+  rm -f "$RELEASE_DIR/bot.env"
+fi
+
+# One copy of the runtime in shared/ rather than ~117 MB in every kept release.
+# Replaced by rename, never overwritten: a running binary cannot be written to.
+if [ -f "$RELEASE_DIR/discord-bot/bin/node" ]; then
+  if ! cmp -s "$RELEASE_DIR/discord-bot/bin/node" "$BOT_SHARED/node" 2>/dev/null; then
+    install -m 755 "$RELEASE_DIR/discord-bot/bin/node" "$BOT_SHARED/node.new"
+    mv -f "$BOT_SHARED/node.new" "$BOT_SHARED/node"
+  fi
+  rm -rf "$RELEASE_DIR/discord-bot/bin"
+fi
+
+if [ -f "$BOT_SHARED/bot.log" ] && [ "$(stat -c %s "$BOT_SHARED/bot.log")" -gt 10485760 ]; then
+  tail -c 1048576 "$BOT_SHARED/bot.log" > "$BOT_SHARED/bot.log.tmp" && mv "$BOT_SHARED/bot.log.tmp" "$BOT_SHARED/bot.log"
+fi
+
+if ! command -v crontab >/dev/null 2>&1; then
+  warn "crontab is not installed, so the Discord assistant cannot be kept running; skipping it"
+elif [ "${DISCORD_BOT:-off}" = "on" ] && [ -x "$BOT_SHARED/node" ]; then
+  log "Restarting the Discord assistant"
+  { crontab -l 2>/dev/null | grep -vF "# $BOT_TAG" || true; echo "* * * * * $BOT_RUN # $BOT_TAG"; } | crontab -
+  stop_bot
+  nohup setsid bash -c "$BOT_RUN" </dev/null >/dev/null 2>&1 &
+  sleep 3
+  if pgrep -f -- "--instance=$BOT_TAG" >/dev/null 2>&1; then
+    log "  running; log at $BOT_SHARED/bot.log"
+    grep -E "Connection code|Connected to Cargo Rush|online on Discord" "$BOT_SHARED/bot.log" | tail -n 3 | sed 's/^/    /' || true
+  else
+    warn "the Discord assistant did not stay up; last lines of $BOT_SHARED/bot.log:"
+    tail -n 15 "$BOT_SHARED/bot.log" 2>/dev/null | sed 's/^/    /' || true
+  fi
+else
+  { crontab -l 2>/dev/null | grep -vF "# $BOT_TAG" || true; } | crontab -
+  if pgrep -f -- "--instance=$BOT_TAG" >/dev/null 2>&1; then
+    log "Stopping the Discord assistant (DISCORD_BOT is not 'on' for $ENV_NAME)"
+    stop_bot
+  fi
+fi
+
+# ---------------------------------------------------------------------------
 # Prune
 # ---------------------------------------------------------------------------
 log "Pruning old releases (keeping $KEEP_RELEASES)"

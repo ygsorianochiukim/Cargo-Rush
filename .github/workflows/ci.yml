@@ -82,3 +82,29 @@ jobs:
       # error, so there is no separate tsc step.
       - name: Production build
         run: npx ng build --configuration production
+
+  bot:
+    name: Discord assistant (vitest + tsc)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: discord-bot
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: discord-bot/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test

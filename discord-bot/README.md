@@ -29,8 +29,6 @@ npm test
 npm run typecheck
 ```
 
-## On the VPS
+## On the server
 
-Install the unit from `deploy/systemd/cargo-discord-bot.service.template` (fill the placeholders), then
-`systemctl enable --now cargo-discord-bot-<env>`. Logs: `/var/log/cargo-rush/<env>-discord-bot.log`.
-Conversation memory is kept in `data/history.json`.
+The deploy workflow builds and runs it. Set the GitHub environment variable DISCORD_BOT=on on one environment; see deploy/README.md, "The Discord assistant".
