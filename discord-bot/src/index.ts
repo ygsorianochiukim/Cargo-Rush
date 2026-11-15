@@ -27,6 +27,7 @@ const CHECK_EVERY_MS = 60_000;
 let discord: Client | null = null;
 let discordToken: string | null = null;
 let botId = config.DISCORD_CLIENT_ID;
+let discordStatus: Record<string, unknown> & { state: string } = { state: "connecting" };
 
 const stamp = () => `[${new Date().toISOString()}]`;
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
@@ -35,9 +36,16 @@ function conversationKey(message: Message): string {
   return message.channel.type === ChannelType.DM ? `dm:${message.author.id}` : `ch:${message.channelId}`;
 }
 
+function myRoleId(message: Message): string | null {
+  return message.guild?.members.me?.roles.botRole?.id ?? null;
+}
+
 async function addressedToMe(message: Message): Promise<boolean> {
   if (message.channel.type === ChannelType.DM) return true;
   if (message.mentions.users.has(botId)) return true;
+
+  const role = myRoleId(message);
+  if (role !== null && message.mentions.roles.has(role)) return true;
 
   if (message.reference?.messageId) {
     const replied = await message.fetchReference().catch(() => null);
@@ -48,7 +56,10 @@ async function addressedToMe(message: Message): Promise<boolean> {
 }
 
 function cleanText(message: Message): string {
-  return message.content.replace(new RegExp(`<@!?${botId}>`, "g"), "").trim();
+  const role = myRoleId(message);
+  const mention = role === null ? `<@!?${botId}>` : `<@!?${botId}>|<@&${role}>`;
+
+  return message.content.replace(new RegExp(mention, "g"), "").trim();
 }
 
 function keepTyping(message: Message): () => void {
@@ -176,9 +187,21 @@ function newDiscordClient(): Client {
   client.once(Events.ClientReady, (ready) => {
     botId = ready.user.id;
     const permissions = 1024n + 2048n + 65536n + 274877906944n;
-    console.log(`${stamp()} ${config.ASSISTANT_NAME} is online on Discord as ${ready.user.tag}.`);
-    console.log(`Invite: https://discord.com/oauth2/authorize?client_id=${ready.user.id}&scope=bot&permissions=${permissions}`);
+    const invite = `https://discord.com/oauth2/authorize?client_id=${ready.user.id}&scope=bot&permissions=${permissions}`;
+    console.log(`${stamp()} ${config.ASSISTANT_NAME} is online on Discord as ${ready.user.tag}, in ${ready.guilds.cache.size} server(s).`);
+    console.log(`Invite: ${invite}`);
+    discordStatus = { state: "online", tag: ready.user.tag, servers: ready.guilds.cache.size, invite_url: invite };
+    void cargo.reportStatus(discordStatus);
   });
+
+  const recount = () => {
+    if (discordStatus.state === "online") {
+      discordStatus = { ...discordStatus, servers: client.guilds.cache.size };
+      void cargo.reportStatus(discordStatus);
+    }
+  };
+  client.on(Events.GuildCreate, recount);
+  client.on(Events.GuildDelete, recount);
 
   client.on(Events.MessageCreate, (message) => {
     void handle(message).catch((error) => console.error("message handler failed", error));
@@ -202,16 +225,22 @@ async function syncDiscord(current: BotSettings): Promise<void> {
 
   if (wanted === null) {
     console.log(`${stamp()} No Discord bot token yet. Add it in Cargo Rush → Assistant Settings; I'll pick it up within a minute.`);
+    discordStatus = { state: "no_token" };
+    void cargo.reportStatus(discordStatus);
     return;
   }
 
   const client = newDiscordClient();
+  discordStatus = { state: "connecting" };
 
   try {
     await client.login(wanted);
     discord = client;
   } catch (error) {
-    console.error(`${stamp()} Discord refused the bot token (${error instanceof Error ? error.message : String(error)}). Fix it in Assistant Settings.`);
+    const reason = error instanceof Error ? error.message : String(error);
+    console.error(`${stamp()} Discord refused the bot token (${reason}). Fix it in Assistant Settings.`);
+    discordStatus = { state: "refused", error: reason.slice(0, 300) };
+    void cargo.reportStatus(discordStatus);
     await client.destroy().catch(() => undefined);
   }
 }
@@ -222,6 +251,7 @@ async function supervise(): Promise<void> {
 
     try {
       await syncDiscord(await settings.refresh());
+      void cargo.reportStatus(discordStatus);
     } catch (error) {
       if (error instanceof CargoApiError && (error.status === 401 || error.status === 403)) {
         cargo.setToken("");

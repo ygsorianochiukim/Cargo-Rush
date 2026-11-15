@@ -21,6 +21,7 @@ export interface AssistantSettings {
   bot_role: AssistantBotRole;
   providers: { value: AssistantProvider; label: string; default_model: string }[];
   bot_roles: AssistantBotRole[];
+  discord_status: AssistantDiscordStatus | null;
   token: { issued: boolean; created_at: string | null; last_used_at: string | null };
   discord_users: AssistantDiscordUser[];
   pairings: AssistantPairing[];
@@ -44,4 +45,13 @@ export interface AssistantSettingsPayload {
   clear_key?: boolean;
   discord_token?: string;
   clear_discord_token?: boolean;
+}
+
+export interface AssistantDiscordStatus {
+  state: 'online' | 'connecting' | 'no_token' | 'refused';
+  tag?: string | null;
+  servers?: number | null;
+  invite_url?: string | null;
+  error?: string | null;
+  reported_at: string;
 }

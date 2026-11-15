@@ -69,6 +69,15 @@ export class CargoClient {
     return this.fetch("assistant/bot-config", {});
   }
 
+  async reportStatus(status: Record<string, unknown>): Promise<void> {
+    await this.fetcher(`${this.baseUrl}/assistant/bot-status`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json", Authorization: `Bearer ${this.token}` },
+      body: JSON.stringify(status),
+      signal: AbortSignal.timeout(15_000),
+    }).catch(() => undefined);
+  }
+
   private async fetch(path: string, query: Query): Promise<unknown> {
     const url = new URL(`${this.baseUrl}/${path}`);
 
@@ -100,4 +109,46 @@ export class CargoClient {
 
     return body;
   }
+}
+
+const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:?\d{2})$/;
+
+function localTime(value: string, timezone: string): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    })
+      .formatToParts(new Date(value))
+      .map((part) => [part.type, part.value]),
+  );
+
+  return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
+export function readable(body: unknown, timezone: string): unknown {
+  if (Array.isArray(body)) return body.map((item) => readable(item, timezone));
+
+  if (typeof body === "string") return INSTANT.test(body) && !Number.isNaN(Date.parse(body)) ? localTime(body, timezone) : body;
+
+  if (body === null || typeof body !== "object") return body;
+
+  const out: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(body)) {
+    const cents = typeof value === "string" && /^-?\d+$/.test(value) ? Number(value) : value;
+
+    if (key.endsWith("_cents") && (typeof cents === "number" || cents === null)) {
+      out[`${key.slice(0, -"_cents".length)}_pesos`] = cents === null ? null : Math.round(cents) / 100;
+    } else {
+      out[key] = readable(value, timezone);
+    }
+  }
+
+  return out;
 }

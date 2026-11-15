@@ -88,6 +88,30 @@ class AssistantController extends ApiController
 
     public function botConfig(Request $request): JsonResponse
     {
+        $this->mustBeTheBot($request);
+
+        return $this->payload($this->assistant->botConfig());
+    }
+
+    public function botStatus(Request $request): JsonResponse
+    {
+        $this->mustBeTheBot($request);
+
+        $status = $request->validate([
+            'state' => ['required', 'in:online,connecting,no_token,refused'],
+            'tag' => ['nullable', 'string', 'max:100'],
+            'servers' => ['nullable', 'integer', 'min:0', 'max:100000'],
+            'invite_url' => ['nullable', 'url', 'max:300'],
+            'error' => ['nullable', 'string', 'max:300'],
+        ]);
+
+        $this->assistant->reportStatus($status);
+
+        return $this->noContent();
+    }
+
+    private function mustBeTheBot(Request $request): void
+    {
         $token = $request->user()?->currentAccessToken();
 
         abort_unless(
@@ -95,8 +119,6 @@ class AssistantController extends ApiController
             403,
             'Only the Discord assistant token can read this.',
         );
-
-        return $this->payload($this->assistant->botConfig());
     }
 
     /** @param array<string, mixed> $meta */

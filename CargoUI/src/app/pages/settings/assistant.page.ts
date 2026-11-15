@@ -217,7 +217,7 @@ const SECONDARY =
 
           <p class="text-[13px]">
             @if (s.token.issued) {
-              <span class="font-semibold text-cr-success">Connected.</span>
+              <span class="font-semibold text-cr-success">Connected to Cargo Rush.</span>
               @if (s.token.last_used_at) {
                 Last checked in {{ when(s.token.last_used_at) }}.
               } @else {
@@ -228,6 +228,49 @@ const SECONDARY =
               <button type="button" class="ml-1 font-semibold text-cr-blue hover:underline" (click)="reload()">Check again</button>
             }
           </p>
+
+          @if (s.token.issued) {
+            <div class="mt-2 text-[13px]">
+              @if (s.discord_status; as d) {
+                @switch (d.state) {
+                  @case ('online') {
+                    @if ((d.servers ?? 0) > 0) {
+                      <p>
+                        <span class="font-semibold text-cr-success">Online on Discord</span> as {{ d.tag }}, in
+                        {{ d.servers }} {{ d.servers === 1 ? 'server' : 'servers' }}. Mention it in a channel or send it a DM.
+                      </p>
+                    } @else {
+                      <p>
+                        <span class="font-semibold text-cr-warning">Online on Discord as {{ d.tag }}, but not in any server yet.</span>
+                        People can only reach it once it is in a server you share.
+                      </p>
+                      @if (d.invite_url) {
+                        <a [href]="d.invite_url" target="_blank" rel="noopener" [class]="primary + ' mt-2 inline-flex items-center'">
+                          Add it to your Discord server
+                        </a>
+                      }
+                    }
+                  }
+                  @case ('refused') {
+                    <p class="font-semibold text-cr-red">Discord refused the bot token.</p>
+                    <p class="cr-meta mt-0.5">{{ discordHint(d.error) }}</p>
+                  }
+                  @case ('no_token') {
+                    <p class="font-semibold text-cr-warning">Waiting for a Discord bot token. Paste it above and save.</p>
+                  }
+                  @default {
+                    <p class="text-cr-ink-muted">Connecting to Discord…</p>
+                  }
+                }
+                <p class="cr-meta mt-1">Reported {{ when(d.reported_at) }}.</p>
+              } @else {
+                <p class="text-cr-ink-muted">
+                  No Discord status from the bot yet. It reports within a minute of starting; if this stays empty, the
+                  running bot is an older version, so redeploy it.
+                </p>
+              }
+            </div>
+          }
 
           @if (s.token.issued) {
             <button type="button" [class]="secondary + ' mt-3'" [disabled]="busy()" (click)="revokeToken()">Disconnect the bot</button>
@@ -292,9 +335,12 @@ export class AssistantPage {
   constructor() {
     this.reload();
 
+    let ticks = 0;
     const timer = setInterval(() => {
+      ticks++;
       const s = this.settings();
-      if (s !== null && !s.token.issued && !this.busy()) this.reload();
+      if (s === null || this.busy()) return;
+      if (!s.token.issued || ticks % 6 === 0) this.reload();
     }, 5_000);
 
     inject(DestroyRef).onDestroy(() => clearInterval(timer));
@@ -360,6 +406,20 @@ export class AssistantPage {
   protected revokeToken(): void {
     if (!confirm('Disconnect the bot? It stops answering and asks to connect again, which you approve here.')) return;
     this.run(this.api.revokeToken(), 'Disconnected.');
+  }
+
+  protected discordHint(error: string | null | undefined): string {
+    const text = (error ?? '').toLowerCase();
+
+    if (text.includes('disallowed intents')) {
+      return 'Turn on Message Content Intent: Discord Developer Portal → your app → Bot → Privileged Gateway Intents, then save there. The bot retries within a minute.';
+    }
+
+    if (text.includes('invalid') || text.includes('token')) {
+      return 'The token is wrong or was reset. In the Developer Portal → Bot → Reset Token, copy the new one and paste it above.';
+    }
+
+    return error ?? 'Check the token in the Developer Portal.';
   }
 
   protected when(iso: string | null): string {
