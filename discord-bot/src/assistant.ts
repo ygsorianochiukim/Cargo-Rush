@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-import { CargoApiError, type CargoClient, trimResult } from "./cargo.js";
+import { CargoApiError, type CargoClient, readable, trimResult } from "./cargo.js";
 import type { Turn } from "./memory.js";
 import { systemPrompt } from "./prompt.js";
 import { BASE_URLS, type BotSettings } from "./settings.js";
@@ -65,6 +65,7 @@ export const CARGO_TOOL: OpenAI.Chat.Completions.ChatCompletionFunctionTool = {
 
 export class Assistant {
   private readonly system: string;
+  private readonly timezone: string;
 
   constructor(
     private readonly llmFor: LlmFactory,
@@ -72,6 +73,7 @@ export class Assistant {
     options: AssistantOptions,
   ) {
     this.system = systemPrompt(options.name, options.timezone);
+    this.timezone = options.timezone;
   }
 
   async reply(history: Turn[], message: string, settings: BotSettings): Promise<Reply> {
@@ -144,7 +146,7 @@ export class Assistant {
     const query = input.query && typeof input.query === "object" ? (input.query as Record<string, string | number | boolean>) : {};
 
     try {
-      return trimResult(await this.cargo.get(input.path, query));
+      return trimResult(readable(await this.cargo.get(input.path, query), this.timezone));
     } catch (error) {
       if (error instanceof CargoApiError) return `Lookup failed: ${error.message}`;
       return `Lookup failed: ${error instanceof Error ? error.message : String(error)}`;

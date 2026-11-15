@@ -268,3 +268,28 @@ describe('the Discord bot token', function (): void {
         ($this->settings)(['discord_token' => 'hello'])->assertUnprocessable()->assertJsonValidationErrors('discord_token');
     });
 });
+
+describe('the bot reporting how Discord is going', function (): void {
+    it('shows the bot\'s last Discord status on the page, and takes it only from the bot', function (): void {
+        $token = $this->actingAs($this->admin)->postJson('/api/v1/assistant/token')->json('meta.token');
+
+        $this->actingAs($this->admin)->getJson('/api/v1/assistant/settings')->assertJsonPath('data.discord_status', null);
+        $this->actingAs($this->admin)->postJson('/api/v1/assistant/bot-status', ['state' => 'online'])->assertForbidden();
+
+        $this->app['auth']->forgetGuards();
+
+        $this->withToken($token)->postJson('/api/v1/assistant/bot-status', [
+            'state' => 'online', 'tag' => 'Eisenlink Bot#0001', 'servers' => 0,
+            'invite_url' => 'https://discord.com/oauth2/authorize?client_id=1571205865602687158&scope=bot',
+        ])->assertNoContent();
+
+        $this->withToken($token)->postJson('/api/v1/assistant/bot-status', ['state' => 'sleeping'])->assertUnprocessable();
+
+        $this->app['auth']->forgetGuards();
+
+        $this->actingAs($this->admin)->getJson('/api/v1/assistant/settings')
+            ->assertJsonPath('data.discord_status.state', 'online')
+            ->assertJsonPath('data.discord_status.tag', 'Eisenlink Bot#0001')
+            ->assertJsonPath('data.discord_status.servers', 0);
+    });
+});

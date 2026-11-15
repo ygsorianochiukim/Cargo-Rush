@@ -1151,6 +1151,7 @@ Route::prefix('v1')->group(function (): void {
 
         Route::prefix('assistant')->group(function (): void {
             Route::get('bot-config', [AssistantController::class, 'botConfig']);
+            Route::post('bot-status', [AssistantController::class, 'botStatus']);
 
             Route::middleware('permission:company.manage')->group(function (): void {
                 Route::get('settings', [AssistantController::class, 'show']);

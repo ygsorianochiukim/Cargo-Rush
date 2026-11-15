@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { CargoApiError, CargoClient, normalisePath, trimResult } from "../src/cargo.js";
+import { CargoApiError, CargoClient, normalisePath, readable, trimResult } from "../src/cargo.js";
 import { mayAsk, RemoteSettings } from "../src/settings.js";
 
 function json(status: number, body: unknown): Response {
@@ -121,5 +121,21 @@ describe("RemoteSettings", () => {
     const { settings } = remote([() => json(401, { message: "Unauthenticated." })], { t: 0 });
 
     await expect(settings.get()).rejects.toThrow("Assistant Settings");
+  });
+});
+
+describe("readable", () => {
+  it("turns centavos into pesos and UTC instants into local time", () => {
+    const body = {
+      data: [{ reference: "CTS-1", price_cents: 2141000, scheduled_at: "2026-11-13T18:00:00.000000Z", eta: null }],
+      tiles: [{ value_cents: 69075093, previous_cents: "100", note: "2026-11-14" }],
+      empty_cents: null,
+    };
+
+    expect(readable(body, "Asia/Manila")).toEqual({
+      data: [{ reference: "CTS-1", price_pesos: 21410, scheduled_at: "2026-11-14 02:00", eta: null }],
+      tiles: [{ value_pesos: 690750.93, previous_pesos: 1, note: "2026-11-14" }],
+      empty_pesos: null,
+    });
   });
 });

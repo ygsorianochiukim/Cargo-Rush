@@ -8,6 +8,7 @@ use App\Domain\Assistant\Models\AssistantDiscordUser;
 use App\Domain\Assistant\Models\AssistantSetting;
 use App\Domain\Identity\Models\User;
 use App\Domain\Tenancy\Support\Tenant;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -102,6 +103,25 @@ class AssistantService
             && in_array(self::ABILITY, (array) $token->abilities, true);
     }
 
+    /** @param array<string, mixed> $status */
+    public function reportStatus(array $status): void
+    {
+        Cache::put($this->statusKey(), [...$status, 'reported_at' => now()->toIso8601String()], now()->addMinutes(10));
+    }
+
+    /** @return array<string, mixed>|null */
+    public function status(): ?array
+    {
+        $status = Cache::get($this->statusKey());
+
+        return is_array($status) ? $status : null;
+    }
+
+    private function statusKey(): string
+    {
+        return 'assistant-status:'.$this->tenant->id();
+    }
+
     public function revokeToken(): void
     {
         $this->settings()->botUser?->tokens()->delete();
@@ -129,6 +149,7 @@ class AssistantService
                 ->values()
                 ->all(),
             'bot_roles' => AssistantSetting::BOT_ROLES,
+            'discord_status' => $token === null ? null : $this->status(),
             'token' => [
                 'issued' => $token !== null,
                 'created_at' => $token?->created_at?->toIso8601String(),

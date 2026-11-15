@@ -76,11 +76,11 @@ class TripRepository extends Repository
         }
 
         if (! empty($filters['from'])) {
-            $query->where('scheduled_at', '>=', Carbon::parse($filters['from'])->startOfDay());
+            $query->where('scheduled_at', '>=', Carbon::parse($filters['from'], Trip::REFERENCE_TIMEZONE)->startOfDay()->utc());
         }
 
         if (! empty($filters['to'])) {
-            $query->where('scheduled_at', '<=', Carbon::parse($filters['to'])->endOfDay());
+            $query->where('scheduled_at', '<=', Carbon::parse($filters['to'], Trip::REFERENCE_TIMEZONE)->endOfDay()->utc());
         }
 
         return $query->reorder()
