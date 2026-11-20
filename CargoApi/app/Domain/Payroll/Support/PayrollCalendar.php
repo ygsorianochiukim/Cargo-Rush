@@ -21,11 +21,16 @@ final class PayrollCalendar
     private function __construct(
         public readonly array $days,
         public readonly int $releaseLagDays = self::DEFAULT_RELEASE_LAG,
+        private readonly array $payDates = [],
     ) {}
 
     public function releaseFor(Carbon $cutoff): Carbon
     {
-        return $cutoff->copy()->addDays($this->releaseLagDays);
+        $override = $this->payDates[$cutoff->toDateString()] ?? null;
+
+        return $override === null
+            ? $cutoff->copy()->addDays($this->releaseLagDays)
+            : Carbon::parse($override, $cutoff->timezone);
     }
 
     /** @param array<int, mixed> $days */
@@ -51,9 +56,9 @@ final class PayrollCalendar
 
         $lag = $company?->payroll_release_lag_days ?? self::configuredLag();
 
-        return is_array($days) && $days !== []
-            ? self::of($days, $lag)
-            : new self(self::default()->days, $lag);
+        $days = is_array($days) ? self::normalise($days) : [];
+
+        return new self($days ?: self::default()->days, $lag, $company?->payroll_pay_dates ?? []);
     }
 
     private static function configuredLag(): int

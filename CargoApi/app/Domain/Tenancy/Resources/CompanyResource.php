@@ -42,7 +42,9 @@ class CompanyResource extends ApiResource
             'payroll_cutoff_days' => $this->payroll_cutoff_days,
 
             'payroll_release_lag_days' => $this->payroll_release_lag_days,
-            'payroll_calendar' => $this->payrollCalendar()->toArray(),
+            'payroll_pay_dates' => (object) ($this->payroll_pay_dates ?? []),
+            'payroll_auto_drafts' => (bool) $this->payroll_auto_drafts,
+            'payroll_calendar' => $this->payrollCalendar()->toArray(now('Asia/Manila')),
 
             'rates' => $this->rates()->inForce(),
             'rate_defaults' => $this->rates()->defaults(),

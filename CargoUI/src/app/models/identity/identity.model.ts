@@ -56,6 +56,8 @@ export interface Company {
   payroll_cutoff_days: number[] | null;
 
   payroll_release_lag_days: number | null;
+  payroll_pay_dates?: Record<string, string>;
+  payroll_auto_drafts?: boolean;
 
   payroll_calendar: PayrollCalendar;
 

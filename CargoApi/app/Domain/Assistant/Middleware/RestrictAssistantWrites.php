@@ -21,6 +21,7 @@ class RestrictAssistantWrites
                 'assistant.receipts.store',
                 'assistant.receipts.decide',
                 'assistant.receipts.edit-link',
+                'assistant.payroll-alerts.delivered',
             ), 403);
         }
 

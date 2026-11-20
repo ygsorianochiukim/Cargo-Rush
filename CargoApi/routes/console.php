@@ -37,6 +37,7 @@ Schedule::command('cargo:trips-quote')->everyFiveMinutes()->withoutOverlapping()
 // Money goes stale on the same clock. Daily rather than by the minute: a due
 // date is a date, so nothing can change between one morning and the next.
 Schedule::command('cargo:invoices-overdue', ['--scheduled'])->dailyAt('00:05')->withoutOverlapping();
+Schedule::command('cargo:payroll-drafts')->dailyAt('12:00')->timezone('Asia/Manila')->withoutOverlapping();
 
 /*
 | The rent on every truck the fleet hires at a flat fee.

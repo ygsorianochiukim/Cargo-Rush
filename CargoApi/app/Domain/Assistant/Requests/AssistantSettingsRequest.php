@@ -25,6 +25,7 @@ class AssistantSettingsRequest extends ApiFormRequest
             'discord_assistant_channel_id' => ['sometimes', 'nullable', 'string', 'regex:/^[1-9][0-9]{16,19}$/'],
             'discord_finance_channel_id' => ['sometimes', 'nullable', 'string', 'regex:/^[1-9][0-9]{16,19}$/'],
             'discord_finance_alerts_channel_id' => ['sometimes', 'nullable', 'string', 'regex:/^[1-9][0-9]{16,19}$/'],
+            'discord_hr_channel_id' => ['sometimes', 'nullable', 'string', 'regex:/^[1-9][0-9]{16,19}$/'],
             'discord_payment_alert_pesos' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:1000000000'],
         ];
     }

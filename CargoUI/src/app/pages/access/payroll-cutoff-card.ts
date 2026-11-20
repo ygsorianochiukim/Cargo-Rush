@@ -22,10 +22,36 @@ import { Icon } from '../../shared/icon';
               <app-icon name="calendar" [size]="14" />
               <span class="font-medium text-cr-ink">{{ period.label }}</span>
               <span>· {{ period.days }} days</span>
-              <span class="cr-num text-cr-blue">· paid {{ date(period.release_on) }}</span>
+              <label class="flex flex-wrap items-center gap-2 text-cr-blue">
+                <span>Planned pay date · {{ date(period.release_on) }}</span>
+                <input
+                  type="date"
+                  class="rounded-control border border-cr-line bg-cr-surface px-2 py-1 text-cr-ink"
+                  [attr.aria-label]="'Override pay date for ' + period.label"
+                  [min]="period.cutoff"
+                  [value]="payDate(period.cutoff)"
+                  [disabled]="busy()"
+                  (input)="changePayDate(period.cutoff, $any($event.target).value)"
+                />
+              </label>
             </li>
           }
         </ul>
+        <p class="cr-meta mt-2">Leave a date blank to use the release delay below.</p>
+
+        <label class="mt-4 flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            class="mt-1 h-4 w-4 accent-cr-blue"
+            [checked]="autoDrafts()"
+            [disabled]="busy()"
+            (change)="autoDrafts.set($any($event.target).checked)"
+          />
+          <span>
+            Prepare Office and Crew payroll drafts automatically
+            <span class="cr-meta block">The scheduler checks at noon Manila time and prepares drafts on the planned pay date after the cutoff closes.</span>
+          </span>
+        </label>
 
         @if (row.payroll_cutoff_days === null) {
           <p class="cr-meta mt-2">
@@ -189,6 +215,8 @@ export class PayrollCutoffCard {
   protected readonly lastDay = signal(31);
 
   protected readonly lag = signal(2);
+  protected readonly autoDrafts = signal(false);
+  private readonly dateChanges = signal<Record<string, string | null>>({});
 
   protected readonly schedules = [
     { key: 'once' as const, label: 'Once a month' },
@@ -208,7 +236,9 @@ export class PayrollCutoffCard {
 
     return (
       current.join(',') !== this.days().join(',') ||
-      row.payroll_calendar.release_lag_days !== this.lag()
+      row.payroll_calendar.release_lag_days !== this.lag() ||
+      !!row.payroll_auto_drafts !== this.autoDrafts() ||
+      Object.keys(this.dateChanges()).length > 0
     );
   });
 
@@ -219,6 +249,21 @@ export class PayrollCutoffCard {
   });
 
   protected readonly date = (value: string): string => fmt.date(value);
+
+  protected payDate(cutoff: string): string {
+    const changes = this.dateChanges();
+    return (cutoff in changes ? changes[cutoff] : this.company()?.payroll_pay_dates?.[cutoff]) ?? '';
+  }
+
+  protected changePayDate(cutoff: string, value: string): void {
+    const original = this.company()?.payroll_pay_dates?.[cutoff] ?? '';
+    this.dateChanges.update((changes) => {
+      if (original !== value) return { ...changes, [cutoff]: value || null };
+      const next = { ...changes };
+      delete next[cutoff];
+      return next;
+    });
+  }
 
   constructor() {
     this.load();
@@ -261,6 +306,8 @@ export class PayrollCutoffCard {
       .updateProfile({
         payroll_cutoff_days: this.days(),
         payroll_release_lag_days: this.lag(),
+        payroll_auto_drafts: this.autoDrafts(),
+        ...(Object.keys(this.dateChanges()).length ? { payroll_pay_dates: this.dateChanges() } : {}),
       })
       .subscribe({
         next: (company) => {
@@ -329,6 +376,8 @@ export class PayrollCutoffCard {
     this.lastDay.set(days[days.length - 1]);
 
     this.lag.set(company.payroll_calendar.release_lag_days);
+    this.autoDrafts.set(company.payroll_auto_drafts === true);
+    this.dateChanges.set({});
   }
 
   private messageFor(error: HttpErrorResponse): string {
@@ -337,6 +386,7 @@ export class PayrollCutoffCard {
 
       return (
         errors?.['payroll_cutoff_days']?.[0] ??
+        errors?.['payroll_pay_dates']?.[0] ??
         errors?.['payroll_deduct_on']?.[0] ??
         error.error?.message ??
         'That schedule was not accepted.'

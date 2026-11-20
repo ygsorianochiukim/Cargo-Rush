@@ -19,6 +19,7 @@ const CHANNELS = [
   { key: 'discord_assistant_channel_id', label: 'Assistant channel', hint: 'General Cargo Rush questions' },
   { key: 'discord_finance_channel_id', label: 'Finance channel', hint: 'Finance questions and daily reports' },
   { key: 'discord_finance_alerts_channel_id', label: 'Finance alerts channel', hint: 'Optional. Defaults to the Finance channel.' },
+  { key: 'discord_hr_channel_id', label: 'HR assistant channel', hint: 'Private payroll alerts with employee names and net pay' },
 ] as const;
 
 const CONFIGURATION_KEYS = [
@@ -26,6 +27,7 @@ const CONFIGURATION_KEYS = [
   'discord_assistant_channel_id',
   'discord_finance_channel_id',
   'discord_finance_alerts_channel_id',
+  'discord_hr_channel_id',
   'discord_payment_alert_pesos',
 ] as const satisfies readonly (keyof DiscordBotConfiguration)[];
 

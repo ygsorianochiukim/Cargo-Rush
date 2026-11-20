@@ -49,6 +49,7 @@ use App\Domain\Payroll\Controllers\CrewPayReportController;
 use App\Domain\Payroll\Controllers\PayComponentController;
 use App\Domain\Payroll\Controllers\PayrollController;
 use App\Domain\Payroll\Controllers\PayrollCutoffRequestController;
+use App\Domain\Payroll\Controllers\PayrollDiscordAlertController;
 use App\Domain\Payroll\Controllers\StoreCreditController;
 use App\Domain\Pricing\Controllers\PricingController;
 use App\Domain\Printing\Controllers\PrintableController;
@@ -1175,6 +1176,9 @@ Route::prefix('v1')->group(function (): void {
             Route::get('bot-config', [AssistantController::class, 'botConfig']);
             Route::post('bot-status', [AssistantController::class, 'botStatus'])->name('assistant.bot-status');
             Route::get('finance-activity', [AssistantController::class, 'financeActivity']);
+            Route::get('payroll-alerts', [PayrollDiscordAlertController::class, 'index']);
+            Route::post('payroll-alerts/{alert}/delivered', [PayrollDiscordAlertController::class, 'delivered'])
+                ->whereUlid('alert')->name('assistant.payroll-alerts.delivered');
             Route::post('receipts', [DiscordExpenseReceiptController::class, 'store'])->name('assistant.receipts.store');
             Route::get('receipts/{receipt}', [DiscordExpenseReceiptController::class, 'review'])->whereUlid('receipt');
             Route::post('receipts/{receipt}', [DiscordExpenseReceiptController::class, 'decide'])->whereUlid('receipt')->name('assistant.receipts.decide');

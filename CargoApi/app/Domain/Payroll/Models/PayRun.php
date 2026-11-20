@@ -216,6 +216,12 @@ class PayRun extends Model
         static::creating(function (self $run): void {
             $run->reference ??= static::nextReference(null, $run->scope());
         });
+        static::saved(function (self $run): void {
+            if (($run->wasRecentlyCreated || $run->wasChanged('status'))
+                && in_array($run->status, [self::DRAFT, self::APPROVED, self::PAID], true)) {
+                PayrollDiscordAlert::enqueue($run, $run->status);
+            }
+        });
     }
 
     public static function nextReference(?int $year = null, PayrollScope $scope = PayrollScope::Office): string

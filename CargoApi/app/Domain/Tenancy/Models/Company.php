@@ -25,6 +25,7 @@ class Company extends Model
         'latitude', 'longitude',
         'tin', 'vat_registered', 'vat_rate_bp', 'withholding_rate_bp', 'prices_include_vat',
         'payroll_deduct_on', 'payroll_benefits_enabled', 'payroll_cutoff_days', 'payroll_release_lag_days',
+        'payroll_pay_dates', 'payroll_auto_drafts',
         'trucker_commission_bp',
         'billing_terms_days',    ];
 
@@ -50,6 +51,8 @@ class Company extends Model
             'payroll_cutoff_days' => 'array',
 
             'payroll_release_lag_days' => 'integer',
+            'payroll_pay_dates' => 'array',
+            'payroll_auto_drafts' => 'boolean',
         ];
     }
 

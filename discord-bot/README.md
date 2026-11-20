@@ -25,6 +25,12 @@ Upload a JPEG, PNG, or WebP receipt of up to 2 MB directly in the private Financ
 
 An administrator grants the uploader **Confirm receipts** under **Administration → Assistant Settings → Who can message it**. Only the uploader can use the preview buttons. **Other Expenses → Expense archive** contains the original images, draft revisions, and archived expense entries. Confirmed receipt expenses appear in the daily finance report.
 
+## Payroll alerts
+
+Set a dedicated private **HR assistant channel** in the Automation Dashboard. Give access to the bot and the staff authorized to see employee pay. The bot sends Office and Crew payroll alerts with the planned pay date, total payroll cost, and each employee’s net pay.
+
+Under **Benefits → Payroll cutoff**, set any planned pay date overrides and enable **Prepare Office and Crew payroll drafts automatically**. Laravel checks daily at noon Manila time and creates drafts on their planned pay date after the cutoff has closed. Review, approval, and payment continue through the existing payroll screens.
+
 ## Setup
 
 1. **Bot settings file.** `cp .env.example .env` and set `CARGO_API_URL`. That is the only setting it needs, and it never changes.
