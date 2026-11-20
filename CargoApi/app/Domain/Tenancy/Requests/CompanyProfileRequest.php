@@ -29,6 +29,9 @@ class CompanyProfileRequest extends ApiFormRequest
             'payroll_cutoff_days' => ['sometimes', 'nullable', 'array', new PayrollCutoffDays],
 
             'payroll_release_lag_days' => ['sometimes', 'nullable', 'integer', 'min:0', 'max:14'],
+            'payroll_pay_dates' => ['sometimes', 'array', 'max:12'],
+            'payroll_pay_dates.*' => ['nullable', 'date_format:Y-m-d'],
+            'payroll_auto_drafts' => ['sometimes', 'boolean'],
 
             'trucker_commission_bp' => ['sometimes', 'integer', 'min:0', 'max:5000'],
 
@@ -56,6 +59,7 @@ class CompanyProfileRequest extends ApiFormRequest
         $attributes = $this->safe()->only([
             'contact_name', 'contact_email', 'contact_phone', 'address', 'latitude', 'longitude',
             'payroll_deduct_on', 'payroll_benefits_enabled', 'payroll_cutoff_days', 'payroll_release_lag_days',
+            'payroll_pay_dates', 'payroll_auto_drafts',
             'trucker_commission_bp',
             'billing_terms_days',
             'vat_registered', 'vat_rate_bp', 'withholding_rate_bp', 'prices_include_vat',
@@ -76,7 +80,7 @@ class CompanyProfileRequest extends ApiFormRequest
             }
         }
 
-        foreach (['vat_registered', 'prices_include_vat', 'payroll_benefits_enabled'] as $key) {
+        foreach (['vat_registered', 'prices_include_vat', 'payroll_benefits_enabled', 'payroll_auto_drafts'] as $key) {
             if (array_key_exists($key, $attributes) && $attributes[$key] !== null) {
                 $attributes[$key] = filter_var($attributes[$key], FILTER_VALIDATE_BOOLEAN);
             }

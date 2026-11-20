@@ -225,6 +225,7 @@ class AssistantService
             'discord_token' => $settings->discord_token,
             ...$settings->only(AssistantSetting::CHANNEL_FIELDS),
             'finance_reports_enabled' => $settings->enabled && $settings->discord_finance_channel_id !== null,
+            'hr_alerts_enabled' => $settings->enabled && $settings->discord_hr_channel_id !== null,
             'discord_ids' => AssistantDiscordUser::query()->pluck('discord_id')->values()->all(),
         ];
     }

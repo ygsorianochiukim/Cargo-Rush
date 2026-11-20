@@ -4,7 +4,8 @@ export type AssistantBotRole = 'accountant' | 'administrator';
 export type AssistantChannelField =
   | 'discord_assistant_channel_id'
   | 'discord_finance_channel_id'
-  | 'discord_finance_alerts_channel_id';
+  | 'discord_finance_alerts_channel_id'
+  | 'discord_hr_channel_id';
 
 export interface DiscordBotConfiguration extends Record<AssistantChannelField, string | null> {
   enabled: boolean;
@@ -72,5 +73,6 @@ export interface AssistantDiscordStatus {
   invite_url?: string | null;
   error?: string | null;
   finance_error?: string | null;
+  hr_error?: string | null;
   reported_at: string;
 }

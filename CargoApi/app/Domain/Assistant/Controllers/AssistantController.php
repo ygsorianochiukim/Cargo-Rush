@@ -120,6 +120,7 @@ class AssistantController extends ApiController
             'invite_url' => ['nullable', 'url', 'max:300'],
             'error' => ['nullable', 'string', 'max:300'],
             'finance_error' => ['nullable', 'string', 'max:300'],
+            'hr_error' => ['nullable', 'string', 'max:300'],
         ]);
 
         $this->assistant->reportStatus($status);

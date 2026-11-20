@@ -36,6 +36,7 @@ use App\Domain\Identity\Models\User;
 use App\Domain\Incident\Models\Incident;
 use App\Domain\Notification\Models\NotificationItem;
 use App\Domain\Payroll\Console\DemoPayrollCommand;
+use App\Domain\Payroll\Console\GenerateDuePayrollDraftsCommand;
 use App\Domain\Payroll\Models\PayRun;
 use App\Domain\Payroll\Models\StoreCredit;
 use App\Domain\Pricing\Console\LoadSubsidyCardCommand;
@@ -116,6 +117,7 @@ class DomainServiceProvider extends ServiceProvider
                 ReleaseDueTripsCommand::class,
                 ReconcileOverdueTripsCommand::class,
                 ReconcileOverdueInvoicesCommand::class,
+                GenerateDuePayrollDraftsCommand::class,
                 RequoteInvoicesCommand::class,
                 QuoteUnpricedTripsCommand::class,
                 RemeasureTripsCommand::class,

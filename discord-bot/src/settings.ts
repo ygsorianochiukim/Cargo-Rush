@@ -15,7 +15,9 @@ const schema = z.object({
   discord_assistant_channel_id: z.string().nullable().optional(),
   discord_finance_channel_id: z.string().nullable().optional(),
   discord_finance_alerts_channel_id: z.string().nullable().optional(),
+  discord_hr_channel_id: z.string().nullable().optional(),
   finance_reports_enabled: z.boolean().optional(),
+  hr_alerts_enabled: z.boolean().optional(),
 });
 
 export type BotSettings = z.infer<typeof schema>;
@@ -70,7 +72,7 @@ export function mayAsk(settings: BotSettings, discordId: string): boolean {
 
 export function channelScope(settings: BotSettings, channelId: string): "general" | "finance" | "legacy" | null {
   const { discord_assistant_channel_id: assistant, discord_finance_channel_id: finance, discord_finance_alerts_channel_id: alerts } = settings;
-  if (!assistant && !finance && !alerts) return "legacy";
+  if (!assistant && !finance && !alerts && !settings.discord_hr_channel_id) return "legacy";
   if (channelId === assistant) return "general";
   if (channelId === finance) return "finance";
   return null;

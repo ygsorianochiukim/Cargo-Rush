@@ -17,6 +17,7 @@ use App\Domain\Payroll\Models\PayRunLine;
 use App\Domain\Payroll\Models\PayRunLineComponent;
 use App\Domain\Payroll\Models\PayRunLineTrip;
 use App\Domain\Payroll\Support\MonthlyShare;
+use App\Domain\Payroll\Support\PayPeriod;
 use App\Domain\Payroll\Support\PayrollCalendar;
 use App\Domain\Shared\Enums\CrewEmployment;
 use App\Domain\Shared\Enums\DeductionSchedule;
@@ -182,6 +183,26 @@ class PayrollService
             }
 
             return $this->find($run->getKey());
+        });
+    }
+
+    public function buildScheduledDraft(PayPeriod $period, Carbon $payDate, PayrollScope $scope): void
+    {
+        DB::transaction(function () use ($period, $payDate, $scope): void {
+            $this->lockPayroll();
+            $exists = PayRun::withTrashed()->ofScope($scope)
+                ->whereDate('period_start', $period->start->toDateString())
+                ->whereDate('period_end', $period->end->toDateString())
+                ->exists();
+
+            if ($exists || PayRun::query()->ofScope($scope)
+                ->whereDate('period_start', '<=', $period->end->toDateString())
+                ->whereDate('period_end', '>=', $period->start->toDateString())->exists()
+                || $this->payable($period->end, $scope, $period->start)->isEmpty()) {
+                return;
+            }
+
+            $this->build($period->start, $period->end, $payDate, scope: $scope);
         });
     }
 

@@ -9,6 +9,7 @@ import { loadConfig } from "./config.js";
 import { FinanceReports } from "./finance-reports.js";
 import { ConversationMemory, KeyedQueue } from "./memory.js";
 import { CredentialStore, pair } from "./pairing.js";
+import { deliverPayrollAlerts } from "./payroll-alerts.js";
 import { stampFor } from "./prompt.js";
 import { ReceiptWorkflow } from "./receipts.js";
 import { type BotSettings, channelScope, mayAsk, RemoteSettings } from "./settings.js";
@@ -282,7 +283,7 @@ async function supervise(): Promise<void> {
     try {
       const current = await settings.refresh();
       await syncDiscord(current);
-      await syncFinanceReports(current);
+      await syncReports(current);
       void cargo.reportStatus(discordStatus);
     } catch (error) {
       if (error instanceof CargoApiError && (error.status === 401 || error.status === 403)) {
@@ -294,10 +295,17 @@ async function supervise(): Promise<void> {
   }
 }
 
-async function syncFinanceReports(current: BotSettings): Promise<void> {
+async function syncReports(current: BotSettings): Promise<void> {
   if (discord?.isReady() !== true) return;
   const errors = await reports.tick(discord, current);
-  discordStatus = { ...discordStatus, finance_error: errors.join(" ").slice(0, 300) || null };
+  let payrollError: string | null = null;
+  try {
+    await deliverPayrollAlerts(discord, cargo, current);
+  } catch {
+    payrollError = "Payroll alerts could not be delivered. Check the private HR channel and bot permissions.";
+    console.error(stamp() + " " + payrollError);
+  }
+  discordStatus = { ...discordStatus, finance_error: errors.join(" ").slice(0, 300) || null, hr_error: payrollError };
   for (const error of errors) console.error(stamp() + " " + error);
 }
 
@@ -316,5 +324,5 @@ console.log(
 );
 
 await syncDiscord(initial);
-await syncFinanceReports(initial);
+await syncReports(initial);
 void supervise();

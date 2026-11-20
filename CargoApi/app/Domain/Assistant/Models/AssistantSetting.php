@@ -23,6 +23,7 @@ class AssistantSetting extends Model
 
     public const CHANNEL_FIELDS = [
         'discord_assistant_channel_id', 'discord_finance_channel_id', 'discord_finance_alerts_channel_id',
+        'discord_hr_channel_id',
     ];
 
     protected $fillable = [
