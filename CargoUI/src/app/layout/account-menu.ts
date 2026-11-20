@@ -7,7 +7,8 @@ import {
   signal,
 } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
+import { finalize } from 'rxjs';
 
 import { IdentityService } from '../services/identity/identity.service';
 import { Field } from '../shared/field';
@@ -17,7 +18,7 @@ import { Modal } from '../shared/modal';
 @Component({
   selector: 'app-account-menu',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Field, Icon, Modal, ReactiveFormsModule],
+  imports: [Field, Icon, Modal, ReactiveFormsModule, RouterLink],
   template: `
     <div class="relative">
       @if (open()) {
@@ -37,6 +38,18 @@ import { Modal } from '../shared/modal';
               }
             </p>
           </div>
+
+          @if (me()?.can_edit_developer_access) {
+            <button
+              type="button"
+              role="menuitem"
+              class="flex w-full items-center gap-2.5 px-4 py-2.5 text-left text-[13px] font-medium transition-colors hover:bg-cr-tint"
+              (click)="openAccess()"
+            >
+              <app-icon name="shield" [size]="16" class="text-cr-ink-muted" />
+              Edit access
+            </button>
+          }
 
           <button
             type="button"
@@ -106,6 +119,63 @@ import { Modal } from '../shared/modal';
         </div>
       }
     </div>
+
+    <app-modal
+      [open]="accessOpen()"
+      (openChange)="accessOpen.set($event)"
+      title="Edit access"
+      icon="shield"
+      size="sm"
+    >
+      <label class="flex items-start gap-3 text-sm">
+        <input
+          type="checkbox"
+          class="mt-1 h-4 w-4 accent-cr-blue"
+          [checked]="developerAccess()"
+          [disabled]="savingAccess()"
+          (change)="developerAccess.set($any($event.target).checked)"
+        />
+        <span>
+          <span class="font-semibold">Developer Access</span>
+          <span class="cr-meta block">
+            Open the Automation Dashboard and manage Discord bot settings from this account.
+          </span>
+        </span>
+      </label>
+      @if (accessError(); as message) {
+        <p role="alert" class="mt-3 text-sm text-cr-red">{{ message }}</p>
+      }
+      @if (accessNotice(); as message) {
+        <p role="status" class="mt-3 text-sm text-cr-success">{{ message }}</p>
+      }
+      @if (me()?.developer_access) {
+        <a
+          routerLink="/automation"
+          class="mt-3 inline-block text-sm font-semibold text-cr-blue hover:underline"
+          (click)="accessOpen.set(false)"
+        >
+          Open Automation Dashboard
+        </a>
+      }
+
+      <ng-container modal-footer>
+        <button
+          type="button"
+          class="h-10 rounded-control px-4 text-[14px] font-semibold text-cr-ink-muted hover:bg-cr-tint"
+          (click)="accessOpen.set(false)"
+        >
+          Close
+        </button>
+        <button
+          type="button"
+          class="h-10 rounded-control bg-cr-blue px-4 text-[14px] font-semibold text-cr-surface hover:bg-cr-blue-hover disabled:opacity-50"
+          [disabled]="savingAccess() || developerAccess() === !!me()?.developer_access"
+          (click)="saveAccess()"
+        >
+          {{ savingAccess() ? 'Saving…' : 'Save access' }}
+        </button>
+      </ng-container>
+    </app-modal>
 
     <app-modal
       [open]="passwordOpen()"
@@ -188,6 +258,11 @@ export class AccountMenu {
 
   protected readonly open = signal(false);
   protected readonly signingOut = signal(false);
+  protected readonly accessOpen = signal(false);
+  protected readonly developerAccess = signal(false);
+  protected readonly savingAccess = signal(false);
+  protected readonly accessError = signal('');
+  protected readonly accessNotice = signal('');
 
   protected readonly passwordOpen = signal(false);
   protected readonly saving = signal(false);
@@ -217,6 +292,38 @@ export class AccountMenu {
     this.passwordError.set(null);
     this.changed.set(false);
     this.passwordOpen.set(true);
+  }
+
+  protected openAccess(): void {
+    this.open.set(false);
+    this.developerAccess.set(this.me()?.developer_access === true);
+    this.accessError.set('');
+    this.accessNotice.set('');
+    this.accessOpen.set(true);
+  }
+
+  protected saveAccess(): void {
+    if (this.savingAccess() || this.developerAccess() === (this.me()?.developer_access === true)) return;
+
+    this.savingAccess.set(true);
+    this.accessError.set('');
+    this.accessNotice.set('');
+    this.identity.updateDeveloperAccess(this.developerAccess()).pipe(
+      finalize(() => this.savingAccess.set(false)),
+    ).subscribe({
+      next: (account) => {
+        const enabled = account.developer_access === true;
+        this.developerAccess.set(enabled);
+        this.accessNotice.set(enabled ? 'Developer Access enabled.' : 'Developer Access disabled.');
+        this.identity.loadNavigation().subscribe({
+          error: () => this.accessError.set('Access saved. Reload the page to refresh the sidebar.'),
+        });
+        if (!enabled && this.router.url.split(/[?#]/, 1)[0] === '/automation') {
+          void this.router.navigate(['/dashboard']);
+        }
+      },
+      error: () => this.accessError.set('Could not save Developer Access. Try again.'),
+    });
   }
 
   protected errorFor(field: string): string | null {

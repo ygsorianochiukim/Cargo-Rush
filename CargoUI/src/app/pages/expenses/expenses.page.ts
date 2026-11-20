@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 
 import {
@@ -27,7 +27,7 @@ import { ErrorState } from '../../shared/states';
 @Component({
   selector: 'app-expenses',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BarRows, Card, DataTable, Field, FilterBar, Icon, ListToolbar, ErrorState, ReactiveFormsModule],
+  imports: [BarRows, Card, DataTable, Field, FilterBar, Icon, ListToolbar, ErrorState, ReactiveFormsModule, RouterLink],
   templateUrl: './expenses.page.html',
 })
 export class ExpensesPage {

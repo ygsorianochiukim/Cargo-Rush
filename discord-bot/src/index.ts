@@ -1,14 +1,17 @@
 import OpenAI from "openai";
-import { ChannelType, Client, Events, GatewayIntentBits, type Message, Partials } from "discord.js";
+import { ChannelType, Client, Events, GatewayIntentBits, type Message, Partials, PermissionFlagsBits } from "discord.js";
 import { join } from "node:path";
 
 import { Assistant, llmFactory } from "./assistant.js";
 import { CargoApiError, CargoClient } from "./cargo.js";
+import { privateTextChannel } from "./channels.js";
 import { loadConfig } from "./config.js";
+import { FinanceReports } from "./finance-reports.js";
 import { ConversationMemory, KeyedQueue } from "./memory.js";
 import { CredentialStore, pair } from "./pairing.js";
 import { stampFor } from "./prompt.js";
-import { type BotSettings, mayAsk, RemoteSettings } from "./settings.js";
+import { ReceiptWorkflow } from "./receipts.js";
+import { type BotSettings, channelScope, mayAsk, RemoteSettings } from "./settings.js";
 import { splitMessage } from "./split.js";
 
 const config = loadConfig();
@@ -16,7 +19,11 @@ const config = loadConfig();
 const credentials = new CredentialStore(join(config.DATA_DIR, "credentials.json"));
 const cargo = new CargoClient(config.CARGO_API_URL, config.CARGO_BOT_TOKEN || credentials.load() || "");
 const settings = new RemoteSettings(cargo);
-const assistant = new Assistant(llmFactory(), cargo, { name: config.ASSISTANT_NAME, timezone: config.TIMEZONE });
+const llm = llmFactory();
+const receipts = new ReceiptWorkflow(cargo, settings, llm);
+const assistant = new Assistant(llm, cargo, { name: config.ASSISTANT_NAME, timezone: config.TIMEZONE });
+const finance = new Assistant(llm, cargo, { name: "Finance Bot", timezone: config.TIMEZONE, financeOnly: true });
+const reports = new FinanceReports(cargo, join(config.DATA_DIR, "finance-deliveries.json"), config.TIMEZONE);
 const memory = new ConversationMemory(config.HISTORY_TURNS, join(config.DATA_DIR, "history.json"));
 const queue = new KeyedQueue();
 const warned = new Set<string>();
@@ -84,19 +91,19 @@ async function send(message: Message, text: string): Promise<void> {
 }
 
 async function handle(message: Message): Promise<void> {
-  if (message.author.bot || !(await addressedToMe(message))) return;
+  if (message.author.bot) return;
 
-  const current = await settings.get().catch((error: unknown) => {
+  const current = await settings.get(false).catch((error: unknown) => {
     console.error(`${stamp()} could not read the assistant settings`, error);
     return null;
   });
 
-  if (current === null) {
-    await message.reply("I can't reach Cargo Rush right now. Try again in a few minutes.").catch(() => undefined);
-    return;
-  }
+  if (current === null) return;
+  const scope = channelScope(current, message.channelId);
+  if (scope === null || (scope === "legacy" && !(await addressedToMe(message)))) return;
 
   if (!mayAsk(current, message.author.id)) {
+    if (scope !== "legacy") return;
     if (!warned.has(message.author.id)) {
       warned.add(message.author.id);
       await message.reply("Sorry, I can only help people the company has given access to. Ask an admin to add your Discord ID in Assistant Settings.");
@@ -104,6 +111,7 @@ async function handle(message: Message): Promise<void> {
     return;
   }
 
+  if (scope !== "legacy") await privateTextChannel(message.client, message.channelId);
   warned.delete(message.author.id);
 
   if (!current.enabled) {
@@ -111,11 +119,20 @@ async function handle(message: Message): Promise<void> {
     return;
   }
 
+  if (scope === "finance" && message.attachments.size > 0) {
+    await receipts.receive(message, current);
+    return;
+  }
+
   const text = cleanText(message);
-  const key = conversationKey(message);
+  const key = scope === "legacy"
+    ? conversationKey(message)
+    : (current.company_id ?? "") + ":" + scope + ":" + conversationKey(message);
 
   if (text === "") {
-    await message.reply("Hi! What would you like to know? Sales, trips, schedules, trucks, assets, anything in Cargo Rush.");
+    await message.reply(scope === "finance"
+      ? "Ask me about Cargo Rush finances, invoices, payments, or accounting."
+      : "Hi! What would you like to know about Cargo Rush?");
     return;
   }
 
@@ -131,15 +148,24 @@ async function handle(message: Message): Promise<void> {
     const stamped = `${stampFor(author, message.createdAt, config.TIMEZONE)}\n${text}`;
 
     try {
-      const reply = await assistant.reply(memory.history(key), stamped, current);
+      const reply = await (scope === "finance" ? finance : assistant).reply(memory.history(key), stamped, current);
+      const latest = await settings.get(false);
+      if (current.company_id !== latest.company_id || !latest.enabled ||
+          channelScope(latest, message.channelId) !== scope || !mayAsk(latest, message.author.id)) return;
+      if (scope !== "legacy") await privateTextChannel(message.client, message.channelId);
       memory.record(key, stamped, reply.text, reply.reasoning);
-      stopTyping();
       await send(message, reply.text);
       console.log(`${stamp()} ${author} in ${key}: ${reply.lookups} lookup(s)`);
     } catch (error) {
-      stopTyping();
       console.error(`${stamp()} reply failed in ${key}`, error);
-      await send(message, friendlyError(error)).catch(() => undefined);
+      if (scope === "legacy") {
+        await send(message, friendlyError(error)).catch(() => undefined);
+      } else {
+        await privateTextChannel(message.client, message.channelId)
+          .then(() => send(message, friendlyError(error))).catch(() => undefined);
+      }
+    } finally {
+      stopTyping();
     }
   });
 }
@@ -186,7 +212,8 @@ function newDiscordClient(): Client {
 
   client.once(Events.ClientReady, (ready) => {
     botId = ready.user.id;
-    const permissions = 1024n + 2048n + 65536n + 274877906944n;
+    const permissions = PermissionFlagsBits.ViewChannel | PermissionFlagsBits.SendMessages |
+      PermissionFlagsBits.ReadMessageHistory | PermissionFlagsBits.SendMessagesInThreads | PermissionFlagsBits.AttachFiles;
     const invite = `https://discord.com/oauth2/authorize?client_id=${ready.user.id}&scope=bot&permissions=${permissions}`;
     console.log(`${stamp()} ${config.ASSISTANT_NAME} is online on Discord as ${ready.user.tag}, in ${ready.guilds.cache.size} server(s).`);
     console.log(`Invite: ${invite}`);
@@ -205,6 +232,9 @@ function newDiscordClient(): Client {
 
   client.on(Events.MessageCreate, (message) => {
     void handle(message).catch((error) => console.error("message handler failed", error));
+  });
+  client.on(Events.InteractionCreate, (interaction) => {
+    void receipts.interact(interaction).catch(() => console.error("Receipt interaction failed."));
   });
 
   return client;
@@ -250,7 +280,9 @@ async function supervise(): Promise<void> {
     await sleep(CHECK_EVERY_MS);
 
     try {
-      await syncDiscord(await settings.refresh());
+      const current = await settings.refresh();
+      await syncDiscord(current);
+      await syncFinanceReports(current);
       void cargo.reportStatus(discordStatus);
     } catch (error) {
       if (error instanceof CargoApiError && (error.status === 401 || error.status === 403)) {
@@ -260,6 +292,13 @@ async function supervise(): Promise<void> {
       }
     }
   }
+}
+
+async function syncFinanceReports(current: BotSettings): Promise<void> {
+  if (discord?.isReady() !== true) return;
+  const errors = await reports.tick(discord, current);
+  discordStatus = { ...discordStatus, finance_error: errors.join(" ").slice(0, 300) || null };
+  for (const error of errors) console.error(stamp() + " " + error);
 }
 
 function shutdown(): void {
@@ -277,4 +316,5 @@ console.log(
 );
 
 await syncDiscord(initial);
+await syncFinanceReports(initial);
 void supervise();

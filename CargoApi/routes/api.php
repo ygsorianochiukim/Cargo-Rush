@@ -11,6 +11,9 @@ use App\Domain\Accounting\Controllers\StatementPdfController;
 use App\Domain\Asset\Controllers\AssetCategoryController;
 use App\Domain\Asset\Controllers\AssetController;
 use App\Domain\Assistant\Controllers\AssistantController;
+use App\Domain\Assistant\Middleware\RestrictAssistantWrites;
+use App\Domain\Automation\Controllers\AutomationBotController;
+use App\Domain\Automation\Controllers\AutomationController;
 use App\Domain\Billing\Controllers\BillingController;
 use App\Domain\Billing\Controllers\PaymentController;
 use App\Domain\Customer\Controllers\CustomerController;
@@ -20,6 +23,7 @@ use App\Domain\Dashboard\Controllers\DashboardController;
 use App\Domain\Delivery\Controllers\DeliveryController;
 use App\Domain\Dispatch\Controllers\DispatchController;
 use App\Domain\Driver\Controllers\DriverController;
+use App\Domain\Finance\Controllers\DiscordExpenseReceiptController;
 use App\Domain\Finance\Controllers\ExpenseController;
 use App\Domain\Finance\Controllers\FinanceController;
 use App\Domain\Finance\Controllers\OwnerPayablesController;
@@ -36,6 +40,7 @@ use App\Domain\Identity\Controllers\AuthController;
 use App\Domain\Identity\Controllers\MeController;
 use App\Domain\Identity\Controllers\NavigationController;
 use App\Domain\Identity\Controllers\PasswordController;
+use App\Domain\Identity\Models\Permission;
 use App\Domain\Incident\Controllers\DriverIncidentController;
 use App\Domain\Incident\Controllers\IncidentController;
 use App\Domain\Inspection\Controllers\InspectionController;
@@ -202,10 +207,11 @@ Route::prefix('v1')->group(function (): void {
      * than the group middleware Laravel ships with precisely so it can be put
      * after the other two; see `bootstrap/app.php`.
      */
-    Route::middleware(['auth:sanctum', 'tenant', 'bindings'])->group(function (): void {
+    Route::middleware(['auth:sanctum', 'tenant', RestrictAssistantWrites::class, 'bindings'])->group(function (): void {
 
         // The two endpoints that make the shell data-driven (section 7.2, 7.3).
         Route::get('me', MeController::class);
+        Route::put('me/developer-access', [MeController::class, 'updateDeveloperAccess']);
         Route::get('navigation', NavigationController::class);
 
         /* ------------------------------------------------------ Operations */
@@ -916,6 +922,11 @@ Route::prefix('v1')->group(function (): void {
         });
 
         Route::get('expenses', [ExpenseController::class, 'index'])->middleware('permission:expenses.view');
+        Route::middleware('permission:expenses.view')->group(function (): void {
+            Route::get('expenses/receipt-archive', [DiscordExpenseReceiptController::class, 'archive']);
+            Route::get('expenses/archived', [DiscordExpenseReceiptController::class, 'archivedExpenses']);
+            Route::get('expenses/receipt-archive/{receipt}/original', [DiscordExpenseReceiptController::class, 'original'])->whereUlid('receipt');
+        });
         Route::get('expenses/{expense}', [ExpenseController::class, 'show'])->middleware('permission:expenses.view');
 
         Route::middleware('permission:expenses.manage')->group(function (): void {
@@ -1149,9 +1160,20 @@ Route::prefix('v1')->group(function (): void {
             Route::delete('logo', [CompanyController::class, 'destroyLogo']);
         });
 
+        Route::middleware('permission:'.Permission::DEVELOPER_ACCESS)->prefix('automation')->group(function (): void {
+            Route::get('runs', [AutomationController::class, 'index']);
+            Route::get('runs/{run}', [AutomationController::class, 'show'])->whereUlid('run');
+            Route::get('bots/discord', [AutomationBotController::class, 'show']);
+            Route::put('bots/discord', [AutomationBotController::class, 'update']);
+        });
+
         Route::prefix('assistant')->group(function (): void {
             Route::get('bot-config', [AssistantController::class, 'botConfig']);
-            Route::post('bot-status', [AssistantController::class, 'botStatus']);
+            Route::post('bot-status', [AssistantController::class, 'botStatus'])->name('assistant.bot-status');
+            Route::get('finance-activity', [AssistantController::class, 'financeActivity']);
+            Route::post('receipts', [DiscordExpenseReceiptController::class, 'store'])->name('assistant.receipts.store');
+            Route::get('receipts/{receipt}', [DiscordExpenseReceiptController::class, 'review'])->whereUlid('receipt');
+            Route::post('receipts/{receipt}', [DiscordExpenseReceiptController::class, 'decide'])->whereUlid('receipt')->name('assistant.receipts.decide');
 
             Route::middleware('permission:company.manage')->group(function (): void {
                 Route::get('settings', [AssistantController::class, 'show']);

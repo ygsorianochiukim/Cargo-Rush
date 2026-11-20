@@ -6,10 +6,13 @@ namespace App\Domain\Assistant\Controllers;
 
 use App\Domain\Assistant\Models\AssistantDiscordUser;
 use App\Domain\Assistant\Models\AssistantPairing;
+use App\Domain\Assistant\Models\AssistantSetting;
 use App\Domain\Assistant\Requests\AssistantDiscordUserRequest;
 use App\Domain\Assistant\Requests\AssistantSettingsRequest;
 use App\Domain\Assistant\Services\AssistantPairingService;
 use App\Domain\Assistant\Services\AssistantService;
+use App\Domain\Assistant\Services\DiscordFinanceActivity;
+use App\Domain\Identity\Models\Permission;
 use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -29,14 +32,27 @@ class AssistantController extends ApiController
 
     public function update(AssistantSettingsRequest $request): JsonResponse
     {
-        $this->assistant->update($request->toInput());
+        $input = $request->toInput();
+        $developerFields = [...AssistantSetting::CHANNEL_FIELDS, 'discord_payment_alert_pesos'];
+        abort_if(
+            array_intersect_key($input, array_flip($developerFields)) !== []
+                && ! $request->user()->hasPermission(Permission::DEVELOPER_ACCESS),
+            403,
+            'Developer Access is required to manage Discord channels and payment alerts.',
+        );
+
+        $this->assistant->update($input);
 
         return $this->page();
     }
 
     public function storeDiscordUser(AssistantDiscordUserRequest $request): JsonResponse
     {
-        $this->assistant->addDiscordUser($request->string('discord_id')->toString(), $request->input('label'));
+        $this->assistant->addDiscordUser(
+            $request->string('discord_id')->toString(),
+            $request->input('label'),
+            $request->has('may_confirm_receipts') ? $request->boolean('may_confirm_receipts') : null,
+        );
 
         return $this->page();
     }
@@ -103,11 +119,30 @@ class AssistantController extends ApiController
             'servers' => ['nullable', 'integer', 'min:0', 'max:100000'],
             'invite_url' => ['nullable', 'url', 'max:300'],
             'error' => ['nullable', 'string', 'max:300'],
+            'finance_error' => ['nullable', 'string', 'max:300'],
         ]);
 
         $this->assistant->reportStatus($status);
 
         return $this->noContent();
+    }
+
+    public function financeActivity(Request $request, DiscordFinanceActivity $activity): JsonResponse
+    {
+        $this->mustBeTheBot($request);
+        $settings = $this->assistant->settings();
+        abort_unless($settings->enabled && $settings->discord_finance_channel_id !== null
+            && $request->user()->hasPermission('billing.view'), 403);
+
+        $input = $request->validate([
+            'day' => ['required', 'date_format:Y-m-d'],
+            'timezone' => ['required', 'timezone'],
+            'kind' => ['required', 'in:runs,changes,payments,receipt-expenses'],
+            'alerts' => ['sometimes', 'boolean'],
+            'after' => ['sometimes', 'string', 'regex:/^[A-Za-z0-9]{1,26}$/'],
+        ]);
+
+        return $this->payload($activity->page($settings, $input));
     }
 
     private function mustBeTheBot(Request $request): void
@@ -124,6 +159,13 @@ class AssistantController extends ApiController
     /** @param array<string, mixed> $meta */
     private function page(array $meta = []): JsonResponse
     {
-        return $this->payload([...$this->assistant->overview(), 'pairings' => $this->pairings->waiting()], $meta);
+        $overview = $this->assistant->overview();
+        if (! request()->user()->hasPermission(Permission::DEVELOPER_ACCESS)) {
+            foreach ([...AssistantSetting::CHANNEL_FIELDS, 'discord_payment_alert_pesos'] as $field) {
+                unset($overview[$field]);
+            }
+        }
+
+        return $this->payload([...$overview, 'pairings' => $this->pairings->waiting()], $meta);
     }
 }

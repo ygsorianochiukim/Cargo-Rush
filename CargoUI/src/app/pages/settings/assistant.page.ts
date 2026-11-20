@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 
 import {
   AssistantBotRole,
+  AssistantDiscordUser,
   AssistantProvider,
   AssistantSettings,
   AssistantSettingsPayload,
@@ -38,7 +39,7 @@ const SECONDARY =
             <span>
               Assistant switched on
               <span class="block text-[12px] text-cr-ink-muted">
-                Off, it replies that it is unavailable. It also stays off until an AI key is saved.
+                This controls conversations and reports. Conversations also require an AI key.
               </span>
             </span>
           </label>
@@ -182,6 +183,16 @@ const SECONDARY =
                   <span class="block truncate font-medium">{{ u.label ?? 'No name' }}</span>
                   <span class="cr-num text-[12px] text-cr-ink-muted">{{ u.discord_id }}</span>
                 </span>
+                <label class="flex items-center gap-1.5 text-xs text-cr-ink-muted">
+                  <input
+                    type="checkbox"
+                    class="accent-cr-blue"
+                    [checked]="u.may_confirm_receipts"
+                    [disabled]="busy()"
+                    (change)="setReceiptAccess(u, $any($event.target).checked)"
+                  />
+                  Confirm receipts
+                </label>
                 <button
                   type="button"
                   class="flex-none text-[12px] font-semibold text-cr-red hover:underline disabled:opacity-60"
@@ -237,7 +248,7 @@ const SECONDARY =
                     @if ((d.servers ?? 0) > 0) {
                       <p>
                         <span class="font-semibold text-cr-success">Online on Discord</span> as {{ d.tag }}, in
-                        {{ d.servers }} {{ d.servers === 1 ? 'server' : 'servers' }}. Mention it in a channel or send it a DM.
+                        {{ d.servers }} {{ d.servers === 1 ? 'server' : 'servers' }}.
                       </p>
                     } @else {
                       <p>
@@ -393,6 +404,10 @@ export class AssistantPage {
 
   protected removeUser(id: string): void {
     this.run(this.api.removeDiscordUser(id), 'Removed.');
+  }
+
+  protected setReceiptAccess(user: AssistantDiscordUser, enabled: boolean): void {
+    this.run(this.api.addDiscordUser(user.discord_id, user.label, enabled), 'Receipt access saved.');
   }
 
   protected approve(id: string): void {

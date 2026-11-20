@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Identity\Repositories;
 
 use App\Domain\Identity\Models\NavItem;
+use App\Domain\Identity\Models\Permission;
 use App\Domain\Shared\Repositories\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -34,8 +35,7 @@ class NavigationRepository extends Repository
             ->where($column, true)
             ->get()
             ->filter(fn (NavItem $item): bool => $item->permission === null
-                || in_array('*', $permissions, true)
-                || in_array($item->permission, $permissions, true))
+                || Permission::allows($permissions, $item->permission))
             ->filter(fn (NavItem $item): bool => $only === [] || in_array($item->key, $only, true))
             ->values();
     }

@@ -7,6 +7,7 @@ const BLOCKED = [
   /^(login|logout|me\/password|forgot-password|reset-password)$/i,
   /^access(\/|$)/i,
   /^assistant(\/|$)/i,
+  /^expenses\/(?:receipt-archive|archived)(\/|$)/i,
 ];
 
 export class CargoApiError extends Error {
@@ -69,6 +70,24 @@ export class CargoClient {
     return this.fetch("assistant/bot-config", {});
   }
 
+  financeActivity(query: Query): Promise<unknown> {
+    return this.fetch("assistant/finance-activity", query);
+  }
+
+  uploadReceipt(input: FormData): Promise<unknown> {
+    return this.fetch("assistant/receipts", {}, { method: "POST", body: input });
+  }
+
+  receipt(id: string, identity: Query): Promise<unknown> {
+    return this.fetch("assistant/receipts/" + id, identity);
+  }
+
+  decideReceipt(id: string, input: object): Promise<unknown> {
+    return this.fetch("assistant/receipts/" + id, {}, {
+      method: "POST", body: JSON.stringify(input), headers: { "Content-Type": "application/json" },
+    });
+  }
+
   async reportStatus(status: Record<string, unknown>): Promise<void> {
     await this.fetcher(`${this.baseUrl}/assistant/bot-status`, {
       method: "POST",
@@ -78,7 +97,7 @@ export class CargoClient {
     }).catch(() => undefined);
   }
 
-  private async fetch(path: string, query: Query): Promise<unknown> {
+  private async fetch(path: string, query: Query, options: RequestInit = {}): Promise<unknown> {
     const url = new URL(`${this.baseUrl}/${path}`);
 
     for (const [key, value] of Object.entries(query)) {
@@ -86,7 +105,8 @@ export class CargoClient {
     }
 
     const response = await this.fetcher(url, {
-      headers: { Accept: "application/json", Authorization: `Bearer ${this.token}` },
+      ...options,
+      headers: { Accept: "application/json", Authorization: "Bearer " + this.token, ...options.headers },
       signal: AbortSignal.timeout(30_000),
     });
 

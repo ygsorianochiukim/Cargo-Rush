@@ -6,11 +6,14 @@ namespace App\Domain\Shared\Support;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Context;
 use Illuminate\Support\Facades\Schema;
 
 final class ChangeLog
 {
     public const ACTIONS = ['created', 'updated', 'deleted', 'restored'];
+
+    public const INVOICE_AUTOMATION_RUN_CONTEXT = 'invoice_automation_run';
 
     public const TABLES = [
         'accounts', 'applicants', 'assistant_discord_users', 'assistant_pairings', 'assistant_settings', 'asset_categories', 'asset_turnovers', 'assets', 'companies', 'contracts', 'customers', 'delivery_logs',
@@ -84,7 +87,7 @@ final class ChangeLog
         $request = request();
         $routed = $request->route() !== null;
 
-        $connection->table($logTable)->insert([
+        $entry = [
             'record_id' => $model->getKey() === null ? null : (string) $model->getKey(),
             'action' => $action,
             'old_values' => self::encode($old, $model),
@@ -93,7 +96,15 @@ final class ChangeLog
             'ip_address' => $routed ? $request->ip() : null,
             'url' => $routed ? mb_substr($request->method().' '.$request->path(), 0, 255) : null,
             'created_at' => now(),
-        ]);
+        ];
+        if ($table === 'invoices' && $action === 'updated' && isset($new['status'])) {
+            $runId = Context::getHidden(self::INVOICE_AUTOMATION_RUN_CONTEXT);
+            if ($runId !== null) {
+                $entry['automation_run_id'] = $runId;
+            }
+        }
+
+        $connection->table($logTable)->insert($entry);
     }
 
     /** @param array<string, mixed>|null $values */

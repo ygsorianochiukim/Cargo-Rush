@@ -155,11 +155,10 @@ class InvoiceRepository extends Repository
             ->all();
     }
 
-    public function pendingPastDue(): Collection
+    public function pendingPastDue(): Builder
     {
         return Invoice::query()
             ->whereIn('status', [StatusValue::Pending->value, StatusValue::Partial->value])
-            ->whereDate('due_at', '<', now())
-            ->get();
+            ->whereDate('due_at', '<', now());
     }
 }

@@ -20,6 +20,7 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use RuntimeException;
 
 class BillingService
 {
@@ -293,9 +294,19 @@ class BillingService
     {
         $count = 0;
 
-        foreach ($this->invoices->pendingPastDue() as $invoice) {
-            $invoice->update(['status' => StatusValue::Overdue->value]);
-            $count++;
+        foreach ($this->invoices->pendingPastDue()->select('id')->lazyById() as $candidate) {
+            $count += DB::transaction(function () use ($candidate): int {
+                $invoice = $this->invoices->pendingPastDue()->lockForUpdate()->find($candidate->getKey());
+                if ($invoice === null) {
+                    return 0;
+                }
+
+                if (! $invoice->update(['status' => StatusValue::Overdue->value])) {
+                    throw new RuntimeException('Could not update overdue invoice '.$invoice->number.'.');
+                }
+
+                return 1;
+            }, 3);
         }
 
         return $count;

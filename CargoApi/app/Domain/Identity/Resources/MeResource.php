@@ -35,6 +35,8 @@ class MeResource extends ApiResource
             'role_label' => $this->roleLabel(),
             'avatar_url' => $this->avatar_url,
             'permissions' => $this->permissions(),
+            'can_edit_developer_access' => $this->canEditOwnDeveloperAccess(),
+            'developer_access' => (bool) $this->developer_access,
 
             'driver_id' => $driver?->id,
             'licence_no' => $driver?->licence_no,

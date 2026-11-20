@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
 
 import { Layout } from './layout/layout';
-import { authGuard, guestGuard } from './services/identity/auth.guard';
+import { authGuard, developerGuard, guestGuard } from './services/identity/auth.guard';
 
 export const routes: Routes = [
   {
@@ -169,6 +169,13 @@ export const routes: Routes = [
         title: 'Other Expenses · Cargo Rush',
         data: { title: 'Other Expenses' },
         loadComponent: () => import('./pages/expenses/expenses.page').then((m) => m.ExpensesPage),
+      },
+      {
+        path: 'expenses/receipt-archive',
+        title: 'Expense Archive · Cargo Rush',
+        data: { title: 'Expense Archive' },
+        loadComponent: () =>
+          import('./pages/expenses/expense-archive.page').then((m) => m.ExpenseArchivePage),
       },
       {
         path: 'asset-inventory',
@@ -349,6 +356,14 @@ export const routes: Routes = [
         data: { title: 'Assistant Settings' },
         loadComponent: () =>
           import('./pages/settings/assistant.page').then((m) => m.AssistantPage),
+      },
+      {
+        path: 'automation',
+        canActivate: [developerGuard],
+        title: 'Automation Dashboard · Cargo Rush',
+        data: { title: 'Automation Dashboard' },
+        loadComponent: () =>
+          import('./pages/automation/automation.page').then((m) => m.AutomationPage),
       },
       {
         path: 'benefits',

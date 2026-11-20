@@ -1,0 +1,182 @@
+<div class="space-y-4">
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <p class="text-sm text-cr-ink-muted">Monitor automation runs and the records they change.</p>
+    <button
+      type="button"
+      class="rounded-control border border-cr-line bg-cr-surface px-3 py-2 text-sm font-semibold hover:bg-cr-tint"
+      (click)="refreshNow()"
+    >
+      Refresh
+    </button>
+  </div>
+
+  @if (dashboardError()) {
+    <p role="alert" class="rounded-control border border-cr-line bg-cr-surface p-3 text-sm text-cr-red">
+      {{ dashboardError() }}
+    </p>
+  }
+
+  @if (dashboard(); as overview) {
+    <div class="grid gap-4 lg:grid-cols-2">
+      <app-card heading="Finance Bot" icon="wallet">
+        <p class="font-semibold">Overdue invoice check</p>
+        <p class="mt-1 text-sm text-cr-ink-muted">Scheduled daily</p>
+        @if (overview.data.latest_finance_run; as latest) {
+          <div class="mt-4 border-t border-cr-line pt-3 text-sm">
+            <p class="text-cr-ink-muted">Latest run · {{ latest.started_at | date: 'medium' }}</p>
+            <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <ng-container *ngTemplateOutlet="runStatus; context: { $implicit: latest }" />
+              <span>{{ latest.changed_count | number }} invoices updated</span>
+              <button type="button" class="font-semibold text-cr-blue hover:underline" (click)="selectRun(latest.id)">
+                View run
+              </button>
+            </div>
+          </div>
+        } @else {
+          <p class="mt-4 text-sm text-cr-ink-muted">Waiting for the first run.</p>
+        }
+      </app-card>
+
+      <app-card heading="Running now" icon="gauge">
+        @for (run of overview.data.active; track run.id) {
+          <div class="flex items-start justify-between gap-3 border-b border-cr-line py-2 last:border-none first:pt-0">
+            <div>
+              <p class="font-semibold">{{ workflowLabel(run) }}</p>
+              <p class="text-sm text-cr-ink-muted">
+                Checking invoices · {{ run.changed_count | number }} updated
+              </p>
+              <p class="text-sm text-cr-ink-muted">Started {{ run.started_at | date: 'medium' }}</p>
+            </div>
+            <button type="button" class="shrink-0 text-sm font-semibold text-cr-blue hover:underline" (click)="selectRun(run.id)">
+              View run
+            </button>
+          </div>
+        } @empty {
+          <p class="text-sm text-cr-ink-muted">No automations running right now.</p>
+        }
+      </app-card>
+    </div>
+
+    <app-discord-bot-settings />
+
+    <app-card heading="Run history" icon="clipboard" [padded]="false">
+      @if (overview.data.history.length) {
+        <div class="overflow-x-auto">
+          <table class="w-full whitespace-nowrap text-left text-sm">
+            <thead class="border-b border-cr-line bg-cr-tint text-cr-ink-muted">
+              <tr>
+                <th scope="col" class="px-4 py-2 font-semibold">Workflow</th>
+                <th scope="col" class="px-4 py-2 font-semibold">Status</th>
+                <th scope="col" class="px-4 py-2 font-semibold">Trigger</th>
+                <th scope="col" class="px-4 py-2 font-semibold">Started</th>
+                <th scope="col" class="px-4 py-2 text-right font-semibold">Invoices updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (run of overview.data.history; track run.id) {
+                <tr class="border-b border-cr-line" [class.bg-cr-tint]="selection()?.id === run.id">
+                  <td class="px-4 py-3">
+                    <button type="button" class="font-semibold text-cr-blue hover:underline" (click)="selectRun(run.id)">
+                      {{ workflowLabel(run) }}
+                    </button>
+                  </td>
+                  <td class="px-4 py-3">
+                    <ng-container *ngTemplateOutlet="runStatus; context: { $implicit: run }" />
+                  </td>
+                  <td class="px-4 py-3">{{ run.trigger | titlecase }}</td>
+                  <td class="px-4 py-3">{{ run.started_at | date: 'medium' }}</td>
+                  <td class="px-4 py-3 text-right tabular-nums">{{ run.changed_count | number }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+        <ng-container *ngTemplateOutlet="pager; context: { page: historyPage(), count: pageCount(overview), move: moveHistory, label: 'Run history pages', displayed: overview.meta?.['page'] }" />
+      } @else {
+        <p class="p-4 text-sm text-cr-ink-muted">No runs recorded yet.</p>
+      }
+    </app-card>
+
+    @if (selection()) {
+      <app-card #detailSection heading="Run details" icon="billing" tabindex="-1" aria-label="Run details">
+        @if (detailError()) {
+          <p role="alert" class="mb-3 text-sm text-cr-red">{{ detailError() }}</p>
+        }
+        @if (detail(); as result) {
+          @let run = result.data.run;
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <h3 class="font-semibold">{{ workflowLabel(run) }}</h3>
+            <ng-container *ngTemplateOutlet="runStatus; context: { $implicit: run }" />
+          </div>
+          <p class="mt-1 text-sm text-cr-ink-muted">
+            Started {{ run.started_at | date: 'medium' }}
+            @if (run.finished_at) {
+              · Ended {{ run.finished_at | date: 'medium' }}
+            }
+          </p>
+          @if (run.status === 'failed') {
+            <p class="mt-2 text-sm text-cr-red">The invoice check stopped with an error. Any changes it committed appear below.</p>
+          }
+          <h4 class="mt-4 text-sm font-semibold">Invoice changes ({{ run.changed_count | number }})</h4>
+          @if (result.data.changes.length) {
+            <div class="mt-2 overflow-x-auto">
+              <table class="w-full whitespace-nowrap text-left text-sm">
+                <thead class="border-b border-cr-line bg-cr-tint text-cr-ink-muted">
+                  <tr>
+                    <th scope="col" class="px-3 py-2 font-semibold">Invoice</th>
+                    <th scope="col" class="px-3 py-2 font-semibold">Previous status</th>
+                    <th scope="col" class="px-3 py-2 font-semibold">New status</th>
+                    <th scope="col" class="px-3 py-2 font-semibold">Changed at</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (change of result.data.changes; track change.id) {
+                    <tr class="border-b border-cr-line">
+                      <td class="px-3 py-2">
+                        @if (change.invoice_available && result.data.can_open_invoices) {
+                          <a [routerLink]="['/billing', change.invoice_id]" class="font-semibold text-cr-blue hover:underline">{{ change.invoice_number }}</a>
+                        } @else {
+                          {{ change.invoice_number ?? change.invoice_id }}
+                        }
+                      </td>
+                      <td class="px-3 py-2">{{ (change.before | titlecase) ?? '—' }}</td>
+                      <td class="px-3 py-2">{{ (change.after | titlecase) ?? '—' }}</td>
+                      <td class="px-3 py-2">{{ change.changed_at | date: 'medium' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+            <ng-container *ngTemplateOutlet="pager; context: { page: selection()?.page, count: pageCount(result), move: moveDetail, label: 'Invoice change pages', displayed: result.meta?.['page'] }" />
+          } @else {
+            <p class="mt-2 text-sm text-cr-ink-muted">No invoice changes recorded for this run.</p>
+          }
+        } @else if (!detailError()) {
+          <p role="status" class="text-sm text-cr-ink-muted">Loading run details…</p>
+        }
+      </app-card>
+    }
+  } @else if (!dashboardError()) {
+    <p role="status" class="text-sm text-cr-ink-muted">Loading automation runs…</p>
+  }
+</div>
+
+<ng-template #runStatus let-run>
+  <span
+    class="inline-flex rounded-full border border-cr-line px-2 py-0.5 text-xs font-semibold"
+    [class.text-cr-blue]="run.status === 'running'"
+    [class.text-cr-red]="run.status === 'failed'"
+  >
+    {{ statusLabel(run) }}
+  </span>
+</ng-template>
+
+<ng-template #pager let-page="page" let-count="count" let-move="move" let-label="label" let-displayed="displayed">
+  @if (count > 1) {
+    <nav [attr.aria-label]="label" class="flex items-center justify-end gap-3 px-4 py-3 text-sm">
+      <button type="button" class="font-semibold text-cr-blue disabled:opacity-40" [disabled]="page <= 1 || page !== displayed" (click)="move(page - 1)">Previous</button>
+      <span class="text-cr-ink-muted">Page {{ page }} of {{ count }}</span>
+      <button type="button" class="font-semibold text-cr-blue disabled:opacity-40" [disabled]="page >= count || page !== displayed" (click)="move(page + 1)">Next</button>
+    </nav>
+  }
+</ng-template>

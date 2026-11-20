@@ -6,6 +6,12 @@
   (add)="list.create()"
 />
 
+<div class="mb-4 flex justify-end">
+  <a routerLink="/expenses/receipt-archive" class="text-sm font-semibold text-cr-blue hover:underline">
+    Expense archive
+  </a>
+</div>
+
 <div class="grid grid-cols-1 gap-4 lg:grid-cols-3">
   <app-card [heading]="isThisMonth() ? 'Spend this month' : 'Spend in range'" icon="wallet">
     @if (report(); as r) {
@@ -213,6 +219,7 @@
       [rows]="rows()"
       [minWidth]="1000"
       rowAction="Edit expense"
+      removeLabel="Archive"
       [deletable]="true"
       [rowLabel]="label"
       emptyIcon="wallet"

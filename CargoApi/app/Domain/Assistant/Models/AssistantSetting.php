@@ -21,9 +21,14 @@ class AssistantSetting extends Model
 
     public const BOT_ROLES = ['accountant', 'administrator'];
 
+    public const CHANNEL_FIELDS = [
+        'discord_assistant_channel_id', 'discord_finance_channel_id', 'discord_finance_alerts_channel_id',
+    ];
+
     protected $fillable = [
         'enabled', 'llm_provider', 'llm_model', 'llm_api_key', 'llm_key_hint', 'llm_thinking',
         'discord_token', 'discord_token_hint', 'bot_role', 'bot_user_id',
+        ...self::CHANNEL_FIELDS, 'discord_payment_alert_pesos',
     ];
 
     protected $hidden = ['llm_api_key', 'discord_token'];
@@ -42,6 +47,7 @@ class AssistantSetting extends Model
             'llm_thinking' => 'boolean',
             'llm_api_key' => 'encrypted',
             'discord_token' => 'encrypted',
+            'discord_payment_alert_pesos' => 'integer',
         ];
     }
 

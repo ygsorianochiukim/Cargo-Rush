@@ -18,6 +18,7 @@ class AssistantDiscordUserRequest extends ApiFormRequest
         return [
             'discord_id' => ['required', 'string', 'regex:/^\d{17,20}$/'],
             'label' => ['nullable', 'string', 'max:80'],
+            'may_confirm_receipts' => ['sometimes', 'boolean'],
         ];
     }
 
