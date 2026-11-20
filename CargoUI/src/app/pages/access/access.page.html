@@ -62,7 +62,7 @@
                   <span class="block text-[12px] text-cr-ink-muted">
                     {{
                       role.all_permissions
-                        ? 'All permissions'
+                        ? 'General administrator access'
                         : role.permission_count + ' permissions'
                     }}
                     @if (role.user_count) {
@@ -106,7 +106,7 @@
 
         @if (role.all_permissions) {
           <p class="rounded-control bg-cr-tint px-3 py-2 text-[13px] text-cr-ink-muted">
-            Holds every permission, including ones added in future releases. Not editable.
+            This role has general administrator access. Developer Access is assigned separately.
           </p>
         } @else {
           @if (role.is_system) {

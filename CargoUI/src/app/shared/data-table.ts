@@ -214,7 +214,7 @@ export function dayOf(value: string | null | undefined): string | null {
                           <button
                             type="button"
                             class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
-                            [attr.aria-label]="'Delete ' + (rowLabel() ? rowLabel()!(row) : 'row')"
+                            [attr.aria-label]="removeLabel() + ' ' + (rowLabel() ? rowLabel()!(row) : 'row')"
                             (click)="remove.emit(row)"
                           >
                             <app-icon name="close" [size]="16" />
@@ -301,6 +301,7 @@ export class DataTable {
 
   readonly deletable = input(false);
   readonly rowLabel = input<((row: any) => string) | null>(null);
+  readonly removeLabel = input('Delete');
 
   readonly open = output<any>();
   readonly remove = output<any>();

@@ -1,0 +1,69 @@
+<div class="space-y-4">
+  <a routerLink="/expenses" class="text-sm font-semibold text-cr-blue hover:underline">Back to Other Expenses</a>
+  @if (error()) {
+    <p role="alert" class="text-sm text-cr-red">{{ error() }}</p>
+  }
+  <app-card heading="Discord receipts" icon="clipboard">
+    @for (receipt of receipts(); track receipt.id) {
+      <details class="border-b border-cr-line py-3">
+        <summary class="cursor-pointer text-sm font-semibold">
+          {{ receipt.filename }} · {{ receipt.status | titlecase }} · {{ receipt.created_at | date: 'medium' }}
+        </summary>
+        <div class="mt-3 space-y-2 text-sm">
+          @if (receipt.archived_at) {
+            <p>Cancelled {{ receipt.archived_at | date: 'medium' }}</p>
+          }
+          @if (receipt.expense_id) {
+            <p>Expense {{ receipt.expense_id }}</p>
+          }
+          <button type="button" class="font-semibold text-cr-blue hover:underline" (click)="download(receipt)">
+            Download original
+          </button>
+          <dl class="grid gap-2 rounded-control bg-cr-tint p-3 sm:grid-cols-2">
+            @for (field of receipt.fields | keyvalue; track field.key) {
+              <div>
+                <dt class="cr-meta">{{ fieldLabel(field.key) | titlecase }}</dt>
+                <dd class="break-words">{{ field.value || '—' }}</dd>
+              </div>
+            }
+          </dl>
+          @for (version of receipt.history; track version.revision) {
+            <details>
+              <summary class="cursor-pointer">Version {{ version.revision + 1 }} · {{ version.replaced_at | date: 'medium' }}</summary>
+              <dl class="mt-1 grid gap-2 rounded-control bg-cr-tint p-3 sm:grid-cols-2">
+                @for (field of version.fields | keyvalue; track field.key) {
+                  <div>
+                    <dt class="cr-meta">{{ fieldLabel(field.key) | titlecase }}</dt>
+                    <dd class="break-words">{{ field.value || '—' }}</dd>
+                  </div>
+                }
+              </dl>
+            </details>
+          }
+        </div>
+      </details>
+    } @empty {
+      <p class="text-sm text-cr-ink-muted">{{ loading() ? 'Loading receipts…' : 'No Discord receipts.' }}</p>
+    }
+    @if (moreReceipts() && receiptPage() > 0) {
+      <button type="button" class="mt-3 text-sm font-semibold text-cr-blue" [disabled]="loading()" (click)="loadReceipts()">Load more receipts</button>
+    }
+  </app-card>
+  <app-card heading="Archived expenses" icon="wallet">
+    @for (expense of expenses(); track expense.id) {
+      <div class="flex flex-wrap justify-between gap-2 border-b border-cr-line py-3 text-sm">
+        <div>
+          <p class="font-semibold">{{ expense.payee || expense.reference || 'Expense' }}</p>
+          <p class="cr-meta">{{ expense.date | date }} · Archived {{ expense.deleted_at | date: 'medium' }}</p>
+          @if (expense.note) { <p class="cr-meta">{{ expense.note }}</p> }
+        </div>
+        <span class="font-semibold">{{ fmt.money(expense.amount_cents, expense.currency) }}</span>
+      </div>
+    } @empty {
+      <p class="text-sm text-cr-ink-muted">{{ loadingExpenses() ? 'Loading archived expenses…' : 'No archived expenses.' }}</p>
+    }
+    @if (moreExpenses() && expensePage() > 0) {
+      <button type="button" class="mt-3 text-sm font-semibold text-cr-blue" [disabled]="loadingExpenses()" (click)="loadExpenses()">Load more expenses</button>
+    }
+  </app-card>
+</div>

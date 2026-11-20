@@ -38,6 +38,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'chooses_carrier' => 'boolean',
+            'developer_access' => 'boolean',
         ];
     }
 
@@ -111,18 +112,33 @@ class User extends Authenticatable
     public function permissions(): array
     {
         $record = $this->roleRecord;
+        $permissions = $record?->permissionKeys() ?? $this->systemRole()?->permissions() ?? [];
 
-        if ($record !== null) {
-            return $record->permissionKeys();
+        if ($record !== null && ! $record->isActive()) {
+            return array_values(array_diff($permissions, [Permission::DEVELOPER_ACCESS]));
         }
 
-        return $this->systemRole()?->permissions() ?? [];
+        if ($this->developer_access && $this->canEditOwnDeveloperAccess()
+            && ! in_array(Permission::DEVELOPER_ACCESS, $permissions, true)) {
+            $permissions[] = Permission::DEVELOPER_ACCESS;
+        }
+
+        return $permissions;
+    }
+
+    public function canEditOwnDeveloperAccess(): bool
+    {
+        if ($this->systemRole() !== Role::Administrator) {
+            return false;
+        }
+
+        $role = $this->roleRecord;
+
+        return $role === null || ($role->isActive() && Permission::allows($role->permissionKeys(), 'access.manage'));
     }
 
     public function hasPermission(string $permission): bool
     {
-        $held = $this->permissions();
-
-        return in_array('*', $held, true) || in_array($permission, $held, true);
+        return Permission::allows($this->permissions(), $permission);
     }
 }

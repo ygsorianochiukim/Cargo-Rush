@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 
-import { CargoApiError, type CargoClient, readable, trimResult } from "./cargo.js";
+import { CargoApiError, type CargoClient, normalisePath, readable, trimResult } from "./cargo.js";
 import type { Turn } from "./memory.js";
 import { systemPrompt } from "./prompt.js";
 import { BASE_URLS, type BotSettings } from "./settings.js";
@@ -8,6 +8,7 @@ import { BASE_URLS, type BotSettings } from "./settings.js";
 export interface AssistantOptions {
   name: string;
   timezone: string;
+  financeOnly?: boolean;
 }
 
 export type LlmFactory = (settings: BotSettings) => OpenAI;
@@ -66,13 +67,17 @@ export const CARGO_TOOL: OpenAI.Chat.Completions.ChatCompletionFunctionTool = {
 export class Assistant {
   private readonly system: string;
   private readonly timezone: string;
+  private readonly financeOnly: boolean;
 
   constructor(
     private readonly llmFor: LlmFactory,
     private readonly cargo: CargoClient,
     options: AssistantOptions,
   ) {
-    this.system = systemPrompt(options.name, options.timezone);
+    this.financeOnly = options.financeOnly ?? false;
+    this.system = systemPrompt(options.name, options.timezone) + (this.financeOnly
+      ? "\n\nThis is the Finance channel. Answer only finance, billing and accounting questions. Use only finance, accounting, expenses, billing, payments and dashboard/business endpoints. Direct other work to the general Assistant channel."
+      : "");
     this.timezone = options.timezone;
   }
 
@@ -146,7 +151,11 @@ export class Assistant {
     const query = input.query && typeof input.query === "object" ? (input.query as Record<string, string | number | boolean>) : {};
 
     try {
-      return trimResult(readable(await this.cargo.get(input.path, query), this.timezone));
+      const path = normalisePath(input.path);
+      if (this.financeOnly && !/^(?:(?:finance|accounting|expenses|billing|payments)(?:\/|$)|dashboard\/business$)/i.test(path)) {
+        return "This lookup is outside the scope of the Finance channel.";
+      }
+      return trimResult(readable(await this.cargo.get(path, query), this.timezone));
     } catch (error) {
       if (error instanceof CargoApiError) return `Lookup failed: ${error.message}`;
       return `Lookup failed: ${error instanceof Error ? error.message : String(error)}`;

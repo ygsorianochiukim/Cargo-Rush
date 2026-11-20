@@ -3,7 +3,11 @@
 declare(strict_types=1);
 
 use App\Domain\Assistant\Models\AssistantSetting;
+use App\Domain\Assistant\Services\AssistantService;
+use App\Domain\Billing\Models\Invoice;
+use App\Domain\Billing\Models\Payment;
 use App\Domain\Identity\Models\User;
+use App\Domain\Identity\Services\AccessService;
 use App\Domain\Tenancy\Services\CompanyProvisioner;
 use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
@@ -146,6 +150,76 @@ it('stays switched off until there is a key', function (): void {
     $this->app['auth']->forgetGuards();
 
     ($this->botConfig)($token)->assertOk()->assertJsonPath('data.enabled', false)->assertJsonPath('data.api_key', null);
+});
+
+it('validates distinct private channel destinations and returns them to the paired bot', function (): void {
+    $role = app(AccessService::class)->createRole([
+        'name' => 'Developer',
+        'permissions' => ['automation.manage'],
+    ]);
+    $developer = User::create([
+        'name' => 'Developer', 'email' => 'developer@test.test',
+        'password' => 'password', 'role' => $role->key,
+    ]);
+    $this->actingAs($developer)->putJson('/api/v1/automation/bots/discord', ['discord_assistant_channel_id' => '#assistant'])
+        ->assertUnprocessable()->assertJsonValidationErrors('discord_assistant_channel_id');
+    $this->putJson('/api/v1/automation/bots/discord', [
+        'enabled' => true,
+        'discord_assistant_channel_id' => '111111111111111111',
+        'discord_finance_channel_id' => '222222222222222222',
+    ])->assertOk();
+    $this->putJson('/api/v1/automation/bots/discord', ['discord_finance_alerts_channel_id' => '222222222222222222'])
+        ->assertUnprocessable();
+
+    $token = $this->actingAs($this->admin)->postJson('/api/v1/assistant/token')->json('meta.token');
+    $this->app['auth']->forgetGuards();
+    ($this->botConfig)($token)->assertOk()
+        ->assertJsonPath('data.enabled', false)
+        ->assertJsonPath('data.finance_reports_enabled', true)
+        ->assertJsonPath('data.discord_finance_channel_id', '222222222222222222');
+});
+
+it('reports tenant-scoped finance activity by local calendar day and filters important alerts', function (): void {
+    $this->travelTo(now()->setDate(2026, 11, 20)->setTime(16, 30));
+    app(AssistantService::class)->update([
+        'enabled' => true,
+        'discord_finance_channel_id' => '222222222222222222',
+        'discord_payment_alert_pesos' => 500,
+    ]);
+    $makePayment = fn (int $amount): Payment => Payment::create([
+        'direction' => 'receivable',
+        'amount_cents' => $amount,
+        'currency' => 'PHP',
+        'paid_on' => now()->subDay(),
+        'method' => 'cash',
+    ]);
+    $small = $makePayment(10000);
+    $large = $makePayment(50000);
+    $other = $this->makeCompany('Other Finance Company');
+    $foreign = $this->asCompany($other, fn (): Payment => $makePayment(60000));
+    $invoice = Invoice::create([
+        'direction' => 'payable', 'status' => 'partial', 'amount_cents' => 100000,
+        'currency' => 'PHP', 'issued_at' => now()->subWeek(), 'due_at' => now()->subDay(),
+    ]);
+    $this->artisan('cargo:invoices-overdue')->assertSuccessful();
+
+    $path = '/api/v1/assistant/finance-activity?day=2026-11-21&timezone=Asia%2FManila';
+    $this->actingAs($this->admin)->getJson($path.'&kind=payments')->assertForbidden();
+    $token = $this->postJson('/api/v1/assistant/token')->assertOk()->json('meta.token');
+    $this->app['auth']->forgetGuards();
+
+    $this->withToken($token)->getJson($path.'&kind=payments')->assertOk()
+        ->assertJsonCount(2, 'data.events')->assertJsonFragment(['id' => $small->id])
+        ->assertJsonFragment(['id' => $large->id])->assertJsonMissing(['id' => $foreign->id]);
+    $this->getJson($path.'&kind=payments&alerts=1')->assertOk()
+        ->assertJsonCount(1, 'data.events')->assertJsonPath('data.events.0.id', $large->id);
+    $this->getJson(str_replace('2026-11-21', '2026-11-20', $path).'&kind=payments')->assertOk()
+        ->assertJsonCount(0, 'data.events');
+    $this->getJson($path.'&kind=runs&alerts=1')->assertOk()
+        ->assertJsonCount(1, 'data.events')->assertJsonPath('data.events.0.changed_count', 1);
+    $this->getJson($path.'&kind=changes')->assertOk()
+        ->assertJsonPath('data.events.0.invoice_id', $invoice->id)
+        ->assertJsonPath('data.events.0.new_status', 'overdue');
 });
 
 it('never hands the key to anyone but the bot token', function (): void {

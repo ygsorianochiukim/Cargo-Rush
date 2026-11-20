@@ -42,6 +42,7 @@ export function expenseSpec(): RecordSpec<Expense> {
 
   return {
     noun: 'expense',
+    archiveOnRemove: true,
     icon: 'wallet',
 
     fields: [

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Database\Seeders;
 
 use App\Domain\Identity\Models\NavItem;
+use App\Domain\Identity\Models\Permission;
 use Illuminate\Database\Seeder;
 
 class NavigationSeeder extends Seeder
@@ -70,6 +71,8 @@ class NavigationSeeder extends Seeder
             ['categories', 'Categories', 'tag', '/categories', 930, false, true, 'Administration', 'company.manage', null],
             ['printables', 'Printables', 'billing', '/printables', 940, false, true, 'Administration', 'company.manage', null],
             ['assistant-settings', 'Assistant Settings', 'gauge', '/assistant-settings', 950, false, true, 'Administration', 'company.manage', null],
+
+            ['automation', 'Automation Dashboard', 'gauge', '/automation', 1000, false, true, 'Development', Permission::DEVELOPER_ACCESS, null],
 
             ['cargo', 'Cargo', 'shipments', '/cargo', 1100, true, false, 'Driver', 'delivery.view', null],
             ['tracking', 'Tracking', 'map-pin', '/tracking', 1110, true, false, 'Driver', 'gps.write', null],

@@ -63,6 +63,7 @@ export interface RecordSpec<T = Record<string, unknown>> {
   toPayload: (values: Record<string, unknown>) => unknown;
   save: (values: unknown, id?: string) => import('rxjs').Observable<T>;
   remove?: (id: string) => import('rxjs').Observable<void>;
+  archiveOnRemove?: boolean;
 }
 
 export function statusOptions(values: StatusValue[]) {

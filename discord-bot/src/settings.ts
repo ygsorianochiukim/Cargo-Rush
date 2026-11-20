@@ -5,12 +5,17 @@ import type { CargoClient } from "./cargo.js";
 const schema = z.object({
   enabled: z.boolean(),
   company: z.string().nullable().optional(),
+  company_id: z.string().nullable().optional(),
   provider: z.enum(["deepseek", "openai"]),
   model: z.string().min(1),
   api_key: z.string().nullable(),
   thinking: z.boolean(),
   discord_token: z.string().nullable().optional(),
   discord_ids: z.array(z.string()),
+  discord_assistant_channel_id: z.string().nullable().optional(),
+  discord_finance_channel_id: z.string().nullable().optional(),
+  discord_finance_alerts_channel_id: z.string().nullable().optional(),
+  finance_reports_enabled: z.boolean().optional(),
 });
 
 export type BotSettings = z.infer<typeof schema>;
@@ -31,13 +36,13 @@ export class RemoteSettings {
     private readonly now: () => number = Date.now,
   ) {}
 
-  async get(): Promise<BotSettings> {
+  async get(allowStale = true): Promise<BotSettings> {
     if (this.current !== null && this.now() - this.fetchedAt < this.maxAgeMs) return this.current;
 
     try {
       return await this.refresh();
     } catch (error) {
-      if (this.current !== null) return this.current;
+      if (allowStale && this.current !== null) return this.current;
       throw error;
     }
   }
@@ -61,4 +66,12 @@ export class RemoteSettings {
 
 export function mayAsk(settings: BotSettings, discordId: string): boolean {
   return settings.discord_ids.includes(discordId);
+}
+
+export function channelScope(settings: BotSettings, channelId: string): "general" | "finance" | "legacy" | null {
+  const { discord_assistant_channel_id: assistant, discord_finance_channel_id: finance, discord_finance_alerts_channel_id: alerts } = settings;
+  if (!assistant && !finance && !alerts) return "legacy";
+  if (channelId === assistant) return "general";
+  if (channelId === finance) return "finance";
+  return null;
 }

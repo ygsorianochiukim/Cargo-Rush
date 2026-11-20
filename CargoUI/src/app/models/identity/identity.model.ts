@@ -14,6 +14,8 @@ export interface Me {
   role_label: string;
   avatar_url: string | null;
   permissions: string[];
+  can_edit_developer_access?: boolean;
+  developer_access?: boolean;
 
   driver_id: string | null;
   licence_no: string | null;

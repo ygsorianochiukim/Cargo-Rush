@@ -56,6 +56,7 @@ describe('the groups', function (): void {
             'Custodian',
             'Support',
             'Administration',
+            'Development',
         ]);
     });
 

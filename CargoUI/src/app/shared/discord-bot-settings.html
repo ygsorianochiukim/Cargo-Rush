@@ -1,0 +1,98 @@
+<app-card heading="Manage Discord bots" icon="inbox">
+  @if (settings(); as bot) {
+    @if (draft(); as form) {
+      <div class="mb-4 flex flex-wrap items-start justify-between gap-4 border-b border-cr-line pb-4">
+        <div>
+          <p class="text-sm font-semibold">
+            {{ bot.discord_status?.tag ?? 'Discord bot' }} · {{ connection() }}
+          </p>
+          @if (bot.discord_status?.reported_at; as reported) {
+            <p class="cr-meta mt-1">Last check-in {{ reported | date: 'medium' }}</p>
+          }
+          @if (!bot.chat_configured) {
+            <p class="cr-meta mt-1">Chat requires an AI key in Assistant Settings.</p>
+          }
+        </div>
+        @if (canManageConnection()) {
+          <a routerLink="/assistant-settings" class="text-sm font-semibold text-cr-blue hover:underline">
+            Pairing and credentials
+          </a>
+        }
+      </div>
+      <label class="mb-4 flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          class="mt-1 h-4 w-4 accent-cr-blue"
+          [checked]="form.enabled"
+          [disabled]="saving()"
+          (change)="setEnabled($any($event.target).checked)"
+        />
+        <span>
+          Enable Discord conversations and reports
+          <span class="cr-meta block">The scheduled overdue invoice check runs independently.</span>
+        </span>
+      </label>
+
+      <div class="grid gap-3 md:grid-cols-3">
+        @for (field of fields; track field.key) {
+          <app-field [label]="field.label" [hint]="field.hint" [error]="fieldError(field.key)">
+            <input
+              type="text"
+              class="h-10 w-full rounded-control border border-cr-line bg-cr-surface px-3 text-sm"
+              placeholder="Channel ID or Discord link"
+              [value]="form[field.key] ?? ''"
+              [disabled]="saving()"
+              (input)="setChannel(field.key, $any($event.target).value)"
+            />
+          </app-field>
+        }
+      </div>
+      <div class="mt-3 max-w-sm">
+        <app-field
+          label="Large payment alert (PHP)"
+          hint="Leave blank to disable large payment alerts."
+          [error]="fieldError('discord_payment_alert_pesos')"
+        >
+          <input
+            type="number"
+            min="1"
+            max="1000000000"
+            step="1"
+            class="h-10 w-full rounded-control border border-cr-line bg-cr-surface px-3 text-sm"
+            [value]="form.discord_payment_alert_pesos ?? ''"
+            [disabled]="saving()"
+            (input)="setPaymentAlert($any($event.target).valueAsNumber)"
+          />
+        </app-field>
+      </div>
+      <p class="cr-meta mt-3">
+        Use private text channels that the bot can access. Adding a channel limits conversations to
+        the Assistant and Finance channels. Daily reports arrive after midnight in the bot’s time zone.
+      </p>
+      @if (bot.discord_status?.finance_error; as message) {
+        <p role="alert" class="mt-2 text-sm text-cr-red">{{ message }}</p>
+      }
+      <button
+        type="button"
+        class="mt-3 h-10 rounded-control bg-cr-blue px-4 text-sm font-semibold text-cr-surface hover:bg-cr-blue-hover disabled:opacity-60"
+        [disabled]="saving() || !dirty()"
+        (click)="save()"
+      >
+        {{ saving() ? 'Saving…' : 'Save Discord settings' }}
+      </button>
+    }
+  } @else if (!error()) {
+    <p role="status" class="cr-meta">Loading Discord bot settings…</p>
+  }
+  @if (error()) {
+    <p role="alert" class="mt-2 text-sm text-cr-red">{{ error() }}</p>
+    @if (!settings()) {
+      <button type="button" class="mt-2 text-sm font-semibold text-cr-blue hover:underline" (click)="refresh()">
+        Try again
+      </button>
+    }
+  }
+  @if (notice()) {
+    <p role="status" class="mt-2 text-sm text-cr-success">{{ notice() }}</p>
+  }
+</app-card>

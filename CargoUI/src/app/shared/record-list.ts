@@ -54,10 +54,11 @@ export function recordList<T extends { id: string }>(
     remove: async (record: T): Promise<void> => {
       if (!spec.remove) return;
 
+      const action = spec.archiveOnRemove ? 'Archive' : 'Delete';
       const ok = await confirm.ask({
-        title: `Delete ${spec.title(record)}?`,
-        body: `This removes the ${spec.noun} from the system. Records already filed against it are kept.`,
-        confirmLabel: `Delete ${spec.noun}`,
+        title: `${action} ${spec.title(record)}?`,
+        body: spec.archiveOnRemove ? 'The record will be kept in the archive.' : `This removes the ${spec.noun} from the system. Records already filed against it are kept.`,
+        confirmLabel: `${action} ${spec.noun}`,
         danger: true,
       });
 
@@ -65,7 +66,7 @@ export function recordList<T extends { id: string }>(
 
       spec.remove(record.id).subscribe({
         next: () => dialog.announceDeleted(spec, record.id),
-        error: () => error.set(`Could not delete this ${spec.noun}.`),
+        error: () => error.set(`Could not ${action.toLowerCase()} this ${spec.noun}.`),
       });
     },
   };

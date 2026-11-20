@@ -12,5 +12,10 @@ class AssistantDiscordUser extends Model
 {
     use BelongsToCompany, HasUlids;
 
-    protected $fillable = ['discord_id', 'label'];
+    protected $fillable = ['discord_id', 'label', 'may_confirm_receipts'];
+
+    protected function casts(): array
+    {
+        return ['may_confirm_receipts' => 'boolean'];
+    }
 }

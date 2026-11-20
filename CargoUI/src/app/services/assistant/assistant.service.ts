@@ -1,7 +1,12 @@
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
-import { AssistantSettings, AssistantSettingsPayload } from '../../models/assistant/assistant.model';
+import {
+  AssistantSettings,
+  AssistantSettingsPayload,
+  DiscordBotConfiguration,
+  DiscordBotSettings,
+} from '../../models/assistant/assistant.model';
 import { ApiService } from '../shared/api.service';
 
 @Injectable({ providedIn: 'root' })
@@ -16,8 +21,18 @@ export class AssistantService {
     return this.api.put<AssistantSettings>('assistant/settings', payload);
   }
 
-  addDiscordUser(discordId: string, label: string): Observable<AssistantSettings> {
-    return this.api.post<AssistantSettings>('assistant/discord-users', { discord_id: discordId, label });
+  discordSettings(): Observable<DiscordBotSettings> {
+    return this.api.get<DiscordBotSettings>('automation/bots/discord');
+  }
+
+  saveDiscordSettings(payload: Partial<DiscordBotConfiguration>): Observable<DiscordBotSettings> {
+    return this.api.put<DiscordBotSettings>('automation/bots/discord', payload);
+  }
+
+  addDiscordUser(discordId: string, label: string | null, mayConfirmReceipts?: boolean): Observable<AssistantSettings> {
+    return this.api.post<AssistantSettings>('assistant/discord-users', {
+      discord_id: discordId, label, may_confirm_receipts: mayConfirmReceipts,
+    });
   }
 
   removeDiscordUser(id: string): Observable<AssistantSettings> {

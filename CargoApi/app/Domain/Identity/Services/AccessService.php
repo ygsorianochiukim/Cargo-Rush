@@ -83,7 +83,7 @@ class AccessService
         abort_if(
             $role->all_permissions,
             422,
-            'This role holds every permission, including ones added in future releases. Its list is not editable.',
+            'This role has general administrator access. Its permission list is not editable.',
         );
 
         $ids = Permission::whereIn('key', array_values(array_filter($keys)))->pluck('id')->all();

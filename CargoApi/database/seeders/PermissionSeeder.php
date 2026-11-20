@@ -58,6 +58,7 @@ class PermissionSeeder extends Seeder
         ['access.manage', 'Manage access control', 'Access', 'Create roles and change what they reach.'],
 
         ['company.manage', 'Manage the company', 'Company', 'The company name, contact details and logo.'],
+        [Permission::DEVELOPER_ACCESS, 'Developer Access', 'Development', 'Open the Automation Dashboard and manage Discord bots, channels and alerts. Grant this only to your Developer role.'],
 
         ['incidents.view', 'View incidents', 'Support', 'The incident log.'],
         ['incidents.manage', 'Manage incidents', 'Support', 'Raise and close out incidents.'],

@@ -29,3 +29,11 @@ export const guestGuard: CanActivateFn = () => {
     catchError(() => of(true)),
   );
 };
+
+export const developerGuard: CanActivateFn = () => {
+  const identity = inject(IdentityService);
+  const router = inject(Router);
+  return identity.me()?.permissions.includes('automation.manage') === true
+    ? true
+    : router.createUrlTree(['/dashboard']);
+};

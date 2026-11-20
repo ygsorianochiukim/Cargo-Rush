@@ -149,6 +149,12 @@ export class IdentityService {
     return this.api.postVoid('me/password', payload);
   }
 
+  updateDeveloperAccess(enabled: boolean): Observable<Me> {
+    return this.api.put<Me>('me/developer-access', { enabled }).pipe(
+      tap((me) => this.meSignal.set(me)),
+    );
+  }
+
   logout(): Observable<void> {
     return this.api.postVoid('logout').pipe(
       finalize(() => {

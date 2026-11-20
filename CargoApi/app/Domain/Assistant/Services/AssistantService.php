@@ -11,6 +11,7 @@ use App\Domain\Tenancy\Support\Tenant;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\PersonalAccessToken;
 
 class AssistantService
@@ -29,46 +30,60 @@ class AssistantService
     /** @param array<string, mixed> $input */
     public function update(array $input): AssistantSetting
     {
-        $settings = $this->settings();
+        $id = $this->settings()->getKey();
 
-        $settings->fill(array_intersect_key($input, array_flip(['enabled', 'llm_provider', 'llm_model', 'llm_thinking', 'bot_role'])));
+        return DB::transaction(function () use ($id, $input): AssistantSetting {
+            $settings = AssistantSetting::query()->lockForUpdate()->findOrFail($id);
+            $settings->fill(array_intersect_key($input, array_flip([
+                'enabled', 'llm_provider', 'llm_model', 'llm_thinking', 'bot_role',
+                ...AssistantSetting::CHANNEL_FIELDS, 'discord_payment_alert_pesos',
+            ])));
 
-        $key = isset($input['api_key']) ? trim((string) $input['api_key']) : '';
+            $key = isset($input['api_key']) ? trim((string) $input['api_key']) : '';
 
-        if ($key !== '') {
-            $settings->llm_api_key = $key;
-            $settings->llm_key_hint = mb_substr($key, -4);
-        } elseif (($input['clear_key'] ?? false) === true) {
-            $settings->llm_api_key = null;
-            $settings->llm_key_hint = null;
-        }
+            if ($key !== '') {
+                $settings->llm_api_key = $key;
+                $settings->llm_key_hint = mb_substr($key, -4);
+            } elseif (($input['clear_key'] ?? false) === true) {
+                $settings->llm_api_key = null;
+                $settings->llm_key_hint = null;
+            }
 
-        $discord = isset($input['discord_token']) ? trim((string) $input['discord_token']) : '';
+            $discord = isset($input['discord_token']) ? trim((string) $input['discord_token']) : '';
 
-        if ($discord !== '') {
-            $settings->discord_token = $discord;
-            $settings->discord_token_hint = mb_substr($discord, -4);
-        } elseif (($input['clear_discord_token'] ?? false) === true) {
-            $settings->discord_token = null;
-            $settings->discord_token_hint = null;
-        }
+            if ($discord !== '') {
+                $settings->discord_token = $discord;
+                $settings->discord_token_hint = mb_substr($discord, -4);
+            } elseif (($input['clear_discord_token'] ?? false) === true) {
+                $settings->discord_token = null;
+                $settings->discord_token_hint = null;
+            }
 
-        DB::transaction(function () use ($settings): void {
+            $channels = array_filter($settings->only(AssistantSetting::CHANNEL_FIELDS));
+            foreach ($channels as $field => $channel) {
+                if ($settings->isDirty($field) && in_array($channel, array_diff_key($channels, [$field => true]), true)) {
+                    throw ValidationException::withMessages([$field => 'Use a different Discord channel for each destination.']);
+                }
+            }
+
             $settings->save();
 
             if ($settings->wasChanged('bot_role')) {
                 $settings->botUser?->update(['role' => $settings->bot_role]);
             }
-        });
 
-        return $settings->refresh();
+            return $settings->refresh();
+        });
     }
 
-    public function addDiscordUser(string $discordId, ?string $label): AssistantDiscordUser
+    public function addDiscordUser(string $discordId, ?string $label, ?bool $mayConfirmReceipts = null): AssistantDiscordUser
     {
         return AssistantDiscordUser::query()->updateOrCreate(
             ['discord_id' => $discordId],
-            ['label' => $label !== null && trim($label) !== '' ? trim($label) : null],
+            [
+                'label' => $label !== null && trim($label) !== '' ? trim($label) : null,
+                ...($mayConfirmReceipts === null ? [] : ['may_confirm_receipts' => $mayConfirmReceipts]),
+            ],
         );
     }
 
@@ -128,13 +143,37 @@ class AssistantService
     }
 
     /** @return array<string, mixed> */
+    public function automationSettings(): array
+    {
+        $settings = $this->settings();
+        $paired = $settings->botUser?->tokens()->where('name', self::TOKEN_NAME)->exists() ?? false;
+
+        return [
+            ...$this->discordConfiguration($settings),
+            'paired' => $paired,
+            'chat_configured' => $settings->llm_api_key !== null,
+            'discord_status' => $paired ? $this->status() : null,
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function discordConfiguration(AssistantSetting $settings): array
+    {
+        return [
+            'enabled' => $settings->enabled,
+            ...$settings->only(AssistantSetting::CHANNEL_FIELDS),
+            'discord_payment_alert_pesos' => $settings->discord_payment_alert_pesos,
+        ];
+    }
+
+    /** @return array<string, mixed> */
     public function overview(): array
     {
         $settings = $this->settings()->load('botUser');
         $token = $settings->botUser?->tokens()->where('name', self::TOKEN_NAME)->latest()->first();
 
         return [
-            'enabled' => $settings->enabled,
+            ...$this->discordConfiguration($settings),
             'provider' => $settings->llm_provider,
             'model' => $settings->llm_model,
             'model_in_use' => $settings->modelName(),
@@ -163,6 +202,7 @@ class AssistantService
                     'id' => $u->id,
                     'discord_id' => $u->discord_id,
                     'label' => $u->label,
+                    'may_confirm_receipts' => $u->may_confirm_receipts,
                     'added_at' => $u->created_at?->toIso8601String(),
                 ])
                 ->all(),
@@ -177,11 +217,14 @@ class AssistantService
         return [
             'enabled' => $settings->enabled && $settings->llm_api_key !== null,
             'company' => $this->tenant->company()->name,
+            'company_id' => $this->tenant->id(),
             'provider' => $settings->llm_provider,
             'model' => $settings->modelName(),
             'api_key' => $settings->llm_api_key,
             'thinking' => $settings->llm_thinking,
             'discord_token' => $settings->discord_token,
+            ...$settings->only(AssistantSetting::CHANNEL_FIELDS),
+            'finance_reports_enabled' => $settings->enabled && $settings->discord_finance_channel_id !== null,
             'discord_ids' => AssistantDiscordUser::query()->pluck('discord_id')->values()->all(),
         ];
     }
