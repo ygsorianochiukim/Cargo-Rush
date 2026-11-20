@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Domain\Finance\Controllers;
 
+use App\Domain\Accounting\Models\PaymentSource;
 use App\Domain\Assistant\Models\AssistantDiscordUser;
 use App\Domain\Assistant\Services\AssistantService;
 use App\Domain\Finance\Models\DiscordExpenseReceipt;
@@ -11,9 +12,13 @@ use App\Domain\Finance\Models\Expense;
 use App\Domain\Finance\Services\DiscordReceiptService;
 use App\Domain\Finance\Services\ExpenseService;
 use App\Domain\Shared\Http\Controllers\ApiController;
+use App\Domain\Supplier\Models\Supplier;
+use App\Domain\Trip\Models\Trip;
+use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Laravel\Sanctum\PersonalAccessToken;
@@ -49,7 +54,7 @@ class DiscordExpenseReceiptController extends ApiController
                 'fingerprint' => hash('sha256', $bytes),
                 'status' => 'pending',
                 'revision' => 0,
-                'fields' => ['pay_schedule' => 'on_receipt'],
+                'fields' => ['pay_schedule' => 'on_receipt', 'supplier_id' => null],
                 'history' => [],
             ],
         );
@@ -97,7 +102,7 @@ class DiscordExpenseReceiptController extends ApiController
             }
 
             if ($input['action'] === 'update') {
-                $this->receipts->update($draft, [...$draft->fields, ...$input['fields']]);
+                $this->receipts->update($draft, $input['fields']);
             } elseif ($input['action'] === 'cancel') {
                 $draft->update(['status' => 'archived', 'archived_at' => now()]);
             } else {
@@ -115,6 +120,70 @@ class DiscordExpenseReceiptController extends ApiController
         });
 
         return $this->payload($this->receipts->preview($draft, $actor->may_confirm_receipts));
+    }
+
+    public function editLink(Request $request, string $receipt): JsonResponse
+    {
+        $actor = $this->discordActor($request);
+        $draft = DiscordExpenseReceipt::query()->findOrFail($receipt);
+        $this->authorizeReceipt($draft, $actor, $request);
+        $url = null;
+        if ($draft->status === 'pending') {
+            $ticket = Crypt::encryptString('receipt-editor|'.$draft->id.'|'.now()->addMinutes(30)->timestamp);
+            $url = rtrim((string) config('app.frontend_url'), '/')
+                .'/expenses/receipt-edit/'.$draft->id.'#'.http_build_query(['ticket' => $ticket]);
+        }
+
+        return $this->payload(['url' => $url, 'preview' => $this->receipts->preview($draft, $actor->may_confirm_receipts)]);
+    }
+
+    public function openEditor(Request $request, string $receipt): JsonResponse
+    {
+        $this->checkEditTicket($request, $receipt);
+        $draft = DiscordExpenseReceipt::query()->findOrFail($receipt);
+        abort_unless($draft->status === 'pending', 409, 'This receipt has already been resolved.');
+        $trips = Trip::query()->latest()->limit(100)->pluck('reference', 'id');
+        if ($trip = ($draft->fields['trip_id'] ?? null)) {
+            $trips = $trips->union(Trip::query()->whereKey($trip)->pluck('reference', 'id'));
+        }
+
+        return $this->payload([
+            'preview' => $this->receipts->preview($draft, false),
+            'suppliers' => (object) Supplier::query()->active()->orderBy('name')->pluck('name', 'id')->all(),
+            'payment_sources' => (object) PaymentSource::query()->orderBy('name')->pluck('name', 'id')->all(),
+            'trips' => (object) $trips->all(),
+        ])->header('Cache-Control', 'private, no-store');
+    }
+
+    public function saveEditor(Request $request, string $receipt): JsonResponse
+    {
+        $this->checkEditTicket($request, $receipt);
+        $input = $request->validate([
+            'revision' => ['required', 'integer', 'min:0'],
+            'fields' => ['required', 'array:'.implode(',', DiscordExpenseReceipt::FIELDS)],
+            'fields.*' => ['nullable', 'string', 'max:255'],
+        ]);
+        $draft = DB::transaction(function () use ($receipt, $input): DiscordExpenseReceipt {
+            $draft = DiscordExpenseReceipt::query()->lockForUpdate()->findOrFail($receipt);
+            abort_unless($draft->status === 'pending' && $draft->revision === (int) $input['revision'], 409, 'The receipt changed. Reopen the editor from Discord.');
+            $this->receipts->update($draft, $input['fields']);
+
+            return $draft;
+        });
+
+        return $this->payload($this->receipts->preview($draft, false));
+    }
+
+    private function checkEditTicket(Request $request, string $receipt): void
+    {
+        $input = $request->validate(['ticket' => ['required', 'string', 'max:4096']]);
+        try {
+            [$purpose, $id, $expires] = array_pad(explode('|', Crypt::decryptString($input['ticket']), 3), 3, '');
+        } catch (DecryptException) {
+            abort(403, 'This edit link is invalid.');
+        }
+
+        abort_unless($purpose === 'receipt-editor' && $id === $receipt && (int) $expires >= now()->timestamp, 403, 'This edit link has expired or is invalid.');
     }
 
     public function archive(Request $request): JsonResponse

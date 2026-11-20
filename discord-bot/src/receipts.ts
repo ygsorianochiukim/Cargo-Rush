@@ -1,7 +1,6 @@
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, escapeMarkdown,
-  type Interaction, type Message, MessageFlags, ModalBuilder,
-  TextInputBuilder, TextInputStyle,
+  type Interaction, type Message, MessageFlags,
 } from "discord.js";
 import { z } from "zod";
 
@@ -19,6 +18,7 @@ const envelope = z.object({
     id: z.string(), filename: z.string(), status: z.enum(["pending", "archived", "confirmed"]),
     revision: z.number(), fields: fieldsSchema, issues: z.array(z.string()),
     categories: z.record(z.string(), z.string()), expense_id: z.string().nullable(), may_confirm: z.boolean(),
+    supplier_name: z.string().nullable().optional(),
   }),
 });
 type Draft = z.infer<typeof envelope>["data"];
@@ -33,20 +33,6 @@ function identity(channelId: string, userId: string) {
   return { channel_id: channelId, discord_user_id: userId };
 }
 
-export function parseReceiptEdits(text: string): Fields {
-  const fields: Fields = {};
-  const allowed = new Map<string, string>(Object.entries(details).map(([name, key]) => [name.toLowerCase(), key]));
-  for (const line of text.split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    const separator = line.indexOf(":");
-    const key = separator < 0 ? undefined : allowed.get(line.slice(0, separator).trim().toLowerCase());
-    if (key === undefined || key in fields) throw new Error("Keep each field label once, followed by a colon and its value.");
-    const value = line.slice(separator + 1).trim();
-    fields[key] = (key === "currency" ? value.toUpperCase() : key === "vat" ? value.toLowerCase() : value) || null;
-  }
-  return fields;
-}
-
 function control(action: string, draft: Draft) {
   return ["receipt", action, draft.id, draft.revision].join(":");
 }
@@ -59,7 +45,13 @@ function render(draft: Draft, note?: string) {
     .setDescription(escapeMarkdown(draft.filename.replace(/\s+/g, " ")) + "\n" + status + (note ? "\n" + note : ""))
     .setColor(draft.status === "confirmed" ? 0x17834c : draft.status === "archived" ? 0x687380 : 0x3769ca);
   const summary = Object.entries({ Date: "date", Total: "amount", Payee: "payee", Reference: "reference", ...details })
-    .map(([name, key]) => ({ name, value: escapeMarkdown(draft.fields[key] || "—"), inline: true }));
+    .map(([name, key]) => ({
+      name: key === "supplier_id" ? "Supplier" : name,
+      value: escapeMarkdown(key === "supplier_id"
+        ? (draft.supplier_name || draft.fields[key] || "Payee only")
+        : (draft.fields[key] || "—")),
+      inline: true,
+    }));
   embed.addFields(summary);
   if (draft.status === "pending" && draft.issues.length) {
     embed.addFields({ name: "Check these fields", value: draft.issues.map((issue) => "• " + issue).join("\n").slice(0, 1024) });
@@ -79,23 +71,7 @@ function render(draft: Draft, note?: string) {
   return { embeds: [embed], components, allowedMentions: { parse: [] as [] } };
 }
 
-function form(draft: Draft): ModalBuilder {
-  const input = (id: string, label: string, limit: number, value?: string | null, paragraph = false) => {
-    const field = new TextInputBuilder().setCustomId(id).setLabel(label).setMaxLength(limit)
-      .setRequired(false).setStyle(paragraph ? TextInputStyle.Paragraph : TextInputStyle.Short);
-    if (value) field.setValue(value.slice(0, limit));
-    return new ActionRowBuilder<TextInputBuilder>().addComponents(field);
-  };
-  const fields = draft.fields;
-  const lines = Object.entries(details).map(([label, key]) => label + ": " + (fields[key] ?? "")).join("\n");
-  return new ModalBuilder().setCustomId(control("edit", draft)).setTitle("Update expense receipt").addComponents(
-    input("date", "Receipt date (YYYY-MM-DD)", 10, fields.date),
-    input("amount", "Total amount (e.g. 1250.50)", 20, fields.amount),
-    input("payee", "Payee or merchant", 120, fields.payee),
-    input("reference", "Receipt or invoice reference", 60, fields.reference),
-    input("details", "Expense details · category, VAT yes/no", 2000, lines, true),
-  );
-}
+const editLink = z.object({ data: z.object({ url: z.url().nullable(), preview: envelope.shape.data }) });
 
 export class ReceiptWorkflow {
   constructor(private readonly cargo: CargoClient, private readonly settings: RemoteSettings, private readonly llm: LlmFactory) {}
@@ -137,8 +113,8 @@ export class ReceiptWorkflow {
   }
 
   async interact(interaction: Interaction): Promise<void> {
-    if (!interaction.isButton() && !interaction.isModalSubmit()) return;
-    const match = /^receipt:(confirm|cancel|update|edit):([0-9A-HJKMNP-TV-Z]{26}):(\d+)$/i.exec(interaction.customId);
+    if (!interaction.isButton()) return;
+    const match = /^receipt:(confirm|cancel|update):([0-9A-HJKMNP-TV-Z]{26}):(\d+)$/i.exec(interaction.customId);
     if (!match) return;
     const [, action, id, revision] = match;
     if (!action || !id || !revision || !interaction.channelId) return;
@@ -146,37 +122,23 @@ export class ReceiptWorkflow {
     const user = interaction.user.id;
 
     try {
-      if (action === "update" && interaction.isButton()) {
-        const [, response] = await Promise.all([
-          this.authorize(interaction.client, channel, user),
-          this.cargo.receipt(id, identity(channel, user)),
-        ]);
-        const draft = envelope.parse(response).data;
-        if (draft.status === "pending") await interaction.showModal(form(draft));
-        else await interaction.update(render(draft));
-        return;
-      }
-
-      if (interaction.isModalSubmit() && (!interaction.isFromMessage() || action !== "edit")) return;
       await interaction.deferUpdate();
       await this.authorize(interaction.client, channel, user);
-      let fields: Fields | undefined;
-      if (interaction.isModalSubmit()) {
-        const value = (key: string) => interaction.fields.getTextInputValue(key).trim() || null;
-        try {
-          fields = {
-            ...parseReceiptEdits(value("details") ?? ""),
-            date: value("date"), amount: value("amount"), payee: value("payee"), reference: value("reference"),
-          };
-        } catch {
+      if (action === "update") {
+        const { data } = editLink.parse(await this.cargo.receiptEditLink(id, identity(channel, user)));
+        await interaction.editReply(render(data.preview));
+        if (data.url) {
           await interaction.followUp({
-            content: "Use one label and value per line in Expense details. Open Update to try again.",
+            content: "Open the Cargo Rush editor in your browser. After saving, click Update again to refresh this preview.",
             flags: MessageFlags.Ephemeral,
+            components: [new ActionRowBuilder<ButtonBuilder>().addComponents(
+              new ButtonBuilder().setStyle(ButtonStyle.Link).setURL(data.url).setLabel("Open receipt editor"),
+            )],
           });
-          return;
         }
+        return;
       }
-      const result = await this.decide({ id, revision: Number(revision) }, action === "edit" ? "update" : action, channel, user, fields);
+      const result = await this.decide({ id, revision: Number(revision) }, action, channel, user);
       await interaction.editReply(render(result));
     } catch (error) {
       if (error instanceof CargoApiError && (error.status === 409 || error.status === 422) && interaction.deferred) {

@@ -20,6 +20,7 @@ class RestrictAssistantWrites
                 'assistant.bot-status',
                 'assistant.receipts.store',
                 'assistant.receipts.decide',
+                'assistant.receipts.edit-link',
             ), 403);
         }
 

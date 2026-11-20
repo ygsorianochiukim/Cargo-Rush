@@ -21,7 +21,7 @@ Finance posts a report for the previous date after midnight in the bot's configu
 
 ## Expense receipts
 
-Upload a JPEG, PNG, or WebP receipt of up to 2 MB directly in the private Finance channel. The bot saves the original, uses the configured AI provider to read the image, and shows an Other Expenses preview. **Update** opens a form and saves a new draft version. **Confirm** creates one expense after the required fields validate. **Cancel** archives the draft and original image.
+Upload a JPEG, PNG, or WebP receipt of up to 2 MB directly in the private Finance channel. The bot saves the original, uses the configured AI provider to read the image, and shows an Other Expenses preview. **Update** sends the uploader a private link to the authenticated Cargo Rush editor. Save the draft and click **Update** in Discord to refresh the preview. **Confirm** creates one expense after the required fields validate. **Cancel** archives the draft and original image.
 
 An administrator grants the uploader **Confirm receipts** under **Administration → Assistant Settings → Who can message it**. Only the uploader can use the preview buttons. **Other Expenses → Expense archive** contains the original images, draft revisions, and archived expense entries. Confirmed receipt expenses appear in the daily finance report.
 

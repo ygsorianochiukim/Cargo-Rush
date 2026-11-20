@@ -88,6 +88,12 @@ export class CargoClient {
     });
   }
 
+  receiptEditLink(id: string, input: object): Promise<unknown> {
+    return this.fetch("assistant/receipts/" + id + "/edit-link", {}, {
+      method: "POST", body: JSON.stringify(input), headers: { "Content-Type": "application/json" },
+    });
+  }
+
   async reportStatus(status: Record<string, unknown>): Promise<void> {
     await this.fetcher(`${this.baseUrl}/assistant/bot-status`, {
       method: "POST",

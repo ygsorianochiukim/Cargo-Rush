@@ -9,6 +9,7 @@ use App\Domain\Finance\Models\DiscordExpenseReceipt;
 use App\Domain\Finance\Models\ExpenseCategory;
 use App\Domain\Shared\Enums\PaySchedule;
 use App\Domain\Shared\Enums\StatusValue;
+use App\Domain\Supplier\Models\Supplier;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
@@ -23,6 +24,11 @@ class DiscordReceiptService
 
     public function update(DiscordExpenseReceipt $receipt, array $fields): void
     {
+        if (array_key_exists('payee', $fields) && ! array_key_exists('supplier_id', $fields)
+            && $fields['payee'] !== ($receipt->fields['payee'] ?? null)) {
+            $fields['supplier_id'] = $this->matchSupplier($fields['payee']);
+        }
+
         $receipt->update([
             'history' => [...$receipt->history, [
                 'revision' => $receipt->revision,
@@ -30,8 +36,88 @@ class DiscordReceiptService
                 'replaced_at' => now()->toIso8601String(),
             ]],
             'revision' => $receipt->revision + 1,
-            'fields' => $fields,
+            'fields' => [...$receipt->fields, ...$fields],
         ]);
+    }
+
+    private function matchSupplier(?string $payee): ?string
+    {
+        $name = $this->normalizeSupplier($payee ?? '');
+        if ($name === '') {
+            return null;
+        }
+
+        $canonical = $this->expandSupplier($name);
+        $best = $second = 0;
+        $match = null;
+        foreach (Supplier::query()->active()->select('id', 'name')->cursor() as $supplier) {
+            $candidate = $this->normalizeSupplier($supplier->name);
+            $score = $candidate === $name ? 100 : $this->supplierScore($canonical, $this->expandSupplier($candidate));
+            if ($score > $best) {
+                $second = $best;
+                $best = $score;
+                $match = $supplier->getKey();
+            } else {
+                $second = max($second, $score);
+            }
+        }
+
+        return $best - $second >= 6 ? $match : null;
+    }
+
+    private function normalizeSupplier(string $name): string
+    {
+        return mb_strtolower(trim(preg_replace('/[^\p{L}\p{N}]+/u', ' ', $name) ?? ''));
+    }
+
+    private function expandSupplier(string $name): string
+    {
+        $abbreviations = [
+            'natl' => 'national', 'intl' => 'international', 'brd' => 'board', 'ctr' => 'center',
+            'centre' => 'center', 'dept' => 'department', 'mfg' => 'manufacturing', 'svcs' => 'services',
+            'assoc' => 'association', 'dist' => 'distribution', 'ent' => 'enterprise',
+        ];
+        $words = implode(' ', array_map(static fn (string $word): string => $abbreviations[$word] ?? $word, explode(' ', $name)));
+
+        return preg_replace('/(?: (?:inc|incorporated|corp|corporation|ltd|limited|llc|co|company))+$/', '', $words) ?? $words;
+    }
+
+    private function supplierScore(string $name, string $candidate): int
+    {
+        if ($name === $candidate && mb_strlen($name) >= 4) {
+            return 94;
+        }
+
+        if ($this->isSupplierAcronym($name, $candidate) || $this->isSupplierAcronym($candidate, $name)) {
+            return 88;
+        }
+
+        $length = min(strlen($name), strlen($candidate));
+        $limit = $length >= 18 ? 2 : 1;
+        if ($length < 9 || abs(strlen($name) - strlen($candidate)) > $limit
+            || ! preg_match('/^[a-z0-9 ]+$/D', $name) || ! preg_match('/^[a-z0-9 ]+$/D', $candidate)) {
+            return 0;
+        }
+
+        $shared = array_intersect(explode(' ', $name), explode(' ', $candidate));
+        $distinctive = array_filter(array_diff($shared, [
+            'supply', 'supplies', 'services', 'service', 'trading', 'general', 'store', 'sales', 'center', 'enterprise', 'enterprises',
+        ]), static fn (string $word): bool => strlen($word) >= 4);
+        $distance = levenshtein($name, $candidate);
+
+        return $distinctive !== [] && $distance <= $limit ? 88 - 2 * $distance : 0;
+    }
+
+    private function isSupplierAcronym(string $short, string $expanded): bool
+    {
+        if (! preg_match('/^[a-z]{3,6}$/D', $short)) {
+            return false;
+        }
+
+        $words = array_diff(explode(' ', $expanded), ['of', 'the', 'and', '']);
+        $initials = implode('', array_map(static fn (string $word): string => $word[0], $words));
+
+        return $short === $initials;
     }
 
     public function expense(DiscordExpenseReceipt $receipt): ExpenseData
@@ -58,6 +144,9 @@ class DiscordReceiptService
             'revision' => $receipt->revision,
             'filename' => $receipt->filename,
             'fields' => $receipt->fields,
+            'supplier_name' => isset($receipt->fields['supplier_id'])
+                ? Supplier::query()->whereKey($receipt->fields['supplier_id'])->value('name')
+                : null,
             'issues' => $receipt->status === 'pending' ? $this->validator($receipt)->errors()->all() : [],
             'categories' => (object) $this->categories(),
             'expense_id' => $receipt->expense_id,

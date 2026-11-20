@@ -927,6 +927,10 @@ Route::prefix('v1')->group(function (): void {
             Route::get('expenses/archived', [DiscordExpenseReceiptController::class, 'archivedExpenses']);
             Route::get('expenses/receipt-archive/{receipt}/original', [DiscordExpenseReceiptController::class, 'original'])->whereUlid('receipt');
         });
+        Route::middleware('permission:expenses.manage')->group(function (): void {
+            Route::post('expenses/receipt-edit/{receipt}/open', [DiscordExpenseReceiptController::class, 'openEditor'])->whereUlid('receipt');
+            Route::put('expenses/receipt-edit/{receipt}', [DiscordExpenseReceiptController::class, 'saveEditor'])->whereUlid('receipt');
+        });
         Route::get('expenses/{expense}', [ExpenseController::class, 'show'])->middleware('permission:expenses.view');
 
         Route::middleware('permission:expenses.manage')->group(function (): void {
@@ -1174,6 +1178,7 @@ Route::prefix('v1')->group(function (): void {
             Route::post('receipts', [DiscordExpenseReceiptController::class, 'store'])->name('assistant.receipts.store');
             Route::get('receipts/{receipt}', [DiscordExpenseReceiptController::class, 'review'])->whereUlid('receipt');
             Route::post('receipts/{receipt}', [DiscordExpenseReceiptController::class, 'decide'])->whereUlid('receipt')->name('assistant.receipts.decide');
+            Route::post('receipts/{receipt}/edit-link', [DiscordExpenseReceiptController::class, 'editLink'])->whereUlid('receipt')->name('assistant.receipts.edit-link');
 
             Route::middleware('permission:company.manage')->group(function (): void {
                 Route::get('settings', [AssistantController::class, 'show']);

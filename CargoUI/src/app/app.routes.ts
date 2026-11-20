@@ -178,6 +178,13 @@ export const routes: Routes = [
           import('./pages/expenses/expense-archive.page').then((m) => m.ExpenseArchivePage),
       },
       {
+        path: 'expenses/receipt-edit/:receipt',
+        title: 'Update Expense Receipt · Cargo Rush',
+        data: { title: 'Update Expense Receipt' },
+        loadComponent: () =>
+          import('./pages/expenses/receipt-edit.page').then((m) => m.ReceiptEditPage),
+      },
+      {
         path: 'asset-inventory',
         title: 'Asset Inventory · Cargo Rush',
         data: { title: 'Asset Inventory' },
