@@ -8,7 +8,8 @@
 <div class="flex h-full gap-4 bg-cr-tint p-4">
   @if (!overlay()) {
     <div
-      class="flex-none transition-[width] duration-200"
+      id="cr-navigation"
+      class="flex-none transition-[width] duration-200 motion-reduce:transition-none"
       [style.width.px]="collapsed() ? 72 : 240"
     >
       <app-sidebar [collapsed]="collapsed()" />
@@ -16,7 +17,7 @@
   } @else if (drawerOpen()) {
     <div class="fixed inset-0 z-40">
       <div class="absolute inset-0 bg-cr-shell/50" (click)="closeDrawer()" aria-hidden="true"></div>
-      <div class="absolute top-4 bottom-4 left-4 w-[240px]">
+      <div id="cr-navigation" class="absolute top-4 bottom-4 left-4 w-[240px]">
         <app-sidebar (navigate)="closeDrawer()" />
       </div>
     </div>
@@ -24,16 +25,17 @@
 
   <main id="cr-main" class="flex min-w-0 flex-1 flex-col overflow-hidden">
     <header class="flex flex-none items-center gap-3 px-2 pt-1 pb-5">
-      @if (overlay()) {
-        <button
-          type="button"
-          class="flex h-10 w-10 flex-none items-center justify-center rounded-control text-cr-ink transition-colors hover:bg-cr-surface"
-          (click)="toggleDrawer()"
-          aria-label="Open navigation"
-        >
-          <app-icon name="dashboard" [size]="20" />
-        </button>
-      }
+      <button
+        type="button"
+        class="flex h-10 w-10 flex-none items-center justify-center rounded-control bg-cr-surface text-cr-ink transition-colors hover:text-cr-blue"
+        (click)="toggleNavigation()"
+        [attr.aria-label]="navigationLabel()"
+        [attr.title]="navigationLabel()"
+        [attr.aria-expanded]="navigationExpanded()"
+        [attr.aria-controls]="!overlay() || drawerOpen() ? 'cr-navigation' : null"
+      >
+        <app-icon [name]="overlay() ? 'menu' : 'sidebar'" [size]="20" />
+      </button>
 
       <h1 class="cr-page-title min-w-0 truncate">{{ title() }}</h1>
 

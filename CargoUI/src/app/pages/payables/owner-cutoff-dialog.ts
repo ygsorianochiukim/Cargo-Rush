@@ -18,10 +18,12 @@ import { SkeletonRows } from '../../shared/states';
 import { OwnerHistoryList } from '../owner-pay-report/owner-history-list';
 import { costWord, cutoffState, percent } from '../owner-pay-report/owner-pay';
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-owner-cutoff-dialog',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Field, Modal, OwnerHistoryList, SkeletonRows],
+  imports: [TableView, Field, Modal, OwnerHistoryList, SkeletonRows],
   template: `
     <app-modal
       [open]="true"
@@ -116,126 +118,150 @@ import { costWord, cutoffState, percent } from '../owner-pay-report/owner-pay';
           </p>
         }
 
-        <div class="mt-4 overflow-x-auto rounded-control border border-cr-line">
-          <table class="w-full min-w-[560px] text-[12px]">
-            <thead class="bg-cr-tint text-left">
-              <tr>
-                <th class="px-3 py-2 font-semibold" colspan="2">
-                  Runs · how each share comes about
-                </th>
-                <th class="px-3 py-2 text-right font-semibold">Income</th>
-                <th class="px-3 py-2 text-right font-semibold">Company</th>
-                <th class="px-3 py-2 text-right font-semibold">Owner</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (run of c.runs; track run.id) {
-                <tr class="border-t border-cr-line/70" [class.opacity-50]="!run.counted">
-                  <td class="px-3 py-2">
-                    <span class="block font-semibold">{{ run.reference ?? '—' }}</span>
-                    <span class="block text-cr-ink-muted"
-                      >{{ date(run.on) }} · {{ run.plate }}</span
-                    >
-                  </td>
-                  <td class="px-3 py-2">
-                    {{ run.origin }} → {{ run.destination }}
-                    @if (run.customer) {
-                      <span class="block text-cr-ink-muted">{{ run.customer }}</span>
-                    }
-                    @if (run.paid_elsewhere) {
-                      <span class="block text-cr-warning">paid · {{ run.paid_elsewhere }}</span>
-                    }
-                  </td>
-                  <td class="cr-num px-3 py-2 text-right">
-                    {{ money(run.gross_cents) }}
-                    @if (run.vat_in_price_cents > 0) {
-                      <span class="block text-[10px] text-cr-ink-muted">
-                        {{ money(run.price_cents) }} less VAT
-                      </span>
-                    }
-                  </td>
-                  <td class="cr-num px-3 py-2 text-right text-cr-ink-muted">
-                    − {{ money(run.commission_cents) }}
-                    <span class="block text-[10px]">{{ percent(run.fleet_keeps_bp) }}</span>
-                  </td>
-                  <td class="cr-num px-3 py-2 text-right font-semibold">
-                    {{ money(run.share_cents) }}
-                  </td>
-                </tr>
-              } @empty {
-                <tr>
-                  <td colspan="5" class="px-3 py-3 text-center text-cr-ink-muted">
-                    No runs on this cutoff.
-                  </td>
-                </tr>
-              }
-              <tr class="border-t border-cr-ink/20 bg-cr-tint/60">
-                <td class="px-3 py-2 font-semibold" colspan="2">Their share</td>
-                <td class="cr-num px-3 py-2 text-right">{{ money(c.gross_cents) }}</td>
-                <td class="cr-num px-3 py-2 text-right text-cr-ink-muted">
-                  − {{ money(c.commission_cents) }}
-                </td>
-                <td class="cr-num px-3 py-2 text-right font-bold">{{ money(c.share_cents) }}</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        @if (c.costs.length > 0) {
-          <div class="mt-3 overflow-x-auto rounded-control border border-cr-line">
+        <app-table-view
+          #records0
+          [rows]="c.runs"
+          [fields]="[
+            'reference',
+            'customer',
+            'origin',
+            'destination',
+            'on',
+            'plate',
+            'price_cents',
+            'commission_cents',
+            'share_cents',
+          ]"
+          label="Search cutoff trips"
+        >
+          <div class="mt-4 overflow-x-auto rounded-control border border-cr-line">
             <table class="w-full min-w-[560px] text-[12px]">
               <thead class="bg-cr-tint text-left">
                 <tr>
-                  <th class="px-3 py-2 font-semibold" colspan="3">
-                    Costs the fleet put into their truck · taken off the share
+                  <th class="px-3 py-2 font-semibold" colspan="2">
+                    Runs · how each share comes about
                   </th>
-                  <th class="px-3 py-2 text-right font-semibold">Amount</th>
+                  <th class="px-3 py-2 text-right font-semibold">Income</th>
+                  <th class="px-3 py-2 text-right font-semibold">Company</th>
+                  <th class="px-3 py-2 text-right font-semibold">Owner</th>
                 </tr>
               </thead>
               <tbody>
-                @for (cost of c.costs; track $index) {
-                  <tr class="border-t border-cr-line/70">
+                @for (run of records0.page(); track run.id) {
+                  <tr class="border-t border-cr-line/70" [class.opacity-50]="!run.counted">
                     <td class="px-3 py-2">
-                      <span class="block font-semibold">{{ costWord(cost.kind) }}</span>
-                      <span class="block text-cr-ink-muted">
-                        {{ cost.on ? date(cost.on) : '—' }} · {{ cost.plate ?? '—' }}
-                      </span>
+                      <span class="block font-semibold">{{ run.reference ?? '—' }}</span>
+                      <span class="block text-cr-ink-muted"
+                        >{{ date(run.on) }} · {{ run.plate }}</span
+                      >
                     </td>
-                    <td class="px-3 py-2" colspan="2">
-                      {{ cost.label }}
-                      @if (cost.detail) {
-                        <span class="block text-cr-ink-muted">{{ cost.detail }}</span>
+                    <td class="px-3 py-2">
+                      {{ run.origin }} → {{ run.destination }}
+                      @if (run.customer) {
+                        <span class="block text-cr-ink-muted">{{ run.customer }}</span>
                       }
-                      @if (cost.litres !== null || cost.paid_with) {
-                        <span class="block text-cr-ink-muted">
-                          {{ cost.litres !== null ? litres(cost.litres) : '' }}
-                          {{ cost.litres !== null && cost.paid_with ? '·' : '' }}
-                          {{ cost.paid_with ?? '' }}
+                      @if (run.paid_elsewhere) {
+                        <span class="block text-cr-warning">paid · {{ run.paid_elsewhere }}</span>
+                      }
+                    </td>
+                    <td class="cr-num px-3 py-2 text-right">
+                      {{ money(run.gross_cents) }}
+                      @if (run.vat_in_price_cents > 0) {
+                        <span class="block text-[10px] text-cr-ink-muted">
+                          {{ money(run.price_cents) }} less VAT
                         </span>
                       }
                     </td>
-                    <td class="cr-num px-3 py-2 text-right font-semibold text-cr-red">
-                      − {{ money(cost.cents) }}
+                    <td class="cr-num px-3 py-2 text-right text-cr-ink-muted">
+                      − {{ money(run.commission_cents) }}
+                      <span class="block text-[10px]">{{ percent(run.fleet_keeps_bp) }}</span>
+                    </td>
+                    <td class="cr-num px-3 py-2 text-right font-semibold">
+                      {{ money(run.share_cents) }}
+                    </td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="5" class="px-3 py-3 text-center text-cr-ink-muted">
+                      No runs on this cutoff.
                     </td>
                   </tr>
                 }
                 <tr class="border-t border-cr-ink/20 bg-cr-tint/60">
-                  <td class="px-3 py-2 font-semibold" colspan="3">
-                    {{ c.net_cents < 0 ? 'Owner owes the fleet' : 'To settle to the owner' }}
-                    <span class="cr-num block text-[11px] font-normal text-cr-ink-muted">
-                      {{ formula(c) }}
-                    </span>
+                  <td class="px-3 py-2 font-semibold" colspan="2">Their share</td>
+                  <td class="cr-num px-3 py-2 text-right">{{ money(c.gross_cents) }}</td>
+                  <td class="cr-num px-3 py-2 text-right text-cr-ink-muted">
+                    − {{ money(c.commission_cents) }}
                   </td>
-                  <td
-                    class="cr-num px-3 py-2 text-right text-[14px] font-bold"
-                    [class]="c.net_cents < 0 ? 'text-cr-red' : 'text-cr-blue'"
-                  >
-                    {{ money(c.net_cents < 0 ? -c.net_cents : c.net_cents) }}
-                  </td>
+                  <td class="cr-num px-3 py-2 text-right font-bold">{{ money(c.share_cents) }}</td>
                 </tr>
               </tbody>
             </table>
           </div>
+        </app-table-view>
+
+        @if (c.costs.length > 0) {
+          <app-table-view
+            #records1
+            [rows]="c.costs"
+            [fields]="['label', 'detail', 'kind', 'plate', 'on', 'paid_with', 'cents', 'litres']"
+            label="Search cutoff costs"
+          >
+            <div class="mt-3 overflow-x-auto rounded-control border border-cr-line">
+              <table class="w-full min-w-[560px] text-[12px]">
+                <thead class="bg-cr-tint text-left">
+                  <tr>
+                    <th class="px-3 py-2 font-semibold" colspan="3">
+                      Costs the fleet put into their truck · taken off the share
+                    </th>
+                    <th class="px-3 py-2 text-right font-semibold">Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (cost of records1.page(); track $index) {
+                    <tr class="border-t border-cr-line/70">
+                      <td class="px-3 py-2">
+                        <span class="block font-semibold">{{ costWord(cost.kind) }}</span>
+                        <span class="block text-cr-ink-muted">
+                          {{ cost.on ? date(cost.on) : '—' }} · {{ cost.plate ?? '—' }}
+                        </span>
+                      </td>
+                      <td class="px-3 py-2" colspan="2">
+                        {{ cost.label }}
+                        @if (cost.detail) {
+                          <span class="block text-cr-ink-muted">{{ cost.detail }}</span>
+                        }
+                        @if (cost.litres !== null || cost.paid_with) {
+                          <span class="block text-cr-ink-muted">
+                            {{ cost.litres !== null ? litres(cost.litres) : '' }}
+                            {{ cost.litres !== null && cost.paid_with ? '·' : '' }}
+                            {{ cost.paid_with ?? '' }}
+                          </span>
+                        }
+                      </td>
+                      <td class="cr-num px-3 py-2 text-right font-semibold text-cr-red">
+                        − {{ money(cost.cents) }}
+                      </td>
+                    </tr>
+                  }
+                  <tr class="border-t border-cr-ink/20 bg-cr-tint/60">
+                    <td class="px-3 py-2 font-semibold" colspan="3">
+                      {{ c.net_cents < 0 ? 'Owner owes the fleet' : 'To settle to the owner' }}
+                      <span class="cr-num block text-[11px] font-normal text-cr-ink-muted">
+                        {{ formula(c) }}
+                      </span>
+                    </td>
+                    <td
+                      class="cr-num px-3 py-2 text-right text-[14px] font-bold"
+                      [class]="c.net_cents < 0 ? 'text-cr-red' : 'text-cr-blue'"
+                    >
+                      {{ money(c.net_cents < 0 ? -c.net_cents : c.net_cents) }}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </app-table-view>
         }
 
         @if (c.state === 'unpaid') {

@@ -21,42 +21,49 @@
         @if (rows.length === 0) {
           <div class="p-4 text-center text-[14px] text-cr-ink-muted">No shipments in transit.</div>
         } @else {
-          <div class="overflow-x-auto">
-            <table class="w-full min-w-[640px] border-collapse text-left whitespace-nowrap">
-              <thead>
-                <tr class="border-b border-cr-line">
-                  <th class="cr-th px-4 py-2.5">Reference</th>
-                  <th class="cr-th px-4 py-2.5">Route</th>
-                  <th class="cr-th px-4 py-2.5">Driver</th>
-                  <th class="cr-th px-4 py-2.5">Vehicle</th>
-                  <th class="cr-th px-4 py-2.5 text-right">ETA</th>
-                  <th class="cr-th px-4 py-2.5">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (row of rows; track row.id) {
-                  <tr
-                    class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint"
-                  >
-                    <td class="cr-num px-4 py-3 text-[13px] font-semibold">{{ row.reference }}</td>
-                    <td class="px-4 py-3 text-[13px]">
-                      <span class="flex items-center gap-1.5">
-                        {{ row.origin }}
-                        <app-icon name="chevron-right" [size]="14" class="text-cr-ink-muted" />
-                        {{ row.destination }}
-                      </span>
-                    </td>
-                    <td class="px-4 py-3 text-[13px]">{{ row.driver_name }}</td>
-                    <td class="cr-num px-4 py-3 text-[13px] text-cr-ink-muted">
-                      {{ row.vehicle_plate }}
-                    </td>
-                    <td class="cr-num px-4 py-3 text-right text-[13px]">{{ eta(row.eta) }}</td>
-                    <td class="px-4 py-3"><app-status-pill [status]="row.status" /></td>
+          <app-table-view
+            #records0
+            [rows]="rows"
+            [fields]="['reference', 'origin', 'destination', 'driver_name', 'vehicle_plate', 'status', 'eta']"
+            label="Search recent deliveries"
+          >
+            <div class="overflow-x-auto">
+              <table class="w-full min-w-[640px] border-collapse text-left whitespace-nowrap">
+                <thead>
+                  <tr class="border-b border-cr-line">
+                    <th class="cr-th px-4 py-2.5">Reference</th>
+                    <th class="cr-th px-4 py-2.5">Route</th>
+                    <th class="cr-th px-4 py-2.5">Driver</th>
+                    <th class="cr-th px-4 py-2.5">Vehicle</th>
+                    <th class="cr-th px-4 py-2.5 text-right">ETA</th>
+                    <th class="cr-th px-4 py-2.5">Status</th>
                   </tr>
-                }
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  @for (row of records0.page(); track row.id) {
+                    <tr
+                      class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint"
+                    >
+                      <td class="cr-num px-4 py-3 text-[13px] font-semibold">{{ row.reference }}</td>
+                      <td class="px-4 py-3 text-[13px]">
+                        <span class="flex items-center gap-1.5">
+                          {{ row.origin }}
+                          <app-icon name="chevron-right" [size]="14" class="text-cr-ink-muted" />
+                          {{ row.destination }}
+                        </span>
+                      </td>
+                      <td class="px-4 py-3 text-[13px]">{{ row.driver_name }}</td>
+                      <td class="cr-num px-4 py-3 text-[13px] text-cr-ink-muted">
+                        {{ row.vehicle_plate }}
+                      </td>
+                      <td class="cr-num px-4 py-3 text-right text-[13px]">{{ eta(row.eta) }}</td>
+                      <td class="px-4 py-3"><app-status-pill [status]="row.status" /></td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </app-table-view>
         }
       } @else {
         <app-skeleton-rows [count]="6" />

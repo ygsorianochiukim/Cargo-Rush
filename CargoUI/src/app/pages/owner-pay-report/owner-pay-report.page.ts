@@ -30,10 +30,12 @@ function lastDay(month: string): string {
   return `${month}-${String(end.getDate()).padStart(2, '0')}`;
 }
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-owner-pay-report',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Card, Field, Icon, EmptyState, ErrorState, OwnerHistoryList, SkeletonRows],
+  imports: [TableView, Card, Field, Icon, EmptyState, ErrorState, OwnerHistoryList, SkeletonRows],
   templateUrl: './owner-pay-report.page.html',
 })
 export class OwnerPayReportPage {

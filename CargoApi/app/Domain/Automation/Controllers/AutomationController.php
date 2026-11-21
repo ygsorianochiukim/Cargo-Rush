@@ -13,13 +13,33 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class AutomationController extends ApiController
 {
     public function index(Request $request, Tenant $tenant): JsonResponse
     {
         $runs = $this->runs($tenant);
-        $history = (clone $runs)->latest('started_at')->orderByDesc('id')->paginate($this->perPage($request, 15));
+        $history = clone $runs;
+        $search = $this->search($request);
+        if ($search !== '') {
+            $pattern = '%'.$search.'%';
+            $history->where(function (Builder $query) use ($search, $pattern): void {
+                $query->whereLike('workflow', $pattern)->orWhereLike('status', $pattern)
+                    ->orWhereLike('trigger', $pattern)->orWhereLike('started_at', $pattern);
+                if (Str::contains('overdue invoice check', strtolower($search))) {
+                    $query->orWhere('workflow', AutomationRun::OVERDUE_INVOICES);
+                }
+                if (Str::contains('activity unconfirmed', strtolower($search))) {
+                    $cutoff = now()->subHour();
+                    $query->orWhere(fn (Builder $unconfirmed) => $unconfirmed
+                        ->where('status', 'running')->where('started_at', '<', $cutoff)
+                        ->whereNotExists(DB::table('invoices_logs')
+                            ->whereColumn('automation_run_id', 'automation_runs.id')->where('created_at', '>=', $cutoff)));
+                }
+            });
+        }
+        $history = $history->latest('started_at')->orderByDesc('id')->paginate($this->perPage($request, 15));
         $active = (clone $runs)->where('status', 'running')
             ->where(function (Builder $query): void {
                 $cutoff = now()->subHour();
@@ -46,12 +66,19 @@ class AutomationController extends ApiController
     public function show(Request $request, Tenant $tenant, string $run): JsonResponse
     {
         $record = $this->runs($tenant)->findOrFail($run);
+        $search = $this->search($request);
         $changes = DB::table('invoices_logs as audit')
             ->leftJoin('invoices', function (JoinClause $join) use ($record): void {
                 $join->on('invoices.id', '=', 'audit.record_id')
                     ->where('invoices.company_id', $record->company_id);
             })
             ->where('audit.automation_run_id', $record->getKey())
+            ->when($search !== '', fn ($query) => $query->where(fn ($matching) => $matching
+                ->whereLike('invoices.number', '%'.$search.'%')
+                ->orWhereLike('audit.record_id', '%'.$search.'%')
+                ->orWhereLike('audit.created_at', '%'.$search.'%')
+                ->orWhere('audit.old_values->status', 'like', '%'.$search.'%')
+                ->orWhere('audit.new_values->status', 'like', '%'.$search.'%')))
             ->select('audit.id', 'audit.record_id', 'audit.old_values', 'audit.new_values', 'audit.created_at', 'invoices.number', 'invoices.deleted_at')
             ->orderByDesc('audit.id')
             ->paginate($this->perPage($request));
@@ -73,6 +100,11 @@ class AutomationController extends ApiController
             'per_page' => $changes->perPage(),
             'total' => $changes->total(),
         ]);
+    }
+
+    private function search(Request $request): string
+    {
+        return trim($request->validate(['search' => ['sometimes', 'string', 'max:120']])['search'] ?? '');
     }
 
     private function runs(Tenant $tenant): Builder

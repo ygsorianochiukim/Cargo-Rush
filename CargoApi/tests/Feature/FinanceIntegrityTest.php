@@ -201,6 +201,33 @@ describe('payroll in Finance (fix 3)', function (): void {
             ->and($totals['net_income_cents'])->toBe(1_500_000);
     });
 
+    it('shows draft payroll for review, approved net pay as owed, and paid payroll in the expense audit', function (): void {
+        $this->travelTo(Carbon::parse('2026-07-16 12:00:00'));
+        $run = ($this->run)(PayRun::DRAFT);
+        $this->actingAs($this->admin)->getJson('/api/v1/finance/payables')->assertOk()
+            ->assertJsonPath('data.total_cents', 0)
+            ->assertJsonPath('data.payroll_drafts.0.id', $run->id)
+            ->assertJsonPath('data.payroll_drafts.0.net_cents', 450_000);
+
+        $run->forceFill(['status' => PayRun::APPROVED])->save();
+        $this->getJson('/api/v1/finance/payables')->assertOk()
+            ->assertJsonPath('data.total_cents', 450_000)
+            ->assertJsonCount(0, 'data.payroll_drafts');
+        $range = '/api/v1/expenses/report?from=2026-07-01&to=2026-07-31';
+        $this->getJson($range)->assertOk()->assertJsonCount(0, 'data.payroll_audit.runs');
+
+        $run->forceFill(['status' => PayRun::PAID, 'paid_at' => now()])->save();
+        $this->getJson('/api/v1/finance/payables')->assertOk()
+            ->assertJsonPath('data.total_cents', 50_000)
+            ->assertJsonMissing(['id' => $run->id]);
+        $this->getJson($range)->assertOk()
+            ->assertJsonPath('data.payroll_audit.total_cents', 200_000)
+            ->assertJsonPath('data.payroll_audit.runs.0.id', $run->id)
+            ->assertJsonPath('data.payroll_audit.runs.0.paid_date', '2026-07-16')
+            ->assertJsonPath('data.payroll_audit.runs.0.accounting_date', '2026-07-17')
+            ->assertJsonPath('data.payroll_audit.runs.0.net_cents', 450_000);
+    });
+
     it('lists the run in the drill-down, which still adds up to the total', function (): void {
         ($this->run)(PayRun::PAID);
 

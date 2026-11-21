@@ -6,6 +6,7 @@ import {
   AssistantSettingsPayload,
   DiscordBotConfiguration,
   DiscordBotSettings,
+  DiscordTestAlert,
 } from '../../models/assistant/assistant.model';
 import { ApiService } from '../shared/api.service';
 
@@ -27,6 +28,10 @@ export class AssistantService {
 
   saveDiscordSettings(payload: Partial<DiscordBotConfiguration>): Observable<DiscordBotSettings> {
     return this.api.put<DiscordBotSettings>('automation/bots/discord', payload);
+  }
+
+  sendDiscordTestAlert(target: DiscordTestAlert['target']): Observable<DiscordTestAlert> {
+    return this.api.post<DiscordTestAlert>('automation/bots/discord/test-alert', { target });
   }
 
   addDiscordUser(discordId: string, label: string | null, mayConfirmReceipts?: boolean): Observable<AssistantSettings> {

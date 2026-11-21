@@ -20,10 +20,12 @@ import { Modal } from '../../shared/modal';
 import { ErrorState, SkeletonRows } from '../../shared/states';
 import { StatusPill } from '../../shared/status-pill';
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-access',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Card, Field, Icon, Modal, ErrorState, SkeletonRows, StatusPill, ReactiveFormsModule],
+  imports: [TableView, Card, Field, Icon, Modal, ErrorState, SkeletonRows, StatusPill, ReactiveFormsModule],
   templateUrl: './access.page.html',
 })
 export class AccessPage {

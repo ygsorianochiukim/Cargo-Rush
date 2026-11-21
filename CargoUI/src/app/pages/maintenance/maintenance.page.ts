@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { map, merge, tap } from 'rxjs';
+import { merge, tap } from 'rxjs';
 
 import { MaintenanceJob } from '../../models/vehicle/vehicle.model';
 import { maintenanceSpec } from '../../services/maintenance/maintenance.form';
@@ -12,6 +12,8 @@ import { ListToolbar } from '../../shared/list-toolbar';
 import { RecordDialog } from '../../shared/record-dialog';
 import { recordList } from '../../shared/record-list';
 import { ErrorState } from '../../shared/states';
+
+import { allPages } from '../../services/shared/all-pages';
 
 @Component({
   selector: 'app-maintenance',
@@ -72,10 +74,11 @@ export class MaintenancePage {
   private readonly costedTotal = signal<number | null>(null);
 
   protected readonly list = recordList<MaintenanceJob>(this.spec, () =>
-    this.jobsApi.list().pipe(
-      tap((res) => this.costedTotal.set((res.meta?.['costed_total_cents'] as number) ?? null)),
-      map((res) => res.data),
-    ),
+    allPages((page) => this.jobsApi.list(page).pipe(
+      tap((res) => {
+        if (page.page === 1) this.costedTotal.set((res.meta?.['costed_total_cents'] as number) ?? null);
+      }),
+    )),
   );
 
   constructor() {

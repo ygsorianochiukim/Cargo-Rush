@@ -6,6 +6,7 @@ namespace App\Domain\Finance\Services;
 
 use App\Domain\Billing\Models\Invoice;
 use App\Domain\Finance\Models\Expense;
+use App\Domain\Payroll\Models\PayRun;
 use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Enums\StatusValue;
 use App\Domain\Shared\Enums\VehicleArrangement;
@@ -28,7 +29,7 @@ class PayablesService
     ) {}
 
     /** @return array<string, mixed> */
-    public function overview(): array
+    public function overview(bool $includePayrollDrafts = false): array
     {
         $groups = [
             $this->truckers(),
@@ -43,6 +44,7 @@ class PayablesService
             'total_cents' => array_sum(array_column($groups, 'total_cents')),
             'in_flight_cents' => array_sum(array_column($groups, 'in_flight_cents')),
             'groups' => $groups,
+            ...($includePayrollDrafts ? ['payroll_drafts' => $this->payrollDrafts()] : []),
         ];
     }
 
@@ -240,9 +242,25 @@ class PayablesService
             'in_flight_cents' => 0,
             'due_on' => $line['due_on'],
             'settle_at' => $line['settle_at'] ?? '/payroll',
-        ], $this->payroll->owedAsOf(now()));
+        ], $this->payroll->owedAsOf(now(), current: true));
 
         return $this->group('payroll', 'Payroll', 'badge', $lines);
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function payrollDrafts(): array
+    {
+        return PayRun::query()->where('status', PayRun::DRAFT)
+            ->withSum('lines', 'net_cents')->orderBy('pay_date')->orderBy('id')->get()
+            ->map(static fn (PayRun $run): array => [
+                'id' => $run->id,
+                'reference' => $run->reference,
+                'label' => $run->scope()->label(),
+                'period' => $run->periodLabel(),
+                'planned_pay_date' => $run->pay_date?->toDateString(),
+                'net_cents' => (int) $run->lines_sum_net_cents,
+                'route' => $run->scope()->route(),
+            ])->all();
     }
 
     /** @return array<string, mixed> */

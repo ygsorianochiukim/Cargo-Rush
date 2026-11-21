@@ -15,6 +15,8 @@ import { FilterBar, FilterOption } from '../../shared/filter-bar';
 import { fmt } from '../../shared/format';
 import { Modal } from '../../shared/modal';
 
+import { allPages } from '../../services/shared/all-pages';
+
 @Component({
   selector: 'app-delivery-logs',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -125,7 +127,7 @@ export class DeliveryLogsPage {
   protected readonly wallets = signal<{ value: string; label: string }[]>([]);
 
   constructor() {
-    this.deliveryApi.list().subscribe((r) => this.all.set(r.data));
+    allPages((page) => this.deliveryApi.list(page)).subscribe((rows) => this.all.set(rows));
 
     if (this.canEncode()) {
       this.sources.options().subscribe({ next: (rows) => this.wallets.set(rows), error: () => {} });

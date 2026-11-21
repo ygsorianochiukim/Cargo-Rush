@@ -19,10 +19,12 @@ import { Icon } from '../../shared/icon';
 
 type Agency = 'sss_enrolled' | 'philhealth_enrolled' | 'pagibig_enrolled';
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-benefits-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Card, Icon],
+  imports: [TableView, Card, Icon],
   template: `
     <app-card heading="Benefits" icon="badge" hint="SSS, PhilHealth and Pag-IBIG">
       @if (enabled() !== null) {
@@ -83,59 +85,66 @@ type Agency = 'sss_enrolled' | 'philhealth_enrolled' | 'pagibig_enrolled';
             </label>
           </div>
 
-          <div class="mt-2 overflow-x-auto" [class.opacity-60]="!enabled()">
-            <table class="w-full min-w-[560px] text-[13px]">
-              <thead>
-                <tr class="cr-meta text-left">
-                  <th class="py-2 pr-2 font-medium">Person</th>
-                  @for (agency of agencies; track agency.key) {
-                    <th class="px-2 py-2 text-center font-medium">{{ agency.label }}</th>
-                  }
-                  <th class="py-2 pl-2 text-right font-medium">All</th>
-                </tr>
-              </thead>
-              <tbody [class.opacity-60]="loadingPeople()">
-                @for (person of people(); track person.id) {
-                  <tr class="border-t border-cr-line">
-                    <td class="py-2 pr-2">
-                      <span class="font-medium">{{ person.full_name }}</span>
-                      <span class="cr-meta block"
-                        >{{ person.position }} · {{ person.employee_no }}</span
-                      >
-                    </td>
+          <app-table-view
+            #records0
+            [rows]="people()"
+            [fields]="['full_name', 'employee_no', 'position']"
+            label="Search employee benefits"
+          >
+            <div class="mt-2 overflow-x-auto" [class.opacity-60]="!enabled()">
+              <table class="w-full min-w-[560px] text-[13px]">
+                <thead>
+                  <tr class="cr-meta text-left">
+                    <th class="py-2 pr-2 font-medium">Person</th>
                     @for (agency of agencies; track agency.key) {
-                      <td class="px-2 py-2 text-center">
-                        <input
-                          type="checkbox"
-                          class="h-4 w-4 accent-cr-blue"
-                          [checked]="person[agency.key]"
-                          [disabled]="saving().has(person.id)"
-                          [attr.aria-label]="agency.label + ' for ' + person.full_name"
-                          (change)="toggle(person, agency.key, $event)"
-                        />
-                      </td>
+                      <th class="px-2 py-2 text-center font-medium">{{ agency.label }}</th>
                     }
-                    <td class="py-2 pl-2 text-right">
-                      <button
-                        type="button"
-                        class="text-[12px] font-semibold text-cr-blue hover:underline disabled:opacity-60"
-                        [disabled]="saving().has(person.id)"
-                        (click)="setFlags(person, all(!hasAll(person)))"
-                      >
-                        {{ hasAll(person) ? 'None' : 'All' }}
-                      </button>
-                    </td>
+                    <th class="py-2 pl-2 text-right font-medium">All</th>
                   </tr>
-                } @empty {
-                  <tr>
-                    <td class="cr-meta py-3" [attr.colspan]="agencies.length + 2">
-                      {{ loadingPeople() ? 'Loading staff…' : 'Nobody matches.' }}
-                    </td>
-                  </tr>
-                }
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody [class.opacity-60]="loadingPeople()">
+                  @for (person of records0.page(); track person.id) {
+                    <tr class="border-t border-cr-line">
+                      <td class="py-2 pr-2">
+                        <span class="font-medium">{{ person.full_name }}</span>
+                        <span class="cr-meta block"
+                          >{{ person.position }} · {{ person.employee_no }}</span
+                        >
+                      </td>
+                      @for (agency of agencies; track agency.key) {
+                        <td class="px-2 py-2 text-center">
+                          <input
+                            type="checkbox"
+                            class="h-4 w-4 accent-cr-blue"
+                            [checked]="person[agency.key]"
+                            [disabled]="saving().has(person.id)"
+                            [attr.aria-label]="agency.label + ' for ' + person.full_name"
+                            (change)="toggle(person, agency.key, $event)"
+                          />
+                        </td>
+                      }
+                      <td class="py-2 pl-2 text-right">
+                        <button
+                          type="button"
+                          class="text-[12px] font-semibold text-cr-blue hover:underline disabled:opacity-60"
+                          [disabled]="saving().has(person.id)"
+                          (click)="setFlags(person, all(!hasAll(person)))"
+                        >
+                          {{ hasAll(person) ? 'None' : 'All' }}
+                        </button>
+                      </td>
+                    </tr>
+                  } @empty {
+                    <tr>
+                      <td class="cr-meta py-3" [attr.colspan]="agencies.length + 2">
+                        {{ loadingPeople() ? 'Loading staff…' : 'Nobody matches.' }}
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </app-table-view>
 
           <div
             class="mt-1 flex flex-wrap items-center justify-between gap-3 border-t border-cr-line pt-3"

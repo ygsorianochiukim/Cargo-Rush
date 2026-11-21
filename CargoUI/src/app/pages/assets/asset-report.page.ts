@@ -11,10 +11,12 @@ import { AssetStats } from './asset-stats';
 
 const CONDITION_LABEL: Record<string, string> = { good: 'Good', fair: 'Fair', damaged: 'Damaged' };
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-asset-report',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [AssetStats, BarRows, Card, ErrorState],
+  imports: [TableView, AssetStats, BarRows, Card, ErrorState],
   template: `
     <div class="mb-4 flex items-center justify-between gap-3">
       <p class="text-[13px] text-cr-ink-muted">
@@ -66,30 +68,37 @@ const CONDITION_LABEL: Record<string, string> = { good: 'Good', fair: 'Fair', da
         </app-card>
 
         <app-card heading="Purchases by year" icon="trend" [padded]="false">
-          <table class="w-full text-[13px]">
-            <thead>
-              <tr class="border-b border-cr-line text-left">
-                <th class="cr-meta px-4 py-2 font-normal">YEAR</th>
-                <th class="cr-meta px-4 py-2 text-right font-normal">ITEMS</th>
-                <th class="cr-meta px-4 py-2 text-right font-normal">SPENT</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (y of r.by_year; track y.year) {
-                <tr class="border-b border-cr-line last:border-0">
-                  <td class="cr-num px-4 py-2 font-semibold">{{ y.year }}</td>
-                  <td class="cr-num px-4 py-2 text-right">{{ y.count }}</td>
-                  <td class="cr-num px-4 py-2 text-right">{{ money(y.cost_cents) }}</td>
+          <app-table-view
+            #records0
+            [rows]="r.by_year"
+            [fields]="['year', 'count', 'cost_cents']"
+            label="Search acquisitions by year"
+          >
+            <table class="w-full text-[13px]">
+              <thead>
+                <tr class="border-b border-cr-line text-left">
+                  <th class="cr-meta px-4 py-2 font-normal">YEAR</th>
+                  <th class="cr-meta px-4 py-2 text-right font-normal">ITEMS</th>
+                  <th class="cr-meta px-4 py-2 text-right font-normal">SPENT</th>
                 </tr>
-              } @empty {
-                <tr>
-                  <td colspan="3" class="px-4 py-3 text-cr-ink-muted">
-                    No purchase dates recorded.
-                  </td>
-                </tr>
-              }
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                @for (y of records0.page(); track y.year) {
+                  <tr class="border-b border-cr-line last:border-0">
+                    <td class="cr-num px-4 py-2 font-semibold">{{ y.year }}</td>
+                    <td class="cr-num px-4 py-2 text-right">{{ y.count }}</td>
+                    <td class="cr-num px-4 py-2 text-right">{{ money(y.cost_cents) }}</td>
+                  </tr>
+                } @empty {
+                  <tr>
+                    <td colspan="3" class="px-4 py-3 text-cr-ink-muted">
+                      No purchase dates recorded.
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </app-table-view>
         </app-card>
 
         <app-card heading="Condition" icon="gauge">
@@ -98,34 +107,41 @@ const CONDITION_LABEL: Record<string, string> = { good: 'Good', fair: 'Fair', da
 
         <div class="lg:col-span-2">
           <app-card heading="Accountability by custodian" icon="profile" [padded]="false">
-            <table class="w-full text-[13px]">
-              <thead>
-                <tr class="border-b border-cr-line text-left">
-                  <th class="cr-meta px-4 py-2 font-normal">CUSTODIAN</th>
-                  <th class="cr-meta px-4 py-2 font-normal">POSITION</th>
-                  <th class="cr-meta px-4 py-2 text-right font-normal">ITEMS</th>
-                  <th class="cr-meta px-4 py-2 text-right font-normal">DAMAGED</th>
-                  <th class="cr-meta px-4 py-2 text-right font-normal">VALUE HELD</th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (p of r.by_custodian; track p.employee_id) {
-                  <tr class="border-b border-cr-line last:border-0">
-                    <td class="px-4 py-2 font-semibold">{{ p.name }}</td>
-                    <td class="px-4 py-2 text-cr-ink-muted">{{ p.position ?? '—' }}</td>
-                    <td class="cr-num px-4 py-2 text-right">{{ p.count }}</td>
-                    <td class="cr-num px-4 py-2 text-right" [class.text-cr-red]="p.damaged > 0">
-                      {{ p.damaged }}
-                    </td>
-                    <td class="cr-num px-4 py-2 text-right">{{ money(p.cost_cents) }}</td>
+            <app-table-view
+              #records1
+              [rows]="r.by_custodian"
+              [fields]="['name', 'position', 'count', 'damaged', 'cost_cents']"
+              label="Search assets by custodian"
+            >
+              <table class="w-full text-[13px]">
+                <thead>
+                  <tr class="border-b border-cr-line text-left">
+                    <th class="cr-meta px-4 py-2 font-normal">CUSTODIAN</th>
+                    <th class="cr-meta px-4 py-2 font-normal">POSITION</th>
+                    <th class="cr-meta px-4 py-2 text-right font-normal">ITEMS</th>
+                    <th class="cr-meta px-4 py-2 text-right font-normal">DAMAGED</th>
+                    <th class="cr-meta px-4 py-2 text-right font-normal">VALUE HELD</th>
                   </tr>
-                } @empty {
-                  <tr>
-                    <td colspan="5" class="px-4 py-3 text-cr-ink-muted">Nobody holds an asset.</td>
-                  </tr>
-                }
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  @for (p of records1.page(); track p.employee_id) {
+                    <tr class="border-b border-cr-line last:border-0">
+                      <td class="px-4 py-2 font-semibold">{{ p.name }}</td>
+                      <td class="px-4 py-2 text-cr-ink-muted">{{ p.position ?? '—' }}</td>
+                      <td class="cr-num px-4 py-2 text-right">{{ p.count }}</td>
+                      <td class="cr-num px-4 py-2 text-right" [class.text-cr-red]="p.damaged > 0">
+                        {{ p.damaged }}
+                      </td>
+                      <td class="cr-num px-4 py-2 text-right">{{ money(p.cost_cents) }}</td>
+                    </tr>
+                  } @empty {
+                    <tr>
+                      <td colspan="5" class="px-4 py-3 text-cr-ink-muted">Nobody holds an asset.</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </app-table-view>
           </app-card>
         </div>
       </div>

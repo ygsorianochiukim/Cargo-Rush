@@ -17,10 +17,12 @@ import { EmptyState, ErrorState } from '../../shared/states';
 
 type View = 'income' | 'sheet' | 'aging' | 'account';
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-statements',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Card, Field, Icon, EmptyState, ErrorState],
+  imports: [TableView, Card, Field, Icon, EmptyState, ErrorState],
   templateUrl: './statements.page.html',
 })
 export class StatementsPage {

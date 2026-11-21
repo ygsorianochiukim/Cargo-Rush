@@ -4,6 +4,15 @@ export interface Payables {
   in_flight_cents: number;
 
   groups: PayableGroup[];
+  payroll_drafts?: {
+    id: string;
+    reference: string;
+    label: string;
+    period: string;
+    planned_pay_date: string | null;
+    net_cents: number;
+    route: string;
+  }[];
 }
 
 export interface PayableGroup {

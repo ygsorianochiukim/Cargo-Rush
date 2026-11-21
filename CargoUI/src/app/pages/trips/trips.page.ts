@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { map } from 'rxjs';
 
 import { StatusValue } from '../../models/shared/status.model';
 import { Trip } from '../../models/trip/trip.model';
@@ -23,6 +22,8 @@ function tripNumber(reference: string | null | undefined): number {
 
   return Number.isFinite(tail) ? tail : -1;
 }
+
+import { allPages } from '../../services/shared/all-pages';
 
 @Component({
   selector: 'app-trips',
@@ -153,7 +154,7 @@ export class TripsPage {
   protected readonly canSeeMoney =
     this.identity.can('finance.view') || this.identity.can('expenses.view');
 
-  private readonly loaded = toSignal(this.trips.list().pipe(map((r) => r.data)), {
+  private readonly loaded = toSignal(allPages((page) => this.trips.list(page)), {
     initialValue: null,
   });
 

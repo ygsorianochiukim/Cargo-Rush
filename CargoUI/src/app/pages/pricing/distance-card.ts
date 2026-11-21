@@ -6,10 +6,12 @@ import { RateCardService } from '../../services/pricing/pricing.service';
 import { Card } from '../../shared/card';
 import { Icon } from '../../shared/icon';
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-distance-card',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Card, Icon],
+  imports: [TableView, Card, Icon],
   template: `
     @if (rows(); as lines) {
       @if (lines.length > 0) {
@@ -23,112 +25,119 @@ import { Icon } from '../../shared/icon';
             Trips are priced from the zones below only. These lines are kept so you can see them;
             add the same rates to a zone, then remove them here.
           </p>
-          <div class="overflow-x-auto">
-            <table class="w-full border-collapse text-left text-[13px] whitespace-nowrap">
-              <thead>
-                <tr class="border-b border-cr-line">
-                  <th class="py-2 pr-3 font-semibold">Line</th>
-                  <th class="py-2 pr-3 font-semibold">From (km)</th>
-                  <th class="py-2 pr-3 font-semibold">To (km)</th>
-                  <th class="py-2 pr-3 font-semibold">Truck</th>
-                  <th class="py-2 pr-3 text-right font-semibold">Base (₱)</th>
-                  <th class="py-2 pr-3 text-right font-semibold">Per km</th>
-                  <th class="py-2 pr-3 text-right font-semibold">Per kg</th>
-                  <th class="py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (line of lines; track $index) {
-                  <tr class="border-b border-cr-line/60">
-                    <td class="py-1.5 pr-3">
-                      <input
-                        [value]="line.label"
-                        (input)="edit($index, 'label', $any($event.target).value)"
-                        placeholder="100–500 km"
-                        [class]="cellClass + ' w-40'"
-                      />
-                    </td>
-                    <td class="py-1.5 pr-3">
-                      <input
-                        type="number"
-                        min="0"
-                        [value]="line.min_km"
-                        (input)="edit($index, 'min_km', $any($event.target).value)"
-                        [class]="cellClass + ' w-24 text-right'"
-                      />
-                    </td>
-                    <td class="py-1.5 pr-3">
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="onwards"
-                        [value]="line.max_km ?? ''"
-                        (input)="edit($index, 'max_km', $any($event.target).value)"
-                        [class]="cellClass + ' w-24 text-right'"
-                      />
-                    </td>
-                    <td class="py-1.5 pr-3">
-                      <select
-                        [value]="line.truck_category_id ?? ''"
-                        (change)="edit($index, 'truck_category_id', $any($event.target).value)"
-                        [class]="cellClass + ' w-36'"
-                      >
-                        <option value="">Any truck</option>
-                        @for (category of categories(); track category.id) {
-                          <option
-                            [value]="category.id"
-                            [selected]="category.id === line.truck_category_id"
-                          >
-                            {{ category.name }}
-                          </option>
-                        }
-                      </select>
-                    </td>
-                    <td class="py-1.5 pr-3">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        [value]="line.base"
-                        (input)="edit($index, 'base', $any($event.target).value)"
-                        [class]="cellClass + ' w-28 text-right'"
-                      />
-                    </td>
-                    <td class="py-1.5 pr-3">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        [value]="line.perKm"
-                        (input)="edit($index, 'perKm', $any($event.target).value)"
-                        [class]="cellClass + ' w-24 text-right'"
-                      />
-                    </td>
-                    <td class="py-1.5 pr-3">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        [value]="line.perKg"
-                        (input)="edit($index, 'perKg', $any($event.target).value)"
-                        [class]="cellClass + ' w-24 text-right'"
-                      />
-                    </td>
-                    <td class="py-1.5 text-right">
-                      <button
-                        type="button"
-                        aria-label="Remove line"
-                        class="h-8 w-8 rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
-                        (click)="removeLine($index)"
-                      >
-                        <app-icon name="close" [size]="14" class="mx-auto" />
-                      </button>
-                    </td>
+          <app-table-view
+            #records0
+            [rows]="lines"
+            [fields]="['label', 'base', 'min_km', 'max_km', 'perKg', 'perKm']"
+            label="Search distance rates"
+          >
+            <div class="overflow-x-auto">
+              <table class="w-full border-collapse text-left text-[13px] whitespace-nowrap">
+                <thead>
+                  <tr class="border-b border-cr-line">
+                    <th class="py-2 pr-3 font-semibold">Line</th>
+                    <th class="py-2 pr-3 font-semibold">From (km)</th>
+                    <th class="py-2 pr-3 font-semibold">To (km)</th>
+                    <th class="py-2 pr-3 font-semibold">Truck</th>
+                    <th class="py-2 pr-3 text-right font-semibold">Base (₱)</th>
+                    <th class="py-2 pr-3 text-right font-semibold">Per km</th>
+                    <th class="py-2 pr-3 text-right font-semibold">Per kg</th>
+                    <th class="py-2"></th>
                   </tr>
-                }
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  @for (line of records0.page(); track $index) {
+                    <tr class="border-b border-cr-line/60">
+                      <td class="py-1.5 pr-3">
+                        <input
+                          [value]="line.label"
+                          (input)="edit($index, 'label', $any($event.target).value)"
+                          placeholder="100–500 km"
+                          [class]="cellClass + ' w-40'"
+                        />
+                      </td>
+                      <td class="py-1.5 pr-3">
+                        <input
+                          type="number"
+                          min="0"
+                          [value]="line.min_km"
+                          (input)="edit($index, 'min_km', $any($event.target).value)"
+                          [class]="cellClass + ' w-24 text-right'"
+                        />
+                      </td>
+                      <td class="py-1.5 pr-3">
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="onwards"
+                          [value]="line.max_km ?? ''"
+                          (input)="edit($index, 'max_km', $any($event.target).value)"
+                          [class]="cellClass + ' w-24 text-right'"
+                        />
+                      </td>
+                      <td class="py-1.5 pr-3">
+                        <select
+                          [value]="line.truck_category_id ?? ''"
+                          (change)="edit($index, 'truck_category_id', $any($event.target).value)"
+                          [class]="cellClass + ' w-36'"
+                        >
+                          <option value="">Any truck</option>
+                          @for (category of categories(); track category.id) {
+                            <option
+                              [value]="category.id"
+                              [selected]="category.id === line.truck_category_id"
+                            >
+                              {{ category.name }}
+                            </option>
+                          }
+                        </select>
+                      </td>
+                      <td class="py-1.5 pr-3">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          [value]="line.base"
+                          (input)="edit($index, 'base', $any($event.target).value)"
+                          [class]="cellClass + ' w-28 text-right'"
+                        />
+                      </td>
+                      <td class="py-1.5 pr-3">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          [value]="line.perKm"
+                          (input)="edit($index, 'perKm', $any($event.target).value)"
+                          [class]="cellClass + ' w-24 text-right'"
+                        />
+                      </td>
+                      <td class="py-1.5 pr-3">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          [value]="line.perKg"
+                          (input)="edit($index, 'perKg', $any($event.target).value)"
+                          [class]="cellClass + ' w-24 text-right'"
+                        />
+                      </td>
+                      <td class="py-1.5 text-right">
+                        <button
+                          type="button"
+                          aria-label="Remove line"
+                          class="h-8 w-8 rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
+                          (click)="removeLine($index)"
+                        >
+                          <app-icon name="close" [size]="14" class="mx-auto" />
+                        </button>
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </app-table-view>
 
           @if (failure(); as message) {
             <p role="alert" class="mt-3 text-[12px] font-medium text-cr-red">{{ message }}</p>

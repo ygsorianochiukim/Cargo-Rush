@@ -12,6 +12,7 @@ use App\Domain\Assistant\Requests\AssistantSettingsRequest;
 use App\Domain\Assistant\Services\AssistantPairingService;
 use App\Domain\Assistant\Services\AssistantService;
 use App\Domain\Assistant\Services\DiscordFinanceActivity;
+use App\Domain\Assistant\Services\DiscordTestAlert;
 use App\Domain\Identity\Models\Permission;
 use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
@@ -138,12 +139,32 @@ class AssistantController extends ApiController
         $input = $request->validate([
             'day' => ['required', 'date_format:Y-m-d'],
             'timezone' => ['required', 'timezone'],
-            'kind' => ['required', 'in:runs,changes,payments,receipt-expenses'],
+            'kind' => ['required', 'in:runs,changes,payments,receipt-expenses,aged-receivables'],
             'alerts' => ['sometimes', 'boolean'],
             'after' => ['sometimes', 'string', 'regex:/^[A-Za-z0-9]{1,26}$/'],
         ]);
 
         return $this->payload($activity->page($settings, $input));
+    }
+
+    public function pendingTestAlert(Request $request, DiscordTestAlert $testAlert): JsonResponse
+    {
+        $this->mustBeTheBot($request);
+
+        return $this->payload(['test' => $testAlert->pending()]);
+    }
+
+    public function finishTestAlert(Request $request, DiscordTestAlert $testAlert, string $test): JsonResponse
+    {
+        $this->mustBeTheBot($request);
+        $input = $request->validate([
+            'status' => ['required', 'in:delivered,failed'],
+            'guild_id' => ['required_if:status,delivered', 'string', 'regex:/^[1-9][0-9]{16,19}$/'],
+            'message_id' => ['required_if:status,delivered', 'string', 'regex:/^[1-9][0-9]{16,19}$/'],
+        ]);
+        $testAlert->finish($test, $input['status'], $input['guild_id'] ?? null, $input['message_id'] ?? null);
+
+        return $this->noContent();
     }
 
     private function mustBeTheBot(Request $request): void

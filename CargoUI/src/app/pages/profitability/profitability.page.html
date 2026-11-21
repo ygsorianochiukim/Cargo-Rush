@@ -185,112 +185,125 @@
     [hint]="fmt.date(range().from) + ' – ' + fmt.date(range().to)"
     [padded]="false"
     class="mt-4 block">
-    <div class="overflow-x-auto">
-      <table class="w-full min-w-[1240px] border-collapse text-left whitespace-nowrap">
-        <thead>
-          <tr class="border-b border-cr-line">
-            <th class="cr-th px-4 py-2.5">Truck no.</th>
-            <th class="cr-th px-4 py-2.5">Unit no.</th>
-            <th class="cr-th px-4 py-2.5 text-right">Trip income</th>
-            <th class="cr-th px-4 py-2.5 text-right">Fuel</th>
-            <th class="cr-th px-4 py-2.5 text-right">Driver salary</th>
-            <th class="cr-th px-4 py-2.5 text-right">Helper salary</th>
-            <th class="cr-th px-4 py-2.5 text-right">Maintenance</th>
-            <th class="cr-th px-4 py-2.5 text-right">Allowance</th>
-            <th
-              class="cr-th px-4 py-2.5 text-right"
-              title="A hired truck owner's cut of the runs — a cost of using their unit">
-              Owner share
-            </th>
-            <th
-              class="cr-th px-4 py-2.5 text-right"
-              title="Categorised expense lines filed against the unit — rent, tolls, parts">
-              Other expenses
-            </th>
-            <th class="cr-th px-4 py-2.5 text-right">Total expenses</th>
-            <th class="cr-th px-4 py-2.5 text-right">Net income</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (r of rows(); track r.truck.id) {
-            <tr
-              class="border-b border-cr-line/70 transition-colors hover:bg-cr-tint"
-              [class.opacity-55]="r.entry_count === 0">
-              <td class="px-4 py-3 text-[13px] font-semibold">{{ r.truck.label }}</td>
-              <td class="cr-num px-4 py-3 text-[13px] text-cr-ink-muted">
-                {{ r.truck.plate ?? 'Unassigned' }}
+    <app-table-view
+      #records0
+      [rows]="rows()"
+      [fields]="[
+        'truck.label',
+        'truck.plate',
+        'trip_income_cents',
+        'total_expenses_cents',
+        'net_income_cents',
+      ]"
+      label="Search truck profitability"
+    >
+      <div class="overflow-x-auto">
+        <table class="w-full min-w-[1240px] border-collapse text-left whitespace-nowrap">
+          <thead>
+            <tr class="border-b border-cr-line">
+              <th class="cr-th px-4 py-2.5">Truck no.</th>
+              <th class="cr-th px-4 py-2.5">Unit no.</th>
+              <th class="cr-th px-4 py-2.5 text-right">Trip income</th>
+              <th class="cr-th px-4 py-2.5 text-right">Fuel</th>
+              <th class="cr-th px-4 py-2.5 text-right">Driver salary</th>
+              <th class="cr-th px-4 py-2.5 text-right">Helper salary</th>
+              <th class="cr-th px-4 py-2.5 text-right">Maintenance</th>
+              <th class="cr-th px-4 py-2.5 text-right">Allowance</th>
+              <th
+                class="cr-th px-4 py-2.5 text-right"
+                title="A hired truck owner's cut of the runs — a cost of using their unit">
+                Owner share
+              </th>
+              <th
+                class="cr-th px-4 py-2.5 text-right"
+                title="Categorised expense lines filed against the unit — rent, tolls, parts">
+                Other expenses
+              </th>
+              <th class="cr-th px-4 py-2.5 text-right">Total expenses</th>
+              <th class="cr-th px-4 py-2.5 text-right">Net income</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (r of records0.page(); track r.truck.id) {
+              <tr
+                class="border-b border-cr-line/70 transition-colors hover:bg-cr-tint"
+                [class.opacity-55]="r.entry_count === 0">
+                <td class="px-4 py-3 text-[13px] font-semibold">{{ r.truck.label }}</td>
+                <td class="cr-num px-4 py-3 text-[13px] text-cr-ink-muted">
+                  {{ r.truck.plate ?? 'Unassigned' }}
+                </td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">
+                  {{ fmt.pesos(r.trip_income_cents) }}
+                </td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">{{ fmt.pesos(r.fuel_cents) }}</td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">
+                  {{ fmt.pesos(r.driver_salary_cents) }}
+                </td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">
+                  {{ fmt.pesos(r.helper_salary_cents) }}
+                </td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">
+                  {{ fmt.pesos(r.maintenance_cents) }}
+                </td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">
+                  {{ fmt.pesos(r.allowance_cents) }}
+                </td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">
+                  {{ fmt.pesos(r.owner_share_cents) }}
+                </td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">
+                  {{ fmt.pesos(r.other_expenses_cents) }}
+                </td>
+                <td class="cr-num px-4 py-3 text-right text-[13px]">
+                  {{ fmt.pesos(r.total_expenses_cents) }}
+                </td>
+                <td
+                  class="cr-num px-4 py-3 text-right text-[13px] font-semibold"
+                  [class.text-cr-red]="r.net_income_cents < 0"
+                  [class.text-cr-success]="r.net_income_cents > 0">
+                  {{ fmt.pesos(r.net_income_cents) }}
+                </td>
+              </tr>
+            }
+            <tr class="border-t-2 border-cr-line bg-cr-tint/60">
+              <td class="px-4 py-3 text-[13px] font-semibold" colspan="2">TOTAL</td>
+              <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+                {{ fmt.pesos(totals().trip_income_cents) }}
               </td>
-              <td class="cr-num px-4 py-3 text-right text-[13px]">
-                {{ fmt.pesos(r.trip_income_cents) }}
+              <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+                {{ fmt.pesos(totals().fuel_cents) }}
               </td>
-              <td class="cr-num px-4 py-3 text-right text-[13px]">{{ fmt.pesos(r.fuel_cents) }}</td>
-              <td class="cr-num px-4 py-3 text-right text-[13px]">
-                {{ fmt.pesos(r.driver_salary_cents) }}
+              <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+                {{ fmt.pesos(totals().driver_salary_cents) }}
               </td>
-              <td class="cr-num px-4 py-3 text-right text-[13px]">
-                {{ fmt.pesos(r.helper_salary_cents) }}
+              <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+                {{ fmt.pesos(totals().helper_salary_cents) }}
               </td>
-              <td class="cr-num px-4 py-3 text-right text-[13px]">
-                {{ fmt.pesos(r.maintenance_cents) }}
+              <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+                {{ fmt.pesos(totals().maintenance_cents) }}
               </td>
-              <td class="cr-num px-4 py-3 text-right text-[13px]">
-                {{ fmt.pesos(r.allowance_cents) }}
+              <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+                {{ fmt.pesos(totals().allowance_cents) }}
               </td>
-              <td class="cr-num px-4 py-3 text-right text-[13px]">
-                {{ fmt.pesos(r.owner_share_cents) }}
+              <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+                {{ fmt.pesos(totals().owner_share_cents) }}
               </td>
-              <td class="cr-num px-4 py-3 text-right text-[13px]">
-                {{ fmt.pesos(r.other_expenses_cents) }}
+              <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+                {{ fmt.pesos(totals().other_expenses_cents) }}
               </td>
-              <td class="cr-num px-4 py-3 text-right text-[13px]">
-                {{ fmt.pesos(r.total_expenses_cents) }}
+              <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
+                {{ fmt.pesos(totals().total_expenses_cents) }}
               </td>
               <td
                 class="cr-num px-4 py-3 text-right text-[13px] font-semibold"
-                [class.text-cr-red]="r.net_income_cents < 0"
-                [class.text-cr-success]="r.net_income_cents > 0">
-                {{ fmt.pesos(r.net_income_cents) }}
+                [class.text-cr-red]="totals().net_income_cents < 0">
+                {{ fmt.pesos(totals().net_income_cents) }}
               </td>
             </tr>
-          }
-          <tr class="border-t-2 border-cr-line bg-cr-tint/60">
-            <td class="px-4 py-3 text-[13px] font-semibold" colspan="2">TOTAL</td>
-            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.pesos(totals().trip_income_cents) }}
-            </td>
-            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.pesos(totals().fuel_cents) }}
-            </td>
-            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.pesos(totals().driver_salary_cents) }}
-            </td>
-            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.pesos(totals().helper_salary_cents) }}
-            </td>
-            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.pesos(totals().maintenance_cents) }}
-            </td>
-            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.pesos(totals().allowance_cents) }}
-            </td>
-            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.pesos(totals().owner_share_cents) }}
-            </td>
-            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.pesos(totals().other_expenses_cents) }}
-            </td>
-            <td class="cr-num px-4 py-3 text-right text-[13px] font-semibold">
-              {{ fmt.pesos(totals().total_expenses_cents) }}
-            </td>
-            <td
-              class="cr-num px-4 py-3 text-right text-[13px] font-semibold"
-              [class.text-cr-red]="totals().net_income_cents < 0">
-              {{ fmt.pesos(totals().net_income_cents) }}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+          </tbody>
+        </table>
+      </div>
+    </app-table-view>
 
     @if (unattributed() > 0) {
       <p class="border-t border-cr-line px-4 py-3 text-[12px] text-cr-ink-muted">

@@ -22,10 +22,13 @@ import { ListToolbar } from '../../shared/list-toolbar';
 import { ErrorState, SkeletonRows } from '../../shared/states';
 import { StatusPill } from '../../shared/status-pill';
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-pricing',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [
+    TableView,
     Card,
     CbmCard,
     DistanceCard,

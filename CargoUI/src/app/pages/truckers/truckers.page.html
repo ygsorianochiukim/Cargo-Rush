@@ -52,154 +52,176 @@
               : 'Truckers register themselves in the app and appear here once they do.'
         " />
     } @else if (tab() === 'trucks') {
-      <div class="overflow-x-auto">
-        <table class="w-full min-w-[760px] border-collapse text-left whitespace-nowrap">
-          <thead>
-            <tr class="border-b border-cr-line">
-              <th class="cr-th px-4 py-2.5">Truck</th>
-              <th class="cr-th px-4 py-2.5">Owner</th>
-              <th class="cr-th px-4 py-2.5 text-right">Capacity</th>
-              <th class="cr-th px-4 py-2.5">Photos</th>
-              <th class="cr-th px-4 py-2.5"><span class="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (q of truckQueue(); track q.vehicle.id) {
-              <tr class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint">
-                <td class="px-4 py-3">
-                  <span class="cr-num block text-[13px] font-semibold">{{ q.vehicle.plate }}</span>
-                  <span class="block text-[12px] text-cr-ink-muted">{{ q.vehicle.model }}</span>
-                </td>
-                <td class="px-4 py-3 text-[13px]">
-                  {{ q.trucker.business_name ?? q.trucker.name }}
-                  <span class="cr-num block text-[12px] text-cr-ink-muted">{{ q.trucker.phone }}</span>
-                </td>
-                <td class="cr-num px-4 py-3 text-right text-[13px]">
-                  {{ q.vehicle.capacity_kg.toLocaleString() }} kg
-                </td>
-                <td class="cr-num px-4 py-3 text-[13px]">{{ photoCount(q.vehicle) }} of 6</td>
-                <td class="px-4 py-3 text-right">
-                  <button
-                    type="button"
-                    class="inline-flex h-8 items-center gap-1.5 rounded-control bg-cr-blue px-3 text-[12px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
-                    [attr.aria-label]="'Check ' + q.vehicle.plate"
-                    (click)="review(q.trucker, q.vehicle)">
-                    <app-icon name="check" [size]="14" />
-                    Check truck
-                  </button>
-                </td>
+      <app-table-view
+        #records0
+        [rows]="truckQueue()"
+        [fields]="['vehicle.plate', 'vehicle.model', 'trucker.name', 'trucker.business_name', 'trucker.phone']"
+        label="Search truck approvals"
+      >
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[760px] border-collapse text-left whitespace-nowrap">
+            <thead>
+              <tr class="border-b border-cr-line">
+                <th class="cr-th px-4 py-2.5">Truck</th>
+                <th class="cr-th px-4 py-2.5">Owner</th>
+                <th class="cr-th px-4 py-2.5 text-right">Capacity</th>
+                <th class="cr-th px-4 py-2.5">Photos</th>
+                <th class="cr-th px-4 py-2.5"><span class="sr-only">Actions</span></th>
               </tr>
-            }
-          </tbody>
-        </table>
-      </div>
-    } @else {
-      <div class="overflow-x-auto">
-        <table class="w-full min-w-[980px] border-collapse text-left whitespace-nowrap">
-          <thead>
-            <tr class="border-b border-cr-line">
-              <th class="cr-th px-4 py-2.5">Trucker</th>
-              <th class="cr-th px-4 py-2.5">Truck</th>
-              <th class="cr-th px-4 py-2.5">Licence</th>
-              <th class="cr-th px-4 py-2.5 text-right">Trips</th>
-              <th class="cr-th px-4 py-2.5 text-right">Rate</th>
-              <th class="cr-th px-4 py-2.5">Standing</th>
-              <th class="cr-th px-4 py-2.5"><span class="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (t of list; track t.id) {
-              <tr
-                class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint">
-                <td class="px-4 py-3">
-                  <span class="flex items-center gap-3">
-                    <span
-                      class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-cr-tint text-[11px] font-semibold text-cr-blue">
-                      {{ initials(t.name) }}
-                    </span>
-                    <span>
-                      <span class="block text-[13px] font-semibold">{{ t.business_name ?? t.name }}</span>
-                      @if (t.business_name) {
-                        <span class="block text-[12px] text-cr-ink-muted">{{ t.name }}</span>
-                      }
-                      <span class="cr-num block text-[12px] text-cr-ink-muted">{{ t.phone }}</span>
-                    </span>
-                  </span>
-                </td>
-
-                <td class="px-4 py-3 text-[13px]">
-                  {{ plate(t) }}
-                  @if (trucksToCheck(t) > 0) {
-                    <span class="block text-[11px] font-semibold text-cr-warning">
-                      {{ trucksToCheck(t) }} to check
-                    </span>
-                  }
-                </td>
-
-                <td class="cr-num px-4 py-3 text-[13px]">{{ t.licence_no ?? '—' }}</td>
-
-                <td class="cr-num px-4 py-3 text-right text-[13px]">{{ t.trips_completed }}</td>
-
-                <td class="px-4 py-3 text-right">
-                  <span class="cr-num text-[13px] font-semibold">{{ rate(t.commission_bp) }}</span>
-                </td>
-
-                <td class="px-4 py-3">
-                  <span class="flex items-center gap-2">
-                    <app-status-pill [status]="t.status" />
-                    @if (t.status === 'active') {
-                      <span
-                        class="text-[11px] font-semibold"
-                        [class]="t.is_online ? 'text-cr-success' : 'text-cr-ink-muted'">
-                        {{ t.is_online ? 'online' : 'offline' }}
-                      </span>
-                    }
-                  </span>
-                </td>
-
-                <td class="px-4 py-3">
-                  <span class="flex items-center justify-end gap-1.5">
-                    @if (t.status === 'pending') {
-                      <button
-                        type="button"
-                        class="inline-flex h-8 items-center gap-1.5 rounded-control bg-cr-blue px-3 text-[12px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
-                        [attr.aria-label]="'Approve ' + t.name"
-                        (click)="approve(t)">
-                        <app-icon name="check" [size]="14" />
-                        Approve
-                      </button>
-                    } @else if (t.status === 'active') {
-                      <button
-                        type="button"
-                        class="inline-flex h-8 items-center rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-ink-muted transition-colors hover:border-cr-red hover:text-cr-red"
-                        [attr.aria-label]="'Put ' + t.name + ' on hold'"
-                        (click)="suspend(t)">
-                        Put on hold
-                      </button>
-                    } @else {
-                      <button
-                        type="button"
-                        class="inline-flex h-8 items-center rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint"
-                        [attr.aria-label]="'Reinstate ' + t.name"
-                        (click)="approve(t)">
-                        Reinstate
-                      </button>
-                    }
-
+            </thead>
+            <tbody>
+              @for (q of records0.page(); track q.vehicle.id) {
+                <tr class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint">
+                  <td class="px-4 py-3">
+                    <span class="cr-num block text-[13px] font-semibold">{{ q.vehicle.plate }}</span>
+                    <span class="block text-[12px] text-cr-ink-muted">{{ q.vehicle.model }}</span>
+                  </td>
+                  <td class="px-4 py-3 text-[13px]">
+                    {{ q.trucker.business_name ?? q.trucker.name }}
+                    <span class="cr-num block text-[12px] text-cr-ink-muted">{{ q.trucker.phone }}</span>
+                  </td>
+                  <td class="cr-num px-4 py-3 text-right text-[13px]">
+                    {{ q.vehicle.capacity_kg.toLocaleString() }} kg
+                  </td>
+                  <td class="cr-num px-4 py-3 text-[13px]">{{ photoCount(q.vehicle) }} of 6</td>
+                  <td class="px-4 py-3 text-right">
                     <button
                       type="button"
-                      class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
-                      [attr.aria-label]="'Open ' + t.name"
-                      (click)="open(t)">
-                      <app-icon name="chevron-right" [size]="16" />
+                      class="inline-flex h-8 items-center gap-1.5 rounded-control bg-cr-blue px-3 text-[12px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+                      [attr.aria-label]="'Check ' + q.vehicle.plate"
+                      (click)="review(q.trucker, q.vehicle)">
+                      <app-icon name="check" [size]="14" />
+                      Check truck
                     </button>
-                  </span>
-                </td>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </app-table-view>
+    } @else {
+      <app-table-view
+        #records1
+        [rows]="list"
+        [fields]="[
+          'name',
+          'business_name',
+          'phone',
+          'licence_no',
+          'status',
+          'trips_completed',
+          'commission_bp',
+        ]"
+        label="Search truckers"
+      >
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[980px] border-collapse text-left whitespace-nowrap">
+            <thead>
+              <tr class="border-b border-cr-line">
+                <th class="cr-th px-4 py-2.5">Trucker</th>
+                <th class="cr-th px-4 py-2.5">Truck</th>
+                <th class="cr-th px-4 py-2.5">Licence</th>
+                <th class="cr-th px-4 py-2.5 text-right">Trips</th>
+                <th class="cr-th px-4 py-2.5 text-right">Rate</th>
+                <th class="cr-th px-4 py-2.5">Standing</th>
+                <th class="cr-th px-4 py-2.5"><span class="sr-only">Actions</span></th>
               </tr>
-            }
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              @for (t of records1.page(); track t.id) {
+                <tr
+                  class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint">
+                  <td class="px-4 py-3">
+                    <span class="flex items-center gap-3">
+                      <span
+                        class="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-cr-tint text-[11px] font-semibold text-cr-blue">
+                        {{ initials(t.name) }}
+                      </span>
+                      <span>
+                        <span class="block text-[13px] font-semibold">{{ t.business_name ?? t.name }}</span>
+                        @if (t.business_name) {
+                          <span class="block text-[12px] text-cr-ink-muted">{{ t.name }}</span>
+                        }
+                        <span class="cr-num block text-[12px] text-cr-ink-muted">{{ t.phone }}</span>
+                      </span>
+                    </span>
+                  </td>
+
+                  <td class="px-4 py-3 text-[13px]">
+                    {{ plate(t) }}
+                    @if (trucksToCheck(t) > 0) {
+                      <span class="block text-[11px] font-semibold text-cr-warning">
+                        {{ trucksToCheck(t) }} to check
+                      </span>
+                    }
+                  </td>
+
+                  <td class="cr-num px-4 py-3 text-[13px]">{{ t.licence_no ?? '—' }}</td>
+
+                  <td class="cr-num px-4 py-3 text-right text-[13px]">{{ t.trips_completed }}</td>
+
+                  <td class="px-4 py-3 text-right">
+                    <span class="cr-num text-[13px] font-semibold">{{ rate(t.commission_bp) }}</span>
+                  </td>
+
+                  <td class="px-4 py-3">
+                    <span class="flex items-center gap-2">
+                      <app-status-pill [status]="t.status" />
+                      @if (t.status === 'active') {
+                        <span
+                          class="text-[11px] font-semibold"
+                          [class]="t.is_online ? 'text-cr-success' : 'text-cr-ink-muted'">
+                          {{ t.is_online ? 'online' : 'offline' }}
+                        </span>
+                      }
+                    </span>
+                  </td>
+
+                  <td class="px-4 py-3">
+                    <span class="flex items-center justify-end gap-1.5">
+                      @if (t.status === 'pending') {
+                        <button
+                          type="button"
+                          class="inline-flex h-8 items-center gap-1.5 rounded-control bg-cr-blue px-3 text-[12px] font-semibold text-cr-surface transition-colors hover:bg-cr-blue-hover"
+                          [attr.aria-label]="'Approve ' + t.name"
+                          (click)="approve(t)">
+                          <app-icon name="check" [size]="14" />
+                          Approve
+                        </button>
+                      } @else if (t.status === 'active') {
+                        <button
+                          type="button"
+                          class="inline-flex h-8 items-center rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-ink-muted transition-colors hover:border-cr-red hover:text-cr-red"
+                          [attr.aria-label]="'Put ' + t.name + ' on hold'"
+                          (click)="suspend(t)">
+                          Put on hold
+                        </button>
+                      } @else {
+                        <button
+                          type="button"
+                          class="inline-flex h-8 items-center rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-ink transition-colors hover:bg-cr-tint"
+                          [attr.aria-label]="'Reinstate ' + t.name"
+                          (click)="approve(t)">
+                          Reinstate
+                        </button>
+                      }
+
+                      <button
+                        type="button"
+                        class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
+                        [attr.aria-label]="'Open ' + t.name"
+                        (click)="open(t)">
+                        <app-icon name="chevron-right" [size]="16" />
+                      </button>
+                    </span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </app-table-view>
     }
   } @else if (!loadError()) {
     <div class="p-4"><app-skeleton-rows [count]="5" /></div>

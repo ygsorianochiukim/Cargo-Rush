@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
-import { map } from 'rxjs';
 
 import { LedgerEntry, Truck } from '../../models/finance/finance.model';
 import { netIncome, totalExpenses } from '../../services/finance/finance.math';
@@ -14,10 +13,14 @@ import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 import { LedgerDialog } from '../../shared/ledger-dialog';
 
+import { TableView } from '../../shared/table-view';
+
+import { allPages } from '../../services/shared/all-pages';
+
 @Component({
   selector: 'app-monitoring',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Card, Icon, EmptyState],
+  imports: [TableView, Card, Icon, EmptyState],
   templateUrl: './monitoring.page.html',
 })
 export class MonitoringPage {
@@ -38,7 +41,7 @@ export class MonitoringPage {
   });
 
   private readonly loaded = toSignal(
-    this.financeApi.ledger({ per_page: 100 }).pipe(map((r) => r.data)),
+    allPages((page) => this.financeApi.ledger(page)),
     { initialValue: null },
   );
 

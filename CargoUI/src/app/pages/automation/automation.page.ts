@@ -6,18 +6,20 @@ import {
   ElementRef,
   Injector,
   afterNextRender,
+  computed,
   inject,
   signal,
   viewChild,
 } from '@angular/core';
 import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
-import { EMPTY, Subject, catchError, exhaustMap, merge, switchMap, timer } from 'rxjs';
+import { EMPTY, Subject, catchError, debounceTime, exhaustMap, merge, switchMap, timer } from 'rxjs';
 
 import { Envelope } from '../../models/shared/envelope.model';
 import { ApiService } from '../../services/shared/api.service';
 import { Card } from '../../shared/card';
 import { DiscordBotSettings } from '../../shared/discord-bot-settings';
+import { TableSearch } from '../../shared/table-search';
 
 interface AutomationRun {
   id: string;
@@ -54,7 +56,7 @@ interface RunDetail {
 @Component({
   selector: 'app-automation-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Card, DatePipe, DecimalPipe, DiscordBotSettings, NgTemplateOutlet, RouterLink, TitleCasePipe],
+  imports: [Card, DatePipe, DecimalPipe, DiscordBotSettings, NgTemplateOutlet, RouterLink, TableSearch, TitleCasePipe],
   templateUrl: './automation.page.html',
 })
 export class AutomationPage {
@@ -68,7 +70,8 @@ export class AutomationPage {
   protected readonly dashboard = signal<Envelope<Dashboard> | null>(null);
   protected readonly detail = signal<Envelope<RunDetail> | null>(null);
   protected readonly historyPage = signal(1);
-  protected readonly selection = signal<{ id: string; page: number } | null>(null);
+  protected readonly historySearch = signal('');
+  protected readonly selection = signal<{ id: string; page: number; search: string } | null>(null);
   protected readonly dashboardError = signal('');
   protected readonly detailError = signal('');
 
@@ -80,12 +83,13 @@ export class AutomationPage {
   };
 
   constructor() {
-    toObservable(this.historyPage)
+    toObservable(computed(() => ({ page: this.historyPage(), search: this.historySearch().trim() })))
       .pipe(
-        switchMap((page) =>
+        debounceTime(200),
+        switchMap((query) =>
           this.updates.pipe(
             exhaustMap(() =>
-              this.api.envelope<Dashboard>('automation/runs', { page }).pipe(
+              this.api.envelope<Dashboard>('automation/runs', query).pipe(
                 catchError((error: unknown) => {
                   if (error instanceof HttpErrorResponse && [401, 403, 404].includes(error.status)) {
                     this.dashboard.set(null);
@@ -110,13 +114,17 @@ export class AutomationPage {
 
     toObservable(this.selection)
       .pipe(
+        debounceTime(200),
         switchMap((selection) =>
           selection === null
             ? EMPTY
             : this.updates.pipe(
                 exhaustMap(() =>
                   this.api
-                    .envelope<RunDetail>('automation/runs/' + selection.id, { page: selection.page })
+                    .envelope<RunDetail>('automation/runs/' + selection.id, {
+                      page: selection.page,
+                      search: selection.search.trim(),
+                    })
                     .pipe(
                       catchError((error: unknown) => {
                         if (
@@ -149,13 +157,22 @@ export class AutomationPage {
     if (id !== this.selection()?.id) {
       this.detail.set(null);
       this.detailError.set('');
-      this.selection.set({ id, page: 1 });
+      this.selection.set({ id, page: 1, search: '' });
     }
 
     afterNextRender(() => this.detailSection()?.nativeElement.focus(), { injector: this.injector });
   }
 
   protected readonly moveHistory = (page: number): void => this.historyPage.set(page);
+
+  protected searchHistory(search: string): void {
+    this.historySearch.set(search);
+    this.historyPage.set(1);
+  }
+
+  protected searchDetail(search: string): void {
+    this.selection.update((current) => current && { ...current, page: 1, search });
+  }
 
   protected readonly moveDetail = (page: number): void => {
     const selected = this.selection();

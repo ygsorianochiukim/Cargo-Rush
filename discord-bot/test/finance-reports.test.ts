@@ -78,3 +78,36 @@ it("does not post a report to a publicly visible text channel", async () => {
     rmSync(directory, { recursive: true, force: true });
   }
 });
+
+it("sends an aged receivable to the finance alert channel once across days and restarts", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "cargo-finance-"));
+  const file = join(directory, "deliveries.json");
+  const invoice = {
+    id: "invoice-1", invoice_number: "INV-123", issued_on: "2026-11-16",
+    age_days: 5, balance_cents: 170000, currency: "PHP",
+  };
+  const cargo = { financeActivity: async ({ kind, day }: Record<string, unknown>) => ({
+    data: {
+      events: kind === "aged-receivables" ? [{ ...invoice, age_days: day === "2026-11-21" ? 5 : 7 }] : [],
+      next: null,
+    },
+  }) } as unknown as CargoClient;
+  const finance = vi.fn().mockResolvedValue(undefined);
+  const alerts = vi.fn().mockResolvedValue(undefined);
+  const client = { channels: { fetch: async (id: string) => ({
+    type: ChannelType.GuildText, guild: { roles: { everyone: {} } },
+    permissionsFor: () => ({ has: () => false }),
+    send: id === "alerts" ? alerts : finance,
+  }) } } as unknown as Client;
+
+  try {
+    expect(await new FinanceReports(cargo, file, "Asia/Manila").tick(client, settings, afterMidnight)).toEqual([]);
+    expect(await new FinanceReports(cargo, file, "Asia/Manila").tick(client, settings, new Date("2026-11-22T16:01:00Z"))).toEqual([]);
+    expect(alerts).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
+      content: expect.stringMatching(/5 days old[\s\S]*INV-123[\s\S]*1,700\.00/),
+      enforceNonce: true,
+    }));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});

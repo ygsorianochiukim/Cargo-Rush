@@ -16,10 +16,12 @@ function today(): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-truck-report',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Card, Icon, NgTemplateOutlet],
+  imports: [TableView, Card, Icon, NgTemplateOutlet],
   templateUrl: './truck-report.page.html',
 })
 export class TruckReportPage {

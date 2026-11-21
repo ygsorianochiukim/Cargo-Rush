@@ -10,67 +10,116 @@
 
   <div class="cr-scroll min-h-0 flex-1 px-3 py-3">
     @if (groups(); as sections) {
-      @for (section of sections; track section.name) {
-        @if (!collapsed()) {
-          <p class="cr-meta px-3 pt-3 pb-1.5 first:pt-0">{{ section.name }}</p>
-        } @else if (!$first) {
-          <div class="mx-2 my-2 border-t border-cr-line"></div>
-        }
-        <ul class="flex flex-col gap-1">
-          @for (item of section.items; track item.key) {
-            <li>
-              <a
-                [routerLink]="item.route"
-                routerLinkActive
-                #rla="routerLinkActive"
-                (click)="navigate.emit()"
-                [attr.aria-current]="rla.isActive ? 'page' : null"
-                [attr.title]="collapsed() ? item.label : null"
-                class="relative flex h-10 items-center rounded-control px-3 transition-colors"
+      <ul class="space-y-1">
+        @for (section of sections; track section.name) {
+          @let expanded = openSection() === section.name;
+          @let current = activeItem()?.group === section.name;
+          <li>
+            <h2>
+              <button
+                type="button"
+                class="relative flex h-10 w-full items-center gap-2.5 rounded-control px-2 text-left text-[13px] font-semibold transition-colors hover:bg-cr-tint focus-visible:outline-2 focus-visible:outline-cr-blue"
                 [class.justify-center]="collapsed()"
-                [class.bg-cr-tint]="rla.isActive"
-                [class.text-cr-blue]="rla.isActive"
-                [class.text-cr-ink]="!rla.isActive"
-                [class.hover:bg-cr-tint]="!rla.isActive"
+                [class.bg-cr-tint]="expanded"
+                [class.text-cr-blue]="current"
+                [class.text-cr-ink]="!current"
+                [attr.aria-expanded]="expanded"
+                [attr.aria-controls]="section.id"
+                [attr.title]="collapsed() ? section.name : null"
+                (click)="toggleSection(section.name)"
               >
-                @if (rla.isActive) {
-                  <span class="absolute left-0 h-5 w-[3px] rounded-r-full bg-cr-blue"></span>
+                <app-icon [name]="section.icon" [size]="18" />
+                <span class="min-w-0 flex-1 truncate" [class.sr-only]="collapsed()">{{
+                  section.name
+                }}</span>
+                @if (current && !expanded) {
+                  <span class="sr-only">Contains the current page</span>
+                }
+                @if (!expanded && section.pending > 0) {
+                  <span class="sr-only">{{ section.pending }} pending</span>
+                  @if (collapsed()) {
+                    <span
+                      aria-hidden="true"
+                      class="absolute top-1.5 right-2 h-2 w-2 rounded-full bg-cr-red ring-2 ring-cr-surface"
+                    ></span>
+                  } @else {
+                    <span
+                      aria-hidden="true"
+                      class="cr-num rounded-full bg-cr-tint px-1.5 py-0.5 text-[11px] text-cr-blue"
+                      >{{ section.pending }}</span
+                    >
+                  }
                 }
                 <app-icon
-                  [name]="item.icon"
-                  [size]="20"
-                  [class.text-cr-blue]="rla.isActive"
-                  [class.text-cr-ink-muted]="!rla.isActive"
+                  name="chevron-right"
+                  [size]="collapsed() ? 10 : 14"
+                  class="text-cr-ink-muted transition-transform motion-reduce:transition-none"
+                  [class.rotate-90]="expanded"
+                  [class.absolute]="collapsed()"
+                  [class.right-1]="collapsed()"
+                  [class.bottom-1]="collapsed()"
                 />
-                @if (!collapsed()) {
-                  <span
-                    class="ml-3 min-w-0 flex-1 truncate text-[14px]"
-                    [class.font-semibold]="rla.isActive"
+              </button>
+            </h2>
+            <ul
+              [id]="section.id"
+              [hidden]="!expanded"
+              class="my-1 space-y-1"
+              [class.ml-3]="!collapsed()"
+              [class.border-l]="!collapsed()"
+              [class.border-cr-line]="!collapsed()"
+              [class.pl-2]="!collapsed()"
+            >
+              @for (item of section.items; track item.key) {
+                @let active = activeItem()?.key === item.key;
+                <li>
+                  <a
+                    [routerLink]="item.route"
+                    (click)="navigate.emit()"
+                    [attr.aria-current]="active ? 'page' : null"
+                    [attr.title]="item.label"
+                    class="relative flex h-9 items-center rounded-control px-2 transition-colors focus-visible:outline-2 focus-visible:outline-cr-blue"
+                    [class.justify-center]="collapsed()"
+                    [class.bg-cr-tint]="active"
+                    [class.text-cr-blue]="active"
+                    [class.text-cr-ink]="!active"
+                    [class.hover:bg-cr-tint]="!active"
                   >
-                    {{ item.label }}
-                  </span>
-                  @if (item.badge) {
+                    @if (active) {
+                      <span class="absolute left-0 h-5 w-[3px] rounded-r-full bg-cr-blue"></span>
+                    }
+                    <app-icon [name]="item.icon" [size]="17" [class.text-cr-ink-muted]="!active" />
                     <span
-                      class="cr-num ml-auto rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                      [class.bg-cr-blue]="rla.isActive"
-                      [class.text-cr-surface]="rla.isActive"
-                      [class.bg-cr-tint]="!rla.isActive"
-                      [class.text-cr-blue]="!rla.isActive"
+                      class="ml-2.5 min-w-0 flex-1 truncate text-[13px]"
+                      [class.font-semibold]="active"
+                      [class.sr-only]="collapsed()"
+                      >{{ item.label }}</span
                     >
-                      {{ item.badge }}
-                    </span>
-                  }
-                } @else if (item.badge) {
-                  <span
-                    class="absolute top-1.5 right-2 h-2 w-2 rounded-full bg-cr-red ring-2 ring-cr-surface"
-                    [attr.aria-label]="item.badge + ' pending'"
-                  ></span>
-                }
-              </a>
-            </li>
-          }
-        </ul>
-      }
+                    @if (!collapsed()) {
+                      @if (item.badge) {
+                        <span
+                          class="cr-num ml-1 rounded-full px-1.5 py-0.5 text-[11px] font-semibold"
+                          [class.bg-cr-blue]="active"
+                          [class.text-cr-surface]="active"
+                          [class.bg-cr-tint]="!active"
+                          [class.text-cr-blue]="!active"
+                        >
+                          {{ item.badge }}
+                        </span>
+                      }
+                    } @else if (item.badge) {
+                      <span
+                        class="absolute top-1.5 right-2 h-2 w-2 rounded-full bg-cr-red ring-2 ring-cr-surface"
+                        [attr.aria-label]="item.badge + ' pending'"
+                      ></span>
+                    }
+                  </a>
+                </li>
+              }
+            </ul>
+          </li>
+        }
+      </ul>
     } @else {
       <div class="flex flex-col gap-2 px-1" role="status" aria-label="Loading navigation">
         @for (row of skeletonRows; track row) {

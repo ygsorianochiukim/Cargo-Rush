@@ -6,8 +6,11 @@ namespace App\Domain\Assistant\Services;
 
 use App\Domain\Assistant\Models\AssistantSetting;
 use App\Domain\Automation\Models\AutomationRun;
+use App\Domain\Billing\Models\Invoice;
 use App\Domain\Billing\Models\Payment;
 use App\Domain\Finance\Models\DiscordExpenseReceipt;
+use App\Domain\Shared\Enums\InvoiceDirection;
+use App\Domain\Shared\Enums\StatusValue;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Carbon;
@@ -15,6 +18,8 @@ use Illuminate\Support\Facades\DB;
 
 class DiscordFinanceActivity
 {
+    private const RECEIVABLE_ALERT_AGE_DAYS = 5;
+
     /** @param array<string, mixed> $input */
     public function page(AssistantSetting $settings, array $input): array
     {
@@ -22,6 +27,10 @@ class DiscordFinanceActivity
         $window = [$start->copy()->utc(), $start->copy()->addDay()->utc()];
         $alerts = (bool) ($input['alerts'] ?? false);
         $kind = $input['kind'];
+        if ($kind === 'aged-receivables') {
+            return $this->agedReceivables($start, $input['after'] ?? null);
+        }
+
         [$query, $id, $date] = match ($kind) {
             'runs' => $this->runs($alerts),
             'changes' => $this->changes($settings->company_id),
@@ -60,6 +69,37 @@ class DiscordFinanceActivity
 
                 return $event;
             })->values(),
+            'next' => $rows->count() > 100 ? (string) $page->last()->id : null,
+        ];
+    }
+
+    /** @return array{events: array<int, array<string, mixed>>, next: ?string} */
+    private function agedReceivables(Carbon $day, ?string $after): array
+    {
+        $rows = Invoice::query()
+            ->select(['id', 'number', 'issued_at', 'amount_cents', 'withholding_cents', 'currency'])
+            ->withSum('allocations', 'amount_cents')
+            ->where('direction', InvoiceDirection::Receivable->value)
+            ->where('status', StatusValue::Pending->value)
+            ->whereDate('issued_at', '<=', $day->copy()->subDays(self::RECEIVABLE_ALERT_AGE_DAYS)->toDateString())
+            ->when($after !== null, fn ($query) => $query->where('id', '>', $after))
+            ->orderBy('id')->limit(101)->get();
+        $page = $rows->take(100);
+
+        return [
+            'events' => $page->filter(static fn (Invoice $invoice): bool => $invoice->balanceCents() > 0)
+                ->map(static function (Invoice $invoice) use ($day): array {
+                    $issued = $invoice->issued_at->toDateString();
+
+                    return [
+                        'id' => $invoice->id,
+                        'invoice_number' => $invoice->number,
+                        'issued_on' => $issued,
+                        'age_days' => (int) Carbon::parse($issued, $day->timezone)->diffInDays($day),
+                        'balance_cents' => $invoice->balanceCents(),
+                        'currency' => $invoice->currency,
+                    ];
+                })->values()->all(),
             'next' => $rows->count() > 100 ? (string) $page->last()->id : null,
         ];
     }

@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
-import { map } from 'rxjs';
 
 import { Asset, AssetTurnover, Custodian } from '../../models/asset/asset.model';
 import { StatusValue } from '../../models/shared/status.model';
@@ -25,6 +24,8 @@ const FILTERS: { key: StatusValue | 'all'; label: string }[] = [
 ];
 
 const CONDITION_LABEL: Record<string, string> = { good: 'Good', fair: 'Fair', damaged: 'Damaged' };
+
+import { allPages } from '../../services/shared/all-pages';
 
 @Component({
   selector: 'app-assets',
@@ -208,7 +209,7 @@ export class AssetsPage {
   protected readonly filters = FILTERS;
 
   protected readonly list = recordList<Asset>(this.spec, () =>
-    this.assetsApi.list({ per_page: 100 }).pipe(map((res) => res.data)),
+    allPages((page) => this.assetsApi.list(page)),
   );
 
   protected readonly filter = signal<StatusValue | 'all'>('all');

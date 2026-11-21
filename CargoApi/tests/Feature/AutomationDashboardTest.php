@@ -66,6 +66,15 @@ it('records scheduled and manual runs and links only the changes each run made',
         ->assertJsonCount(2, 'data.history')
         ->assertJsonPath('data.latest_finance_run.trigger', 'manual')
         ->assertJsonPath('data.latest_finance_run.changed_count', 0);
+
+    $this->getJson('/api/v1/automation/runs?search=scheduled&per_page=1')
+        ->assertOk()->assertJsonPath('meta.total', 1)->assertJsonPath('data.history.0.id', $run->id);
+    $this->getJson('/api/v1/automation/runs?search=Overdue%20invoice%20check&per_page=1&page=2')
+        ->assertOk()->assertJsonPath('meta.total', 2)->assertJsonPath('data.history.0.id', $run->id);
+    $this->getJson("/api/v1/automation/runs/{$run->id}?search=overdue")
+        ->assertOk()->assertJsonPath('meta.total', 1)->assertJsonPath('data.changes.0.invoice_id', $invoice->id);
+    $this->getJson("/api/v1/automation/runs/{$run->id}?search=missing")
+        ->assertOk()->assertJsonPath('meta.total', 0)->assertJsonCount(0, 'data.changes');
 });
 
 it('keeps automation history company scoped and restricts it to authorized users', function (): void {

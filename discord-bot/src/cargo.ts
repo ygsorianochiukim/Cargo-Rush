@@ -74,6 +74,16 @@ export class CargoClient {
     return this.fetch("assistant/finance-activity", query);
   }
 
+  testAlert(): Promise<unknown> {
+    return this.fetch("assistant/test-alert", {});
+  }
+
+  async finishTestAlert(id: string, result: { status: "delivered"; guild_id: string; message_id: string } | { status: "failed" }): Promise<void> {
+    await this.fetch("assistant/test-alert/" + id, {}, {
+      method: "POST", body: JSON.stringify(result), headers: { "Content-Type": "application/json" },
+    });
+  }
+
   payrollAlerts(channelId: string): Promise<unknown> {
     return this.fetch("assistant/payroll-alerts", { channel_id: channelId });
   }

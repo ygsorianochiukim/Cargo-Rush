@@ -15,10 +15,14 @@ import { WalletPanel } from '../../shared/wallet-panel';
 
 type Tab = 'pending' | 'trucks' | 'active' | 'inactive' | 'all';
 
+import { TableView } from '../../shared/table-view';
+
+import { allPages } from '../../services/shared/all-pages';
+
 @Component({
   selector: 'app-truckers',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Card, Icon, Modal, StatusPill, SkeletonRows, EmptyState, ErrorState, WalletPanel],
+  imports: [TableView, Card, Icon, Modal, StatusPill, SkeletonRows, EmptyState, ErrorState, WalletPanel],
   templateUrl: './truckers.page.html',
 })
 export class TruckersPage {
@@ -62,9 +66,9 @@ export class TruckersPage {
   }
 
   protected refresh(): void {
-    this.truckersApi.list({ per_page: 100 }).subscribe({
-      next: (res) => {
-        this.truckers.set(res.data);
+    allPages((page) => this.truckersApi.list(page)).subscribe({
+      next: (rows) => {
+        this.truckers.set(rows);
         this.loadError.set(null);
       },
       error: () => {
