@@ -1,6 +1,7 @@
 import { HttpErrorResponse } from '@angular/common/http';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
 import { Observable } from 'rxjs';
 
 import { Payables, PayableLine } from '../../models/finance/payables.model';
@@ -15,6 +16,7 @@ import { Modal } from '../../shared/modal';
 import { PaymentDialog } from '../../shared/payment-dialog';
 import { RecordDialog } from '../../shared/record-dialog';
 import { EmptyState, ErrorState, SkeletonRows } from '../../shared/states';
+import { TableView } from '../../shared/table-view';
 import { WalletPanel } from '../../shared/wallet-panel';
 import { OwnerCutoffDialog } from './owner-cutoff-dialog';
 import { PayrollSettleDialog } from './payroll-settle-dialog';
@@ -31,6 +33,8 @@ import { PayrollSettleDialog } from './payroll-settle-dialog';
     SkeletonRows,
     OwnerCutoffDialog,
     PayrollSettleDialog,
+    RouterLink,
+    TableView,
     WalletPanel,
   ],
   templateUrl: './payables.page.html',
@@ -91,6 +95,7 @@ export class PayablesPage {
         return;
 
       case '/payroll':
+      case '/payroll/crew':
         this.payrollFor.set(line);
 
         return;

@@ -18,6 +18,7 @@ class RestrictAssistantWrites
         if ($token instanceof PersonalAccessToken && in_array(AssistantService::ABILITY, $token->abilities, true)) {
             abort_unless($request->isMethodSafe() || $request->routeIs(
                 'assistant.bot-status',
+                'assistant.test-alert.finish',
                 'assistant.receipts.store',
                 'assistant.receipts.decide',
                 'assistant.receipts.edit-link',

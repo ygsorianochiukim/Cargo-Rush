@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { map } from 'rxjs';
 
 import { Supplier } from '../../models/supplier/supplier.model';
 import { supplierSpec } from '../../services/supplier/supplier.form';
@@ -10,6 +9,8 @@ import { fmt } from '../../shared/format';
 import { ListToolbar } from '../../shared/list-toolbar';
 import { recordList } from '../../shared/record-list';
 import { ErrorState } from '../../shared/states';
+
+import { allPages } from '../../services/shared/all-pages';
 
 @Component({
   selector: 'app-suppliers',
@@ -51,7 +52,7 @@ export class SuppliersPage {
   private readonly spec = supplierSpec();
 
   protected readonly list = recordList<Supplier>(this.spec, () =>
-    this.suppliersApi.list().pipe(map((res) => res.data)),
+    allPages((page) => this.suppliersApi.list(page)),
   );
 
   protected readonly label = (s: Supplier) => s.name;

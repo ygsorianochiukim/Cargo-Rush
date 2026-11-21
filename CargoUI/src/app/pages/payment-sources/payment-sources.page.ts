@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { map } from 'rxjs';
 
 import { PaymentSource } from '../../models/accounting/payment-source.model';
 import { paymentSourceSpec } from '../../services/accounting/payment-source.form';
@@ -10,6 +9,8 @@ import { fmt } from '../../shared/format';
 import { ListToolbar } from '../../shared/list-toolbar';
 import { recordList } from '../../shared/record-list';
 import { ErrorState } from '../../shared/states';
+
+import { allPages } from '../../services/shared/all-pages';
 
 @Component({
   selector: 'app-payment-sources',
@@ -51,7 +52,7 @@ export class PaymentSourcesPage {
   private readonly spec = paymentSourceSpec();
 
   protected readonly list = recordList<PaymentSource>(this.spec, () =>
-    this.sourcesApi.list().pipe(map((res) => res.data)),
+    allPages((page) => this.sourcesApi.list(page)),
   );
 
   protected readonly label = (s: PaymentSource) => s.label;

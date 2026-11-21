@@ -38,7 +38,7 @@ it('uses a planned pay date override and generates both drafts once at their due
         'role' => 'driver', 'employment' => 'company', 'name' => 'Marco Villanueva',
         'contact' => '0917 555 0102', 'licence_no' => 'N01-23-456789', 'licence_expiry' => '2029-08-31',
     ])->assertCreated()->json('data');
-    payContract(Employee::findOrFail($crew['employee_id']), 'per_trip', 150_000, '2026-01-05');
+    payContract(Employee::findOrFail($crew['employee_id']), 'monthly', 2_400_000, '2026-01-05');
 
     $this->artisan('cargo:payroll-drafts')->assertSuccessful();
     expect(PayRun::count())->toBe(0);
@@ -67,6 +67,36 @@ it('uses a planned pay date override and generates both drafts once at their due
         ->assertNoContent();
     $this->getJson('/api/v1/assistant/payroll-alerts?channel_id='.$this->hrChannel)
         ->assertOk()->assertJsonCount(1, 'data');
+
+    $crewAlert = collect($items)->firstWhere('scope', 'crew');
+    $this->postJson("/api/v1/assistant/payroll-alerts/{$crewAlert['id']}/delivered", ['channel_id' => $this->hrChannel])
+        ->assertNoContent();
+    $this->app['auth']->forgetGuards();
+
+    $this->actingAs($this->admin)->getJson('/api/v1/finance/payables')->assertOk()
+        ->assertJsonCount(2, 'data.payroll_drafts');
+    foreach ($runs as $run) {
+        $this->postJson("/api/v1/payroll/{$run->id}/approve")->assertOk();
+    }
+    $this->getJson('/api/v1/finance/payables')->assertOk()
+        ->assertJsonCount(0, 'data.payroll_drafts')
+        ->assertJsonPath('data.total_cents', $runs->sum(fn (PayRun $run) => $run->netCents()));
+    foreach ($runs as $run) {
+        $this->postJson("/api/v1/payroll/{$run->id}/pay")->assertOk()->assertJsonPath('data.status', 'paid');
+    }
+    $this->getJson('/api/v1/expenses/report?from=2026-11-22&to=2026-11-22')->assertOk()
+        ->assertJsonCount(2, 'data.payroll_audit.runs')
+        ->assertJsonPath('data.payroll_audit.runs.0.paid_date', '2026-11-22')
+        ->assertJsonPath('data.payroll_audit.runs.1.paid_date', '2026-11-22');
+    $this->app['auth']->forgetGuards();
+
+    $remaining = $this->withToken($token)->getJson('/api/v1/assistant/payroll-alerts?channel_id='.$this->hrChannel)
+        ->assertOk()->assertJsonCount(4, 'data')->json('data');
+    foreach (['office', 'crew'] as $scope) {
+        $events = collect($remaining)->where('scope', $scope)->keyBy('event');
+        expect($events->keys()->sort()->values()->all())->toBe(['approved', 'paid'])
+            ->and($events['paid']['paid_date'])->toBe('2026-11-22');
+    }
 });
 
 it('validates date overrides and can clear them to use the normal delay', function (): void {

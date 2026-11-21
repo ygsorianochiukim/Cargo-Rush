@@ -28,10 +28,12 @@ function lastDay(month: string): string {
   return `${month}-${String(end.getDate()).padStart(2, '0')}`;
 }
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-crew-pay-report',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Card, Field, Icon, EmptyState, ErrorState, SkeletonRows],
+  imports: [TableView, Card, Field, Icon, EmptyState, ErrorState, SkeletonRows],
   templateUrl: './crew-pay-report.page.html',
 })
 export class CrewPayReportPage {

@@ -83,6 +83,40 @@
       >
         {{ saving() ? 'Saving…' : 'Save Discord settings' }}
       </button>
+      <div class="mt-4 border-t border-cr-line pt-4">
+        <div class="flex flex-wrap gap-2">
+          <button
+            type="button"
+            class="h-9 rounded-control border border-cr-line px-3 text-sm font-semibold hover:bg-cr-tint disabled:opacity-50"
+            [disabled]="testDisabled() || !bot.paired || !bot.enabled || !(bot.discord_finance_alerts_channel_id || bot.discord_finance_channel_id)"
+            (click)="sendTest('finance')"
+          >Send Finance test alert</button>
+          <button
+            type="button"
+            class="h-9 rounded-control border border-cr-line px-3 text-sm font-semibold hover:bg-cr-tint disabled:opacity-50"
+            [disabled]="testDisabled() || !bot.paired || !bot.enabled || !bot.discord_hr_channel_id"
+            (click)="sendTest('hr')"
+          >Send HR test alert</button>
+        </div>
+        @if (testError()) {
+          <p role="alert" class="mt-2 text-sm text-cr-red">{{ testError() }}</p>
+        } @else if (bot.test_alert; as test) {
+          <p role="status" class="mt-2 text-sm">
+            {{ test.target === 'hr' ? 'HR' : 'Finance' }} test alert
+            @switch (test.status) {
+              @case ('queued') { queued. Waiting for the bot. }
+              @case ('delivered') {
+                delivered.
+                @if (test.message_url) {
+                  <a [href]="test.message_url" target="_blank" rel="noopener" class="font-semibold text-cr-blue hover:underline">View in Discord</a>
+                }
+              }
+              @case ('failed') { failed. Check the saved channel is private and the bot can post in it. }
+              @case ('expired') { expired before the bot reported delivery. Check the bot connection. }
+            }
+          </p>
+        }
+      </div>
     }
   } @else if (!error()) {
     <p role="status" class="cr-meta">Loading Discord bot settings…</p>

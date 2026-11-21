@@ -11,6 +11,7 @@ use App\Domain\Finance\Requests\ExpenseRequest;
 use App\Domain\Finance\Resources\ExpenseCategoryResource;
 use App\Domain\Finance\Resources\ExpenseResource;
 use App\Domain\Finance\Services\ExpenseService;
+use App\Domain\Finance\Services\PayrollCostService;
 use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -54,11 +55,15 @@ class ExpenseController extends ApiController
         return $this->noContent();
     }
 
-    public function report(Request $request): JsonResponse
+    public function report(Request $request, PayrollCostService $payroll): JsonResponse
     {
         [$from, $to] = $this->range($request);
+        $report = $this->expenses->report($from, $to);
+        if ($request->user()->hasPermission('payroll.view')) {
+            $report['payroll_audit'] = $payroll->expenseAudit($from, $to);
+        }
 
-        return $this->payload($this->expenses->report($from, $to));
+        return $this->payload($report);
     }
 
     public function categories(Request $request): JsonResponse

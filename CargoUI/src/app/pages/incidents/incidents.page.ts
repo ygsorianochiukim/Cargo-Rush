@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { map } from 'rxjs';
 
 import { Incident } from '../../models/incident/incident.model';
 import { incidentSpec } from '../../services/incident/incident.form';
@@ -10,6 +9,8 @@ import { fmt } from '../../shared/format';
 import { ListToolbar } from '../../shared/list-toolbar';
 import { recordList } from '../../shared/record-list';
 import { ErrorState } from '../../shared/states';
+
+import { allPages } from '../../services/shared/all-pages';
 
 @Component({
   selector: 'app-incidents',
@@ -52,7 +53,7 @@ export class IncidentsPage {
   private readonly spec = incidentSpec();
 
   protected readonly list = recordList<Incident>(this.spec, () =>
-    this.incidentsApi.list().pipe(map((res) => res.data)),
+    allPages((page) => this.incidentsApi.list(page)),
   );
 
   protected readonly label = (i: Incident) => i.reference;

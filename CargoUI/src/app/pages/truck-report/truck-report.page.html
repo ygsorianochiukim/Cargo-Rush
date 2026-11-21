@@ -212,28 +212,35 @@
 }
 
 <ng-template #lineTable let-lines>
-  <div class="overflow-x-auto border-t border-cr-line">
-    <table class="w-full min-w-[640px] text-left">
-      <thead>
-        <tr class="border-b border-cr-line">
-          <th class="cr-th px-4 py-2.5">Date</th>
-          <th class="cr-th px-4 py-2.5">Expense</th>
-          <th class="cr-th px-4 py-2.5">Details</th>
-          <th class="cr-th px-4 py-2.5">Paid with</th>
-          <th class="cr-th px-4 py-2.5 text-right">Amount</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (line of lines; track line.key) {
-          <tr class="border-b border-cr-line/70 last:border-0">
-            <td class="cr-num px-4 py-2.5 text-[13px]">{{ fmt.date(line.date) }}</td>
-            <td class="px-4 py-2.5 text-[13px] font-semibold">{{ line.kind }}</td>
-            <td class="px-4 py-2.5 text-[13px] text-cr-ink-muted">{{ line.description ?? '—' }}</td>
-            <td class="px-4 py-2.5 text-[13px] text-cr-ink-muted">{{ line.paid_with ?? '—' }}</td>
-            <td class="cr-num px-4 py-2.5 text-right text-[13px]">{{ fmt.pesos(line.amount_cents) }}</td>
+  <app-table-view
+    #records0
+    [rows]="lines"
+    [fields]="['description', 'kind', 'date', 'paid_with', 'amount_cents']"
+    label="Search cost transactions"
+  >
+    <div class="overflow-x-auto border-t border-cr-line">
+      <table class="w-full min-w-[640px] text-left">
+        <thead>
+          <tr class="border-b border-cr-line">
+            <th class="cr-th px-4 py-2.5">Date</th>
+            <th class="cr-th px-4 py-2.5">Expense</th>
+            <th class="cr-th px-4 py-2.5">Details</th>
+            <th class="cr-th px-4 py-2.5">Paid with</th>
+            <th class="cr-th px-4 py-2.5 text-right">Amount</th>
           </tr>
-        }
-      </tbody>
-    </table>
-  </div>
+        </thead>
+        <tbody>
+          @for (line of records0.page(); track line.key) {
+            <tr class="border-b border-cr-line/70 last:border-0">
+              <td class="cr-num px-4 py-2.5 text-[13px]">{{ fmt.date(line.date) }}</td>
+              <td class="px-4 py-2.5 text-[13px] font-semibold">{{ line.kind }}</td>
+              <td class="px-4 py-2.5 text-[13px] text-cr-ink-muted">{{ line.description ?? '—' }}</td>
+              <td class="px-4 py-2.5 text-[13px] text-cr-ink-muted">{{ line.paid_with ?? '—' }}</td>
+              <td class="cr-num px-4 py-2.5 text-right text-[13px]">{{ fmt.pesos(line.amount_cents) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </app-table-view>
 </ng-template>

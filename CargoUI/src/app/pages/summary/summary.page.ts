@@ -19,10 +19,12 @@ import { SplitBar, SplitPart } from '../../shared/split-bar';
 import { ExpenseLinesDialog } from './expense-lines.dialog';
 import { ReceivableLinesDialog } from './receivable-lines.dialog';
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-summary',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Card, ChartTooltip, ExpenseLinesDialog, Icon, MarginRing, ReceivableLinesDialog, SplitBar],
+  imports: [TableView, Card, ChartTooltip, ExpenseLinesDialog, Icon, MarginRing, ReceivableLinesDialog, SplitBar],
   templateUrl: './summary.page.html',
 })
 export class SummaryPage {

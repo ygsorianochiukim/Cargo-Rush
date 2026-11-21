@@ -188,35 +188,42 @@
             />
           </div>
         } @else {
-          <div class="flex flex-col divide-y divide-cr-line/70">
-            @for (candidate of list; track candidate.id) {
-              <button
-                type="button"
-                class="flex flex-col gap-1 px-4 py-3 text-left transition-colors hover:bg-cr-tint"
-                [class.bg-cr-tint]="run()?.id === candidate.id"
-                (click)="choose(candidate.id)"
-              >
-                <span class="flex flex-wrap items-center gap-2">
-                  <span class="cr-num text-[13px] font-semibold">{{ candidate.reference }}</span>
-                  <span
-                    class="rounded-full px-2 py-[2px] text-[10px] font-semibold tracking-[0.06em] uppercase"
-                    [class]="stateClass(candidate)"
-                  >
-                    {{ stateLabel(candidate) }}
+          <app-table-view
+            #payRuns
+            [rows]="list"
+            [fields]="['reference', 'status', 'period_label', 'net_cents', 'staff_count']"
+            label="Search pay runs"
+          >
+            <div class="flex flex-col divide-y divide-cr-line/70">
+              @for (candidate of payRuns.page(); track candidate.id) {
+                <button
+                  type="button"
+                  class="flex flex-col gap-1 px-4 py-3 text-left transition-colors hover:bg-cr-tint"
+                  [class.bg-cr-tint]="run()?.id === candidate.id"
+                  (click)="choose(candidate.id)"
+                >
+                  <span class="flex flex-wrap items-center gap-2">
+                    <span class="cr-num text-[13px] font-semibold">{{ candidate.reference }}</span>
+                    <span
+                      class="rounded-full px-2 py-[2px] text-[10px] font-semibold tracking-[0.06em] uppercase"
+                      [class]="stateClass(candidate)"
+                    >
+                      {{ stateLabel(candidate) }}
+                    </span>
                   </span>
-                </span>
-                <span class="text-[12px] text-cr-ink-muted">{{ candidate.period_label }}</span>
-                <span class="cr-num text-[13px]">
-                  {{ fmt.pesos(candidate.net_cents, candidate.currency) }}
-                  <span class="text-[12px] text-cr-ink-muted">
-                    take-home ·
-                    {{ candidate.staff_count }}
-                    {{ candidate.staff_count === 1 ? 'person' : 'people' }}</span
-                  >
-                </span>
-              </button>
-            }
-          </div>
+                  <span class="text-[12px] text-cr-ink-muted">{{ candidate.period_label }}</span>
+                  <span class="cr-num text-[13px]">
+                    {{ fmt.pesos(candidate.net_cents, candidate.currency) }}
+                    <span class="text-[12px] text-cr-ink-muted">
+                      take-home ·
+                      {{ candidate.staff_count }}
+                      {{ candidate.staff_count === 1 ? 'person' : 'people' }}</span
+                    >
+                  </span>
+                </button>
+              }
+            </div>
+          </app-table-view>
         }
       } @else {
         <p class="p-4 text-[13px] text-cr-ink-muted">Reading the payroll…</p>
@@ -364,28 +371,35 @@
           @if (slip.crew && trips(slip).length > 0) {
             <section class="border-t border-cr-ink/10 py-5">
               <h2 class="cr-meta">Hauls this cutoff</h2>
-              <table class="mt-2 w-full text-[13px]">
-                <thead>
-                  <tr class="border-b border-cr-ink/10 text-left">
-                    <th class="cr-meta py-1.5">Date</th>
-                    <th class="cr-meta py-1.5">Trip</th>
-                    <th class="cr-meta py-1.5">Route</th>
-                    <th class="cr-meta py-1.5">Truck</th>
-                    <th class="cr-meta py-1.5 text-right">Seat</th>
-                  </tr>
-                </thead>
-                <tbody class="divide-y divide-cr-ink/5">
-                  @for (trip of trips(slip); track trip.id) {
-                    <tr>
-                      <td class="cr-num py-1.5">{{ trip.on ? fmt.date(trip.on) : '—' }}</td>
-                      <td class="cr-num py-1.5 font-semibold">{{ trip.reference }}</td>
-                      <td class="py-1.5">{{ trip.origin }} → {{ trip.destination }}</td>
-                      <td class="cr-num py-1.5">{{ trip.plate ?? '—' }}</td>
-                      <td class="py-1.5 text-right">{{ seatLabel(trip) }}</td>
+              <app-table-view
+                #records0
+                [rows]="trips(slip)"
+                [fields]="['reference', 'on', 'origin', 'destination', 'plate']"
+                label="Search payslip trips"
+              >
+                <table class="mt-2 w-full text-[13px]">
+                  <thead>
+                    <tr class="border-b border-cr-ink/10 text-left">
+                      <th class="cr-meta py-1.5">Date</th>
+                      <th class="cr-meta py-1.5">Trip</th>
+                      <th class="cr-meta py-1.5">Route</th>
+                      <th class="cr-meta py-1.5">Truck</th>
+                      <th class="cr-meta py-1.5 text-right">Seat</th>
                     </tr>
-                  }
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody class="divide-y divide-cr-ink/5">
+                    @for (trip of records0.page(); track trip.id) {
+                      <tr>
+                        <td class="cr-num py-1.5">{{ trip.on ? fmt.date(trip.on) : '—' }}</td>
+                        <td class="cr-num py-1.5 font-semibold">{{ trip.reference }}</td>
+                        <td class="py-1.5">{{ trip.origin }} → {{ trip.destination }}</td>
+                        <td class="cr-num py-1.5">{{ trip.plate ?? '—' }}</td>
+                        <td class="py-1.5 text-right">{{ seatLabel(trip) }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </app-table-view>
             </section>
           }
 
@@ -661,323 +675,338 @@
             </div>
 
             @if (view() === 'simple') {
-              <section class="mt-4 flex flex-col gap-3">
-                @for (line of current.lines; track line.id) {
-                  <div class="cr-person rounded-card ring-1 ring-cr-line/60">
-                    <div class="flex flex-wrap items-center gap-x-4 gap-y-3 p-4">
-                      <div class="min-w-[160px] flex-1">
-                        <p class="text-[14px] font-semibold">{{ line.name }}</p>
-                        <p class="text-[12px] text-cr-ink-muted">
-                          {{ line.position ?? 'Staff' }}
-                          @if (line.employee_no) {
-                            <span class="cr-num"> · {{ line.employee_no }}</span>
-                          }
-                        </p>
-                      </div>
-
-                      <div class="text-right">
-                        <p class="cr-meta">Earned</p>
-                        <p class="cr-num text-[15px] font-semibold">
-                          {{ fmt.pesos(line.gross_cents) }}
-                        </p>
-                      </div>
-
-                      <span class="text-[16px] font-semibold text-cr-ink-muted">−</span>
-
-                      <div class="text-right">
-                        <p class="cr-meta">Held back</p>
-                        <p class="cr-num text-[15px] font-semibold">
-                          {{ fmt.pesos(line.deductions_cents) }}
-                        </p>
-                      </div>
-
-                      <span class="text-[16px] font-semibold text-cr-ink-muted">=</span>
-
-                      <div class="text-right">
-                        <p class="cr-meta">Take-home</p>
-                        <p class="cr-num text-[17px] font-bold text-cr-blue">
-                          {{ fmt.pesos(line.net_cents) }}
-                        </p>
-                      </div>
-
-                      <div class="cr-no-print flex flex-none items-center gap-2">
-                        <button
-                          type="button"
-                          class="flex h-8 items-center gap-1 rounded-control px-2.5 text-[12px] font-semibold text-cr-blue ring-1 ring-cr-line transition-colors hover:bg-cr-tint"
-                          [attr.aria-expanded]="isOpen(line.id)"
-                          (click)="toggle(line.id)"
-                        >
-                          {{ isOpen(line.id) ? 'Hide' : 'How was this worked out?' }}
-                          <app-icon
-                            [name]="isOpen(line.id) ? 'chevron-left' : 'chevron-right'"
-                            [size]="14"
-                          />
-                        </button>
-                        <button
-                          type="button"
-                          class="h-8 rounded-control px-2.5 text-[12px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
-                          (click)="payslip.set(line)"
-                        >
-                          Payslip
-                        </button>
-                      </div>
-                    </div>
-
-                    @if (isOpen(line.id)) {
-                      @if (line.zero_explanation; as why) {
-                        <div class="border-t border-cr-line/70 px-4 pt-4">
-                          <p
-                            class="rounded-control bg-cr-warning-bg px-3 py-2 text-[13px] text-cr-ink"
-                          >
-                            <span class="font-semibold">Nothing to pay.</span> {{ why }}
+              <app-table-view
+                #staff
+                [rows]="current.lines"
+                [fields]="['name', 'employee_no', 'position', 'basic_cents', 'gross_cents', 'net_cents']"
+                label="Search payroll employees"
+              >
+                <section class="mt-4 flex flex-col gap-3">
+                  @for (line of staff.page(); track line.id) {
+                    <div class="cr-person rounded-card ring-1 ring-cr-line/60">
+                      <div class="flex flex-wrap items-center gap-x-4 gap-y-3 p-4">
+                        <div class="min-w-[160px] flex-1">
+                          <p class="text-[14px] font-semibold">{{ line.name }}</p>
+                          <p class="text-[12px] text-cr-ink-muted">
+                            {{ line.position ?? 'Staff' }}
+                            @if (line.employee_no) {
+                              <span class="cr-num"> · {{ line.employee_no }}</span>
+                            }
                           </p>
                         </div>
-                      }
 
-                      <div
-                        class="grid grid-cols-1 gap-6 border-t border-cr-line/70 p-4 sm:grid-cols-2"
-                      >
-                        <div>
-                          <h3 class="cr-meta">What {{ line.name.split(' ')[0] }} earned</h3>
-                          <div class="mt-2 flex flex-col gap-2.5">
-                            @for (part of earnings(current, line); track part.label) {
-                              <div class="flex items-start gap-3">
-                                <div class="min-w-0 flex-1">
-                                  <p class="text-[13px]">{{ part.label }}</p>
-                                  <p class="text-[12px] text-cr-ink-muted">{{ part.why }}</p>
-                                </div>
-                                @if (current.can_edit && part.field !== null) {
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    [attr.min]="part.signed ? null : 0"
-                                    [class]="cellClass"
-                                    [value]="pesos(part.cents)"
-                                    (change)="
-                                      edit(current, line, part.field, $any($event.target).value)
-                                    "
-                                  />
-                                } @else {
-                                  <p class="cr-num w-24 flex-none text-right text-[13px]">
-                                    {{ fmt.pesos(part.cents) }}
-                                  </p>
-                                }
-                              </div>
-                            }
-
-                            @if (current.can_edit) {
-                              <input
-                                type="text"
-                                placeholder="Note on the adjustment — e.g. 13th month advance"
-                                class="h-8 w-full rounded-control border border-cr-line bg-cr-surface px-2 text-[12px] focus:border-cr-blue focus:outline-none"
-                                [value]="line.adjustment_note ?? ''"
-                                (change)="
-                                  note(current, line, 'adjustment_note', $any($event.target).value)
-                                "
-                              />
-                            }
-
-                            <div class="flex items-center gap-3 border-t border-cr-line/70 pt-2">
-                              <p class="min-w-0 flex-1 text-[13px] font-semibold">Total earned</p>
-                              <p class="cr-num w-24 flex-none text-right text-[13px] font-semibold">
-                                {{ fmt.pesos(line.gross_cents) }}
-                              </p>
-                            </div>
-                          </div>
+                        <div class="text-right">
+                          <p class="cr-meta">Earned</p>
+                          <p class="cr-num text-[15px] font-semibold">
+                            {{ fmt.pesos(line.gross_cents) }}
+                          </p>
                         </div>
 
-                        <div>
-                          <h3 class="cr-meta">What was held back, and who gets it</h3>
-                          <div class="mt-2 flex flex-col gap-2.5">
-                            @for (part of deductions(current, line); track part.label) {
-                              <div class="flex items-start gap-3">
-                                <div class="min-w-0 flex-1">
-                                  <p class="text-[13px]">{{ part.label }}</p>
-                                  <p class="text-[12px] text-cr-ink-muted">{{ part.why }}</p>
-                                </div>
-                                @if (current.can_edit) {
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    [class]="cellClass"
-                                    [value]="pesos(part.cents)"
-                                    (change)="
-                                      edit(current, line, part.field, $any($event.target).value)
-                                    "
-                                  />
-                                } @else {
-                                  <p class="cr-num w-24 flex-none text-right text-[13px]">
-                                    {{ fmt.pesos(part.cents) }}
-                                  </p>
-                                }
-                              </div>
-                            }
+                        <span class="text-[16px] font-semibold text-cr-ink-muted">−</span>
 
-                            @for (charge of charges(line); track charge.id) {
-                              <div class="flex items-start gap-3">
-                                <div class="min-w-0 flex-1">
-                                  <p class="text-[13px]">{{ charge.name }}</p>
-                                  <p class="text-[12px] text-cr-ink-muted">
-                                    {{
-                                      charge.added_by_hand
-                                        ? 'Added on this run.'
-                                        : 'From the salary structure — end the assignment to stop it.'
-                                    }}
-                                  </p>
-                                </div>
-                                <p class="cr-num w-24 flex-none text-right text-[13px]">
-                                  {{ fmt.pesos(charge.amount_cents) }}
-                                </p>
-                                @if (current.can_edit && charge.added_by_hand) {
-                                  <button
-                                    type="button"
-                                    class="cr-no-print -mr-1 h-6 w-6 flex-none rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red disabled:opacity-50"
-                                    [attr.aria-label]="'Remove ' + charge.name"
-                                    [disabled]="busy()"
-                                    (click)="removeDeduction(current, line, charge.id)"
-                                  >
-                                    <app-icon name="close" [size]="13" class="mx-auto" />
-                                  </button>
-                                } @else {
-                                  <span class="w-6 flex-none"></span>
-                                }
-                              </div>
-                            }
+                        <div class="text-right">
+                          <p class="cr-meta">Held back</p>
+                          <p class="cr-num text-[15px] font-semibold">
+                            {{ fmt.pesos(line.deductions_cents) }}
+                          </p>
+                        </div>
 
-                            @if (current.can_edit) {
-                              <div class="cr-no-print flex items-end gap-2 pt-1">
-                                <label class="min-w-0 flex-1">
-                                  <span class="sr-only">Deduction</span>
-                                  <input
-                                    type="text"
-                                    list="cr-deductions"
-                                    placeholder="Add a deduction — uniform, breakage, advance"
-                                    class="h-8 w-full rounded-control border border-cr-line bg-cr-surface px-2 text-[12px] focus:border-cr-blue focus:outline-none"
-                                    [value]="draftFor(line.id).name"
-                                    (input)="setDraft(line.id, 'name', $any($event.target).value)"
-                                  />
-                                </label>
-                                <label class="w-24 flex-none">
-                                  <span class="sr-only">Amount in pesos</span>
-                                  <input
-                                    type="number"
-                                    step="0.01"
-                                    min="0"
-                                    placeholder="0.00"
-                                    [class]="cellClass"
-                                    [value]="draftFor(line.id).amount"
-                                    (input)="setDraft(line.id, 'amount', $any($event.target).value)"
-                                  />
-                                </label>
-                                <button
-                                  type="button"
-                                  class="h-8 flex-none rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint disabled:opacity-50"
-                                  [disabled]="busy()"
-                                  (click)="addDeduction(current, line)"
-                                >
-                                  Add
-                                </button>
-                              </div>
-                            }
+                        <span class="text-[16px] font-semibold text-cr-ink-muted">=</span>
 
-                            @if (current.can_edit) {
-                              <input
-                                type="text"
-                                placeholder="Note on the advance — e.g. cash advance, 20 Aug"
-                                class="h-8 w-full rounded-control border border-cr-line bg-cr-surface px-2 text-[12px] focus:border-cr-blue focus:outline-none"
-                                [value]="line.deduction_note ?? ''"
-                                (change)="
-                                  note(current, line, 'deduction_note', $any($event.target).value)
-                                "
-                              />
-                            }
+                        <div class="text-right">
+                          <p class="cr-meta">Take-home</p>
+                          <p class="cr-num text-[17px] font-bold text-cr-blue">
+                            {{ fmt.pesos(line.net_cents) }}
+                          </p>
+                        </div>
 
-                            <div class="flex items-center gap-3 border-t border-cr-line/70 pt-2">
-                              <p class="min-w-0 flex-1 text-[13px] font-semibold">
-                                Total held back
-                              </p>
-                              <p class="cr-num w-24 flex-none text-right text-[13px] font-semibold">
-                                {{ fmt.pesos(line.deductions_cents) }}
-                              </p>
-                            </div>
-                          </div>
+                        <div class="cr-no-print flex flex-none items-center gap-2">
+                          <button
+                            type="button"
+                            class="flex h-8 items-center gap-1 rounded-control px-2.5 text-[12px] font-semibold text-cr-blue ring-1 ring-cr-line transition-colors hover:bg-cr-tint"
+                            [attr.aria-expanded]="isOpen(line.id)"
+                            (click)="toggle(line.id)"
+                          >
+                            {{ isOpen(line.id) ? 'Hide' : 'How was this worked out?' }}
+                            <app-icon
+                              [name]="isOpen(line.id) ? 'chevron-left' : 'chevron-right'"
+                              [size]="14"
+                            />
+                          </button>
+                          <button
+                            type="button"
+                            class="h-8 rounded-control px-2.5 text-[12px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+                            (click)="payslip.set(line)"
+                          >
+                            Payslip
+                          </button>
                         </div>
                       </div>
 
-                      @if (line.crew) {
-                        <div class="border-t border-cr-line/70 px-4 py-4">
-                          <h3 class="cr-meta">
-                            Hauls this cutoff
-                            <span class="ml-1 font-normal normal-case tracking-normal">
-                              · {{ trips(line).length }}
-                              {{ trips(line).length === 1 ? 'trip' : 'trips' }} on record
-                            </span>
-                          </h3>
-                          @for (span of line.hired_out; track span.from + span.plate) {
+                      @if (isOpen(line.id)) {
+                        @if (line.zero_explanation; as why) {
+                          <div class="border-t border-cr-line/70 px-4 pt-4">
                             <p
-                              class="mt-2 flex items-start gap-2 rounded-control bg-cr-warning-bg px-3 py-2 text-[12px]"
+                              class="rounded-control bg-cr-warning-bg px-3 py-2 text-[13px] text-cr-ink"
                             >
-                              <app-icon name="fleet" [size]="14" class="mt-0.5 flex-none text-cr-warning" />
-                              <span class="min-w-0 flex-1">
-                                Assigned to <span class="cr-num font-semibold">{{ span.plate ?? 'a truck' }}</span>
-                                ({{ span.arrangement_label }}) from {{ fmt.date(span.from) }} to
-                                {{ fmt.date(span.to) }}. Hauls and sheet days in that stretch are not paid
-                                here — whoever hires the truck pays them.
-                              </span>
+                              <span class="font-semibold">Nothing to pay.</span> {{ why }}
                             </p>
-                          }
-                          @if (trips(line).length > 0) {
-                            <table class="mt-2 w-full text-[13px]">
-                              <thead>
-                                <tr class="border-b border-cr-line/70 text-left">
-                                  <th class="cr-meta py-1.5">Date</th>
-                                  <th class="cr-meta py-1.5">Trip</th>
-                                  <th class="cr-meta py-1.5">Route</th>
-                                  <th class="cr-meta py-1.5">Truck</th>
-                                  <th class="cr-meta py-1.5 text-right">Seat</th>
-                                </tr>
-                              </thead>
-                              <tbody class="divide-y divide-cr-line/50">
-                                @for (trip of trips(line); track trip.id) {
-                                  <tr>
-                                    <td class="cr-num py-1.5">{{ trip.on ? fmt.date(trip.on) : '—' }}</td>
-                                    <td class="cr-num py-1.5 font-semibold">{{ trip.reference }}</td>
-                                    <td class="py-1.5">{{ trip.origin }} → {{ trip.destination }}</td>
-                                    <td class="cr-num py-1.5">{{ trip.plate ?? '—' }}</td>
-                                    <td class="py-1.5 text-right">{{ seatLabel(trip) }}</td>
-                                  </tr>
-                                }
-                              </tbody>
-                            </table>
-                          } @else {
-                            <p class="mt-1 text-[12px] text-cr-ink-muted">
-                              No delivered trip names this person between these two dates.
-                            </p>
-                          }
-                        </div>
-                      }
+                          </div>
+                        }
 
-                      @if (current.can_edit) {
-                        <p
-                          class="cr-no-print border-t border-cr-line/70 px-4 py-2.5 text-[12px] text-cr-ink-muted"
+                        <div
+                          class="grid grid-cols-1 gap-6 border-t border-cr-line/70 p-4 sm:grid-cols-2"
                         >
-                          Changing an allowance or an overtime figure does
-                          <strong>not</strong> move the withholding tax. That is deliberate: the
-                          BIR's table would tax a one-off as if it were regular pay. Use
-                          <em>Work out again</em> if the tax needs redoing from scratch.
-                        </p>
+                          <div>
+                            <h3 class="cr-meta">What {{ line.name.split(' ')[0] }} earned</h3>
+                            <div class="mt-2 flex flex-col gap-2.5">
+                              @for (part of earnings(current, line); track part.label) {
+                                <div class="flex items-start gap-3">
+                                  <div class="min-w-0 flex-1">
+                                    <p class="text-[13px]">{{ part.label }}</p>
+                                    <p class="text-[12px] text-cr-ink-muted">{{ part.why }}</p>
+                                  </div>
+                                  @if (current.can_edit && part.field !== null) {
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      [attr.min]="part.signed ? null : 0"
+                                      [class]="cellClass"
+                                      [value]="pesos(part.cents)"
+                                      (change)="
+                                        edit(current, line, part.field, $any($event.target).value)
+                                      "
+                                    />
+                                  } @else {
+                                    <p class="cr-num w-24 flex-none text-right text-[13px]">
+                                      {{ fmt.pesos(part.cents) }}
+                                    </p>
+                                  }
+                                </div>
+                              }
+
+                              @if (current.can_edit) {
+                                <input
+                                  type="text"
+                                  placeholder="Note on the adjustment — e.g. 13th month advance"
+                                  class="h-8 w-full rounded-control border border-cr-line bg-cr-surface px-2 text-[12px] focus:border-cr-blue focus:outline-none"
+                                  [value]="line.adjustment_note ?? ''"
+                                  (change)="
+                                    note(current, line, 'adjustment_note', $any($event.target).value)
+                                  "
+                                />
+                              }
+
+                              <div class="flex items-center gap-3 border-t border-cr-line/70 pt-2">
+                                <p class="min-w-0 flex-1 text-[13px] font-semibold">Total earned</p>
+                                <p class="cr-num w-24 flex-none text-right text-[13px] font-semibold">
+                                  {{ fmt.pesos(line.gross_cents) }}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <h3 class="cr-meta">What was held back, and who gets it</h3>
+                            <div class="mt-2 flex flex-col gap-2.5">
+                              @for (part of deductions(current, line); track part.label) {
+                                <div class="flex items-start gap-3">
+                                  <div class="min-w-0 flex-1">
+                                    <p class="text-[13px]">{{ part.label }}</p>
+                                    <p class="text-[12px] text-cr-ink-muted">{{ part.why }}</p>
+                                  </div>
+                                  @if (current.can_edit) {
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      [class]="cellClass"
+                                      [value]="pesos(part.cents)"
+                                      (change)="
+                                        edit(current, line, part.field, $any($event.target).value)
+                                      "
+                                    />
+                                  } @else {
+                                    <p class="cr-num w-24 flex-none text-right text-[13px]">
+                                      {{ fmt.pesos(part.cents) }}
+                                    </p>
+                                  }
+                                </div>
+                              }
+
+                              @for (charge of charges(line); track charge.id) {
+                                <div class="flex items-start gap-3">
+                                  <div class="min-w-0 flex-1">
+                                    <p class="text-[13px]">{{ charge.name }}</p>
+                                    <p class="text-[12px] text-cr-ink-muted">
+                                      {{
+                                        charge.added_by_hand
+                                          ? 'Added on this run.'
+                                          : 'From the salary structure — end the assignment to stop it.'
+                                      }}
+                                    </p>
+                                  </div>
+                                  <p class="cr-num w-24 flex-none text-right text-[13px]">
+                                    {{ fmt.pesos(charge.amount_cents) }}
+                                  </p>
+                                  @if (current.can_edit && charge.added_by_hand) {
+                                    <button
+                                      type="button"
+                                      class="cr-no-print -mr-1 h-6 w-6 flex-none rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red disabled:opacity-50"
+                                      [attr.aria-label]="'Remove ' + charge.name"
+                                      [disabled]="busy()"
+                                      (click)="removeDeduction(current, line, charge.id)"
+                                    >
+                                      <app-icon name="close" [size]="13" class="mx-auto" />
+                                    </button>
+                                  } @else {
+                                    <span class="w-6 flex-none"></span>
+                                  }
+                                </div>
+                              }
+
+                              @if (current.can_edit) {
+                                <div class="cr-no-print flex items-end gap-2 pt-1">
+                                  <label class="min-w-0 flex-1">
+                                    <span class="sr-only">Deduction</span>
+                                    <input
+                                      type="text"
+                                      list="cr-deductions"
+                                      placeholder="Add a deduction — uniform, breakage, advance"
+                                      class="h-8 w-full rounded-control border border-cr-line bg-cr-surface px-2 text-[12px] focus:border-cr-blue focus:outline-none"
+                                      [value]="draftFor(line.id).name"
+                                      (input)="setDraft(line.id, 'name', $any($event.target).value)"
+                                    />
+                                  </label>
+                                  <label class="w-24 flex-none">
+                                    <span class="sr-only">Amount in pesos</span>
+                                    <input
+                                      type="number"
+                                      step="0.01"
+                                      min="0"
+                                      placeholder="0.00"
+                                      [class]="cellClass"
+                                      [value]="draftFor(line.id).amount"
+                                      (input)="setDraft(line.id, 'amount', $any($event.target).value)"
+                                    />
+                                  </label>
+                                  <button
+                                    type="button"
+                                    class="h-8 flex-none rounded-control border border-cr-line px-3 text-[12px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint disabled:opacity-50"
+                                    [disabled]="busy()"
+                                    (click)="addDeduction(current, line)"
+                                  >
+                                    Add
+                                  </button>
+                                </div>
+                              }
+
+                              @if (current.can_edit) {
+                                <input
+                                  type="text"
+                                  placeholder="Note on the advance — e.g. cash advance, 20 Aug"
+                                  class="h-8 w-full rounded-control border border-cr-line bg-cr-surface px-2 text-[12px] focus:border-cr-blue focus:outline-none"
+                                  [value]="line.deduction_note ?? ''"
+                                  (change)="
+                                    note(current, line, 'deduction_note', $any($event.target).value)
+                                  "
+                                />
+                              }
+
+                              <div class="flex items-center gap-3 border-t border-cr-line/70 pt-2">
+                                <p class="min-w-0 flex-1 text-[13px] font-semibold">
+                                  Total held back
+                                </p>
+                                <p class="cr-num w-24 flex-none text-right text-[13px] font-semibold">
+                                  {{ fmt.pesos(line.deductions_cents) }}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        @if (line.crew) {
+                          <div class="border-t border-cr-line/70 px-4 py-4">
+                            <h3 class="cr-meta">
+                              Hauls this cutoff
+                              <span class="ml-1 font-normal normal-case tracking-normal">
+                                · {{ trips(line).length }}
+                                {{ trips(line).length === 1 ? 'trip' : 'trips' }} on record
+                              </span>
+                            </h3>
+                            @for (span of line.hired_out; track span.from + span.plate) {
+                              <p
+                                class="mt-2 flex items-start gap-2 rounded-control bg-cr-warning-bg px-3 py-2 text-[12px]"
+                              >
+                                <app-icon name="fleet" [size]="14" class="mt-0.5 flex-none text-cr-warning" />
+                                <span class="min-w-0 flex-1">
+                                  Assigned to <span class="cr-num font-semibold">{{ span.plate ?? 'a truck' }}</span>
+                                  ({{ span.arrangement_label }}) from {{ fmt.date(span.from) }} to
+                                  {{ fmt.date(span.to) }}. Hauls and sheet days in that stretch are not paid
+                                  here — whoever hires the truck pays them.
+                                </span>
+                              </p>
+                            }
+                            @if (trips(line).length > 0) {
+                              <app-table-view
+                                #records1
+                                [rows]="trips(line)"
+                                [fields]="['reference', 'on', 'origin', 'destination', 'plate']"
+                                label="Search employee trips"
+                              >
+                                <table class="mt-2 w-full text-[13px]">
+                                  <thead>
+                                    <tr class="border-b border-cr-line/70 text-left">
+                                      <th class="cr-meta py-1.5">Date</th>
+                                      <th class="cr-meta py-1.5">Trip</th>
+                                      <th class="cr-meta py-1.5">Route</th>
+                                      <th class="cr-meta py-1.5">Truck</th>
+                                      <th class="cr-meta py-1.5 text-right">Seat</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody class="divide-y divide-cr-line/50">
+                                    @for (trip of records1.page(); track trip.id) {
+                                      <tr>
+                                        <td class="cr-num py-1.5">{{ trip.on ? fmt.date(trip.on) : '—' }}</td>
+                                        <td class="cr-num py-1.5 font-semibold">{{ trip.reference }}</td>
+                                        <td class="py-1.5">{{ trip.origin }} → {{ trip.destination }}</td>
+                                        <td class="cr-num py-1.5">{{ trip.plate ?? '—' }}</td>
+                                        <td class="py-1.5 text-right">{{ seatLabel(trip) }}</td>
+                                      </tr>
+                                    }
+                                  </tbody>
+                                </table>
+                              </app-table-view>
+                            } @else {
+                              <p class="mt-1 text-[12px] text-cr-ink-muted">
+                                No delivered trip names this person between these two dates.
+                              </p>
+                            }
+                          </div>
+                        }
+
+                        @if (current.can_edit) {
+                          <p
+                            class="cr-no-print border-t border-cr-line/70 px-4 py-2.5 text-[12px] text-cr-ink-muted"
+                          >
+                            Changing an allowance or an overtime figure does
+                            <strong>not</strong> move the withholding tax. That is deliberate: the
+                            BIR's table would tax a one-off as if it were regular pay. Use
+                            <em>Work out again</em> if the tax needs redoing from scratch.
+                          </p>
+                        }
                       }
-                    }
-                  </div>
-                } @empty {
-                  <app-empty-state
-                    icon="wallet"
-                    title="Nobody is on this run"
-                    [body]="nobodyCopy()"
-                  />
-                }
-              </section>
+                    </div>
+                  }
+                  @if (!current.lines.length) {
+                    <app-empty-state
+                      icon="wallet"
+                      title="Nobody is on this run"
+                      [body]="nobodyCopy()"
+                    />
+                  }
+                </section>
+              </app-table-view>
             } @else {
               @if (current.can_edit) {
                 <p
@@ -990,230 +1019,245 @@
               }
 
               <section class="mt-4 overflow-x-auto">
-                <table class="w-full min-w-[900px] text-[13px]">
-                  <thead>
-                    <tr class="border-b border-cr-ink/20 text-left">
-                      <th class="cr-meta py-2">Employee</th>
-                      <th class="cr-meta py-2 text-right">Basic</th>
-                      <th class="cr-meta py-2 text-right">Allowance</th>
-                      <th class="cr-meta py-2 text-right">Overtime</th>
-                      <th class="cr-meta py-2 text-right">Adjustment</th>
-                      <th class="cr-meta py-2 text-right">Earned</th>
-                      <th class="cr-meta py-2 text-right">SSS</th>
-                      <th class="cr-meta py-2 text-right">PhilHealth</th>
-                      <th class="cr-meta py-2 text-right">Pag-IBIG</th>
-                      <th class="cr-meta py-2 text-right">Tax</th>
-                      <th class="cr-meta py-2 text-right">Advance</th>
-                      <th class="cr-meta py-2 text-right">Take-home</th>
-                      <th class="cr-meta py-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-cr-line/70">
-                    @for (line of current.lines; track line.id) {
-                      <tr>
-                        <td class="py-2">
-                          <span class="block font-semibold">{{ line.name }}</span>
-                          <span class="block text-[12px] text-cr-ink-muted">
-                            {{ line.position ?? 'Staff' }}
-                            @if (line.employee_no) {
-                              <span class="cr-num"> · {{ line.employee_no }}</span>
-                            }
-                          </span>
-                        </td>
-                        <td class="cr-num py-2 text-right">{{ fmt.pesos(line.basic_cents) }}</td>
+                <app-table-view
+                  #records2
+                  [rows]="current.lines"
+                  [fields]="[
+                    'name',
+                    'employee_no',
+                    'position',
+                    'basic_cents',
+                    'gross_cents',
+                    'net_cents',
+                    'adjustments_cents',
+                  ]"
+                  label="Search payroll employees"
+                >
+                  <table class="w-full min-w-[900px] text-[13px]">
+                    <thead>
+                      <tr class="border-b border-cr-ink/20 text-left">
+                        <th class="cr-meta py-2">Employee</th>
+                        <th class="cr-meta py-2 text-right">Basic</th>
+                        <th class="cr-meta py-2 text-right">Allowance</th>
+                        <th class="cr-meta py-2 text-right">Overtime</th>
+                        <th class="cr-meta py-2 text-right">Adjustment</th>
+                        <th class="cr-meta py-2 text-right">Earned</th>
+                        <th class="cr-meta py-2 text-right">SSS</th>
+                        <th class="cr-meta py-2 text-right">PhilHealth</th>
+                        <th class="cr-meta py-2 text-right">Pag-IBIG</th>
+                        <th class="cr-meta py-2 text-right">Tax</th>
+                        <th class="cr-meta py-2 text-right">Advance</th>
+                        <th class="cr-meta py-2 text-right">Take-home</th>
+                        <th class="cr-meta py-2"></th>
+                      </tr>
+                    </thead>
+                    <tbody class="divide-y divide-cr-line/70">
+                      @for (line of records2.page(); track line.id) {
+                        <tr>
+                          <td class="py-2">
+                            <span class="block font-semibold">{{ line.name }}</span>
+                            <span class="block text-[12px] text-cr-ink-muted">
+                              {{ line.position ?? 'Staff' }}
+                              @if (line.employee_no) {
+                                <span class="cr-num"> · {{ line.employee_no }}</span>
+                              }
+                            </span>
+                          </td>
+                          <td class="cr-num py-2 text-right">{{ fmt.pesos(line.basic_cents) }}</td>
 
-                        @if (current.can_edit) {
-                          <td class="py-2 text-right">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              [class]="cellClass"
-                              [value]="pesos(line.allowance_cents)"
-                              (change)="
-                                edit(current, line, 'allowance_cents', $any($event.target).value)
-                              "
-                            />
-                          </td>
-                          <td class="py-2 text-right">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              [class]="cellClass"
-                              [value]="pesos(line.overtime_cents)"
-                              (change)="
-                                edit(current, line, 'overtime_cents', $any($event.target).value)
-                              "
-                            />
-                          </td>
-                          <td class="py-2 text-right">
-                            <input
-                              type="number"
-                              step="0.01"
-                              [class]="cellClass"
-                              [value]="pesos(line.adjustments_cents)"
-                              (change)="
-                                edit(current, line, 'adjustments_cents', $any($event.target).value)
-                              "
-                            />
-                          </td>
-                        } @else {
-                          <td class="cr-num py-2 text-right">
-                            {{ line.allowance_cents ? fmt.pesos(line.allowance_cents) : '—' }}
-                          </td>
-                          <td class="cr-num py-2 text-right">
-                            {{ line.overtime_cents ? fmt.pesos(line.overtime_cents) : '—' }}
-                          </td>
-                          <td class="cr-num py-2 text-right">
-                            {{ line.adjustments_cents ? fmt.pesos(line.adjustments_cents) : '—' }}
-                          </td>
-                        }
+                          @if (current.can_edit) {
+                            <td class="py-2 text-right">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                [class]="cellClass"
+                                [value]="pesos(line.allowance_cents)"
+                                (change)="
+                                  edit(current, line, 'allowance_cents', $any($event.target).value)
+                                "
+                              />
+                            </td>
+                            <td class="py-2 text-right">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                [class]="cellClass"
+                                [value]="pesos(line.overtime_cents)"
+                                (change)="
+                                  edit(current, line, 'overtime_cents', $any($event.target).value)
+                                "
+                              />
+                            </td>
+                            <td class="py-2 text-right">
+                              <input
+                                type="number"
+                                step="0.01"
+                                [class]="cellClass"
+                                [value]="pesos(line.adjustments_cents)"
+                                (change)="
+                                  edit(current, line, 'adjustments_cents', $any($event.target).value)
+                                "
+                              />
+                            </td>
+                          } @else {
+                            <td class="cr-num py-2 text-right">
+                              {{ line.allowance_cents ? fmt.pesos(line.allowance_cents) : '—' }}
+                            </td>
+                            <td class="cr-num py-2 text-right">
+                              {{ line.overtime_cents ? fmt.pesos(line.overtime_cents) : '—' }}
+                            </td>
+                            <td class="cr-num py-2 text-right">
+                              {{ line.adjustments_cents ? fmt.pesos(line.adjustments_cents) : '—' }}
+                            </td>
+                          }
 
-                        <td class="cr-num py-2 text-right font-semibold">
-                          {{ fmt.pesos(line.gross_cents) }}
-                        </td>
+                          <td class="cr-num py-2 text-right font-semibold">
+                            {{ fmt.pesos(line.gross_cents) }}
+                          </td>
 
-                        @if (current.can_edit) {
-                          <td class="py-2 text-right">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              [class]="cellClass"
-                              [value]="pesos(line.sss_cents)"
-                              (change)="edit(current, line, 'sss_cents', $any($event.target).value)"
-                            />
-                          </td>
-                          <td class="py-2 text-right">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              [class]="cellClass"
-                              [value]="pesos(line.philhealth_cents)"
-                              (change)="
-                                edit(current, line, 'philhealth_cents', $any($event.target).value)
-                              "
-                            />
-                          </td>
-                          <td class="py-2 text-right">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              [class]="cellClass"
-                              [value]="pesos(line.pagibig_cents)"
-                              (change)="
-                                edit(current, line, 'pagibig_cents', $any($event.target).value)
-                              "
-                            />
-                          </td>
-                          <td class="py-2 text-right">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              [class]="cellClass"
-                              [value]="pesos(line.withholding_tax_cents)"
-                              (change)="
-                                edit(
-                                  current,
-                                  line,
-                                  'withholding_tax_cents',
-                                  $any($event.target).value
-                                )
-                              "
-                            />
-                          </td>
-                          <td class="py-2 text-right">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              [class]="cellClass"
-                              [value]="pesos(line.other_deductions_cents)"
-                              (change)="
-                                edit(
-                                  current,
-                                  line,
-                                  'other_deductions_cents',
-                                  $any($event.target).value
-                                )
-                              "
-                            />
-                          </td>
-                        } @else {
-                          <td class="cr-num py-2 text-right">{{ fmt.pesos(line.sss_cents) }}</td>
-                          <td class="cr-num py-2 text-right">
-                            {{ fmt.pesos(line.philhealth_cents) }}
-                          </td>
-                          <td class="cr-num py-2 text-right">
-                            {{ fmt.pesos(line.pagibig_cents) }}
-                          </td>
-                          <td class="cr-num py-2 text-right">
-                            {{ fmt.pesos(line.withholding_tax_cents) }}
-                          </td>
-                          <td class="cr-num py-2 text-right">
-                            {{
-                              line.other_deductions_cents
-                                ? fmt.pesos(line.other_deductions_cents)
-                                : '—'
-                            }}
-                          </td>
-                        }
+                          @if (current.can_edit) {
+                            <td class="py-2 text-right">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                [class]="cellClass"
+                                [value]="pesos(line.sss_cents)"
+                                (change)="edit(current, line, 'sss_cents', $any($event.target).value)"
+                              />
+                            </td>
+                            <td class="py-2 text-right">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                [class]="cellClass"
+                                [value]="pesos(line.philhealth_cents)"
+                                (change)="
+                                  edit(current, line, 'philhealth_cents', $any($event.target).value)
+                                "
+                              />
+                            </td>
+                            <td class="py-2 text-right">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                [class]="cellClass"
+                                [value]="pesos(line.pagibig_cents)"
+                                (change)="
+                                  edit(current, line, 'pagibig_cents', $any($event.target).value)
+                                "
+                              />
+                            </td>
+                            <td class="py-2 text-right">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                [class]="cellClass"
+                                [value]="pesos(line.withholding_tax_cents)"
+                                (change)="
+                                  edit(
+                                    current,
+                                    line,
+                                    'withholding_tax_cents',
+                                    $any($event.target).value
+                                  )
+                                "
+                              />
+                            </td>
+                            <td class="py-2 text-right">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                [class]="cellClass"
+                                [value]="pesos(line.other_deductions_cents)"
+                                (change)="
+                                  edit(
+                                    current,
+                                    line,
+                                    'other_deductions_cents',
+                                    $any($event.target).value
+                                  )
+                                "
+                              />
+                            </td>
+                          } @else {
+                            <td class="cr-num py-2 text-right">{{ fmt.pesos(line.sss_cents) }}</td>
+                            <td class="cr-num py-2 text-right">
+                              {{ fmt.pesos(line.philhealth_cents) }}
+                            </td>
+                            <td class="cr-num py-2 text-right">
+                              {{ fmt.pesos(line.pagibig_cents) }}
+                            </td>
+                            <td class="cr-num py-2 text-right">
+                              {{ fmt.pesos(line.withholding_tax_cents) }}
+                            </td>
+                            <td class="cr-num py-2 text-right">
+                              {{
+                                line.other_deductions_cents
+                                  ? fmt.pesos(line.other_deductions_cents)
+                                  : '—'
+                              }}
+                            </td>
+                          }
 
+                          <td class="cr-num py-2 text-right font-bold">
+                            {{ fmt.pesos(line.net_cents) }}
+                          </td>
+
+                          <td class="cr-no-print py-2 text-right">
+                            <button
+                              type="button"
+                              class="text-[12px] font-semibold text-cr-blue hover:underline"
+                              (click)="payslip.set(line)"
+                            >
+                              Payslip
+                            </button>
+                          </td>
+                        </tr>
+                      } @empty {
+                        <tr>
+                          <td class="py-8 text-center text-cr-ink-muted" colspan="13">
+                            Nobody is on this run. {{ nobodyCopy() }}
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                    <tfoot>
+                      <tr class="border-t-2 border-cr-ink/20">
+                        <td class="py-2 font-bold">Totals</td>
+                        <td class="cr-num py-2 text-right" colspan="4"></td>
                         <td class="cr-num py-2 text-right font-bold">
-                          {{ fmt.pesos(line.net_cents) }}
+                          {{ fmt.pesos(current.gross_cents) }}
                         </td>
-
-                        <td class="cr-no-print py-2 text-right">
-                          <button
-                            type="button"
-                            class="text-[12px] font-semibold text-cr-blue hover:underline"
-                            (click)="payslip.set(line)"
-                          >
-                            Payslip
-                          </button>
+                        <td class="cr-num py-2 text-right font-bold">
+                          {{ fmt.pesos(current.statutory.sss) }}
                         </td>
+                        <td class="cr-num py-2 text-right font-bold">
+                          {{ fmt.pesos(current.statutory.philhealth) }}
+                        </td>
+                        <td class="cr-num py-2 text-right font-bold">
+                          {{ fmt.pesos(current.statutory.pagibig) }}
+                        </td>
+                        <td class="cr-num py-2 text-right font-bold">
+                          {{ fmt.pesos(current.statutory.withholding_tax) }}
+                        </td>
+                        <td class="cr-num py-2 text-right font-bold">
+                          {{ fmt.pesos(current.statutory.other) }}
+                        </td>
+                        <td class="cr-num py-2 text-right font-bold">
+                          {{ fmt.pesos(current.net_cents) }}
+                        </td>
+                        <td></td>
                       </tr>
-                    } @empty {
-                      <tr>
-                        <td class="py-8 text-center text-cr-ink-muted" colspan="13">
-                          Nobody is on this run. {{ nobodyCopy() }}
-                        </td>
-                      </tr>
-                    }
-                  </tbody>
-                  <tfoot>
-                    <tr class="border-t-2 border-cr-ink/20">
-                      <td class="py-2 font-bold">Totals</td>
-                      <td class="cr-num py-2 text-right" colspan="4"></td>
-                      <td class="cr-num py-2 text-right font-bold">
-                        {{ fmt.pesos(current.gross_cents) }}
-                      </td>
-                      <td class="cr-num py-2 text-right font-bold">
-                        {{ fmt.pesos(current.statutory.sss) }}
-                      </td>
-                      <td class="cr-num py-2 text-right font-bold">
-                        {{ fmt.pesos(current.statutory.philhealth) }}
-                      </td>
-                      <td class="cr-num py-2 text-right font-bold">
-                        {{ fmt.pesos(current.statutory.pagibig) }}
-                      </td>
-                      <td class="cr-num py-2 text-right font-bold">
-                        {{ fmt.pesos(current.statutory.withholding_tax) }}
-                      </td>
-                      <td class="cr-num py-2 text-right font-bold">
-                        {{ fmt.pesos(current.statutory.other) }}
-                      </td>
-                      <td class="cr-num py-2 text-right font-bold">
-                        {{ fmt.pesos(current.net_cents) }}
-                      </td>
-                      <td></td>
-                    </tr>
-                  </tfoot>
-                </table>
+                    </tfoot>
+                  </table>
+                </app-table-view>
               </section>
             }
           </article>

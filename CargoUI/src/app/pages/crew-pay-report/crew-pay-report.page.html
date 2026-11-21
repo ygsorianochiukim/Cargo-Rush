@@ -227,59 +227,75 @@
               @if (cutoff.trips.length === 0) {
                 <p class="mt-1 text-[13px] text-cr-ink-muted">No delivered trip names this person in this cutoff.</p>
               } @else {
-                <table class="mt-2 w-full text-[13px]">
-                  <thead>
-                    <tr class="border-b border-cr-line/70 text-left">
-                      <th class="cr-meta py-1.5">Date</th>
-                      <th class="cr-meta py-1.5">Trip</th>
-                      <th class="cr-meta py-1.5">Route</th>
-                      <th class="cr-meta py-1.5">Truck</th>
-                      <th class="cr-meta py-1.5">Seat</th>
-                      <th class="cr-meta py-1.5 text-right">Rate</th>
-                      <th class="cr-meta py-1.5">Paid on</th>
-                    </tr>
-                  </thead>
-                  <tbody class="divide-y divide-cr-line/50">
-                    @for (trip of cutoff.trips; track trip.id) {
-                      <tr [class.opacity-60]="!trip.counted">
-                        <td class="cr-num py-1.5">{{ fmt.date(trip.on) }}</td>
-                        <td class="cr-num py-1.5 font-semibold">{{ trip.reference }}</td>
-                        <td class="py-1.5">
-                          {{ trip.origin }} → {{ trip.destination }}
-                          @if (!trip.counted) {
-                            <span class="block text-[11px] text-cr-warning">Withheld · {{ trip.withheld_reason }}</span>
-                          }
-                        </td>
-                        <td class="cr-num py-1.5">{{ trip.plate ?? '—' }}</td>
-                        <td class="py-1.5">{{ seat(trip) }}</td>
-                        <td class="cr-num py-1.5 text-right">
-                          @if (cutoff.pay_basis === 'per_trip') {
-                            {{ trip.counted ? fmt.pesos(cutoff.rate_cents) : '—' }}
-                          } @else {
-                            —
-                          }
-                        </td>
-                        <td class="cr-num py-1.5 text-[12px]">
-                          @if (trip.paid_on_run) {
-                            {{ trip.paid_on_run }}
-                            <span class="text-cr-ink-muted">· {{ trip.paid_on_run_status }}</span>
-                          } @else {
-                            <span class="text-cr-ink-muted">not yet</span>
-                          }
-                        </td>
+                <app-table-view
+                  #records0
+                  [rows]="cutoff.trips"
+                  [fields]="[
+                    'reference',
+                    'on',
+                    'origin',
+                    'destination',
+                    'plate',
+                    'paid_on_run',
+                    'paid_on_run_status',
+                    'withheld_reason',
+                  ]"
+                  label="Search crew trips"
+                >
+                  <table class="mt-2 w-full text-[13px]">
+                    <thead>
+                      <tr class="border-b border-cr-line/70 text-left">
+                        <th class="cr-meta py-1.5">Date</th>
+                        <th class="cr-meta py-1.5">Trip</th>
+                        <th class="cr-meta py-1.5">Route</th>
+                        <th class="cr-meta py-1.5">Truck</th>
+                        <th class="cr-meta py-1.5">Seat</th>
+                        <th class="cr-meta py-1.5 text-right">Rate</th>
+                        <th class="cr-meta py-1.5">Paid on</th>
                       </tr>
+                    </thead>
+                    <tbody class="divide-y divide-cr-line/50">
+                      @for (trip of records0.page(); track trip.id) {
+                        <tr [class.opacity-60]="!trip.counted">
+                          <td class="cr-num py-1.5">{{ fmt.date(trip.on) }}</td>
+                          <td class="cr-num py-1.5 font-semibold">{{ trip.reference }}</td>
+                          <td class="py-1.5">
+                            {{ trip.origin }} → {{ trip.destination }}
+                            @if (!trip.counted) {
+                              <span class="block text-[11px] text-cr-warning">Withheld · {{ trip.withheld_reason }}</span>
+                            }
+                          </td>
+                          <td class="cr-num py-1.5">{{ trip.plate ?? '—' }}</td>
+                          <td class="py-1.5">{{ seat(trip) }}</td>
+                          <td class="cr-num py-1.5 text-right">
+                            @if (cutoff.pay_basis === 'per_trip') {
+                              {{ trip.counted ? fmt.pesos(cutoff.rate_cents) : '—' }}
+                            } @else {
+                              —
+                            }
+                          </td>
+                          <td class="cr-num py-1.5 text-[12px]">
+                            @if (trip.paid_on_run) {
+                              {{ trip.paid_on_run }}
+                              <span class="text-cr-ink-muted">· {{ trip.paid_on_run_status }}</span>
+                            } @else {
+                              <span class="text-cr-ink-muted">not yet</span>
+                            }
+                          </td>
+                        </tr>
+                      }
+                    </tbody>
+                    @if (cutoff.pay_basis === 'per_trip') {
+                      <tfoot>
+                        <tr class="border-t-2 border-cr-ink/20">
+                          <td class="py-2 font-bold" colspan="5">{{ formula(cutoff) }}</td>
+                          <td class="cr-num py-2 text-right font-bold">{{ fmt.pesos(cutoff.expected_cents) }}</td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
                     }
-                  </tbody>
-                  @if (cutoff.pay_basis === 'per_trip') {
-                    <tfoot>
-                      <tr class="border-t-2 border-cr-ink/20">
-                        <td class="py-2 font-bold" colspan="5">{{ formula(cutoff) }}</td>
-                        <td class="cr-num py-2 text-right font-bold">{{ fmt.pesos(cutoff.expected_cents) }}</td>
-                        <td></td>
-                      </tr>
-                    </tfoot>
-                  }
-                </table>
+                  </table>
+                </app-table-view>
               }
 
               @if (cutoff.pay_basis === 'daily' || cutoff.sheet_days.length > 0) {
@@ -287,37 +303,44 @@
                 @if (cutoff.sheet_days.length === 0) {
                   <p class="mt-1 text-[13px] text-cr-ink-muted">No sheet row names this person in this cutoff.</p>
                 } @else {
-                  <table class="mt-2 w-full text-[13px]">
-                    <thead>
-                      <tr class="border-b border-cr-line/70 text-left">
-                        <th class="cr-meta py-1.5">Date</th>
-                        <th class="cr-meta py-1.5">Unit</th>
-                        <th class="cr-meta py-1.5">Seat</th>
-                        <th class="cr-meta py-1.5 text-right">On the sheet</th>
-                        <th class="cr-meta py-1.5 text-right">Counted</th>
-                      </tr>
-                    </thead>
-                    <tbody class="divide-y divide-cr-line/50">
-                      @for (day of cutoff.sheet_days; track day.on + day.truck) {
-                        <tr [class.opacity-60]="!day.counted">
-                          <td class="cr-num py-1.5">{{ fmt.date(day.on) }}</td>
-                          <td class="py-1.5">{{ day.truck ?? '—' }}</td>
-                          <td class="py-1.5">{{ day.seat === 'driver' ? 'Drove' : 'Helper' }}</td>
-                          <td class="cr-num py-1.5 text-right">{{ fmt.pesos(day.salary_cents) }}</td>
-                          <td class="py-1.5 text-right">{{ day.counted ? 'Yes' : 'Withheld' }}</td>
+                  <app-table-view
+                    #records1
+                    [rows]="cutoff.sheet_days"
+                    [fields]="['on', 'truck', 'seat', 'salary_cents']"
+                    label="Search trip-sheet days"
+                  >
+                    <table class="mt-2 w-full text-[13px]">
+                      <thead>
+                        <tr class="border-b border-cr-line/70 text-left">
+                          <th class="cr-meta py-1.5">Date</th>
+                          <th class="cr-meta py-1.5">Unit</th>
+                          <th class="cr-meta py-1.5">Seat</th>
+                          <th class="cr-meta py-1.5 text-right">On the sheet</th>
+                          <th class="cr-meta py-1.5 text-right">Counted</th>
                         </tr>
+                      </thead>
+                      <tbody class="divide-y divide-cr-line/50">
+                        @for (day of records1.page(); track day.on + day.truck) {
+                          <tr [class.opacity-60]="!day.counted">
+                            <td class="cr-num py-1.5">{{ fmt.date(day.on) }}</td>
+                            <td class="py-1.5">{{ day.truck ?? '—' }}</td>
+                            <td class="py-1.5">{{ day.seat === 'driver' ? 'Drove' : 'Helper' }}</td>
+                            <td class="cr-num py-1.5 text-right">{{ fmt.pesos(day.salary_cents) }}</td>
+                            <td class="py-1.5 text-right">{{ day.counted ? 'Yes' : 'Withheld' }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                      @if (cutoff.pay_basis === 'daily') {
+                        <tfoot>
+                          <tr class="border-t-2 border-cr-ink/20">
+                            <td class="py-2 font-bold" colspan="3">{{ formula(cutoff) }}</td>
+                            <td class="cr-num py-2 text-right font-bold">{{ fmt.pesos(cutoff.expected_cents) }}</td>
+                            <td></td>
+                          </tr>
+                        </tfoot>
                       }
-                    </tbody>
-                    @if (cutoff.pay_basis === 'daily') {
-                      <tfoot>
-                        <tr class="border-t-2 border-cr-ink/20">
-                          <td class="py-2 font-bold" colspan="3">{{ formula(cutoff) }}</td>
-                          <td class="cr-num py-2 text-right font-bold">{{ fmt.pesos(cutoff.expected_cents) }}</td>
-                          <td></td>
-                        </tr>
-                      </tfoot>
-                    }
-                  </table>
+                    </table>
+                  </app-table-view>
                 }
               }
             </div>

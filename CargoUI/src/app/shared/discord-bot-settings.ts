@@ -9,6 +9,7 @@ import {
   AssistantChannelField,
   DiscordBotConfiguration,
   DiscordBotSettings as BotSettings,
+  DiscordTestAlert,
 } from '../models/assistant/assistant.model';
 import { AssistantService } from '../services/assistant/assistant.service';
 import { IdentityService } from '../services/identity/identity.service';
@@ -47,6 +48,8 @@ export class DiscordBotSettings {
   protected readonly settings = signal<BotSettings | null>(null);
   protected readonly draft = signal<DiscordBotConfiguration | null>(null);
   protected readonly saving = signal(false);
+  protected readonly queueingTest = signal(false);
+  protected readonly testError = signal('');
   protected readonly error = signal('');
   protected readonly notice = signal('');
   protected readonly fieldErrors = signal<Record<string, string[]>>({});
@@ -62,6 +65,8 @@ export class DiscordBotSettings {
       .map((key) => [key, form[key]])) as Partial<DiscordBotConfiguration>;
   });
   protected readonly dirty = computed(() => Object.keys(this.changes()).length > 0);
+  protected readonly testDisabled = computed(() => this.dirty() || this.saving() || this.queueingTest() ||
+    this.settings()?.test_alert?.status === 'queued');
   protected readonly connection = computed(() => {
     const settings = this.settings();
     if (!settings?.paired) return 'Unpaired';
@@ -77,7 +82,7 @@ export class DiscordBotSettings {
 
   constructor() {
     merge(timer(0, 30_000), this.reload).pipe(
-      filter(() => !this.saving()),
+      filter(() => !this.saving() && !this.queueingTest()),
       exhaustMap(() => this.api.discordSettings().pipe(
         takeUntil(this.savingStarted),
         catchError((error: unknown) => {
@@ -121,6 +126,29 @@ export class DiscordBotSettings {
     this.draft.update((draft) => draft && {
       ...draft,
       discord_payment_alert_pesos: Number.isNaN(value) ? null : value,
+    });
+  }
+
+  protected sendTest(target: DiscordTestAlert['target']): void {
+    if (this.testDisabled()) return;
+
+    this.queueingTest.set(true);
+    this.savingStarted.next();
+    this.testError.set('');
+    this.api.sendDiscordTestAlert(target).pipe(
+      takeUntilDestroyed(this.destroyRef),
+      finalize(() => {
+        this.queueingTest.set(false);
+        this.refresh();
+      }),
+    ).subscribe({
+      next: (test_alert) => {
+        this.settings.update((settings) => settings && { ...settings, test_alert });
+      },
+      error: (error: unknown) => {
+        const message = error instanceof HttpErrorResponse ? error.error?.message : null;
+        this.testError.set(typeof message === 'string' ? message : 'Could not queue a Discord test alert.');
+      },
     });
   }
 

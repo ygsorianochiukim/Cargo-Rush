@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import type { Client, MessageCreateOptions } from "discord.js";
+import { type Client, escapeMarkdown, type MessageCreateOptions } from "discord.js";
 import { z } from "zod";
 
 import type { CargoClient } from "./cargo.js";
@@ -25,6 +25,13 @@ const receiptExpense = base.extend({
 });
 
 const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const agedReceivable = z.object({
+  id: z.string(), invoice_number: z.string(), issued_on: dateKey,
+  age_days: z.number().int().min(5), balance_cents: z.number().int().positive(), currency: z.string(),
+});
+const AGED_RECEIVABLE_KEY = "aged-receivable:";
+const AGING_CHECK_INTERVAL_MS = 15 * 60_000;
+
 const progress = z.object({
   firstAlertDay: dateKey,
   lastReportDay: dateKey.nullable(),
@@ -59,6 +66,7 @@ function runLine(event: z.infer<typeof run>): string {
 
 export class FinanceReports {
   private saved: Record<string, Progress> = {};
+  private readonly nextAgingCheck = new Map<string, number>();
   private stateError = false;
 
   constructor(private readonly cargo: CargoClient, private readonly file: string, private readonly timezone: string) {
@@ -82,7 +90,7 @@ export class FinanceReports {
     const reportDay = state.lastReportDay ? moveDay(state.lastReportDay, 1) : yesterday;
     const oldest = reportDay < yesterday ? reportDay : yesterday;
     for (const [id, day] of Object.entries(state.sent)) {
-      if (day < oldest) delete state.sent[id];
+      if (day < oldest && !id.startsWith(AGED_RECEIVABLE_KEY)) delete state.sent[id];
     }
 
     const failures: string[] = [];
@@ -106,6 +114,25 @@ export class FinanceReports {
       }
     } catch (error) {
       failures.push(this.failure("Finance alerts", error));
+    }
+
+    if (now.getTime() >= (this.nextAgingCheck.get(key) ?? 0)) {
+      try {
+        for await (const page of this.pages("aged-receivables", today, agedReceivable, true)) {
+          for (const invoice of page.events) {
+            const balance = new Intl.NumberFormat("en-PH", { style: "currency", currency: invoice.currency })
+              .format(invoice.balance_cents / 100);
+            await this.send(client, alerts, state, today, AGED_RECEIVABLE_KEY + invoice.id, {
+              content: "**Pending receivable · " + invoice.age_days + " days old**\n" +
+                "Invoice " + escapeMarkdown(invoice.invoice_number) + " · issued " + invoice.issued_on +
+                "\nOutstanding balance **" + balance + "**",
+            });
+          }
+        }
+        this.nextAgingCheck.set(key, now.getTime() + AGING_CHECK_INTERVAL_MS);
+      } catch (error) {
+        failures.push(this.failure("Pending receivables", error));
+      }
     }
 
     if (reportDay < today) {
@@ -178,7 +205,7 @@ export class FinanceReports {
   }
 
   private async send(client: Client, channelId: string, state: Progress, day: string, id: string, message: MessageCreateOptions): Promise<void> {
-    const delivery = day + ":" + id;
+    const delivery = id.startsWith(AGED_RECEIVABLE_KEY) ? id : day + ":" + id;
     if (state.sent[delivery]) return;
 
     const channel = await privateTextChannel(client, channelId);

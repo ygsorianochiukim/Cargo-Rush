@@ -39,6 +39,7 @@ export class Layout {
   private readonly tripDialog = inject(TripDialog);
 
   private readonly width = signal(typeof window === 'undefined' ? 1440 : window.innerWidth);
+  private readonly desktopCollapsed = signal<boolean | null>(null);
 
   protected readonly drawerOpen = signal(false);
 
@@ -67,13 +68,19 @@ export class Layout {
     return 'mobile';
   });
 
-  protected readonly collapsed = computed(() => this.breakpoint() === 'rail');
+  protected readonly collapsed = computed(() => this.desktopCollapsed() ?? (this.breakpoint() === 'rail'));
 
   protected readonly overlay = computed(
     () => this.breakpoint() === 'drawer' || this.breakpoint() === 'mobile',
   );
 
   protected readonly compact = computed(() => this.breakpoint() === 'mobile');
+  protected readonly navigationExpanded = computed(() => this.overlay() ? this.drawerOpen() : !this.collapsed());
+  protected readonly navigationLabel = computed(() =>
+    this.overlay()
+      ? this.drawerOpen() ? 'Close navigation' : 'Open navigation'
+      : this.collapsed() ? 'Expand sidebar' : 'Collapse sidebar',
+  );
 
   constructor() {
     this.identity.loadNavigation().subscribe();
@@ -98,8 +105,13 @@ export class Layout {
     this.tripDialog.create();
   }
 
-  protected toggleDrawer(): void {
-    this.drawerOpen.update((open) => !open);
+  protected toggleNavigation(): void {
+    if (this.overlay()) {
+      this.drawerOpen.update((open) => !open);
+      return;
+    }
+
+    this.desktopCollapsed.set(!this.collapsed());
   }
 
   protected closeDrawer(): void {

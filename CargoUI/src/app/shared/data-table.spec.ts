@@ -34,15 +34,19 @@ function table(list: Row[] | null, inputs: Record<string, unknown> = {}) {
 
   fixture.detectChanges();
 
-  return fixture.componentInstance as unknown as {
+  const state = fixture.componentInstance as unknown as {
     term: { set(value: string): void };
     pageIndex: { set(value: number): void; (): number };
     matched(): Row[];
     page(): Row[];
     pageCount(): number;
-    firstShown(): number;
-    lastShown(): number;
   };
+  return Object.assign(state, {
+    range: () => {
+      fixture.detectChanges();
+      return (fixture.nativeElement as HTMLElement).querySelector('app-table-pager [aria-live]')?.textContent?.trim();
+    },
+  });
 }
 
 describe('searching', () => {
@@ -63,11 +67,11 @@ describe('searching', () => {
     expect(t.matched()).toHaveLength(10);
   });
 
-  it('leaves a status column out of the haystack', () => {
+  it('searches the status label shown in the table', () => {
     const t = table(rows(20));
 
     t.term.set('active');
-    expect(t.matched()).toHaveLength(0);
+    expect(t.matched()).toHaveLength(20);
   });
 
   it('returns everything when the box is empty', () => {
@@ -91,8 +95,7 @@ describe('paging', () => {
 
     expect(t.page()).toHaveLength(5);
     expect(t.pageCount()).toBe(4);
-    expect(t.firstShown()).toBe(1);
-    expect(t.lastShown()).toBe(5);
+    expect(t.range()).toBe('1–5 of 20');
   });
 
   it('counts the last page from where it actually starts', () => {
@@ -101,8 +104,7 @@ describe('paging', () => {
     t.pageIndex.set(2);
 
     expect(t.page()).toHaveLength(2);
-    expect(t.firstShown()).toBe(21);
-    expect(t.lastShown()).toBe(22);
+    expect(t.range()).toBe('21–22 of 22');
   });
 
   it('shows a list shorter than a page whole, on one page', () => {
@@ -110,8 +112,7 @@ describe('paging', () => {
 
     expect(t.page()).toHaveLength(3);
     expect(t.pageCount()).toBe(1);
-    expect(t.firstShown()).toBe(1);
-    expect(t.lastShown()).toBe(3);
+    expect(t.range()).toBe('1–3 of 3');
   });
 
   it('pages a list of exactly one page plus one', () => {

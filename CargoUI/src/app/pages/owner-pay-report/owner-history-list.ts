@@ -14,10 +14,12 @@ import { fmt } from '../../shared/format';
 import { EmptyState, ErrorState, SkeletonRows } from '../../shared/states';
 import { transactionState, transactionTitle } from './owner-pay';
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-owner-history-list',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [EmptyState, ErrorState, SkeletonRows],
+  imports: [TableView, EmptyState, ErrorState, SkeletonRows],
   template: `
     @if (error(); as message) {
       <app-error-state [message]="message" (retry)="load()" />
@@ -30,68 +32,85 @@ import { transactionState, transactionTitle } from './owner-pay';
         body="Every settlement, cost charged and remittance for this owner will be listed here."
       />
     } @else {
-      <div class="overflow-x-auto rounded-control border border-cr-line">
-        <table class="w-full min-w-[560px] text-[12px]">
-          <thead class="bg-cr-tint text-left">
-            <tr>
-              <th class="px-3 py-2 font-semibold">Date</th>
-              <th class="px-3 py-2 font-semibold">Transaction</th>
-              <th class="px-3 py-2 font-semibold">How · reference</th>
-              <th class="px-3 py-2 text-right font-semibold">Amount</th>
-              <th class="px-3 py-2 text-right font-semibold">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (entry of rows(); track entry.id) {
-              <tr class="border-t border-cr-line/70">
-                <td class="cr-num px-3 py-2 whitespace-nowrap">
-                  {{ fmt.date(entry.occurred_on) }}
-                </td>
-                <td class="px-3 py-2">
-                  <span class="block font-semibold">{{ title(entry) }}</span>
-                  @if (entry.kind === 'payout' && entry.runs_count > 0) {
-                    <span class="block text-cr-ink-muted">
-                      {{ entry.runs_count }} {{ entry.runs_count === 1 ? 'run' : 'runs' }}
-                      @if (entry.note && !entry.note.startsWith('Cutoff ')) {
-                        · {{ entry.note }}
-                      }
-                    </span>
-                  } @else if (entry.kind !== 'adjustment' && entry.note) {
-                    <span class="block text-cr-ink-muted">{{ entry.note }}</span>
-                  } @else if (entry.kind === 'adjustment' && entry.period_label) {
-                    <span class="block text-cr-ink-muted"
-                      >Taken off the {{ entry.period_label }} settlement</span
-                    >
-                  }
-                </td>
-                <td class="px-3 py-2">
-                  {{ entry.method ? entry.method.replace('_', ' ') : '—' }}
-                  @if (entry.reference) {
-                    <span class="cr-num block text-cr-ink-muted">{{ entry.reference }}</span>
-                  }
-                </td>
-                <td
-                  class="cr-num px-3 py-2 text-right font-semibold whitespace-nowrap"
-                  [class]="entry.amount_cents > 0 ? 'text-cr-success' : 'text-cr-ink'"
-                >
-                  {{ entry.amount_cents > 0 ? '+' : '−'
-                  }}{{
-                    fmt.pesos(entry.amount_cents < 0 ? -entry.amount_cents : entry.amount_cents)
-                  }}
-                </td>
-                <td class="px-3 py-2 text-right">
-                  <span
-                    class="inline-flex rounded-full px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap"
-                    [class]="state(entry).tone"
-                  >
-                    {{ state(entry).label }}
-                  </span>
-                </td>
+      <app-table-view
+        #records0
+        [rows]="rows()"
+        [fields]="[
+          'reference',
+          'description',
+          'kind_label',
+          'method',
+          'note',
+          'occurred_on',
+          'period_label',
+          'amount_cents',
+          'runs_count',
+        ]"
+        label="Search owner transactions"
+      >
+        <div class="overflow-x-auto rounded-control border border-cr-line">
+          <table class="w-full min-w-[560px] text-[12px]">
+            <thead class="bg-cr-tint text-left">
+              <tr>
+                <th class="px-3 py-2 font-semibold">Date</th>
+                <th class="px-3 py-2 font-semibold">Transaction</th>
+                <th class="px-3 py-2 font-semibold">How · reference</th>
+                <th class="px-3 py-2 text-right font-semibold">Amount</th>
+                <th class="px-3 py-2 text-right font-semibold">Status</th>
               </tr>
-            }
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              @for (entry of records0.page(); track entry.id) {
+                <tr class="border-t border-cr-line/70">
+                  <td class="cr-num px-3 py-2 whitespace-nowrap">
+                    {{ fmt.date(entry.occurred_on) }}
+                  </td>
+                  <td class="px-3 py-2">
+                    <span class="block font-semibold">{{ title(entry) }}</span>
+                    @if (entry.kind === 'payout' && entry.runs_count > 0) {
+                      <span class="block text-cr-ink-muted">
+                        {{ entry.runs_count }} {{ entry.runs_count === 1 ? 'run' : 'runs' }}
+                        @if (entry.note && !entry.note.startsWith('Cutoff ')) {
+                          · {{ entry.note }}
+                        }
+                      </span>
+                    } @else if (entry.kind !== 'adjustment' && entry.note) {
+                      <span class="block text-cr-ink-muted">{{ entry.note }}</span>
+                    } @else if (entry.kind === 'adjustment' && entry.period_label) {
+                      <span class="block text-cr-ink-muted"
+                        >Taken off the {{ entry.period_label }} settlement</span
+                      >
+                    }
+                  </td>
+                  <td class="px-3 py-2">
+                    {{ entry.method ? entry.method.replace('_', ' ') : '—' }}
+                    @if (entry.reference) {
+                      <span class="cr-num block text-cr-ink-muted">{{ entry.reference }}</span>
+                    }
+                  </td>
+                  <td
+                    class="cr-num px-3 py-2 text-right font-semibold whitespace-nowrap"
+                    [class]="entry.amount_cents > 0 ? 'text-cr-success' : 'text-cr-ink'"
+                  >
+                    {{ entry.amount_cents > 0 ? '+' : '−'
+                    }}{{
+                      fmt.pesos(entry.amount_cents < 0 ? -entry.amount_cents : entry.amount_cents)
+                    }}
+                  </td>
+                  <td class="px-3 py-2 text-right">
+                    <span
+                      class="inline-flex rounded-full px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] uppercase whitespace-nowrap"
+                      [class]="state(entry).tone"
+                    >
+                      {{ state(entry).label }}
+                    </span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </app-table-view>
     }
   `,
 })

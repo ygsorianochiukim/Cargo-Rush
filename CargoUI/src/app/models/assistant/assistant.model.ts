@@ -16,6 +16,14 @@ export interface DiscordBotSettings extends DiscordBotConfiguration {
   paired: boolean;
   chat_configured: boolean;
   discord_status: AssistantDiscordStatus | null;
+  test_alert?: DiscordTestAlert | null;
+}
+
+export interface DiscordTestAlert {
+  id: string;
+  target: 'hr' | 'finance';
+  status: 'queued' | 'delivered' | 'failed' | 'expired';
+  message_url: string | null;
 }
 
 export interface AssistantDiscordUser {

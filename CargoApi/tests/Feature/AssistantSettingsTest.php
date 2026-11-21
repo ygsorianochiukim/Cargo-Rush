@@ -222,6 +222,66 @@ it('reports tenant-scoped finance activity by local calendar day and filters imp
         ->assertJsonPath('data.events.0.new_status', 'overdue');
 });
 
+it('queues one Discord test alert for the current company and accepts delivery only from its paired bot', function (): void {
+    $this->admin->forceFill(['developer_access' => true])->save();
+    $assistant = app(AssistantService::class);
+    $assistant->update([
+        'enabled' => true,
+        'discord_finance_channel_id' => '111111111111111111',
+        'discord_finance_alerts_channel_id' => '222222222222222222',
+        'discord_hr_channel_id' => '333333333333333333',
+    ]);
+    $token = $assistant->issueToken();
+    $path = '/api/v1/automation/bots/discord';
+    $botPath = '/api/v1/assistant/test-alert';
+
+    $this->actingAs($this->admin)->postJson($path.'/test-alert', ['target' => 'finance'])
+        ->assertAccepted()->assertJsonPath('data.channel_id', '222222222222222222');
+    $this->postJson($path.'/test-alert', ['target' => 'hr'])->assertConflict();
+    $this->getJson($botPath)->assertForbidden();
+    $this->app['auth']->forgetGuards();
+
+    $test = $this->withToken($token)->getJson($botPath)->assertOk()
+        ->assertJsonPath('data.test.status', 'queued')->json('data.test');
+    $this->postJson($botPath.'/'.$test['id'], [
+        'status' => 'delivered', 'guild_id' => '444444444444444444', 'message_id' => '555555555555555555',
+    ])->assertNoContent();
+    $this->getJson($botPath)->assertOk()->assertJsonPath('data.test', null);
+    $this->app['auth']->forgetGuards();
+
+    $this->actingAs($this->admin)->getJson($path)->assertOk()
+        ->assertJsonPath('data.test_alert.status', 'delivered')
+        ->assertJsonPath('data.test_alert.message_url', 'https://discord.com/channels/444444444444444444/222222222222222222/555555555555555555');
+    $this->postJson($path.'/test-alert', ['target' => 'hr'])->assertAccepted()
+        ->assertJsonPath('data.channel_id', '333333333333333333');
+    $this->travel(6)->minutes();
+    $this->getJson($path)->assertOk()->assertJsonPath('data.test_alert.status', 'expired');
+});
+
+it('gives the finance bot only pending receivables with a balance at least five calendar days after issue', function (): void {
+    $assistant = app(AssistantService::class);
+    $assistant->update(['enabled' => true, 'discord_finance_channel_id' => '222222222222222222']);
+    $createInvoice = static fn (array $fields = []): Invoice => Invoice::create([
+        'direction' => 'receivable', 'status' => 'pending', 'amount_cents' => 100_000,
+        'currency' => 'PHP', 'issued_at' => '2026-11-16', 'due_at' => '2026-12-01', ...$fields,
+    ]);
+    $aged = $createInvoice();
+    $this->asCompany($this->makeCompany('Other Receivables Company'), $createInvoice);
+    $createInvoice(['issued_at' => '2026-11-17']);
+    $createInvoice(['status' => 'paid']);
+    $createInvoice(['direction' => 'payable']);
+    $createInvoice(['withholding_cents' => 100_000]);
+
+    $token = $assistant->issueToken();
+    $path = '/api/v1/assistant/finance-activity?kind=aged-receivables&day=2026-11-21&timezone=Asia%2FManila';
+    $this->withToken($token)->getJson($path)->assertOk()
+        ->assertJsonCount(1, 'data.events')
+        ->assertJsonPath('data.events.0.id', $aged->id)
+        ->assertJsonPath('data.events.0.issued_on', '2026-11-16')
+        ->assertJsonPath('data.events.0.age_days', 5)
+        ->assertJsonPath('data.events.0.balance_cents', 100_000);
+});
+
 it('never hands the key to anyone but the bot token', function (): void {
     ($this->settings)(['api_key' => 'sk-secret-key-7777'])->assertOk();
 

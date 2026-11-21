@@ -19,10 +19,12 @@ import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 import { Modal } from '../../shared/modal';
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-employee-store-credits',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Field, Icon, Modal, ReactiveFormsModule],
+  imports: [TableView, Field, Icon, Modal, ReactiveFormsModule],
   template: `
     <app-modal
       [(open)]="open"
@@ -105,50 +107,57 @@ import { Modal } from '../../shared/modal';
           @if (list.length === 0) {
             <p class="py-6 text-center text-[13px] text-cr-ink-muted">Nothing on this tab yet.</p>
           } @else {
-            <table class="w-full border-collapse text-left text-[13px]">
-              <thead>
-                <tr class="border-b border-cr-line">
-                  <th class="py-2 pr-3 font-semibold">Date</th>
-                  <th class="py-2 pr-3 font-semibold">What</th>
-                  <th class="py-2 pr-3 text-right font-semibold">Amount</th>
-                  <th class="py-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (row of list; track row.id) {
-                  <tr class="border-b border-cr-line/60">
-                    <td class="py-2 pr-3 whitespace-nowrap">{{ fmt.date(row.charged_on) }}</td>
-                    <td class="py-2 pr-3">
-                      {{ row.description ?? row.kind_label }}
-                      @if (row.outlet) {
-                        <span class="text-cr-ink-muted"> · {{ row.outlet }}</span>
-                      }
-                      @if (row.from_payroll) {
-                        <span class="text-cr-ink-muted"> · off a payslip</span>
-                      }
-                    </td>
-                    <td
-                      class="cr-num py-2 pr-3 text-right whitespace-nowrap"
-                      [class.text-cr-success]="row.kind === 'payment'"
-                    >
-                      {{ row.kind === 'payment' ? '−' : '+' }}{{ fmt.money(row.amount_cents) }}
-                    </td>
-                    <td class="py-2 text-right">
-                      @if (!row.from_payroll) {
-                        <button
-                          type="button"
-                          aria-label="Remove line"
-                          class="h-8 w-8 rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
-                          (click)="remove(row)"
-                        >
-                          <app-icon name="close" [size]="14" class="mx-auto" />
-                        </button>
-                      }
-                    </td>
+            <app-table-view
+              #records0
+              [rows]="list"
+              [fields]="['description', 'kind_label', 'outlet', 'charged_on', 'amount_cents']"
+              label="Search store credit entries"
+            >
+              <table class="w-full border-collapse text-left text-[13px]">
+                <thead>
+                  <tr class="border-b border-cr-line">
+                    <th class="py-2 pr-3 font-semibold">Date</th>
+                    <th class="py-2 pr-3 font-semibold">What</th>
+                    <th class="py-2 pr-3 text-right font-semibold">Amount</th>
+                    <th class="py-2"></th>
                   </tr>
-                }
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  @for (row of records0.page(); track row.id) {
+                    <tr class="border-b border-cr-line/60">
+                      <td class="py-2 pr-3 whitespace-nowrap">{{ fmt.date(row.charged_on) }}</td>
+                      <td class="py-2 pr-3">
+                        {{ row.description ?? row.kind_label }}
+                        @if (row.outlet) {
+                          <span class="text-cr-ink-muted"> · {{ row.outlet }}</span>
+                        }
+                        @if (row.from_payroll) {
+                          <span class="text-cr-ink-muted"> · off a payslip</span>
+                        }
+                      </td>
+                      <td
+                        class="cr-num py-2 pr-3 text-right whitespace-nowrap"
+                        [class.text-cr-success]="row.kind === 'payment'"
+                      >
+                        {{ row.kind === 'payment' ? '−' : '+' }}{{ fmt.money(row.amount_cents) }}
+                      </td>
+                      <td class="py-2 text-right">
+                        @if (!row.from_payroll) {
+                          <button
+                            type="button"
+                            aria-label="Remove line"
+                            class="h-8 w-8 rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
+                            (click)="remove(row)"
+                          >
+                            <app-icon name="close" [size]="14" class="mx-auto" />
+                          </button>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </app-table-view>
           }
         } @else {
           <div class="cr-skeleton h-16 w-full"></div>

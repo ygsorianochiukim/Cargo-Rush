@@ -22,10 +22,12 @@ function today(): string {
 
 const PAGE = 5;
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-truck-dashboard',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BarRows, Card, Donut, Icon, IncomeTrend, RouterLink],
+  imports: [TableView, BarRows, Card, Donut, Icon, IncomeTrend, RouterLink],
   templateUrl: './truck-dashboard.page.html',
 })
 export class TruckDashboardPage {

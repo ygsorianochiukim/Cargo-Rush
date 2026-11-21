@@ -130,88 +130,123 @@
         </button>
       </div>
     } @else {
-      <div class="overflow-x-auto">
-        <table class="w-full min-w-[1360px] border-collapse text-left whitespace-nowrap">
-          <thead>
-            <tr class="border-b border-cr-line">
-              <th class="cr-th px-4 py-2.5">Date</th>
-              <th class="cr-th px-4 py-2.5 text-right">Trip income</th>
-              <th class="cr-th px-4 py-2.5 text-right">Fuel</th>
-              <th class="cr-th px-4 py-2.5 text-right">Driver</th>
-              <th class="cr-th px-4 py-2.5 text-right">Helper</th>
-              <th class="cr-th px-4 py-2.5 text-right">Maint.</th>
-              <th class="cr-th px-4 py-2.5 text-right">Allowance</th>
-              <th class="cr-th px-4 py-2.5 text-right">Total exp.</th>
-              <th class="cr-th px-4 py-2.5 text-right">Net income</th>
-              <th class="cr-th px-4 py-2.5">Route</th>
-              <th class="cr-th px-4 py-2.5">Trip</th>
-              <th class="cr-th px-4 py-2.5">Customer</th>
-              <th class="cr-th px-4 py-2.5"><span class="sr-only">Actions</span></th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (e of list; track e.id) {
-              <tr class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint">
-                <td class="cr-num px-4 py-3 text-[13px] font-semibold">{{ fmt.date(e.date) }}</td>
-                <td class="cr-num px-4 py-3 text-right text-[13px]">
-                  {{ fmt.money(e.trip_income_cents) }}
-                </td>
-                <td class="cr-num px-4 py-3 text-right text-[13px]">{{ fmt.money(e.fuel_cents) }}</td>
-                <td class="cr-num px-4 py-3 text-right text-[13px]">
-                  {{ fmt.money(e.driver_salary_cents) }}
-                </td>
-                <td class="cr-num px-4 py-3 text-right text-[13px]">
-                  {{ fmt.money(e.helper_salary_cents) }}
-                </td>
-                <td class="cr-num px-4 py-3 text-right text-[13px]">
-                  {{ fmt.money(e.maintenance_cents) }}
-                </td>
-                <td class="cr-num px-4 py-3 text-right text-[13px]">
-                  {{ fmt.money(e.allowance_cents) }}
-                </td>
-                <td class="cr-num px-4 py-3 text-right text-[13px]">
-                  {{ fmt.money(expensesOf(e)) }}
-                </td>
-                <td
-                  class="cr-num px-4 py-3 text-right text-[13px] font-semibold"
-                  [class.text-cr-red]="netOf(e) < 0"
-                  [class.text-cr-success]="netOf(e) > 0">
-                  {{ fmt.money(netOf(e)) }}
-                </td>
-                <td class="px-4 py-3 text-[13px] text-cr-ink-muted">{{ e.route ?? '—' }}</td>
-                <td class="cr-num px-4 py-3 text-[13px]">
-                  @if (e.trip_reference) {
-                    <span class="font-semibold">{{ e.trip_reference }}</span>
-                  } @else {
-                    <span class="text-cr-ink-muted">—</span>
-                  }
-                </td>
-                <td class="px-4 py-3 text-[13px]">
-                  {{ e.customer ?? '—' }}
-                </td>
-                <td class="px-4 py-3">
-                  <div class="flex items-center justify-end gap-1">
-                    <button
-                      type="button"
-                      class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
-                      [attr.aria-label]="'Delete the ' + fmt.date(e.date) + ' entry'"
-                      (click)="remove(e)">
-                      <app-icon name="close" [size]="16" />
-                    </button>
-                    <button
-                      type="button"
-                      class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
-                      [attr.aria-label]="'Edit the ' + fmt.date(e.date) + ' entry'"
-                      (click)="edit(e)">
-                      <app-icon name="chevron-right" [size]="16" />
-                    </button>
-                  </div>
-                </td>
+      <app-table-view
+        #records0
+        [rows]="list"
+        [fields]="[
+          'trip_reference',
+          'date',
+          'route',
+          'customer',
+          'trip_income_cents',
+          'fuel_cents',
+          'driver_salary_cents',
+          'helper_salary_cents',
+          'maintenance_cents',
+          'allowance_cents',
+        ]"
+        label="Search trip ledger"
+      >
+        <div
+          class="cr-table-scroll max-w-full overflow-x-auto focus-visible:outline-offset-[-2px]"
+          role="region"
+          aria-label="Trip ledger, scroll horizontally to see all columns"
+          tabindex="0"
+        >
+          <table class="w-full min-w-[1812px] border-collapse text-left">
+            <colgroup>
+              <col class="w-[130px]" />
+              <col class="w-[130px]" />
+              <col span="4" class="w-28" />
+              <col class="w-[132px]" />
+              <col span="2" class="w-[136px]" />
+              <col span="2" class="w-[190px]" />
+              <col class="w-[216px]" />
+              <col class="w-[104px]" />
+            </colgroup>
+            <thead>
+              <tr class="border-b border-cr-line">
+                <th class="cr-th px-4 py-2.5">Date</th>
+                <th class="cr-th px-4 py-2.5 text-right">Trip income</th>
+                <th class="cr-th px-4 py-2.5 text-right">Fuel</th>
+                <th class="cr-th px-4 py-2.5 text-right">Driver</th>
+                <th class="cr-th px-4 py-2.5 text-right">Helper</th>
+                <th class="cr-th px-4 py-2.5 text-right">Maint.</th>
+                <th class="cr-th px-4 py-2.5 text-right">Allowance</th>
+                <th class="cr-th px-4 py-2.5 text-right">Total exp.</th>
+                <th class="cr-th px-4 py-2.5 text-right">Net income</th>
+                <th class="cr-th px-4 py-2.5">Route</th>
+                <th class="cr-th px-4 py-2.5">Trip</th>
+                <th class="cr-th px-4 py-2.5">Customer</th>
+                <th class="cr-th px-4 py-2.5"><span class="sr-only">Actions</span></th>
               </tr>
-            }
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              @for (e of records0.page(); track e.id) {
+                <tr class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint">
+                  <td class="cr-num px-4 py-3 text-[13px] font-semibold">
+                    <span class="whitespace-nowrap">{{ fmt.date(e.date) }}</span>
+                  </td>
+                  <td class="cr-num px-4 py-3 text-right text-[13px]">
+                    {{ fmt.money(e.trip_income_cents) }}
+                  </td>
+                  <td class="cr-num px-4 py-3 text-right text-[13px]">{{ fmt.money(e.fuel_cents) }}</td>
+                  <td class="cr-num px-4 py-3 text-right text-[13px]">
+                    {{ fmt.money(e.driver_salary_cents) }}
+                  </td>
+                  <td class="cr-num px-4 py-3 text-right text-[13px]">
+                    {{ fmt.money(e.helper_salary_cents) }}
+                  </td>
+                  <td class="cr-num px-4 py-3 text-right text-[13px]">
+                    {{ fmt.money(e.maintenance_cents) }}
+                  </td>
+                  <td class="cr-num px-4 py-3 text-right text-[13px]">
+                    {{ fmt.money(e.allowance_cents) }}
+                  </td>
+                  <td class="cr-num px-4 py-3 text-right text-[13px]">
+                    {{ fmt.money(expensesOf(e)) }}
+                  </td>
+                  <td
+                    class="cr-num px-4 py-3 text-right text-[13px] font-semibold"
+                    [class.text-cr-red]="netOf(e) < 0"
+                    [class.text-cr-success]="netOf(e) > 0">
+                    {{ fmt.money(netOf(e)) }}
+                  </td>
+                  <td class="px-4 py-3 text-[13px] text-cr-ink-muted">{{ e.route ?? '—' }}</td>
+                  <td class="cr-num px-4 py-3 text-[13px]">
+                    @if (e.trip_reference) {
+                      <span class="font-semibold whitespace-nowrap">{{ e.trip_reference }}</span>
+                    } @else {
+                      <span class="text-cr-ink-muted">—</span>
+                    }
+                  </td>
+                  <td class="px-4 py-3 text-[13px]">
+                    {{ e.customer ?? '—' }}
+                  </td>
+                  <td class="px-4 py-3">
+                    <div class="flex items-center justify-end gap-1">
+                      <button
+                        type="button"
+                        class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
+                        [attr.aria-label]="'Delete the ' + fmt.date(e.date) + ' entry'"
+                        (click)="remove(e)">
+                        <app-icon name="close" [size]="16" />
+                      </button>
+                      <button
+                        type="button"
+                        class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint hover:text-cr-blue"
+                        [attr.aria-label]="'Edit the ' + fmt.date(e.date) + ' entry'"
+                        (click)="edit(e)">
+                        <app-icon name="chevron-right" [size]="16" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </app-table-view>
     }
   } @else {
     <div class="flex flex-col gap-3 p-4" role="status" aria-label="Loading">

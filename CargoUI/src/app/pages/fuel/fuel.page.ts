@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { map } from 'rxjs';
 
 import { Router } from '@angular/router';
 
@@ -13,6 +12,8 @@ import { fmt } from '../../shared/format';
 import { ListToolbar } from '../../shared/list-toolbar';
 import { recordList } from '../../shared/record-list';
 import { ErrorState } from '../../shared/states';
+
+import { allPages } from '../../services/shared/all-pages';
 
 @Component({
   selector: 'app-fuel',
@@ -31,7 +32,7 @@ export class FuelPage {
   private readonly spec = fuelSpec();
 
   protected readonly list = recordList<FuelRecord>(this.spec, () =>
-    this.fuelApi.list().pipe(map((res) => res.data)),
+    allPages((page) => this.fuelApi.list(page)),
   );
 
   protected readonly rows = this.list.rows;

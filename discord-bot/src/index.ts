@@ -14,6 +14,7 @@ import { stampFor } from "./prompt.js";
 import { ReceiptWorkflow } from "./receipts.js";
 import { type BotSettings, channelScope, mayAsk, RemoteSettings } from "./settings.js";
 import { splitMessage } from "./split.js";
+import { deliverTestAlert } from "./test-alert.js";
 
 const config = loadConfig();
 
@@ -297,6 +298,9 @@ async function supervise(): Promise<void> {
 
 async function syncReports(current: BotSettings): Promise<void> {
   if (discord?.isReady() !== true) return;
+  await deliverTestAlert(discord, cargo).catch(() => {
+    console.error(stamp() + " Could not check Discord test alerts.");
+  });
   const errors = await reports.tick(discord, current);
   let payrollError: string | null = null;
   try {

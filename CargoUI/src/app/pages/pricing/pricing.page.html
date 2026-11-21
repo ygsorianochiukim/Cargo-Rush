@@ -377,74 +377,81 @@
           </button>
         </div>
 
-        <div class="overflow-x-auto">
-          <table
-            class="w-full border-collapse text-left whitespace-nowrap"
-            style="min-width: 560px"
-          >
-            <thead>
-              <tr class="border-b border-cr-line">
-                <th class="cr-th px-2 py-2.5">Rate</th>
-                <th class="cr-th px-2 py-2.5">Class of truck</th>
-                <th class="cr-th px-2 py-2.5 text-right">Base (₱)</th>
-                <th class="cr-th px-2 py-2.5 text-right">+ per ₱1/L diesel (₱)</th>
-                <th class="cr-th px-2 py-2.5"><span class="sr-only">Remove</span></th>
-              </tr>
-            </thead>
-            <tbody>
-                @for (bracket of brackets.controls; track bracket) {
-                  <tr class="border-b border-cr-line/70 last:border-0" [formGroup]="bracket">
-                    <td class="px-2 py-2">
-                      <input type="text" formControlName="label" [class]="inputClass" />
-                    </td>
-                    <td class="px-2 py-2">
-                      <select formControlName="truck_category_id" [class]="inputClass">
-                        <option value="" [disabled]="classTakenElsewhere($index, '')">
-                          Current fleet
-                        </option>
-                        @for (category of categories(); track category.id) {
-                          <option
-                            [value]="category.id"
-                            [disabled]="classTakenElsewhere($index, category.id)"
-                          >
-                            {{ category.name }}
+        <app-table-view
+          #records0
+          [rows]="brackets.controls.slice()"
+          [fields]="['value.label', 'value.base', 'value.diesel_step']"
+          label="Search editable rates"
+        >
+          <div class="overflow-x-auto">
+            <table
+              class="w-full border-collapse text-left whitespace-nowrap"
+              style="min-width: 560px"
+            >
+              <thead>
+                <tr class="border-b border-cr-line">
+                  <th class="cr-th px-2 py-2.5">Rate</th>
+                  <th class="cr-th px-2 py-2.5">Class of truck</th>
+                  <th class="cr-th px-2 py-2.5 text-right">Base (₱)</th>
+                  <th class="cr-th px-2 py-2.5 text-right">+ per ₱1/L diesel (₱)</th>
+                  <th class="cr-th px-2 py-2.5"><span class="sr-only">Remove</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                  @for (bracket of records0.page(); track bracket) {
+                    <tr class="border-b border-cr-line/70 last:border-0" [formGroup]="bracket">
+                      <td class="px-2 py-2">
+                        <input type="text" formControlName="label" [class]="inputClass" />
+                      </td>
+                      <td class="px-2 py-2">
+                        <select formControlName="truck_category_id" [class]="inputClass">
+                          <option value="" [disabled]="classTakenElsewhere(brackets.controls.indexOf(bracket), '')">
+                            Current fleet
                           </option>
-                        }
-                      </select>
-                    </td>
-                    <td class="px-2 py-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        formControlName="base"
-                        [class]="inputClass + ' cr-num text-right'"
-                      />
-                    </td>
-                    <td class="px-2 py-2">
-                      <input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        formControlName="diesel_step"
-                        [class]="inputClass + ' cr-num text-right'"
-                      />
-                    </td>
-                    <td class="px-2 py-2 text-right">
-                      <button
-                        type="button"
-                        aria-label="Remove rate"
-                        class="rounded-control p-2 text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
-                        (click)="removeBracket($index)"
-                      >
-                        <app-icon name="close" [size]="16" />
-                      </button>
-                    </td>
-                  </tr>
-                }
-            </tbody>
-          </table>
-        </div>
+                          @for (category of categories(); track category.id) {
+                            <option
+                              [value]="category.id"
+                              [disabled]="classTakenElsewhere(brackets.controls.indexOf(bracket), category.id)"
+                            >
+                              {{ category.name }}
+                            </option>
+                          }
+                        </select>
+                      </td>
+                      <td class="px-2 py-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          formControlName="base"
+                          [class]="inputClass + ' cr-num text-right'"
+                        />
+                      </td>
+                      <td class="px-2 py-2">
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          formControlName="diesel_step"
+                          [class]="inputClass + ' cr-num text-right'"
+                        />
+                      </td>
+                      <td class="px-2 py-2 text-right">
+                        <button
+                          type="button"
+                          aria-label="Remove rate"
+                          class="rounded-control p-2 text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
+                          (click)="removeBracket(brackets.controls.indexOf(bracket))"
+                        >
+                          <app-icon name="close" [size]="16" />
+                        </button>
+                      </td>
+                    </tr>
+                  }
+              </tbody>
+            </table>
+          </div>
+        </app-table-view>
 
         @if (brackets.length === 0) {
           <p
@@ -467,44 +474,51 @@
               </p>
             }
 
-            <div class="mt-2 overflow-x-auto">
-              <table class="w-full border-collapse text-right whitespace-nowrap text-[12px]">
-                <thead>
-                  <tr class="border-b border-cr-line">
-                    <th class="cr-th sticky left-0 bg-cr-surface px-2 py-2 text-left">Diesel (₱/L)</th>
-                    @for (column of dieselGrid().columns; track column) {
-                      <th
-                        class="cr-th px-1.5 py-2 text-right"
-                        [class.bg-cr-tint]="column === dieselGrid().today"
-                      >
-                        {{ column }}
-                      </th>
-                    }
-                  </tr>
-                </thead>
-                <tbody>
-                  @for (row of dieselGrid().rows; track $index) {
-                    <tr class="border-b border-cr-line/70 last:border-0">
-                      <td
-                        class="sticky left-0 bg-cr-surface px-2 py-2 text-left font-semibold"
-                        [class.text-cr-ink-muted]="row.scaled"
-                      >
-                        {{ row.label }}
-                      </td>
-                      @for (cents of row.prices; track $index) {
-                        <td
-                          class="cr-num px-1.5 py-2"
-                          [class.bg-cr-tint]="dieselGrid().columns[$index] === dieselGrid().today"
-                          [class.font-semibold]="dieselGrid().columns[$index] === dieselGrid().today"
+            <app-table-view
+              #records1
+              [rows]="dieselGrid().rows"
+              [fields]="['label']"
+              label="Search diesel price bands"
+            >
+              <div class="mt-2 overflow-x-auto">
+                <table class="w-full border-collapse text-right whitespace-nowrap text-[12px]">
+                  <thead>
+                    <tr class="border-b border-cr-line">
+                      <th class="cr-th sticky left-0 bg-cr-surface px-2 py-2 text-left">Diesel (₱/L)</th>
+                      @for (column of dieselGrid().columns; track column) {
+                        <th
+                          class="cr-th px-1.5 py-2 text-right"
+                          [class.bg-cr-tint]="column === dieselGrid().today"
                         >
-                          {{ fmt.money(cents) }}
-                        </td>
+                          {{ column }}
+                        </th>
                       }
                     </tr>
-                  }
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    @for (row of records1.page(); track $index) {
+                      <tr class="border-b border-cr-line/70 last:border-0">
+                        <td
+                          class="sticky left-0 bg-cr-surface px-2 py-2 text-left font-semibold"
+                          [class.text-cr-ink-muted]="row.scaled"
+                        >
+                          {{ row.label }}
+                        </td>
+                        @for (cents of row.prices; track $index) {
+                          <td
+                            class="cr-num px-1.5 py-2"
+                            [class.bg-cr-tint]="dieselGrid().columns[$index] === dieselGrid().today"
+                            [class.font-semibold]="dieselGrid().columns[$index] === dieselGrid().today"
+                          >
+                            {{ fmt.money(cents) }}
+                          </td>
+                        }
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </app-table-view>
           </div>
         }
       </div>

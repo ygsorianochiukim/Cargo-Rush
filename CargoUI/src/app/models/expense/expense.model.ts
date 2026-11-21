@@ -89,6 +89,22 @@ export interface ExpenseReport {
   by_schedule: { schedule: PaySchedule; label: string; amount_cents: number }[];
   entry_count: number;
   currency: string;
+  payroll_audit?: {
+    total_cents: number;
+    runs: {
+      id: string;
+      reference: string;
+      label: string;
+      route: string;
+      period: string;
+      accounting_date: string;
+      paid_date: string | null;
+      gross_cents: number;
+      employer_cents: number;
+      net_cents: number;
+      expense_cents: number;
+    }[];
+  };
 }
 
 export interface ExpenseCategoryPayload {

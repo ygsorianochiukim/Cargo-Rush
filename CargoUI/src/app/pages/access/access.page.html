@@ -176,102 +176,109 @@
     </p>
 
     @if (positions(); as list) {
-      <div class="overflow-x-auto">
-        <table class="w-full min-w-[720px] border-collapse text-[13px]">
-          <thead>
-            <tr class="border-b border-cr-line text-left text-[12px] text-cr-ink-muted">
-              <th scope="col" class="py-2 pr-3 font-semibold">Position</th>
-              <th scope="col" class="w-40 py-2 pr-3 font-semibold">Paid</th>
-              <th scope="col" class="py-2 pr-3 text-center font-semibold" colspan="3">
-                Amount <span class="font-normal">(₱)</span>
-              </th>
-              <th scope="col" class="w-24 py-2 font-semibold">
-                <span class="sr-only">Actions</span>
-              </th>
-            </tr>
-            <tr class="border-b border-cr-line text-right text-[12px] text-cr-ink-muted">
-              <th scope="col" class="py-1.5"></th>
-              <th scope="col" class="py-1.5"></th>
-              @for (tier of tiers; track tier) {
-                <th scope="col" class="w-32 py-1.5 pr-3 font-medium capitalize">{{ tier }}</th>
-              }
-              <th scope="col" class="py-1.5"></th>
-            </tr>
-          </thead>
-
-          <tbody>
-            @for (position of list; track position.id) {
-              <tr class="border-b border-cr-line last:border-0 hover:bg-cr-tint/40">
-                <th scope="row" class="py-1.5 pr-3 text-left font-semibold">
-                  <span class="flex items-center gap-2">
-                    {{ position.name }}
-                    @if (position.status !== 'active') {
-                      <app-status-pill [status]="position.status" />
-                    }
-                  </span>
-                  <span class="block text-[12px] font-normal text-cr-ink-muted">
-                    {{ position.employee_count ?? 0 }}
-                    {{ position.employee_count === 1 ? 'employee' : 'employees' }}
-                    @if (position.drives) {
-                      · needs a licence
-                    }
-                    @if (position.has_rate_card) {
-                      · {{ position.pay_summary }}
-                    }
-                  </span>
+      <app-table-view
+        #records0
+        [rows]="list"
+        [fields]="['name', 'employee_count', 'pay_summary', 'pay_basis', 'status']"
+        label="Search positions"
+      >
+        <div class="overflow-x-auto">
+          <table class="w-full min-w-[720px] border-collapse text-[13px]">
+            <thead>
+              <tr class="border-b border-cr-line text-left text-[12px] text-cr-ink-muted">
+                <th scope="col" class="py-2 pr-3 font-semibold">Position</th>
+                <th scope="col" class="w-40 py-2 pr-3 font-semibold">Paid</th>
+                <th scope="col" class="py-2 pr-3 text-center font-semibold" colspan="3">
+                  Amount <span class="font-normal">(₱)</span>
                 </th>
-
-                <td class="py-2 pr-3">
-                  <select
-                    [value]="position.pay_basis"
-                    [disabled]="busy()"
-                    [attr.aria-label]="'How ' + position.name + ' is paid'"
-                    class="h-9 w-full rounded-control border border-cr-line bg-cr-surface px-2 text-[13px] focus:border-cr-blue focus:outline-none disabled:opacity-60"
-                    (change)="setBasis(position, $any($event.target).value)"
-                  >
-                    <option value="monthly">Monthly</option>
-                    <option value="daily">Daily</option>
-                    <option value="per_trip">Per Trip</option>
-                  </select>
-                </td>
-
-                @for (tier of tiers; track tier) {
-                  <td class="py-2 pr-3">
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      [value]="amountFor(position, tier) / 100"
-                      [disabled]="busy()"
-                      [attr.aria-label]="position.name + ' — ' + tier + ' rate in pesos'"
-                      class="cr-num h-9 w-full rounded-control border border-cr-line bg-cr-surface px-2 text-right text-[13px] focus:border-cr-blue focus:outline-none disabled:opacity-60"
-                      (change)="setAmount(position, tier, $any($event.target).value)"
-                    />
-                  </td>
-                }
-
-                <td class="py-2 text-right whitespace-nowrap">
-                  <button
-                    type="button"
-                    class="h-9 rounded-control px-2 text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
-                    (click)="openPositionForm(position)"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Delete position"
-                    class="h-9 w-9 rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
-                    (click)="removePosition(position)"
-                  >
-                    <app-icon name="close" [size]="16" class="mx-auto" />
-                  </button>
-                </td>
+                <th scope="col" class="w-24 py-2 font-semibold">
+                  <span class="sr-only">Actions</span>
+                </th>
               </tr>
-            }
-          </tbody>
-        </table>
-      </div>
+              <tr class="border-b border-cr-line text-right text-[12px] text-cr-ink-muted">
+                <th scope="col" class="py-1.5"></th>
+                <th scope="col" class="py-1.5"></th>
+                @for (tier of tiers; track tier) {
+                  <th scope="col" class="w-32 py-1.5 pr-3 font-medium capitalize">{{ tier }}</th>
+                }
+                <th scope="col" class="py-1.5"></th>
+              </tr>
+            </thead>
+
+            <tbody>
+              @for (position of records0.page(); track position.id) {
+                <tr class="border-b border-cr-line last:border-0 hover:bg-cr-tint/40">
+                  <th scope="row" class="py-1.5 pr-3 text-left font-semibold">
+                    <span class="flex items-center gap-2">
+                      {{ position.name }}
+                      @if (position.status !== 'active') {
+                        <app-status-pill [status]="position.status" />
+                      }
+                    </span>
+                    <span class="block text-[12px] font-normal text-cr-ink-muted">
+                      {{ position.employee_count ?? 0 }}
+                      {{ position.employee_count === 1 ? 'employee' : 'employees' }}
+                      @if (position.drives) {
+                        · needs a licence
+                      }
+                      @if (position.has_rate_card) {
+                        · {{ position.pay_summary }}
+                      }
+                    </span>
+                  </th>
+
+                  <td class="py-2 pr-3">
+                    <select
+                      [value]="position.pay_basis"
+                      [disabled]="busy()"
+                      [attr.aria-label]="'How ' + position.name + ' is paid'"
+                      class="h-9 w-full rounded-control border border-cr-line bg-cr-surface px-2 text-[13px] focus:border-cr-blue focus:outline-none disabled:opacity-60"
+                      (change)="setBasis(position, $any($event.target).value)"
+                    >
+                      <option value="monthly">Monthly</option>
+                      <option value="daily">Daily</option>
+                      <option value="per_trip">Per Trip</option>
+                    </select>
+                  </td>
+
+                  @for (tier of tiers; track tier) {
+                    <td class="py-2 pr-3">
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        [value]="amountFor(position, tier) / 100"
+                        [disabled]="busy()"
+                        [attr.aria-label]="position.name + ' — ' + tier + ' rate in pesos'"
+                        class="cr-num h-9 w-full rounded-control border border-cr-line bg-cr-surface px-2 text-right text-[13px] focus:border-cr-blue focus:outline-none disabled:opacity-60"
+                        (change)="setAmount(position, tier, $any($event.target).value)"
+                      />
+                    </td>
+                  }
+
+                  <td class="py-2 text-right whitespace-nowrap">
+                    <button
+                      type="button"
+                      class="h-9 rounded-control px-2 text-[13px] font-semibold text-cr-blue transition-colors hover:bg-cr-tint"
+                      (click)="openPositionForm(position)"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Delete position"
+                      class="h-9 w-9 rounded-control text-cr-ink-muted transition-colors hover:bg-cr-red-bg hover:text-cr-red"
+                      (click)="removePosition(position)"
+                    >
+                      <app-icon name="close" [size]="16" class="mx-auto" />
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </app-table-view>
     } @else {
       <app-skeleton-rows [count]="4" />
     }

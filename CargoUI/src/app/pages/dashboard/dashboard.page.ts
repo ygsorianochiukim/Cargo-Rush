@@ -16,10 +16,12 @@ import { SkeletonRows } from '../../shared/states';
 import { StatusPill } from '../../shared/status-pill';
 import { TruckCards } from './truck-cards';
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-dashboard',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BarChart, Card, ChartTooltip, Icon, KpiTile, SkeletonRows, StatusPill, TruckCards],
+  imports: [TableView, BarChart, Card, ChartTooltip, Icon, KpiTile, SkeletonRows, StatusPill, TruckCards],
   templateUrl: './dashboard.page.html',
 })
 export class DashboardPage {

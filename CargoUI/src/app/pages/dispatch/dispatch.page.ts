@@ -1,12 +1,13 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { map } from 'rxjs';
 
 import { DispatchService } from '../../services/dispatch/dispatch.service';
 import { DispatchRecord } from '../../models/dispatch/dispatch.model';
 import { Card } from '../../shared/card';
 import { Column, DataTable } from '../../shared/data-table';
 import { fmt } from '../../shared/format';
+
+import { allPages } from '../../services/shared/all-pages';
 
 @Component({
   selector: 'app-dispatch',
@@ -27,7 +28,7 @@ import { fmt } from '../../shared/format';
 export class DispatchPage {
   private readonly dispatchApi = inject(DispatchService);
 
-  protected readonly rows = toSignal(this.dispatchApi.list().pipe(map((r) => r.data)), {
+  protected readonly rows = toSignal(allPages((page) => this.dispatchApi.list(page)), {
     initialValue: null,
   });
 

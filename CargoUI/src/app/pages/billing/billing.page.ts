@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router } from '@angular/router';
-import { map } from 'rxjs';
 
 import { BillingService } from '../../services/billing/billing.service';
 import { Invoice } from '../../models/billing/billing.model';
@@ -17,6 +16,8 @@ import { recordList } from '../../shared/record-list';
 import { ErrorState } from '../../shared/states';
 
 type Direction = 'all' | 'receivable' | 'payable';
+
+import { allPages } from '../../services/shared/all-pages';
 
 @Component({
   selector: 'app-billing',
@@ -34,7 +35,7 @@ export class BillingPage {
   private settleId: string | null = this.route.snapshot.queryParamMap.get('settle');
 
   protected readonly list = recordList<Invoice>(this.spec, () =>
-    this.billingApi.list().pipe(map((res) => res.data)),
+    allPages((page) => this.billingApi.list(page)),
   );
 
   private readonly all = this.list.rows;

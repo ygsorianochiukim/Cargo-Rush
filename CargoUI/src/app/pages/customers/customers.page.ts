@@ -1,6 +1,5 @@
 import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { map } from 'rxjs';
 
 import { Customer } from '../../models/customer/customer.model';
 import { customerSpec } from '../../services/customer/customer.form';
@@ -13,6 +12,8 @@ import { ListToolbar } from '../../shared/list-toolbar';
 import { RecordDialog } from '../../shared/record-dialog';
 import { recordList } from '../../shared/record-list';
 import { ErrorState } from '../../shared/states';
+
+import { allPages } from '../../services/shared/all-pages';
 
 @Component({
   selector: 'app-customers',
@@ -78,7 +79,7 @@ export class CustomersPage {
   private readonly spec = customerSpec();
 
   protected readonly list = recordList<Customer>(this.spec, () =>
-    this.customersApi.list().pipe(map((res) => res.data)),
+    allPages((page) => this.customersApi.list(page)),
   );
 
   protected readonly created = signal<Customer | null>(null);

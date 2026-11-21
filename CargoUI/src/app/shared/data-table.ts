@@ -11,7 +11,10 @@ import {
 import { StatusValue } from '../models/shared/status.model';
 import { Icon } from './icon';
 import { SkeletonRows } from './states';
+import { statusLabel } from './status';
 import { StatusPill } from './status-pill';
+import { TablePager } from './table-pager';
+import { matchesTableSearch, TableSearch } from './table-search';
 
 export interface Column<T = any> {
   label: string;
@@ -36,27 +39,18 @@ export function dayOf(value: string | null | undefined): string | null {
 @Component({
   selector: 'app-data-table',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, StatusPill, SkeletonRows],
+  imports: [Icon, StatusPill, SkeletonRows, TablePager, TableSearch],
   template: `
     @if (rows(); as loaded) {
       @if ((searchable() || dated()) && loaded.length > 0) {
         <div class="flex flex-wrap items-center gap-2 px-4 py-3">
           @if (searchable()) {
-            <label class="relative min-w-[200px] flex-1">
-              <span class="sr-only">Search this list</span>
-              <app-icon
-                name="search"
-                [size]="15"
-                class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-cr-ink-muted"
-              />
-              <input
-                type="search"
-                [value]="term()"
-                (input)="setTerm($event)"
-                [attr.placeholder]="searchPlaceholder()"
-                class="h-9 w-full rounded-control border border-cr-line bg-cr-surface pr-3 pl-9 text-[13px] text-cr-ink placeholder:text-cr-ink-muted focus:border-cr-blue focus:outline-none"
-              />
-            </label>
+            <app-table-search
+              class="min-w-[200px] flex-1"
+              [value]="term()"
+              [placeholder]="searchPlaceholder()"
+              (valueChange)="setTerm($event)"
+            />
           }
 
           @if (dated()) {
@@ -150,7 +144,9 @@ export function dayOf(value: string | null | undefined): string | null {
                   </th>
                 }
                 @if (rowAction()) {
-                  <th class="cr-th px-4 py-2.5"><span class="sr-only">Open</span></th>
+                  <th class="cr-th px-4 py-2.5" [style.width.px]="deletable() ? 104 : 64">
+                    <span class="sr-only">Actions</span>
+                  </th>
                 }
               </tr>
             </thead>
@@ -238,50 +234,13 @@ export function dayOf(value: string | null | undefined): string | null {
         </div>
 
         @if (paginated() && matched().length > 0) {
-          <div
-            class="flex flex-wrap items-center justify-between gap-3 border-t border-cr-line px-4 py-3"
-          >
-            <label class="flex items-center gap-2 text-[12px] text-cr-ink-muted">
-              <span>Rows</span>
-              <select
-                [value]="size()"
-                (change)="setSize($event)"
-                class="h-8 rounded-control border border-cr-line bg-cr-surface px-2 text-[13px] text-cr-ink focus:border-cr-blue focus:outline-none"
-              >
-                @for (option of sizes; track option) {
-                  <option [value]="option" [selected]="option === size()">{{ option }}</option>
-                }
-              </select>
-            </label>
-
-            <p class="cr-num text-[12px] text-cr-ink-muted">
-              {{ firstShown() }}–{{ lastShown() }} of {{ matched().length }}
-            </p>
-
-            <div class="flex items-center gap-1">
-              <button
-                type="button"
-                class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint disabled:opacity-40"
-                aria-label="Previous page"
-                [disabled]="pageIndex() === 0"
-                (click)="back()"
-              >
-                <app-icon name="chevron-left" [size]="16" />
-              </button>
-              <span class="cr-num px-1 text-[12px] text-cr-ink-muted">
-                {{ pageIndex() + 1 }} / {{ pageCount() }}
-              </span>
-              <button
-                type="button"
-                class="flex h-8 w-8 items-center justify-center rounded-control text-cr-ink-muted transition-colors hover:bg-cr-tint disabled:opacity-40"
-                aria-label="Next page"
-                [disabled]="pageIndex() + 1 >= pageCount()"
-                (click)="next()"
-              >
-                <app-icon name="chevron-right" [size]="16" />
-              </button>
-            </div>
-          </div>
+          <app-table-pager
+            [total]="matched().length"
+            [size]="size()"
+            [index]="pageIndex()"
+            (indexChange)="pageIndex.set($event)"
+            (sizeChange)="setSize($event)"
+          />
         }
       }
     } @else {
@@ -313,7 +272,6 @@ export class DataTable {
 
   readonly pageSize = input(10);
 
-  protected readonly sizes = [5, 10, 15, 20] as const;
 
   protected readonly term = signal('');
   protected readonly from = signal('');
@@ -341,7 +299,7 @@ export class DataTable {
     if (needle === '' && (from === '' && to === '')) return loaded;
 
     return loaded.filter((row) => {
-      if (needle !== '' && !this.haystack(row).includes(needle)) return false;
+      if (needle !== '' && !matchesTableSearch(this.haystack(row), needle)) return false;
 
       if (dateOf && (from !== '' || to !== '')) {
         const day = dayOf(dateOf(row));
@@ -367,14 +325,6 @@ export class DataTable {
     return this.matched().slice(start, start + this.size());
   });
 
-  protected readonly firstShown = computed(() =>
-    this.matched().length === 0 ? 0 : this.pageIndex() * this.size() + 1,
-  );
-
-  protected readonly lastShown = computed(() =>
-    Math.min(this.matched().length, (this.pageIndex() + 1) * this.size()),
-  );
-
   constructor() {
     effect(() => {
       const last = this.pageCount() - 1;
@@ -383,8 +333,8 @@ export class DataTable {
     });
   }
 
-  protected setTerm(event: Event): void {
-    this.term.set((event.target as HTMLInputElement).value);
+  protected setTerm(term: string): void {
+    this.term.set(term);
     this.pageIndex.set(0);
   }
 
@@ -411,25 +361,18 @@ export class DataTable {
     this.pageIndex.set(0);
   }
 
-  protected setSize(event: Event): void {
-    this.chosenSize.set(Number((event.target as HTMLSelectElement).value));
+  protected setSize(size: number): void {
+    this.chosenSize.set(size);
     this.pageIndex.set(0);
-  }
-
-  protected back(): void {
-    this.pageIndex.update((index) => Math.max(0, index - 1));
-  }
-
-  protected next(): void {
-    this.pageIndex.update((index) => Math.min(this.pageCount() - 1, index + 1));
   }
 
   private haystack(row: any): string {
     return this.columns()
-      .filter((col) => col.kind !== 'status')
-      .map((col) => `${col.badge?.(row) ?? col.value?.(row) ?? ''} ${col.sub?.(row) ?? ''}`)
-      .join(' ')
-      .toLowerCase();
+      .map((col) => [
+        col.value?.(row), col.sub?.(row), col.badge?.(row), col.pill?.(row).label,
+        col.status ? statusLabel(col.status(row)) : null, col.date?.(row),
+      ].join(' '))
+      .join(' ');
   }
 
   protected readonly dash = '—';

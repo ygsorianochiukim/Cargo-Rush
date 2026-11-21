@@ -1,7 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
-import { map } from 'rxjs';
 
 import {
   Expense,
@@ -24,10 +23,14 @@ import { ListToolbar } from '../../shared/list-toolbar';
 import { recordList } from '../../shared/record-list';
 import { ErrorState } from '../../shared/states';
 
+import { TableView } from '../../shared/table-view';
+
+import { allPages } from '../../services/shared/all-pages';
+
 @Component({
   selector: 'app-expenses',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BarRows, Card, DataTable, Field, FilterBar, Icon, ListToolbar, ErrorState, ReactiveFormsModule, RouterLink],
+  imports: [TableView, BarRows, Card, DataTable, Field, FilterBar, Icon, ListToolbar, ErrorState, ReactiveFormsModule, RouterLink],
   templateUrl: './expenses.page.html',
 })
 export class ExpensesPage {
@@ -47,7 +50,7 @@ export class ExpensesPage {
   private readonly spec = expenseSpec();
 
   protected readonly list = recordList<Expense>(this.spec, () =>
-    this.expensesApi.list({ per_page: 100 }).pipe(map((res) => res.data)),
+    allPages((page) => this.expensesApi.list(page)),
   );
 
   protected readonly schedule = signal<PaySchedule | 'all'>('all');

@@ -1170,11 +1170,15 @@ Route::prefix('v1')->group(function (): void {
             Route::get('runs/{run}', [AutomationController::class, 'show'])->whereUlid('run');
             Route::get('bots/discord', [AutomationBotController::class, 'show']);
             Route::put('bots/discord', [AutomationBotController::class, 'update']);
+            Route::post('bots/discord/test-alert', [AutomationBotController::class, 'test'])->middleware('throttle:6,1');
         });
 
         Route::prefix('assistant')->group(function (): void {
             Route::get('bot-config', [AssistantController::class, 'botConfig']);
             Route::post('bot-status', [AssistantController::class, 'botStatus'])->name('assistant.bot-status');
+            Route::get('test-alert', [AssistantController::class, 'pendingTestAlert']);
+            Route::post('test-alert/{test}', [AssistantController::class, 'finishTestAlert'])
+                ->whereUlid('test')->name('assistant.test-alert.finish');
             Route::get('finance-activity', [AssistantController::class, 'financeActivity']);
             Route::get('payroll-alerts', [PayrollDiscordAlertController::class, 'index']);
             Route::post('payroll-alerts/{alert}/delivered', [PayrollDiscordAlertController::class, 'delivered'])

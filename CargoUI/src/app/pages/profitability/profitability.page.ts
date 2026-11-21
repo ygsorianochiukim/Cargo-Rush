@@ -16,10 +16,12 @@ import { Donut, DonutSlice } from '../../shared/donut';
 import { fmt } from '../../shared/format';
 import { Icon } from '../../shared/icon';
 
+import { TableView } from '../../shared/table-view';
+
 @Component({
   selector: 'app-profitability',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [BarRows, Card, Icon, Donut],
+  imports: [TableView, BarRows, Card, Icon, Donut],
   templateUrl: './profitability.page.html',
 })
 export class ProfitabilityPage {

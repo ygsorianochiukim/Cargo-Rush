@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
-import { map } from 'rxjs';
 
 import { Driver } from '../../models/driver/driver.model';
 import { helperSpec } from '../../services/driver/helper.form';
@@ -11,10 +10,14 @@ import { recordList } from '../../shared/record-list';
 import { EmptyState, ErrorState, SkeletonRows } from '../../shared/states';
 import { StatusPill } from '../../shared/status-pill';
 
+import { TableView } from '../../shared/table-view';
+
+import { allPages } from '../../services/shared/all-pages';
+
 @Component({
   selector: 'app-helpers',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Card, Icon, StatusPill, SkeletonRows, EmptyState, ErrorState, ListToolbar],
+  imports: [TableView, Card, Icon, StatusPill, SkeletonRows, EmptyState, ErrorState, ListToolbar],
   templateUrl: './helpers.page.html',
 })
 export class HelpersPage {
@@ -22,7 +25,7 @@ export class HelpersPage {
   private readonly spec = helperSpec();
 
   protected readonly list = recordList<Driver>(this.spec, () =>
-    this.driversApi.helpers().pipe(map((res) => res.data)),
+    allPages((page) => this.driversApi.helpers(page)),
   );
 
   protected initials(name: string): string {

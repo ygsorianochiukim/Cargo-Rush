@@ -123,6 +123,27 @@ app-root {
   color: var(--color-cr-ink-muted);
 }
 
+/* Keep column sizing independent of whichever rows are visible. */
+:is(app-data-table table, app-table-view table, table.cr-fixed-table) {
+  table-layout: fixed;
+  width: 100%;
+}
+
+:is(app-data-table table, app-table-view table, table.cr-fixed-table) > :is(thead, tbody, tfoot) > tr > :is(th, td) {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+:is(app-data-table table, app-table-view table, table.cr-fixed-table) :where(input, select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.cr-table-scroll {
+  overscroll-behavior-inline: contain;
+  scrollbar-color: #8b9db0 var(--color-cr-tint);
+}
+
 /* visible focus everywhere — DESIGN.md section 9 */
 :where(a, button, [tabindex], input, select, textarea):focus-visible {
   outline: 2px solid var(--color-cr-blue);

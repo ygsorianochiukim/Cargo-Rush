@@ -52,8 +52,35 @@ class PayrollCostService
         return (int) $this->paidBetween($from, $to)->sum('counted_cents');
     }
 
+    /** @return array{total_cents: int, runs: array<int, array<string, mixed>>} */
+    public function expenseAudit(CarbonInterface $from, CarbonInterface $to): array
+    {
+        $costs = $this->paidBetween($from, $to);
+
+        return [
+            'total_cents' => (int) $costs->sum('counted_cents'),
+            'runs' => $costs->reverse()->values()->map(static function (array $cost): array {
+                $run = $cost['run'];
+
+                return [
+                    'id' => $run->id,
+                    'reference' => $run->reference,
+                    'label' => $run->scope()->label(),
+                    'route' => $run->scope()->route(),
+                    'period' => $run->periodLabel(),
+                    'accounting_date' => $cost['date'],
+                    'paid_date' => $run->paid_at?->copy()->tz('Asia/Manila')->toDateString(),
+                    'gross_cents' => $cost['gross_cents'],
+                    'employer_cents' => $cost['employer_cents'],
+                    'net_cents' => $run->netCents(),
+                    'expense_cents' => $cost['counted_cents'],
+                ];
+            })->all(),
+        ];
+    }
+
     /** @return array<int, array{id: string, name: string, detail: string, amount_cents: int, costed_cents: int, due_on: ?string}> */
-    public function owedAsOf(CarbonInterface $asOf): array
+    public function owedAsOf(CarbonInterface $asOf, bool $current = false): array
     {
         $day = Carbon::parse($asOf->toDateString())->endOfDay();
         $lines = [];
@@ -65,7 +92,7 @@ class PayrollCostService
 
         foreach ($runs as $run) {
             $approvedBy = $run->approved_at !== null && $run->approved_at->lessThanOrEqualTo($day);
-            $paidBy = $run->isPaid() && $this->paidOn($run)->lessThanOrEqualTo($day);
+            $paidBy = $run->isPaid() && ($current || $this->paidOn($run)->lessThanOrEqualTo($day));
 
             if ($approvedBy && ! $paidBy) {
                 $sheet = $this->sheetPayByLine($run);
@@ -99,6 +126,7 @@ class PayrollCostService
                         'amount_cents' => $withheld,
                         'costed_cents' => $withheld,
                         'due_on' => $this->remittedBy($run)->toDateString(),
+                        'settle_at' => $run->scope()->route(),
                     ];
                 }
             }

@@ -113,6 +113,66 @@
   </app-card>
 </div>
 
+@if (report()?.payroll_audit; as audit) {
+  <app-card heading="Payroll expense audit" icon="badge" [hint]="fmt.pesos(audit.total_cents)" class="mt-4 block">
+    <p class="mb-3 text-[13px] text-cr-ink-muted">
+      Paid runs in the selected accounting date range. Payroll expense includes employer contributions and excludes crew wages already recorded on trip sheets.
+    </p>
+    @if (audit.runs.length > 0) {
+      <app-table-view
+        #records0
+        [rows]="audit.runs"
+        [fields]="[
+          'reference',
+          'label',
+          'period',
+          'accounting_date',
+          'paid_date',
+          'gross_cents',
+          'employer_cents',
+          'net_cents',
+          'expense_cents',
+        ]"
+        label="Search payroll audit"
+      >
+        <div class="overflow-x-auto">
+          <table class="w-full whitespace-nowrap text-left text-[13px]">
+            <thead class="border-b border-cr-line text-cr-ink-muted">
+              <tr>
+                <th scope="col" class="py-2 pr-4">Payroll run</th>
+                <th scope="col" class="py-2 pr-4">Accounting date</th>
+                <th scope="col" class="py-2 pr-4">Paid date</th>
+                <th scope="col" class="py-2 pr-4 text-right">Gross pay</th>
+                <th scope="col" class="py-2 pr-4 text-right">Employer share</th>
+                <th scope="col" class="py-2 pr-4 text-right">Net paid</th>
+                <th scope="col" class="py-2 text-right">Payroll expense</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (run of records0.page(); track run.id) {
+                <tr class="border-b border-cr-line last:border-0">
+                  <td class="py-3 pr-4">
+                    <a [routerLink]="run.route" [queryParams]="{ run: run.id }" class="font-semibold text-cr-blue hover:underline">{{ run.reference }}</a>
+                    <span class="block text-[12px] text-cr-ink-muted">{{ run.label }} · {{ run.period }}</span>
+                  </td>
+                  <td class="py-3 pr-4">{{ fmt.date(run.accounting_date) }}</td>
+                  <td class="py-3 pr-4">{{ run.paid_date ? fmt.date(run.paid_date) : '—' }}</td>
+                  <td class="cr-num py-3 pr-4 text-right">{{ fmt.pesos(run.gross_cents) }}</td>
+                  <td class="cr-num py-3 pr-4 text-right">{{ fmt.pesos(run.employer_cents) }}</td>
+                  <td class="cr-num py-3 pr-4 text-right">{{ fmt.pesos(run.net_cents) }}</td>
+                  <td class="cr-num py-3 text-right font-semibold">{{ fmt.pesos(run.expense_cents) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </app-table-view>
+    } @else {
+      <p class="text-[13px] text-cr-ink-muted">No paid payroll runs in this range.</p>
+    }
+  </app-card>
+}
+
 <app-card heading="Categories" icon="tag" class="mt-4 block">
   <div card-actions class="ml-auto">
     <button

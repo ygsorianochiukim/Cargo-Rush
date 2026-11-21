@@ -60,9 +60,12 @@
     <app-discord-bot-settings />
 
     <app-card heading="Run history" icon="clipboard" [padded]="false">
+      <div class="px-4 py-3">
+        <app-table-search label="Search automation runs" [maxLength]="120" [value]="historySearch()" (valueChange)="searchHistory($event)" />
+      </div>
       @if (overview.data.history.length) {
         <div class="overflow-x-auto">
-          <table class="w-full whitespace-nowrap text-left text-sm">
+          <table class="cr-fixed-table w-full min-w-[580px] text-left text-sm">
             <thead class="border-b border-cr-line bg-cr-tint text-cr-ink-muted">
               <tr>
                 <th scope="col" class="px-4 py-2 font-semibold">Workflow</th>
@@ -93,7 +96,7 @@
         </div>
         <ng-container *ngTemplateOutlet="pager; context: { page: historyPage(), count: pageCount(overview), move: moveHistory, label: 'Run history pages', displayed: overview.meta?.['page'] }" />
       } @else {
-        <p class="p-4 text-sm text-cr-ink-muted">No runs recorded yet.</p>
+        <p class="p-4 text-sm text-cr-ink-muted">{{ historySearch() ? 'No runs match this search.' : 'No runs recorded yet.' }}</p>
       }
     </app-card>
 
@@ -118,9 +121,12 @@
             <p class="mt-2 text-sm text-cr-red">The invoice check stopped with an error. Any changes it committed appear below.</p>
           }
           <h4 class="mt-4 text-sm font-semibold">Invoice changes ({{ run.changed_count | number }})</h4>
+          @if (run.changed_count) {
+            <app-table-search class="mt-2" label="Search invoice changes" [maxLength]="120" [value]="selection()?.search ?? ''" (valueChange)="searchDetail($event)" />
+          }
           @if (result.data.changes.length) {
             <div class="mt-2 overflow-x-auto">
-              <table class="w-full whitespace-nowrap text-left text-sm">
+              <table class="cr-fixed-table w-full min-w-[480px] text-left text-sm">
                 <thead class="border-b border-cr-line bg-cr-tint text-cr-ink-muted">
                   <tr>
                     <th scope="col" class="px-3 py-2 font-semibold">Invoice</th>
@@ -149,7 +155,7 @@
             </div>
             <ng-container *ngTemplateOutlet="pager; context: { page: selection()?.page, count: pageCount(result), move: moveDetail, label: 'Invoice change pages', displayed: result.meta?.['page'] }" />
           } @else {
-            <p class="mt-2 text-sm text-cr-ink-muted">No invoice changes recorded for this run.</p>
+            <p class="mt-2 text-sm text-cr-ink-muted">{{ selection()?.search ? 'No invoice changes match this search.' : 'No invoice changes recorded for this run.' }}</p>
           }
         } @else if (!detailError()) {
           <p role="status" class="text-sm text-cr-ink-muted">Loading run details…</p>

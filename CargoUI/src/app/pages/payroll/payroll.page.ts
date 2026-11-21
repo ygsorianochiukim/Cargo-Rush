@@ -36,10 +36,14 @@ interface Part {
   signed?: boolean;
 }
 
+import { TableView } from '../../shared/table-view';
+
+import { allPages } from '../../services/shared/all-pages';
+
 @Component({
   selector: 'app-payroll',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Card, Field, Icon, EmptyState, ErrorState],
+  imports: [TableView, Card, Field, Icon, EmptyState, ErrorState],
   templateUrl: './payroll.page.html',
 })
 export class PayrollPage {
@@ -49,6 +53,7 @@ export class PayrollPage {
   private readonly company = inject(CompanyService);
   private readonly identity = inject(IdentityService);
   private readonly route = inject(ActivatedRoute);
+  private linkedRunId = this.route.snapshot.queryParamMap.get('run');
 
   protected readonly fmt = fmt;
 
@@ -309,19 +314,23 @@ export class PayrollPage {
   protected load(): void {
     const scope = this.scope();
 
-    this.payroll.list({ per_page: 50, scope }).subscribe({
-      next: (page) => {
+    allPages((page) => this.payroll.list({ ...page, scope })).subscribe({
+      next: (runs) => {
         if (scope !== this.scope()) return;
 
-        this.runs.set(page.data);
+        this.runs.set(runs);
         this.error.set(null);
 
         const current = this.run();
-        const first = page.data[0];
+        const first = runs[0];
 
-        if (current === null && first !== undefined) this.choose(first.id);
+        if (this.linkedRunId !== null) {
+          const id = this.linkedRunId;
+          this.linkedRunId = null;
+          this.choose(id);
+        } else if (current === null && first !== undefined) this.choose(first.id);
         else if (current !== null) {
-          const fresh = page.data.find((candidate) => candidate.id === current.id);
+          const fresh = runs.find((candidate) => candidate.id === current.id);
 
           if (fresh === undefined) this.run.set(first ?? null);
         }
