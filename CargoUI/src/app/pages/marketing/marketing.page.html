@@ -103,6 +103,17 @@
                 ></textarea>
               </app-field>
             }
+            <div>
+              <app-field label="Post image" hint="JPG, PNG, or WebP up to 5 MB." [error]="imageError() || null">
+                <input #imagePicker type="file" accept="image/jpeg,image/png,image/webp"
+                  class="block w-full text-sm text-cr-ink file:mr-3 file:rounded-control file:border file:border-cr-line file:bg-cr-surface file:px-3 file:py-2 file:text-sm file:font-semibold"
+                  [disabled]="!!busy()" (change)="pickImage(imagePicker)" />
+              </app-field>
+              @if (imageEdit() !== 'remove' && (imageEdit() || draft.has_image)) {
+                <button type="button" class="mt-2 text-sm font-semibold text-cr-blue hover:underline"
+                  [disabled]="!!busy()" (click)="removeImage()">Remove image</button>
+              }
+            </div>
             <div class="flex gap-2">
               <button type="submit" class="rounded-control bg-cr-blue px-4 py-2 text-sm font-semibold text-cr-surface disabled:opacity-60"
                 [disabled]="!!busy() || !draftReady() || !draftDirty()">
@@ -120,6 +131,14 @@
           <p class="whitespace-pre-wrap break-words text-sm font-semibold">{{ content.hook }}</p>
           <p class="mt-3 whitespace-pre-wrap break-words text-sm">{{ content.caption }}</p>
           <p class="mt-3 whitespace-pre-wrap break-words text-sm font-semibold">{{ content.cta }}</p>
+          @if (imagePreview(); as image) {
+            <img [src]="image" alt="Post image preview"
+              class="mt-4 max-h-[28rem] w-full rounded-control border border-cr-line bg-cr-tint object-contain" />
+          } @else if (imageEdit() !== 'remove' && imageLoading()) {
+            <p role="status" class="mt-4 text-sm text-cr-ink-muted">Loading image…</p>
+          } @else if (imageEdit() !== 'remove' && imageLoadError()) {
+            <p role="status" class="mt-4 text-sm text-cr-ink-muted">The saved image could not be loaded.</p>
+          }
           @if (draft.trend; as trend) {
             <p class="mt-4 border-t border-cr-line pt-3 text-xs text-cr-ink-muted">
               Inspired by {{ trend.topic }} · {{ trend.source }} · {{ trend.checked_at | date:'medium':'+0800' }} PHT

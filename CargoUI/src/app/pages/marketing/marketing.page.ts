@@ -1,6 +1,6 @@
 import { DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -33,6 +33,7 @@ interface Draft {
   topic: string;
   content: Content;
   trend: { topic: string; source: string; checked_at: string } | null;
+  has_image: boolean;
 }
 
 interface MarketingDashboard {
@@ -74,6 +75,16 @@ export class MarketingPage {
   protected readonly drafts = signal<Draft[]>([]);
   protected readonly selection = signal<Draft | null>(null);
   protected readonly edit = signal<Content | null>(null);
+  protected readonly imageEdit = signal<{ file: File; url: string } | 'remove' | null>(null);
+  protected readonly savedImage = signal<string | null>(null);
+  protected readonly imageLoading = signal(false);
+  protected readonly imageLoadError = signal(false);
+  protected readonly imageError = signal('');
+  protected readonly imagePreview = computed(() => {
+    const change = this.imageEdit();
+    if (change === 'remove') return null;
+    return change?.url ?? this.savedImage();
+  });
   protected readonly busy = signal<'load' | 'brand' | 'generate' | 'draft' | null>(null);
   protected readonly loaded = signal(false);
   protected readonly error = signal('');
@@ -87,12 +98,37 @@ export class MarketingPage {
   protected readonly draftDirty = computed(() => {
     const current = this.edit();
     const original = this.selection()?.content;
-    return current !== null && (current.format !== original?.format ||
+    return current !== null && (this.imageEdit() !== null || current.format !== original?.format ||
       this.editFields.some(({ key }) => current[key] !== original?.[key]));
   });
   protected readonly draftReady = computed(() => this.editFields.every(({ key }) => this.edit()?.[key].trim()));
 
   constructor() {
+    this.destroyRef.onDestroy(() => this.clearImageEdit());
+    effect((onCleanup) => {
+      const draft = this.selection();
+      this.savedImage.set(null);
+      this.imageLoadError.set(false);
+      this.imageLoading.set(draft?.has_image === true);
+      if (!draft?.has_image) return;
+
+      let url: string | undefined;
+      const request = this.api.blob(`marketing/drafts/${draft.id}/image`).subscribe({
+        next: (image) => {
+          url = URL.createObjectURL(image);
+          this.savedImage.set(url);
+          this.imageLoading.set(false);
+        },
+        error: () => {
+          this.imageLoadError.set(true);
+          this.imageLoading.set(false);
+        },
+      });
+      onCleanup(() => {
+        request.unsubscribe();
+        if (url) URL.revokeObjectURL(url);
+      });
+    });
     this.load();
   }
 
@@ -132,6 +168,9 @@ export class MarketingPage {
   }
 
   protected select(draft: Draft | null): void {
+    this.clearImageEdit();
+    this.imageError.set('');
+    if (this.selection() !== draft) this.savedImage.set(null);
     this.selection.set(draft);
     this.edit.set(draft?.content ?? null);
   }
@@ -144,11 +183,52 @@ export class MarketingPage {
     this.edit.update((content) => content && { ...content, [key]: value });
   }
 
+  protected pickImage(input: HTMLInputElement): void {
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) {
+      this.imageError.set('Choose a JPG, PNG, or WebP image up to 5 MB.');
+      return;
+    }
+
+    this.clearImageEdit();
+    this.imageError.set('');
+    this.imageEdit.set({ file, url: URL.createObjectURL(file) });
+  }
+
+  protected removeImage(): void {
+    this.clearImageEdit();
+    this.imageError.set('');
+    if (this.selection()?.has_image) this.imageEdit.set('remove');
+  }
+
+  private clearImageEdit(): void {
+    const change = this.imageEdit();
+    if (change && change !== 'remove') URL.revokeObjectURL(change.url);
+    this.imageEdit.set(null);
+  }
+
   protected saveDraft(): void {
     const selected = this.selection();
     const content = this.edit();
     if (this.busy() || !selected || !content || !this.draftReady() || !this.draftDirty()) return;
-    this.request('draft', this.api.put<Draft>(`marketing/drafts/${selected.id}`, content), (draft) => {
+    const path = `marketing/drafts/${selected.id}`;
+    const image = this.imageEdit();
+    let request: Observable<Draft>;
+    if (image === null) {
+      request = this.api.put<Draft>(path, content);
+    } else {
+      const form = new FormData();
+      form.append('_method', 'PUT');
+      for (const [key, value] of Object.entries(content)) form.append(key, value);
+      if (image === 'remove') form.append('remove_image', '1');
+      else form.append('image', image.file);
+      request = this.api.postForm<Draft>(path, form);
+    }
+
+    this.request('draft', request, (draft) => {
       this.drafts.update((current) => [draft, ...current.filter(({ id }) => id !== draft.id)]);
       this.select(draft);
       this.notice.set('Draft updated.');

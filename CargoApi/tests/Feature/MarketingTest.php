@@ -8,7 +8,9 @@ use App\Domain\Marketing\Services\PhilippinesTrends;
 use App\Domain\Tenancy\Services\CompanyProvisioner;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Http\Client\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 
 beforeEach(function (): void {
     $this->seed(PermissionSeeder::class);
@@ -107,4 +109,46 @@ it('reports missing AI configuration before making external requests', function 
         ->assertUnprocessable()
         ->assertJsonValidationErrors('generation');
     Http::assertNothingSent();
+});
+
+it('saves, previews, replaces and removes an image on a marketing draft', function (): void {
+    $disk = Storage::fake('local');
+    $draft = MarketingDraft::query()->create(['topic' => 'Offer', 'content' => $this->draftContent]);
+    $path = '/api/v1/marketing/drafts/'.$draft->id;
+
+    $this->post($path, ['_method' => 'PUT', ...$this->draftContent, 'image' => UploadedFile::fake()->image('first.jpg')])
+        ->assertOk()
+        ->assertJsonPath('data.has_image', true)
+        ->assertJsonMissingPath('data.image_path');
+    $first = $draft->refresh()->image_path;
+    $disk->assertExists($first);
+
+    $this->get($path.'/image')->assertOk()
+        ->assertHeader('Content-Type', 'image/jpeg');
+    $this->putJson($path, $this->draftContent)->assertOk()->assertJsonPath('data.has_image', true);
+
+    $this->post($path, ['_method' => 'PUT', ...$this->draftContent, 'image' => UploadedFile::fake()->image('next.png')])
+        ->assertOk()
+        ->assertJsonPath('data.has_image', true);
+    $second = $draft->refresh()->image_path;
+    $disk->assertMissing($first);
+    $disk->assertExists($second);
+
+    $this->post($path, ['_method' => 'PUT', ...$this->draftContent, 'image' => UploadedFile::fake()->create('script.svg')])
+        ->assertUnprocessable()
+        ->assertJsonValidationErrors('image');
+
+    $other = $this->makeCompany('Other Image Haulage');
+    app(CompanyProvisioner::class)->provision($other);
+    $otherAdmin = $this->asCompany($other, fn () => User::create([
+        'name' => 'Other Image Admin', 'email' => 'other-image@test.test',
+        'password' => 'password', 'role' => 'administrator',
+    ]));
+    $this->actingAs($otherAdmin)->get($path.'/image')->assertNotFound();
+
+    $this->actingAs($this->admin)->post($path, ['_method' => 'PUT', ...$this->draftContent, 'remove_image' => '1'])
+        ->assertOk()
+        ->assertJsonPath('data.has_image', false);
+    $disk->assertMissing($second);
+    $this->get($path.'/image')->assertNotFound();
 });

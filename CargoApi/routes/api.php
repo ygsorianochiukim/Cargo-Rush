@@ -1171,6 +1171,7 @@ Route::prefix('v1')->group(function (): void {
             Route::put('brand', [MarketingController::class, 'updateBrand']);
             Route::post('drafts', [MarketingController::class, 'generate'])->middleware('throttle:marketing-generation');
             Route::put('drafts/{draft}', [MarketingController::class, 'updateDraft'])->whereUlid('draft');
+            Route::get('drafts/{draft}/image', [MarketingController::class, 'draftImage'])->whereUlid('draft');
         });
 
         Route::middleware('permission:'.Permission::DEVELOPER_ACCESS)->prefix('automation')->group(function (): void {
