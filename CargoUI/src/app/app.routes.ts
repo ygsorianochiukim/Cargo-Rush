@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
 
 import { Layout } from './layout/layout';
-import { authGuard, developerGuard, guestGuard } from './services/identity/auth.guard';
+import { authGuard, companyManagerGuard, developerGuard, guestGuard } from './services/identity/auth.guard';
 
 export const routes: Routes = [
   {
@@ -363,6 +363,13 @@ export const routes: Routes = [
         data: { title: 'Assistant Settings' },
         loadComponent: () =>
           import('./pages/settings/assistant.page').then((m) => m.AssistantPage),
+      },
+      {
+        path: 'marketing',
+        canActivate: [companyManagerGuard],
+        title: 'Marketing · Cargo Rush',
+        data: { title: 'Marketing' },
+        loadComponent: () => import('./pages/marketing/marketing.page').then((m) => m.MarketingPage),
       },
       {
         path: 'automation',

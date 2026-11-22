@@ -190,5 +190,7 @@ class DomainServiceProvider extends ServiceProvider
         RateLimiter::for('register', static fn (Request $request) => Limit::perHour(20)->by($request->ip()));
 
         RateLimiter::for('carriers', static fn (Request $request) => Limit::perMinute(60)->by($request->ip()));
+        RateLimiter::for('marketing-generation', static fn (Request $request) => Limit::perDay(30)
+            ->by($request->user()?->company_id ?? $request->ip()));
     }
 }
