@@ -38,7 +38,7 @@ class MarketingGenerator
     }
 
     /**
-     * @param array<string, mixed> $brand
+     * @param  array<string, mixed>  $brand
      * @return list<array{content: array, trend: array|null}>
      */
     public function generate(?AssistantSetting $settings, string $company, array $brand, string $topic, bool $useTrends): array
