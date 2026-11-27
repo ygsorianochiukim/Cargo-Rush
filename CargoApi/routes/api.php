@@ -1117,6 +1117,7 @@ Route::prefix('v1')->group(function (): void {
 
         Route::middleware('permission:billing.manage')->group(function (): void {
             Route::post('billing', [BillingController::class, 'store']);
+            Route::post('billing/trip-status', [BillingController::class, 'updateTripBilling']);
             Route::match(['put', 'patch'], 'billing/{invoice}', [BillingController::class, 'update']);
             Route::delete('billing/{invoice}', [BillingController::class, 'destroy']);
             Route::post('billing/{invoice}/settle', [BillingController::class, 'settle']);

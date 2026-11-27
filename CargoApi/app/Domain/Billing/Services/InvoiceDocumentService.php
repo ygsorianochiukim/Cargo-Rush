@@ -6,6 +6,7 @@ namespace App\Domain\Billing\Services;
 
 use App\Domain\Billing\Models\Invoice;
 use App\Domain\Billing\Models\Payment;
+use App\Domain\Billing\Support\BillingCutoff;
 use App\Domain\Billing\Support\InvoiceTemplate;
 use App\Domain\Shared\Support\Money;
 use App\Domain\Tenancy\Services\LogoStore;
@@ -76,6 +77,8 @@ class InvoiceDocumentService
             ],
 
             'lines' => $this->lines($invoice),
+            'billing_cutoff' => BillingCutoff::forInvoice($invoice),
+            'billing_status' => $invoice->tripBillingStatus(),
 
             'totals' => [
                 'net_amount_cents' => $invoice->net_amount_cents,

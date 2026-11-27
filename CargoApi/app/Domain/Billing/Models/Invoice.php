@@ -28,7 +28,7 @@ class Invoice extends Model
     protected $fillable = [
         'number', 'customer_id', 'payee', 'issued_at', 'due_at',
         'amount_cents', 'currency', 'direction', 'status',
-        'trip_id', 'paid_at',
+        'trip_id', 'billed_at', 'paid_at',
         'net_amount_cents', 'vat_cents', 'withholding_cents',
         'vat_rate_bp', 'withholding_rate_bp', 'vat_treatment',
         'supplier_id',
@@ -46,6 +46,7 @@ class Invoice extends Model
             'vat_rate_bp' => 'integer',
             'withholding_rate_bp' => 'integer',
             'vat_treatment' => VatTreatment::class,
+            'billed_at' => 'datetime',
             'paid_at' => 'datetime',
             'direction' => InvoiceDirection::class,
             'status' => StatusValue::class,
@@ -133,6 +134,20 @@ class Invoice extends Model
         $paid = $this->paidCents();
 
         return $paid > 0 && $paid < $this->dueCents();
+    }
+
+    public function tripBillingStatus(): ?string
+    {
+        if ($this->trip_id === null || $this->direction !== InvoiceDirection::Receivable
+            || $this->status === StatusValue::Cancelled) {
+            return null;
+        }
+
+        return match (true) {
+            $this->isPaid() => 'paid',
+            $this->billed_at !== null => 'billed',
+            default => 'pending',
+        };
     }
 
     public function statusFromPayments(): StatusValue

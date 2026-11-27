@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Domain\Billing\Models\Invoice;
+use App\Domain\Billing\Models\Payment;
 use App\Domain\Customer\Models\Customer;
 use App\Domain\Driver\Models\Driver;
 use App\Domain\Identity\Models\User;
@@ -11,6 +12,7 @@ use App\Domain\Shared\Support\Money;
 use App\Domain\Vehicle\Models\Vehicle;
 use Database\Seeders\Demo\FleetSeeder;
 use Database\Seeders\NavigationSeeder;
+use Illuminate\Support\Carbon;
 
 beforeEach(function (): void {
     zoneCard();
@@ -72,6 +74,90 @@ beforeEach(function (): void {
 });
 
 describe('the delivery invoice', function (): void {
+    it('marks selected trip invoices billed and settles them in full only after billing', function (?int $dateOffset): void {
+        $first = ($this->haul)();
+        $second = ($this->haul)();
+        $invoices = Invoice::query()->whereIn('trip_id', [$first, $second])->orderBy('id')->get();
+        $ids = $invoices->modelKeys();
+        $endpoint = '/api/v1/billing/trip-status';
+        $payment = [
+            'invoice_ids' => $ids,
+            'action' => 'paid',
+            'method' => 'cash',
+            'reference' => 'RECEIPT-42',
+        ];
+        $expectedDate = now('Asia/Manila')->addDays($dateOffset ?? 0)->toDateString();
+        if ($dateOffset !== null) {
+            $payment['paid_on'] = $expectedDate;
+        }
+
+        $this->actingAs($this->marco)->postJson($endpoint, $payment)->assertForbidden();
+        $this->actingAs($this->admin)->postJson($endpoint, $payment)->assertUnprocessable();
+        $this->postJson($endpoint, [
+            'invoice_ids' => [$ids[0]],
+            'action' => 'billed',
+        ])->assertNoContent();
+
+        $this->getJson("/api/v1/billing/{$ids[0]}/document")
+            ->assertOk()
+            ->assertJsonPath('data.billing_status', 'billed');
+        $this->getJson("/api/v1/billing/{$ids[1]}")
+            ->assertOk()
+            ->assertJsonPath('data.billing_status', 'pending');
+
+        $this->postJson($endpoint, $payment)->assertUnprocessable();
+        expect(Payment::query()->count())->toBe(0);
+
+        $this->postJson($endpoint, ['invoice_ids' => $ids, 'action' => 'billed'])->assertNoContent();
+        $this->postJson($endpoint, $payment)->assertNoContent();
+        $this->postJson($endpoint, $payment)->assertNoContent();
+        expect(Payment::query()->count())->toBe(2);
+
+        foreach ($invoices as $invoice) {
+            $this->getJson("/api/v1/billing/{$invoice->id}")
+                ->assertOk()
+                ->assertJsonPath('data.billing_status', 'paid')
+                ->assertJsonPath('data.balance_cents', 0);
+
+            $record = $invoice->payments()->sole();
+            expect($record->amount_cents)->toBe($invoice->dueCents())
+                ->and($record->method)->toBe('cash')
+                ->and($record->reference)->toBe('RECEIPT-42')
+                ->and($record->paid_on->toDateString())->toBe($expectedDate);
+        }
+    })->with([
+        'date omitted' => [null],
+        'past date' => [-7],
+        'future date' => [14],
+    ]);
+
+    it('uses the Manila delivery date for the same cutoff on the list, document, and export', function (
+        string $utcDay,
+        array $dates,
+    ): void {
+        $this->travelTo(Carbon::parse("{$utcDay} 16:30:00 UTC"));
+        ($this->haul)(['scheduled_at' => "{$utcDay}T15:30:00Z"]);
+
+        $invoice = Invoice::query()->firstOrFail();
+        $cutoff = array_combine(['start', 'end', 'billing_from', 'billing_to', 'payment_target'], $dates);
+
+        $this->actingAs($this->admin)
+            ->getJson('/api/v1/billing')
+            ->assertOk()
+            ->assertJsonPath('data.0.billing_cutoff', $cutoff);
+        expect(($this->document)()['billing_cutoff'])->toBe($cutoff);
+
+        $matching = $this->get('/api/v1/billing/export?cutoff='.$cutoff['start'])->assertOk()->streamedContent();
+        $other = $this->get('/api/v1/billing/export?cutoff=none')->assertOk()->streamedContent();
+        expect($matching)->toContain($invoice->number, implode(',', $cutoff))
+            ->and($other)->not->toContain($invoice->number);
+    })->with([
+        '6 to 15' => ['2026-12-05', ['2026-12-06', '2026-12-15', '2026-12-17', '2026-12-18', '2026-12-28']],
+        '16 to 25' => ['2026-12-15', ['2026-12-16', '2026-12-25', '2026-12-27', '2026-12-28', '2027-01-07']],
+        '26 to 5' => ['2026-12-25', ['2026-12-26', '2027-01-05', '2027-01-07', '2027-01-08', '2027-01-18']],
+        'early in the following month' => ['2027-01-04', ['2026-12-26', '2027-01-05', '2027-01-07', '2027-01-08', '2027-01-18']],
+    ]);
+
     it('says who is billing, with their TIN and their mark', function (): void {
         ($this->haul)();
 

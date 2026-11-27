@@ -1,3 +1,4 @@
+import { signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { describe, expect, it } from 'vitest';
 
@@ -147,6 +148,49 @@ describe('paging', () => {
 
     expect(t.matched()).toHaveLength(0);
     expect(t.pageCount()).toBe(1);
+  });
+});
+
+describe('selecting rows', () => {
+  it('selects and clears eligible search matches across pages', () => {
+    const selected = signal(new Set(['0', '1']));
+    const fixture = TestBed.createComponent(DataTable);
+    fixture.componentRef.setInput('columns', columns);
+    fixture.componentRef.setInput('rows', rows(10));
+    fixture.componentRef.setInput('pageSize', 2);
+    fixture.componentRef.setInput('rowSelection', (row: Row) =>
+      row.id === '2' ? null : selected().has(row.id),
+    );
+    fixture.componentInstance.selectionChange.subscribe(({ rows: matches, checked }) => {
+      const ids = new Set(selected());
+      for (const row of matches) {
+        if (checked) ids.add(row.id);
+        else ids.delete(row.id);
+      }
+      selected.set(ids);
+    });
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    const search = element.querySelector<HTMLInputElement>('app-table-search input')!;
+    search.value = 'Isuzu';
+    search.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    const selectAll = element.querySelector<HTMLInputElement>('thead input[type="checkbox"]')!;
+    expect(element.querySelectorAll('tbody tr')).toHaveLength(2);
+    expect(selectAll.indeterminate).toBe(true);
+
+    selectAll.click();
+    fixture.detectChanges();
+    expect([...selected()]).toEqual(['0', '1', '4', '6', '8']);
+    expect(selectAll.checked).toBe(true);
+    expect(selectAll.indeterminate).toBe(false);
+
+    selectAll.click();
+    fixture.detectChanges();
+    expect([...selected()]).toEqual(['1']);
+    expect(selectAll.checked).toBe(false);
   });
 });
 

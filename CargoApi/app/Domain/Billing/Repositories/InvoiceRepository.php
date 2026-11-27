@@ -24,7 +24,7 @@ class InvoiceRepository extends Repository
     public function query(): Builder
     {
         return NumberOrder::newestFirst(Invoice::query()
-            ->with(['customer:id,name', 'trip:id,reference'])
+            ->with(['customer:id,name', 'trip:id,reference,scheduled_at', 'trip.deliveryLog:id,trip_id,delivered_at'])
             ->withSum('allocations', 'amount_cents'), 'number')
             ->orderByDesc('issued_at');
     }

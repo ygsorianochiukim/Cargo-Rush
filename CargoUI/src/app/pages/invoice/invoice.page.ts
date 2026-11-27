@@ -6,17 +6,19 @@ import { Invoice } from '../../models/billing/billing.model';
 import { InvoiceDocument } from '../../models/billing/invoice-document.model';
 import { invoiceSpec } from '../../services/billing/billing.form';
 import { BillingService } from '../../services/billing/billing.service';
+import { cutoffDate, cutoffRange } from '../../shared/billing-cutoff';
 import { Icon } from '../../shared/icon';
 import { InvoiceSheet } from '../../shared/invoice-sheet';
 import { PaymentDialog } from '../../shared/payment-dialog';
 import { RecordDialog } from '../../shared/record-dialog';
 import { FileDelivery, deliverFile } from '../../shared/save-file';
 import { ErrorState } from '../../shared/states';
+import { StatusPill } from '../../shared/status-pill';
 
 @Component({
   selector: 'app-invoice',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [Icon, ErrorState, InvoiceSheet],
+  imports: [Icon, ErrorState, InvoiceSheet, StatusPill],
   templateUrl: './invoice.page.html',
 })
 export class InvoicePage {
@@ -35,6 +37,8 @@ export class InvoicePage {
   protected readonly error = signal<string | null>(null);
   protected readonly saving = signal(false);
   protected readonly pdfError = signal<string | null>(null);
+  protected readonly cutoffDate = cutoffDate;
+  protected readonly cutoffRange = cutoffRange;
 
   constructor() {
     queueMicrotask(() => this.load());

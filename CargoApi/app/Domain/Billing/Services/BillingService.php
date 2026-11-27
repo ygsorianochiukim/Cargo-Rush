@@ -111,6 +111,9 @@ class BillingService
             $attributes['status'] = $cancelling || $staysCancelled
                 ? StatusValue::Cancelled->value
                 : StatusValue::Pending->value;
+            if ($cancelling || $invoice->status === StatusValue::Cancelled) {
+                $attributes['billed_at'] = null;
+            }
 
             $invoice->update($attributes);
 
@@ -163,6 +166,31 @@ class BillingService
         $this->payments->settle($invoice, $attributes, $userId);
 
         return $invoice->refresh();
+    }
+
+    /** @param list<string> $ids */
+    public function updateTripBilling(array $ids, string $action, array $payment, ?int $userId): void
+    {
+        DB::transaction(function () use ($ids, $action, $payment, $userId): void {
+            $invoices = Invoice::query()->whereKey($ids)->orderBy('id')->lockForUpdate()->get();
+            abort_unless($invoices->count() === count($ids), 422, 'One or more selected invoices are unavailable.');
+
+            foreach ($invoices as $invoice) {
+                $status = $invoice->tripBillingStatus();
+                abort_if($status === null, 422, "{$invoice->number} is not an active trip invoice.");
+
+                if ($action === 'billed' && $status === 'pending') {
+                    $invoice->update(['billed_at' => now()]);
+                } elseif ($action === 'paid' && $status !== 'paid') {
+                    abort_unless($status === 'billed', 422, "Mark {$invoice->number} as billed before recording payment.");
+                    if ($invoice->balanceCents() > 0) {
+                        $this->payments->settle($invoice, $payment, $userId);
+                    } else {
+                        $this->payments->refreshInvoice($invoice);
+                    }
+                }
+            }
+        }, 3);
     }
 
     /** @return array<string, mixed> */

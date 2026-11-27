@@ -8,7 +8,7 @@ import {
   signal,
 } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { Subject } from 'rxjs';
+import { Observable, Subject } from 'rxjs';
 
 import { Invoice } from '../models/billing/billing.model';
 import { BillingService } from '../services/billing/billing.service';
@@ -23,20 +23,30 @@ export class PaymentDialog {
   readonly invoice = signal<Invoice | null>(null);
 
   readonly choices = signal<Invoice[]>([]);
+  readonly settlementIds = signal<string[]>([]);
 
   private readonly recordedSubject = new Subject<void>();
 
   readonly recorded = this.recordedSubject.asObservable();
 
   forInvoice(invoice: Invoice): void {
+    this.settlementIds.set([]);
     this.invoice.set(invoice);
     this.choices.set([]);
     this.open.set(true);
   }
 
   forAny(choices: Invoice[]): void {
+    this.settlementIds.set([]);
     this.invoice.set(null);
     this.choices.set(choices);
+    this.open.set(true);
+  }
+
+  forSettlement(ids: string[]): void {
+    this.invoice.set(null);
+    this.choices.set([]);
+    this.settlementIds.set(ids);
     this.open.set(true);
   }
 
@@ -53,13 +63,13 @@ export class PaymentDialog {
     <app-modal
       [open]="dialog.open()"
       (openChange)="dialog.open.set($event)"
-      title="Record a payment"
+      [title]="batch() ? 'Mark as paid' : 'Record a payment'"
       [subtitle]="subtitle()"
       icon="wallet"
       size="sm"
     >
       <form [formGroup]="form" class="flex flex-col gap-3">
-        @if (dialog.invoice() === null) {
+        @if (!batch() && dialog.invoice() === null) {
           <app-field label="Against which invoice" required [error]="errorFor('invoice_id')">
             <select
               formControlName="invoice_id"
@@ -77,25 +87,37 @@ export class PaymentDialog {
           </app-field>
         }
 
-        <app-field
-          [label]="paying() ? 'Amount paid (₱)' : 'Amount received (₱)'"
-          required
-          [hint]="balanceHint()"
-          [error]="errorFor('amount')"
-        >
-          <input type="number" step="0.01" min="0" formControlName="amount" [class]="inputClass" />
-        </app-field>
+        @if (!batch()) {
+          <app-field
+            [label]="paying() ? 'Amount paid (₱)' : 'Amount received (₱)'"
+            required
+            [hint]="balanceHint()"
+            [error]="errorFor('amount')"
+          >
+            <input
+              type="number"
+              step="0.01"
+              min="0"
+              formControlName="amount"
+              [class]="inputClass"
+            />
+          </app-field>
+        }
 
         <app-field
           [label]="paying() ? 'Date paid' : 'Date received'"
-          required
+          [required]="!batch()"
+          [hint]="batch() ? 'Leave blank to use today’s date.' : undefined"
           [error]="errorFor('paid_on')"
         >
           <input type="date" formControlName="paid_on" [class]="inputClass" />
         </app-field>
 
-        <app-field label="How" required>
+        <app-field label="How" required [error]="errorFor('method')">
           <select formControlName="method" [class]="inputClass">
+            @if (batch()) {
+              <option value="" disabled>Choose a payment method</option>
+            }
             <option value="bank_transfer">Bank transfer</option>
             <option value="cash">Cash</option>
             <option value="cheque">Cheque</option>
@@ -184,8 +206,14 @@ export class PaymentForm {
   });
 
   protected readonly paying = computed(() => this.dialog.invoice()?.direction === 'payable');
+  protected readonly batch = computed(() => this.dialog.settlementIds().length > 0);
 
   protected readonly subtitle = computed(() => {
+    if (this.batch()) {
+      const count = this.dialog.settlementIds().length;
+      return `Record the full outstanding balance for ${count} selected ${count === 1 ? 'invoice' : 'invoices'}.`;
+    }
+
     const invoice = this.dialog.invoice();
 
     return invoice === null
@@ -238,14 +266,16 @@ export class PaymentForm {
     if (this.saving()) return;
 
     const invoice = this.target();
+    const ids = this.dialog.settlementIds();
+    const batch = ids.length > 0;
 
-    if (invoice === null) {
+    if (!batch && invoice === null) {
       this.error.set('Choose the invoice this payment is against.');
 
       return;
     }
 
-    if (this.form.invalid) {
+    if (batch ? this.form.controls.method.invalid : this.form.invalid) {
       this.form.markAllAsTouched();
 
       return;
@@ -258,43 +288,52 @@ export class PaymentForm {
     this.error.set(null);
     this.fieldErrors.set({});
 
-    this.billing
-      .recordPayment({
-        customer_id: invoice.customer_id,
-        direction: invoice.direction,
-        amount_cents: cents,
-        paid_on: values.paid_on,
-        method: values.method,
-        reference: values.reference || null,
-        allocations: [{ invoice_id: invoice.id, amount_cents: cents }],
-      })
-      .subscribe({
-        next: () => {
-          this.saving.set(false);
-          this.dialog.open.set(false);
-          this.dialog.announceRecorded();
-          this.reset();
-        },
-        error: (failure: { error?: { message?: string; errors?: Record<string, string[]> } }) => {
-          this.saving.set(false);
-          this.fieldErrors.set(failure.error?.errors ?? {});
-          this.error.set(
-            failure.error?.errors ? null : (failure.error?.message ?? 'That was not accepted.'),
-          );
-        },
-      });
+    const details = {
+      paid_on: values.paid_on,
+      method: values.method,
+      reference: values.reference || null,
+    };
+    const request: Observable<unknown> =
+      invoice === null
+        ? this.billing.updateTripStatus(ids, 'paid', {
+            ...details,
+            paid_on: details.paid_on || undefined,
+          })
+        : this.billing.recordPayment({
+            ...details,
+            customer_id: invoice.customer_id,
+            direction: invoice.direction,
+            amount_cents: cents,
+            allocations: [{ invoice_id: invoice.id, amount_cents: cents }],
+          });
+    request.subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.dialog.open.set(false);
+        this.dialog.announceRecorded();
+        this.reset();
+      },
+      error: (failure: { error?: { message?: string; errors?: Record<string, string[]> } }) => {
+        this.saving.set(false);
+        this.fieldErrors.set(failure.error?.errors ?? {});
+        this.error.set(
+          failure.error?.errors ? null : (failure.error?.message ?? 'That was not accepted.'),
+        );
+      },
+    });
   }
 
   private reset(): void {
     const invoice = this.dialog.invoice();
+    this.form.controls.paid_on.setValidators(this.batch() ? null : Validators.required);
 
     this.pickedId.set(invoice?.id ?? '');
 
     this.form.reset({
       invoice_id: invoice?.id ?? '',
       amount: invoice ? invoice.balance_cents / 100 : 0,
-      paid_on: new Date().toISOString().slice(0, 10),
-      method: 'bank_transfer',
+      paid_on: this.batch() ? '' : new Date().toISOString().slice(0, 10),
+      method: this.batch() ? '' : 'bank_transfer',
       reference: '',
     });
 

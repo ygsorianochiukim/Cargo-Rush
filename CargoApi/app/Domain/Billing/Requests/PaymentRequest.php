@@ -18,7 +18,7 @@ class PaymentRequest extends ApiFormRequest
             'direction' => ['sometimes', Rule::in(InvoiceDirection::values())],
             'amount_cents' => ['required', 'integer', 'min:1'],
             'currency' => ['sometimes', 'string', 'size:3'],
-            'paid_on' => ['required', 'date', 'before_or_equal:today'],
+            'paid_on' => ['required', 'date'],
             'method' => ['sometimes', 'string', 'max:40'],
             'reference' => ['nullable', 'string', 'max:80'],
             'notes' => ['nullable', 'string', 'max:255'],
