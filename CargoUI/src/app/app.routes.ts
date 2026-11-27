@@ -1,7 +1,7 @@
 import { Routes } from '@angular/router';
 
 import { Layout } from './layout/layout';
-import { authGuard, companyManagerGuard, developerGuard, guestGuard } from './services/identity/auth.guard';
+import { authGuard, companyManagerGuard, developerGuard, guestGuard, virtualOperationsGuard } from './services/identity/auth.guard';
 
 export const routes: Routes = [
   {
@@ -296,6 +296,21 @@ export const routes: Routes = [
         data: { title: 'Employees' },
         loadComponent: () =>
           import('./pages/employees/employees.page').then((m) => m.EmployeesPage),
+      },
+      {
+        path: 'employees/:employeeId',
+        title: 'Employee Profile · Cargo Rush',
+        data: { title: 'Employee Profile' },
+        loadComponent: () =>
+          import('./pages/employees/employees.page').then((m) => m.EmployeesPage),
+      },
+      {
+        path: 'virtual-operations',
+        canActivate: [virtualOperationsGuard],
+        title: 'Virtual Operations Center · Cargo Rush',
+        data: { title: 'Virtual Operations Center' },
+        loadComponent: () =>
+          import('./pages/virtual-operations/virtual-operations.page').then((m) => m.VirtualOperationsPage),
       },
       {
         path: 'applicants',

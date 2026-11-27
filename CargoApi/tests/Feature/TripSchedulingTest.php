@@ -196,17 +196,15 @@ describe('the driver starts the run', function (): void {
     });
 });
 
-describe('the office books, the driver reports', function (): void {
-    it('refuses a trip the office marks in transit or delivered itself', function (): void {
-        foreach ([StatusValue::InTransit, StatusValue::Delivered] as $status) {
-            $this->actingAs($this->admin)
-                ->postJson('/api/v1/trips', [...$this->payload, 'status' => $status->value])
-                ->assertStatus(422)
-                ->assertJsonValidationErrors('status');
-        }
+describe('office booking statuses', function (): void {
+    it('refuses to record a future trip as delivered', function (): void {
+        $this->actingAs($this->admin)
+            ->postJson('/api/v1/trips', [...$this->payload, 'status' => StatusValue::Delivered->value])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('status');
     });
 
-    it('refuses to patch an existing trip into those either', function (): void {
+    it('refuses to mark an existing future trip as delivered', function (): void {
         $id = ($this->book)();
 
         $this->actingAs($this->admin)

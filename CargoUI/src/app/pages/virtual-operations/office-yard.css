@@ -1,0 +1,258 @@
+﻿:host {
+  display: block;
+  margin-block: 16px 22px;
+}
+
+.scene {
+  border: 1px solid var(--color-cr-line);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+.scene-toolbar,
+.yard-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 10px 14px;
+}
+.scene-toolbar p,
+.yard-heading p {
+  color: var(--color-cr-ink-muted);
+  font-size: 13px;
+}
+.scene-toolbar {
+  border-bottom: 1px solid var(--color-cr-line);
+  background: linear-gradient(115deg, #f6f7f3, #eef4f7);
+  padding-block: 13px;
+}
+.scene-toolbar strong {
+  color: #263d4e;
+  font-size: 15px;
+}
+.zoom {
+  border: 1px solid var(--color-cr-line);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 12px;
+}
+.zoom:hover {
+  color: var(--color-cr-blue);
+  border-color: var(--color-cr-blue);
+}
+
+.office-viewport {
+  background: #e5ecee;
+  overflow: auto;
+  max-height: min(68vh, 550px);
+  touch-action: none;
+  cursor: grab;
+}
+.office-viewport.dragging,
+.office-viewport.dragging .pin {
+  cursor: grabbing;
+}
+.office-viewport svg,
+.office-viewport img {
+  user-select: none;
+  -webkit-user-drag: none;
+}
+.office-frame {
+  position: relative;
+  isolation: isolate;
+  width: calc(max(100%, 900px) * var(--office-zoom, 1));
+  overflow: hidden;
+  container-type: inline-size;
+}
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.zoom-controls output {
+  min-width: 40px;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.zoom:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.pin {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  cursor: pointer;
+  border-radius: 6px;
+}
+.pin:hover,
+.pin:focus-visible {
+  z-index: 700;
+}
+.pin-label {
+  visibility: hidden;
+  pointer-events: none;
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 6px;
+  max-width: 160px;
+  width: max-content;
+  border-radius: 5px;
+  background: var(--color-cr-shell);
+  color: white;
+  font-size: 10px;
+  line-height: 1.25;
+  text-align: center;
+}
+.pin:hover .pin-label,
+.pin:focus-visible .pin-label {
+  visibility: visible;
+}
+.pin:focus-visible,
+.yard-roster button:focus-visible,
+.zoom:focus-visible {
+  outline: 2px solid var(--color-cr-blue);
+  outline-offset: 2px;
+}
+.bay-truck {
+  z-index: 35;
+}
+.bay-truck[data-status='available'] {
+  --truck-state: #288064;
+}
+.bay-truck[data-status='active'] {
+  --truck-state: #2868a5;
+}
+.bay-truck[data-status='unavailable'] {
+  --truck-state: #a34836;
+}
+.truck-indicator {
+  position: absolute;
+  left: 66.5%;
+  bottom: 0;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--truck-state, #7e9aaf);
+  border: 1px solid white;
+}
+.garage-page {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 7px 14px;
+  font-size: 12px;
+  background: #edf3f5;
+}
+.garage-page span {
+  margin-right: auto;
+}
+
+.person-pin {
+  z-index: var(--depth);
+  width: max(23px, 3.5cqw);
+  display: grid;
+  justify-content: center;
+  align-content: end;
+}
+.person-pin app-operations-avatar {
+  --avatar-width: max(18px, 3.35cqw);
+}
+[data-room='helpers'],
+[data-room='warehouse'] {
+  --room-accent: var(--color-cr-warning);
+}
+[data-room='dispatch'],
+[data-room='hr'] {
+  --room-accent: var(--color-cr-success);
+}
+[data-room='management'],
+[data-room='finance'] {
+  --room-accent: #535971;
+}
+
+.desk-pin {
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 29px;
+}
+.robot {
+  display: block;
+  position: relative;
+  width: 21px;
+  height: 16px;
+  border-radius: 5px;
+  border: 2px solid #c1c9db;
+  background: #243455;
+  box-shadow: 2px 3px 3px #18223e60;
+}
+.robot::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  bottom: 100%;
+  width: 2px;
+  height: 4px;
+  background: #344f76;
+}
+.robot::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 3px;
+  height: 4px;
+  border-radius: 2px;
+  background: #b5c2d6;
+  box-shadow: 6px 0 #b5c2d6;
+}
+.ready .robot::after {
+  background: #75f9bc;
+  box-shadow: 6px 0 #75f9bc;
+}
+
+.yard-heading {
+  padding-bottom: 8px;
+}
+.yard-heading h3 {
+  font-size: 15px;
+  font-weight: 700;
+}
+.yard-roster {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+.yard-roster li {
+  min-width: 0;
+}
+.yard-roster button {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 10px;
+  border: 1px solid var(--color-cr-line);
+  border-radius: var(--radius-control);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  text-align: start;
+  cursor: pointer;
+}
+.yard-roster button:hover {
+  border-color: var(--color-cr-blue);
+}
+.yard-roster small {
+  display: block;
+  color: var(--color-cr-ink-muted);
+}
+.workstation app-operations-avatar {
+  zoom: 0.55;
+}

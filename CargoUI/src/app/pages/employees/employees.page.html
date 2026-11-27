@@ -1,3 +1,6 @@
+@if (profileId) {
+  <a routerLink="/employees" class="mb-3 inline-block text-[13px] font-semibold text-cr-blue hover:underline">Back to employee roster</a>
+} @else {
 <app-list-toolbar
   [count]="rows()?.length ?? null"
   singular="employee"
@@ -49,9 +52,10 @@
     }
   </app-card>
 </div>
+}
 
 <app-card
-  heading="Roster"
+  [heading]="profileId ? 'Employee profile' : 'Roster'"
   icon="badge"
   hint="Photograph, position, and whether they can sign in"
   class="mt-4 block"

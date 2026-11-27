@@ -80,6 +80,8 @@ class TripService
                 'status' => StatusValue::Pending->value,
             ]);
 
+            $this->recordOfficeDeparture($trip);
+
             return $trip->refresh();
         });
     }
@@ -87,6 +89,10 @@ class TripService
     public function update(Trip $trip, TripData $data): Trip
     {
         return DB::transaction(function () use ($trip, $data): Trip {
+            if ($data->status === StatusValue::InTransit) {
+                $trip = Trip::query()->lockForUpdate()->findOrFail($trip->getKey());
+            }
+
             if ($trip->isBilled() && $data->wasGiven('status') && $data->status !== $trip->status) {
                 $this->unbill($trip);
             }
@@ -108,6 +114,10 @@ class TripService
             }
 
             $updated->refresh();
+
+            if ($data->status === StatusValue::InTransit) {
+                $this->recordOfficeDeparture($updated);
+            }
 
             if ($before->isBilled() && $this->booksMoved($before, $updated)) {
                 $this->takeOffTheBooks($before);
@@ -512,6 +522,26 @@ class TripService
                 ],
             );
         });
+    }
+
+    private function recordOfficeDeparture(Trip $trip): void
+    {
+        if ($trip->status !== StatusValue::InTransit) {
+            return;
+        }
+
+        $dispatch = $trip->dispatchRecord()->first();
+        if ($dispatch !== null) {
+            $dispatch->update([
+                'vehicle_id' => $trip->vehicle_id,
+                'arrived_at' => null,
+                'status' => StatusValue::InTransit->value,
+            ]);
+
+            return;
+        }
+
+        $this->dispatch($trip, $trip->pickup_place ?: $trip->origin);
     }
 
     public function complete(Trip $trip, ProofData $proof, ?CarbonInterface $at = null): Trip

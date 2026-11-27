@@ -16,6 +16,7 @@ export interface Me {
   permissions: string[];
   can_edit_developer_access?: boolean;
   developer_access?: boolean;
+  can_access_virtual_operations?: boolean;
 
   driver_id: string | null;
   licence_no: string | null;

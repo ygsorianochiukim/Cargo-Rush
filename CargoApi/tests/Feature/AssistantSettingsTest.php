@@ -6,9 +6,11 @@ use App\Domain\Assistant\Models\AssistantSetting;
 use App\Domain\Assistant\Services\AssistantService;
 use App\Domain\Billing\Models\Invoice;
 use App\Domain\Billing\Models\Payment;
+use App\Domain\Delivery\Models\DeliveryLog;
 use App\Domain\Identity\Models\User;
 use App\Domain\Identity\Services\AccessService;
 use App\Domain\Tenancy\Services\CompanyProvisioner;
+use App\Domain\Trip\Models\Trip;
 use Database\Seeders\NavigationSeeder;
 use Database\Seeders\PermissionSeeder;
 use Illuminate\Support\Facades\Crypt;
@@ -258,28 +260,61 @@ it('queues one Discord test alert for the current company and accepts delivery o
     $this->getJson($path)->assertOk()->assertJsonPath('data.test_alert.status', 'expired');
 });
 
-it('gives the finance bot only pending receivables with a balance at least five calendar days after issue', function (): void {
+it('replaces five-day alerts with tenant-scoped billing and payment reminders on the Manila cutoff schedule', function (): void {
     $assistant = app(AssistantService::class);
     $assistant->update(['enabled' => true, 'discord_finance_channel_id' => '222222222222222222']);
-    $createInvoice = static fn (array $fields = []): Invoice => Invoice::create([
-        'direction' => 'receivable', 'status' => 'pending', 'amount_cents' => 100_000,
-        'currency' => 'PHP', 'issued_at' => '2026-11-16', 'due_at' => '2026-12-01', ...$fields,
-    ]);
-    $aged = $createInvoice();
-    $this->asCompany($this->makeCompany('Other Receivables Company'), $createInvoice);
-    $createInvoice(['issued_at' => '2026-11-17']);
-    $createInvoice(['status' => 'paid']);
-    $createInvoice(['direction' => 'payable']);
-    $createInvoice(['withholding_cents' => 100_000]);
+    $createInvoice = static function (array $fields = [], string $delivery = '2026-11-05 16:30:00'): Invoice {
+        $trip = Trip::create([
+            'origin' => 'Bacolod', 'destination' => 'Iloilo', 'cargo' => 'Produce', 'weight_kg' => 100,
+            'scheduled_at' => '2026-11-05 15:30:00', 'status' => 'delivered',
+        ]);
+        DeliveryLog::create(['trip_id' => $trip->id, 'delivered_at' => $delivery, 'status' => 'delivered']);
 
-    $token = $assistant->issueToken();
-    $path = '/api/v1/assistant/finance-activity?kind=aged-receivables&day=2026-11-21&timezone=Asia%2FManila';
-    $this->withToken($token)->getJson($path)->assertOk()
+        return Invoice::create([
+            'trip_id' => $trip->id, 'direction' => 'receivable', 'status' => 'pending', 'amount_cents' => 100_000,
+            'currency' => 'PHP', 'issued_at' => '2026-11-06', 'due_at' => '2026-12-10', ...$fields,
+        ]);
+    };
+    $createInvoice();
+    $billed = $createInvoice(['billed_at' => '2026-11-17', 'status' => 'partial']);
+    $paid = Payment::create([
+        'direction' => 'receivable', 'amount_cents' => 25_000, 'currency' => 'PHP', 'paid_on' => '2026-11-20',
+    ]);
+    $paid->allocations()->create(['invoice_id' => $billed->id, 'amount_cents' => 25_000]);
+    $createInvoice(['status' => 'paid']);
+    $createInvoice(['status' => 'cancelled']);
+    $createInvoice(['direction' => 'payable']);
+    $createInvoice(['trip_id' => null]);
+    $createInvoice([], '2026-11-05 15:59:59');
+    $createInvoice([], '2026-11-30 16:00:00');
+    $this->asCompany($this->makeCompany('Other Receivables Company'), $createInvoice);
+
+    $this->withToken($assistant->issueToken());
+    $activity = fn (string $day, string $kind = 'cutoff-reminders') => $this
+        ->getJson('/api/v1/assistant/finance-activity?'.http_build_query(compact('kind', 'day') + ['timezone' => 'UTC']))
+        ->assertOk();
+
+    $activity('2026-11-16')->assertJsonCount(0, 'data.events');
+    foreach (['2026-11-17', '2026-11-18'] as $day) {
+        $activity($day)
+            ->assertJsonCount(1, 'data.events')
+            ->assertJsonPath('data.events.0.id', 'billing:2026-11-06')
+            ->assertJsonPath('data.events.0.billing_to', '2026-11-18')
+            ->assertJsonPath('data.events.0.invoice_count', 1)
+            ->assertJsonPath('data.events.0.balances.0.balance_cents', 100_000);
+    }
+    $activity('2026-11-21', 'aged-receivables')->assertJsonCount(0, 'data.events');
+    $activity('2026-11-28')
         ->assertJsonCount(1, 'data.events')
-        ->assertJsonPath('data.events.0.id', $aged->id)
-        ->assertJsonPath('data.events.0.issued_on', '2026-11-16')
-        ->assertJsonPath('data.events.0.age_days', 5)
-        ->assertJsonPath('data.events.0.balance_cents', 100_000);
+        ->assertJsonPath('data.events.0.id', 'payment:2026-11-06')
+        ->assertJsonPath('data.events.0.payment_target', '2026-11-28')
+        ->assertJsonPath('data.events.0.invoice_count', 1)
+        ->assertJsonPath('data.events.0.balances.0.balance_cents', 75_000);
+    $activity('2026-12-07')
+        ->assertJsonCount(1, 'data.events')
+        ->assertJsonPath('data.events.0.id', 'billing:2026-11-26')
+        ->assertJsonPath('data.events.0.end', '2026-12-05')
+        ->assertJsonPath('data.events.0.payment_target', '2026-12-18');
 });
 
 it('never hands the key to anyone but the bot token', function (): void {

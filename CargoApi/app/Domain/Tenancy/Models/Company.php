@@ -53,6 +53,7 @@ class Company extends Model
             'payroll_release_lag_days' => 'integer',
             'payroll_pay_dates' => 'array',
             'payroll_auto_drafts' => 'boolean',
+            'virtual_operations_layout' => 'array',
         ];
     }
 

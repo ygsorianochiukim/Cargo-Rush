@@ -90,6 +90,7 @@ export interface Trip extends Timestamped {
   pickup_place: string | null;
   dropoff_place: string | null;
   scheduled_at: string;
+  dispatched_at?: string | null;
   eta: string | null;
   distance_total_m: number;
   distance_source: 'road' | 'estimate' | 'manual' | null;

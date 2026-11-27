@@ -79,19 +79,25 @@ it("does not post a report to a publicly visible text channel", async () => {
   }
 });
 
-it("sends an aged receivable to the finance alert channel once across days and restarts", async () => {
+it("posts each day's cutoff reminders in the Finance Alerts channel without duplicates after restart", async () => {
   const directory = mkdtempSync(join(tmpdir(), "cargo-finance-"));
   const file = join(directory, "deliveries.json");
-  const invoice = {
-    id: "invoice-1", invoice_number: "INV-123", issued_on: "2026-11-16",
-    age_days: 5, balance_cents: 170000, currency: "PHP",
+  const billing = {
+    id: "billing:2026-11-06", kind: "billing", start: "2026-11-06", end: "2026-11-15",
+    billing_from: "2026-11-17", billing_to: "2026-11-18", payment_target: "2026-11-28", invoice_count: 2,
+    balances: [{ balance_cents: 170000, currency: "PHP" }],
   };
-  const cargo = { financeActivity: async ({ kind, day }: Record<string, unknown>) => ({
+  const payment = { ...billing, id: "payment:2026-11-06", kind: "payment", invoice_count: 1 };
+  const reminders = new Map([
+    ["2026-11-17", billing], ["2026-11-18", billing], ["2026-11-28", payment],
+  ]);
+  const financeActivity = vi.fn(async ({ kind, day }: { kind: string; day: string }) => ({
     data: {
-      events: kind === "aged-receivables" ? [{ ...invoice, age_days: day === "2026-11-21" ? 5 : 7 }] : [],
+      events: kind === "cutoff-reminders" && reminders.has(day) ? [reminders.get(day)] : [],
       next: null,
     },
-  }) } as unknown as CargoClient;
+  }));
+  const cargo = { financeActivity } as unknown as CargoClient;
   const finance = vi.fn().mockResolvedValue(undefined);
   const alerts = vi.fn().mockResolvedValue(undefined);
   const client = { channels: { fetch: async (id: string) => ({
@@ -101,12 +107,25 @@ it("sends an aged receivable to the finance alert channel once across days and r
   }) } } as unknown as Client;
 
   try {
-    expect(await new FinanceReports(cargo, file, "Asia/Manila").tick(client, settings, afterMidnight)).toEqual([]);
-    expect(await new FinanceReports(cargo, file, "Asia/Manila").tick(client, settings, new Date("2026-11-22T16:01:00Z"))).toEqual([]);
-    expect(alerts).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({
-      content: expect.stringMatching(/5 days old[\s\S]*INV-123[\s\S]*1,700\.00/),
+    const tick = (time: string) => new FinanceReports(cargo, file, "UTC").tick(client, settings, new Date(time));
+    expect(await tick("2026-11-17T00:59:00Z")).toEqual([]);
+    expect(alerts).not.toHaveBeenCalled();
+    expect(await tick("2026-11-17T01:01:00Z")).toEqual([]);
+    expect(await tick("2026-11-17T01:02:00Z")).toEqual([]);
+    expect(await tick("2026-11-18T01:01:00Z")).toEqual([]);
+    expect(await tick("2026-11-28T01:01:00Z")).toEqual([]);
+    expect(alerts).toHaveBeenCalledTimes(3);
+    expect(alerts).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      content: expect.stringMatching(/Billing cutoff reminder[\s\S]*2 trip invoices to mark as billed[\s\S]*1,700\.00/),
       enforceNonce: true,
     }));
+    expect(alerts).toHaveBeenNthCalledWith(3, expect.objectContaining({
+      content: expect.stringMatching(/Payment follow-up reminder[\s\S]*Recommended payment date 2026-11-28[\s\S]*1 trip invoice with an outstanding balance/),
+    }));
+    expect(financeActivity).toHaveBeenCalledWith(expect.objectContaining({
+      kind: "cutoff-reminders", day: "2026-11-28", timezone: "Asia/Manila",
+    }));
+    expect(financeActivity).not.toHaveBeenCalledWith(expect.objectContaining({ kind: "aged-receivables" }));
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }

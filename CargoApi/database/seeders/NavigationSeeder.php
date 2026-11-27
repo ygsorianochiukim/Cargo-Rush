@@ -55,6 +55,7 @@ class NavigationSeeder extends Seeder
             ['performance', 'Performance', 'gauge', '/performance', 630, false, true, 'People', 'hr.view', null],
             ['payroll', 'Office Payroll', 'wallet', '/payroll', 640, false, true, 'People', 'payroll.view', null],
             ['crew-payroll', 'Crew Payroll', 'route', '/payroll/crew', 645, false, true, 'People', 'payroll.view', null],
+            ['virtual-operations', 'Virtual Operations', 'shipments', '/virtual-operations', 650, false, true, 'People', Permission::VIRTUAL_OPERATIONS_ACCESS, null],
 
             ['asset-inventory', 'Asset Inventory', 'shipments', '/asset-inventory', 700, false, true, 'Custodian', 'assets.view', null],
             ['assets', 'Asset List', 'clipboard', '/assets', 710, false, true, 'Custodian', 'assets.view', null],

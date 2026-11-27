@@ -1,0 +1,95 @@
+.profile {
+  display: flex;
+  gap: 14px;
+  align-items: start;
+  margin-bottom: 14px;
+}
+.profile img {
+  border-radius: var(--radius-control);
+  object-fit: cover;
+}
+.profile dl {
+  flex: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 12px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.profile dt {
+  color: var(--color-cr-ink-muted);
+}
+.profile dd {
+  font-weight: 600;
+}
+.appearance-form {
+  margin-top: 14px;
+}
+.appearance-fields,
+.layout-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+}
+.appearance-form .actions,
+.editor-actions {
+  justify-content: flex-end;
+  margin-top: 14px;
+}
+.area-order,
+.position-rule {
+  margin-top: 8px;
+}
+.area-order li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-block: 4px;
+  border-bottom: 1px solid var(--color-cr-line);
+}
+.area-order li span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+.add-area {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.add-area label {
+  flex: 1;
+}
+@media (max-width: 580px) {
+  .layout-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.agent-form {
+  display: grid;
+  justify-items: start;
+  gap: 8px;
+}
+.agent-form label {
+  width: 100%;
+}
+.agent-form textarea {
+  resize: vertical;
+  min-height: 76px;
+  padding: 8px 10px;
+  width: 100%;
+  border: 1px solid var(--color-cr-line);
+  border-radius: var(--radius-control);
+  color: var(--color-cr-ink);
+  font-size: 14px;
+  font-weight: 400;
+}
+.agent-answer {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: var(--radius-control);
+  background: var(--color-cr-tint);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

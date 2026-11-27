@@ -37,6 +37,7 @@ class MeResource extends ApiResource
             'permissions' => $this->permissions(),
             'can_edit_developer_access' => $this->canEditOwnDeveloperAccess(),
             'developer_access' => (bool) $this->developer_access,
+            'can_access_virtual_operations' => $this->canAccessVirtualOperations(),
 
             'driver_id' => $driver?->id,
             'licence_no' => $driver?->licence_no,

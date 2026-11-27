@@ -7,6 +7,7 @@ namespace App\Domain\Billing\Support;
 use App\Domain\Billing\Models\Invoice;
 use App\Domain\Shared\Enums\InvoiceDirection;
 use Carbon\CarbonImmutable;
+use Carbon\CarbonInterface;
 
 class BillingCutoff
 {
@@ -18,10 +19,13 @@ class BillingCutoff
         }
 
         $date = $invoice->trip->deliveryLog?->delivered_at ?? $invoice->trip->scheduled_at;
-        if ($date === null) {
-            return null;
-        }
 
+        return $date === null ? null : self::forDate($date);
+    }
+
+    /** @return array{start: string, end: string, billing_from: string, billing_to: string, payment_target: string} */
+    public static function forDate(CarbonInterface $date): array
+    {
         $day = CarbonImmutable::instance($date)->setTimezone('Asia/Manila')->startOfDay();
         $month = $day->startOfMonth();
 

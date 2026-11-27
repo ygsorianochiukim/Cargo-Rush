@@ -44,3 +44,11 @@ export const companyManagerGuard: CanActivateFn = () => {
 
   return identity.can('company.manage') || router.createUrlTree(['/dashboard']);
 };
+
+export const virtualOperationsGuard: CanActivateFn = () => {
+  const identity = inject(IdentityService);
+  const router = inject(Router);
+
+  return identity.me()?.can_access_virtual_operations === true
+    || router.createUrlTree(['/dashboard']);
+};

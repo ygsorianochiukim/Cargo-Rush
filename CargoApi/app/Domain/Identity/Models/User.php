@@ -126,6 +126,12 @@ class User extends Authenticatable
         return $permissions;
     }
 
+    public function canAccessVirtualOperations(): bool
+    {
+        return ($this->systemRole() === Role::Administrator && ($this->roleRecord?->isActive() ?? true))
+            || $this->hasPermission(Permission::DEVELOPER_ACCESS);
+    }
+
     public function canEditOwnDeveloperAccess(): bool
     {
         if ($this->systemRole() !== Role::Administrator) {
@@ -139,6 +145,10 @@ class User extends Authenticatable
 
     public function hasPermission(string $permission): bool
     {
+        if ($permission === Permission::VIRTUAL_OPERATIONS_ACCESS) {
+            return $this->canAccessVirtualOperations();
+        }
+
         return Permission::allows($this->permissions(), $permission);
     }
 }

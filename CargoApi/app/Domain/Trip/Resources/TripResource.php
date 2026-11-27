@@ -86,6 +86,7 @@ class TripResource extends ApiResource
             'pickup_place' => $this->pickup_place,
             'dropoff_place' => $this->dropoff_place,
             'scheduled_at' => $this->iso($this->scheduled_at),
+            'dispatched_at' => $this->whenLoaded('dispatchRecord', fn () => $this->iso($this->dispatchRecord?->dispatched_at)),
             'eta' => $this->iso($this->eta),
             'distance_total_m' => $this->distance_total_m,
             'distance_source' => $this->distance_source,

@@ -5,6 +5,7 @@ import {
   effect,
   inject,
   signal,
+  untracked,
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
@@ -20,7 +21,7 @@ import { IdentityService } from '../services/identity/identity.service';
 import { PricingService } from '../services/pricing/pricing.service';
 import { fmt } from './format';
 import { StatusValue } from '../models/shared/status.model';
-import { TripPayload, TripPaymentStatus } from '../models/trip/trip.model';
+import { Trip, TripPayload, TripPaymentStatus } from '../models/trip/trip.model';
 import { Vehicle } from '../models/vehicle/vehicle.model';
 import { DriverService } from '../services/driver/driver.service';
 import { TripService } from '../services/trip/trip.service';
@@ -50,7 +51,7 @@ function straightLineMetres(lat1: number, lng1: number, lat2: number, lng2: numb
 
 const NEW_CUSTOMER = '__new__';
 
-const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered', 'cancelled'];
+const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'in_transit', 'delivered', 'cancelled'];
 @Component({
   selector: 'app-trip-form',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -251,7 +252,7 @@ const STATUSES: StatusValue[] = ['scheduled', 'assigned', 'pending', 'delivered'
           <input type="datetime-local" formControlName="scheduled_at" [class]="inputClass" />
         </app-field>
 
-        <app-field label="Status">
+        <app-field label="Status" [hint]="statusHint()">
           <select formControlName="status" [class]="inputClass">
             @for (s of statuses; track s) {
               <option [value]="s">{{ label(s) }}</option>
@@ -659,6 +660,7 @@ export class TripForm {
   protected readonly vehicleLabel = computed(() => this.chosenVehicle()?.plate ?? 'this truck');
 
   private resetting = false;
+  private suggestedDriverId: string | null = null;
 
   protected keepAssigned(): void {
     const assigned = this.assignedDriver();
@@ -666,6 +668,8 @@ export class TripForm {
     if (assigned === null) return;
 
     this.form.controls.driver_id.setValue(assigned.id);
+    this.form.controls.driver_id.markAsPristine();
+    this.suggestedDriverId = assigned.id;
     this.swapping.set(false);
   }
 
@@ -710,10 +714,15 @@ export class TripForm {
     return { metres: straightLineMetres(o.lat, o.lng, d.lat, d.lng), estimate: true };
   });
 
-  protected readonly enteringPast = toSignal(
-    this.form.controls.status.valueChanges.pipe(map((s) => s === 'delivered')),
-    { initialValue: false },
-  );
+  private readonly chosenStatus = toSignal(this.form.controls.status.valueChanges, {
+    initialValue: this.form.controls.status.value,
+  });
+  protected readonly enteringPast = computed(() => this.chosenStatus() === 'delivered');
+  protected readonly statusHint = computed(() => {
+    const started = this.trip()?.dispatched_at;
+    if (started) return 'Started traveling ' + fmt.dateTime(started) + '.';
+    return this.chosenStatus() === 'in_transit' ? 'Saving records the trip departure.' : '';
+  });
 
   protected readonly showsPayment = computed(() => {
     const t = this.trip();
@@ -744,20 +753,16 @@ export class TripForm {
     effect(() => this.form.get('origin')?.setValue(this.origin().place));
     effect(() => this.form.get('destination')?.setValue(this.destination().place));
 
-    this.vehiclesApi.list().subscribe((res) => this.vehicles.set(res.data));
+    this.vehiclesApi.list().subscribe((res) => {
+      this.vehicles.set(res.data);
+      if (this.open()) this.applyVehicleDriver();
+    });
     this.driversApi.crew().subscribe((res) => this.crew.set(res.data));
 
     this.form.controls.vehicle_id.valueChanges
       .pipe(takeUntilDestroyed())
-      .subscribe((id) => {
-        if (this.resetting) return;
-
-        const vehicle = this.vehicles().find((v) => v.id === id);
-
-        if (vehicle?.driver_id) {
-          this.form.controls.driver_id.setValue(vehicle.driver_id);
-          this.swapping.set(false);
-        }
+      .subscribe(() => {
+        if (!this.resetting) this.applyVehicleDriver();
       });
 
     this.customersApi
@@ -812,66 +817,7 @@ export class TripForm {
     effect(() => {
       if (!this.open()) return;
       const t = this.trip();
-      this.origin.set({
-        place: t?.origin ?? '',
-        lat: t?.origin_lat ?? null,
-        lng: t?.origin_lng ?? null,
-      });
-
-      this.destination.set({
-        place: t?.destination ?? '',
-        lat: t?.destination_lat ?? null,
-        lng: t?.destination_lng ?? null,
-      });
-
-      this.resetting = true;
-      this.form.reset({
-        origin: t?.origin ?? '',
-        destination: t?.destination ?? '',
-        cargo: t?.cargo ?? '',
-        weight_kg: t?.weight_kg ?? 0,
-        vehicle_id: t?.vehicle_id ?? '',
-        driver_id: t?.driver_id ?? '',
-        scheduled_at: t ? t.scheduled_at.slice(0, 16) : '',
-        status: t?.status ?? 'scheduled',
-        delivered_at: '',
-        receiver_name: '',
-        km: t && t.distance_total_m > 0 ? String(Math.ceil(t.distance_total_m / 1000)) : '',
-        custom_price: t?.manually_priced && t.price_cents !== null ? String(t.price_cents / 100) : '',
-        zone_id: t?.zone_pinned ? (t.pricing_zone_id ?? '') : '',
-        driver_allowance: this.pesos(t?.driver_allowance_cents),
-        helper_allowance: this.pesos(t?.helper_allowance_cents),
-        toll: this.pesos(t?.toll_cents),
-        customer_id: t?.customer_id ?? '',
-        new_customer_name: '',
-        new_customer_contact: '',
-        new_customer_address: '',
-        payment_status: 'unpaid',
-        paid_amount: '',
-        paid_on: '',
-        payment_method: 'bank_transfer',
-        payment_reference: '',
-      });
-
-      const known = t?.customer_id;
-      if (known && t.customer && !this.customers().some((c) => c.id === known)) {
-        this.customers.update((list) => [...list, { id: known, name: t.customer } as Customer]);
-      }
-
-      this.resetting = false;
-
-      const assigned = this.assignedDriver();
-      this.swapping.set(assigned !== null && !!t?.driver_id && t.driver_id !== assigned.id);
-
-      if (assigned !== null && !t?.driver_id) this.form.controls.driver_id.setValue(assigned.id);
-
-      this.helpers.set(t?.helper_ids ?? []);
-      this.preview.set(null);
-      this.failure.set(null);
-
-      const status = this.form.controls.status;
-      if (t?.billed_at && (t.invoice?.paid_cents ?? 0) > 0) status.disable();
-      else status.enable();
+      untracked(() => this.initializeDraft(t));
     });
 
     this.form.controls.payment_status.valueChanges
@@ -883,8 +829,79 @@ export class TripForm {
       });
   }
 
+  private applyVehicleDriver(): void {
+    const assigned = this.assignedDriver();
+    const driver = this.form.controls.driver_id;
+    if (assigned && (!driver.value || (driver.pristine && driver.value === this.suggestedDriverId))) {
+      driver.setValue(assigned.id);
+      this.suggestedDriverId = assigned.id;
+    }
+    this.swapping.set(assigned !== null && driver.value !== assigned.id);
+  }
+
+  private initializeDraft(t: Trip | null): void {
+    this.suggestedDriverId = null;
+    this.origin.set({
+      place: t?.origin ?? '',
+      lat: t?.origin_lat ?? null,
+      lng: t?.origin_lng ?? null,
+    });
+
+    this.destination.set({
+      place: t?.destination ?? '',
+      lat: t?.destination_lat ?? null,
+      lng: t?.destination_lng ?? null,
+    });
+
+    this.resetting = true;
+    this.form.reset({
+      origin: t?.origin ?? '',
+      destination: t?.destination ?? '',
+      cargo: t?.cargo ?? '',
+      weight_kg: t?.weight_kg ?? 0,
+      vehicle_id: t?.vehicle_id ?? '',
+      driver_id: t?.driver_id ?? '',
+      scheduled_at: t ? t.scheduled_at.slice(0, 16) : '',
+      status: t?.status ?? 'scheduled',
+      delivered_at: '',
+      receiver_name: '',
+      km: t && t.distance_total_m > 0 ? String(Math.ceil(t.distance_total_m / 1000)) : '',
+      custom_price: t?.manually_priced && t.price_cents !== null ? String(t.price_cents / 100) : '',
+      zone_id: t?.zone_pinned ? (t.pricing_zone_id ?? '') : '',
+      driver_allowance: this.pesos(t?.driver_allowance_cents),
+      helper_allowance: this.pesos(t?.helper_allowance_cents),
+      toll: this.pesos(t?.toll_cents),
+      customer_id: t?.customer_id ?? '',
+      new_customer_name: '',
+      new_customer_contact: '',
+      new_customer_address: '',
+      payment_status: 'unpaid',
+      paid_amount: '',
+      paid_on: '',
+      payment_method: 'bank_transfer',
+      payment_reference: '',
+    });
+
+    const known = t?.customer_id;
+    if (known && t.customer && !this.customers().some((c) => c.id === known)) {
+      this.customers.update((list) => [...list, { id: known, name: t.customer } as Customer]);
+    }
+
+    this.resetting = false;
+
+    this.applyVehicleDriver();
+
+    this.helpers.set(t?.helper_ids ?? []);
+    this.preview.set(null);
+    this.failure.set(null);
+
+    const status = this.form.controls.status;
+    if (t?.billed_at && (t.invoice?.paid_cents ?? 0) > 0) status.disable();
+    else status.enable();
+  }
+
   protected label(s: StatusValue) {
-    return statusLabel(s);
+    return s === 'in_transit' ? 'Traveling (started)' : statusLabel(s);
   }
 
   protected money(cents: number, currency?: string): string {

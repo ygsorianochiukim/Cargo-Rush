@@ -6,6 +6,7 @@ namespace App\Domain\Hr\Services;
 
 use App\Domain\Hr\Models\Employee;
 use App\Domain\Identity\Models\NavItem;
+use App\Domain\Identity\Models\Permission;
 use App\Domain\Identity\Models\User;
 use App\Domain\Identity\Repositories\UserRepository;
 use Illuminate\Support\Facades\DB;
@@ -125,9 +126,11 @@ class StaffAccountService
         return NavItem::query()
             ->where('web', true)
             ->get()
-            ->filter(fn (NavItem $item): bool => $item->permission === null
-                || in_array('*', $permissions, true)
-                || in_array($item->permission, $permissions, true))
+            ->filter(fn (NavItem $item): bool => match ($item->permission) {
+                Permission::VIRTUAL_OPERATIONS_ACCESS => $user->canAccessVirtualOperations(),
+                default => $item->permission === null || in_array('*', $permissions, true)
+                    || in_array($item->permission, $permissions, true),
+            })
             ->pluck('key')
             ->all();
     }

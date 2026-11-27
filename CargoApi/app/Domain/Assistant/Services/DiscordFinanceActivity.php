@@ -8,9 +8,11 @@ use App\Domain\Assistant\Models\AssistantSetting;
 use App\Domain\Automation\Models\AutomationRun;
 use App\Domain\Billing\Models\Invoice;
 use App\Domain\Billing\Models\Payment;
+use App\Domain\Billing\Support\BillingCutoff;
 use App\Domain\Finance\Models\DiscordExpenseReceipt;
 use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Enums\StatusValue;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Database\Query\JoinClause;
 use Illuminate\Support\Carbon;
@@ -18,8 +20,6 @@ use Illuminate\Support\Facades\DB;
 
 class DiscordFinanceActivity
 {
-    private const RECEIVABLE_ALERT_AGE_DAYS = 5;
-
     /** @param array<string, mixed> $input */
     public function page(AssistantSetting $settings, array $input): array
     {
@@ -28,7 +28,11 @@ class DiscordFinanceActivity
         $alerts = (bool) ($input['alerts'] ?? false);
         $kind = $input['kind'];
         if ($kind === 'aged-receivables') {
-            return $this->agedReceivables($start, $input['after'] ?? null);
+            // Older bot deployments still ask for these alerts.
+            return ['events' => [], 'next' => null];
+        }
+        if ($kind === 'cutoff-reminders') {
+            return ['events' => $this->cutoffReminders($input['day']), 'next' => null];
         }
 
         [$query, $id, $date] = match ($kind) {
@@ -73,35 +77,72 @@ class DiscordFinanceActivity
         ];
     }
 
-    /** @return array{events: array<int, array<string, mixed>>, next: ?string} */
-    private function agedReceivables(Carbon $day, ?string $after): array
+    /** @return list<array<string, mixed>> */
+    private function cutoffReminders(string $day): array
     {
-        $rows = Invoice::query()
-            ->select(['id', 'number', 'issued_at', 'amount_cents', 'withholding_cents', 'currency'])
+        $date = CarbonImmutable::parse($day, 'Asia/Manila');
+        $events = [];
+
+        // The billing window and payment target fall within two cutoffs of the delivery cutoff.
+        for ($i = 0; $i < 3; $i++) {
+            $cutoff = BillingCutoff::forDate($date);
+            $date = CarbonImmutable::parse($cutoff['start'], 'Asia/Manila')->subDay();
+            $kind = match (true) {
+                $day >= $cutoff['billing_from'] && $day <= $cutoff['billing_to'] => 'billing',
+                $day === $cutoff['payment_target'] => 'payment',
+                default => null,
+            };
+            if ($kind === null) {
+                continue;
+            }
+
+            $start = CarbonImmutable::parse($cutoff['start'], 'Asia/Manila')->utc();
+            $end = CarbonImmutable::parse($cutoff['end'], 'Asia/Manila')->addDay()->utc();
+            $summary = $this->cutoffBalance($start, $end, $kind === 'payment');
+            if ($summary['invoice_count'] > 0) {
+                $events[] = ['id' => $kind.':'.$cutoff['start'], 'kind' => $kind, ...$cutoff, ...$summary];
+            }
+        }
+
+        return $events;
+    }
+
+    /** @return array{invoice_count: int, balances: list<array{currency: string, balance_cents: int}>} */
+    private function cutoffBalance(CarbonImmutable $start, CarbonImmutable $end, bool $billed): array
+    {
+        $invoices = Invoice::query()
+            ->select(['id', 'amount_cents', 'withholding_cents', 'currency'])
             ->withSum('allocations', 'amount_cents')
             ->where('direction', InvoiceDirection::Receivable->value)
-            ->where('status', StatusValue::Pending->value)
-            ->whereDate('issued_at', '<=', $day->copy()->subDays(self::RECEIVABLE_ALERT_AGE_DAYS)->toDateString())
-            ->when($after !== null, fn ($query) => $query->where('id', '>', $after))
-            ->orderBy('id')->limit(101)->get();
-        $page = $rows->take(100);
+            ->whereIn('status', [StatusValue::Pending->value, StatusValue::Partial->value, StatusValue::Overdue->value])
+            ->whereNull('billed_at', not: $billed)
+            ->whereHas('trip', fn ($trip) => $trip->where(
+                fn ($dates) => $dates->whereHas('deliveryLog', fn ($log) => $log
+                    ->where('delivered_at', '>=', $start)->where('delivered_at', '<', $end))
+                    ->orWhere(fn ($scheduled) => $scheduled
+                        ->whereDoesntHave('deliveryLog', fn ($log) => $log->whereNotNull('delivered_at'))
+                        ->where('scheduled_at', '>=', $start)->where('scheduled_at', '<', $end)),
+            ))
+            ->lazyById();
 
-        return [
-            'events' => $page->filter(static fn (Invoice $invoice): bool => $invoice->balanceCents() > 0)
-                ->map(static function (Invoice $invoice) use ($day): array {
-                    $issued = $invoice->issued_at->toDateString();
+        $count = 0;
+        $totals = [];
+        foreach ($invoices as $invoice) {
+            $balance = $invoice->balanceCents();
+            if ($billed && $balance <= 0) {
+                continue;
+            }
+            $count++;
+            $totals[$invoice->currency] = ($totals[$invoice->currency] ?? 0) + $balance;
+        }
+        ksort($totals);
 
-                    return [
-                        'id' => $invoice->id,
-                        'invoice_number' => $invoice->number,
-                        'issued_on' => $issued,
-                        'age_days' => (int) Carbon::parse($issued, $day->timezone)->diffInDays($day),
-                        'balance_cents' => $invoice->balanceCents(),
-                        'currency' => $invoice->currency,
-                    ];
-                })->values()->all(),
-            'next' => $rows->count() > 100 ? (string) $page->last()->id : null,
-        ];
+        $balances = [];
+        foreach ($totals as $currency => $balance) {
+            $balances[] = ['currency' => $currency, 'balance_cents' => $balance];
+        }
+
+        return ['invoice_count' => $count, 'balances' => $balances];
     }
 
     private function runs(bool $alerts): array

@@ -137,6 +137,21 @@ class AssistantService
         return 'assistant-status:'.$this->tenant->id();
     }
 
+    public function officeStatus(): array
+    {
+        $settings = AssistantSetting::query()->first(['enabled', 'bot_user_id', 'llm_api_key']);
+        $paired = $settings?->botUser?->tokens()->where('name', self::TOKEN_NAME)->exists() ?? false;
+        $status = $paired ? $this->status() : null;
+
+        return [
+            'enabled' => $settings?->enabled ?? false,
+            'paired' => $paired,
+            'chat_ready' => ($settings?->enabled ?? false) && filled($settings?->getRawOriginal('llm_api_key')),
+            'state' => $status['state'] ?? null,
+            'reported_at' => $status['reported_at'] ?? null,
+        ];
+    }
+
     public function revokeToken(): void
     {
         $this->settings()->botUser?->tokens()->delete();

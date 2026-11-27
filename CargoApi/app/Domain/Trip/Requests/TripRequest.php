@@ -21,6 +21,7 @@ class TripRequest extends ApiFormRequest
     private const OFFICE_SETTABLE = [
         StatusValue::Scheduled->value,
         StatusValue::Assigned->value,
+        StatusValue::InTransit->value,
         StatusValue::Pending->value,
         StatusValue::Cancelled->value,
         StatusValue::Delivered->value,
