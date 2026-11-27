@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Identity\Repositories;
 
 use App\Domain\Identity\Models\NavItem;
-use App\Domain\Identity\Models\Permission;
+use App\Domain\Identity\Models\User;
 use App\Domain\Shared\Repositories\Repository;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -24,10 +24,9 @@ class NavigationRepository extends Repository
     }
 
     /**
-     * @param  string[]  $permissions
      * @param  string[]  $only
      */
-    public function forClient(string $client, array $permissions, array $only = []): Collection
+    public function forClient(string $client, User $user, array $only = []): Collection
     {
         $column = $client === 'mobile' ? 'mobile' : 'web';
 
@@ -35,7 +34,7 @@ class NavigationRepository extends Repository
             ->where($column, true)
             ->get()
             ->filter(fn (NavItem $item): bool => $item->permission === null
-                || Permission::allows($permissions, $item->permission))
+                || $user->hasPermission($item->permission))
             ->filter(fn (NavItem $item): bool => $only === [] || in_array($item->key, $only, true))
             ->values();
     }

@@ -44,6 +44,7 @@ class Employee extends Model
             'philhealth_enrolled' => 'boolean',
             'pagibig_enrolled' => 'boolean',
             'status' => StatusValue::class,
+            'virtual_appearance' => 'array',
         ];
     }
 

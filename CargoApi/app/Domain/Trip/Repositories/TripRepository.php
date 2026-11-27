@@ -30,6 +30,7 @@ class TripRepository extends Repository
                 'truckerDriver:id,name',
                 'pricingZone:id,name',
                 'latestInspection.driver:id,name',
+                'dispatchRecord',
                 'invoice' => static fn ($query) => $query->withSum('allocations', 'amount_cents'),
             ])
             ->orderByDesc('scheduled_at');

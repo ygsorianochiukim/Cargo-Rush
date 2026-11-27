@@ -84,6 +84,39 @@ it('writes a dispatch record when the unit goes out', function (): void {
         ->and($trip->dispatchRecord->location)->toBe('Manila depot · Bay 3');
 });
 
+it('starts a trip from the office status and keeps its original departure on later edits', function (): void {
+    $created = $this->actingAs($this->admin)->postJson('/api/v1/trips', [
+        ...$this->payload,
+        'status' => 'in_transit',
+    ])->assertCreated()->assertJsonPath('data.status', 'in_transit')->json('data');
+
+    $departure = Trip::findOrFail($created['id'])->dispatchRecord;
+    expect($departure->vehicle_id)->toBe($this->vehicle->id)
+        ->and($departure->location)->toBe($this->payload['origin'])
+        ->and($created['dispatched_at'])->toBe($departure->dispatched_at->toIso8601ZuluString());
+
+    $this->travel(10)->minutes();
+    $this->patchJson('/api/v1/trips/'.$created['id'], ['status' => 'in_transit', 'cargo' => 'Updated load'])
+        ->assertOk()
+        ->assertJsonPath('data.cargo', 'Updated load')
+        ->assertJsonPath('data.dispatched_at', $created['dispatched_at']);
+    $this->travelBack();
+});
+
+it('records departure when an existing scheduled trip is marked traveling', function (): void {
+    $id = $this->actingAs($this->admin)->postJson('/api/v1/trips', [
+        ...$this->payload,
+        'status' => 'scheduled',
+        'pickup_place' => 'Bay 3',
+    ])->assertCreated()->assertJsonPath('data.dispatched_at', null)->json('data.id');
+
+    $this->patchJson('/api/v1/trips/'.$id, ['status' => 'in_transit'])->assertOk()
+        ->assertJsonPath('data.status', 'in_transit');
+    $this->getJson('/api/v1/trips/'.$id)->assertOk()->assertJsonPath('data.dispatched_at',
+        Trip::findOrFail($id)->dispatchRecord->dispatched_at->toIso8601ZuluString());
+    expect(Trip::findOrFail($id)->dispatchRecord->location)->toBe('Bay 3');
+});
+
 it('closes the trip, its dispatch record and its delivery log together', function (): void {
     $id = $this->actingAs($this->admin)->postJson('/api/v1/trips', $this->payload)->json('data.id');
     $before = $this->driver->trips_completed;

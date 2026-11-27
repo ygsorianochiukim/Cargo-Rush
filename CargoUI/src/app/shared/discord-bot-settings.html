@@ -67,7 +67,8 @@
       </div>
       <p class="cr-meta mt-3">
         Use private text channels that the bot can access. Adding a channel limits conversations to
-        the Assistant and Finance channels. Daily reports arrive after midnight in the bot’s time zone.
+        the Assistant and Finance channels. Daily reports arrive after midnight in the bot’s time
+        zone. Billing cutoff and payment reminders go to Finance Alerts from 9:00 a.m. Manila time.
       </p>
       @if (bot.discord_status?.finance_error; as message) {
         <p role="alert" class="mt-2 text-sm text-cr-red">{{ message }}</p>

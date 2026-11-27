@@ -45,7 +45,7 @@ class TripController extends ApiController
 
     public function show(Trip $trip): JsonResponse
     {
-        return $this->item(new TripResource($trip));
+        return $this->item(new TripResource($trip->loadMissing('dispatchRecord')));
     }
 
     public function history(Trip $trip, TripHistoryService $history): JsonResponse
@@ -90,7 +90,7 @@ class TripController extends ApiController
             return $this->recordPayment($request, $this->recordDelivery($request, $this->trips->create($this->asAssigned($request))));
         });
 
-        return $this->item(new TripResource($trip), status: 201);
+        return $this->item(new TripResource($trip->loadMissing('dispatchRecord:trip_id,dispatched_at')), status: 201);
     }
 
     public function update(TripRequest $request, Trip $trip): JsonResponse
@@ -105,7 +105,7 @@ class TripController extends ApiController
             return $this->recordPayment($request, $this->recordDelivery($request, $this->trips->update($trip, $this->asAssigned($request))));
         });
 
-        return $this->item(new TripResource($updated));
+        return $this->item(new TripResource($updated->loadMissing('dispatchRecord:trip_id,dispatched_at')));
     }
 
     private function registerNewCustomer(TripRequest $request): void
@@ -177,7 +177,7 @@ class TripController extends ApiController
 
         $this->trips->dispatch($trip, $validated['location']);
 
-        return $this->item(new TripResource($trip->refresh()));
+        return $this->item(new TripResource($trip->refresh()->loadMissing('dispatchRecord:trip_id,dispatched_at')));
     }
 
     public function complete(DeliverTripRequest $request, Trip $trip): JsonResponse

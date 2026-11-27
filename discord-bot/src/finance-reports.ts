@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { type Client, escapeMarkdown, type MessageCreateOptions } from "discord.js";
+import { type Client, type MessageCreateOptions } from "discord.js";
 import { z } from "zod";
 
 import type { CargoClient } from "./cargo.js";
@@ -25,12 +25,17 @@ const receiptExpense = base.extend({
 });
 
 const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
-const agedReceivable = z.object({
-  id: z.string(), invoice_number: z.string(), issued_on: dateKey,
-  age_days: z.number().int().min(5), balance_cents: z.number().int().positive(), currency: z.string(),
+const cutoffReminder = z.object({
+  id: z.string(), kind: z.enum(["billing", "payment"]), start: dateKey, end: dateKey,
+  billing_from: dateKey, billing_to: dateKey, payment_target: dateKey,
+  invoice_count: z.number().int().positive(),
+  balances: z.array(z.object({ currency: z.string(), balance_cents: z.number().int().nonnegative() })),
 });
-const AGED_RECEIVABLE_KEY = "aged-receivable:";
-const AGING_CHECK_INTERVAL_MS = 15 * 60_000;
+const CUTOFF_TIMEZONE = "Asia/Manila";
+const CUTOFF_CHECK_INTERVAL_MS = 15 * 60_000;
+const cutoffHour = new Intl.DateTimeFormat("en-PH", {
+  timeZone: CUTOFF_TIMEZONE, hour: "2-digit", hourCycle: "h23",
+});
 
 const progress = z.object({
   firstAlertDay: dateKey,
@@ -64,9 +69,24 @@ function runLine(event: z.infer<typeof run>): string {
   return "Overdue invoice check " + event.status + " · " + event.changed_count + " invoices marked overdue · run " + event.id;
 }
 
+function reminderMessage(event: z.infer<typeof cutoffReminder>): string {
+  const billing = event.kind === "billing";
+  const count = event.invoice_count;
+  const balances = event.balances.map(({ currency, balance_cents }) =>
+    new Intl.NumberFormat("en-PH", { style: "currency", currency }).format(balance_cents / 100),
+  ).join(" + ");
+
+  return (billing ? "**Billing cutoff reminder**" : "**Payment follow-up reminder**") + "\n" +
+    "Trip cutoff " + event.start + " to " + event.end + "\n" +
+    "Billing window " + event.billing_from + " to " + event.billing_to + "\n" +
+    "Recommended payment date " + event.payment_target + "\n" +
+    count + (count === 1 ? " trip invoice " : " trip invoices ") +
+    (billing ? "to mark as billed" : "with an outstanding balance") + " · **" + balances + "**";
+}
+
 export class FinanceReports {
   private saved: Record<string, Progress> = {};
-  private readonly nextAgingCheck = new Map<string, number>();
+  private readonly nextCutoffCheck = new Map<string, number>();
   private stateError = false;
 
   constructor(private readonly cargo: CargoClient, private readonly file: string, private readonly timezone: string) {
@@ -90,7 +110,7 @@ export class FinanceReports {
     const reportDay = state.lastReportDay ? moveDay(state.lastReportDay, 1) : yesterday;
     const oldest = reportDay < yesterday ? reportDay : yesterday;
     for (const [id, day] of Object.entries(state.sent)) {
-      if (day < oldest && !id.startsWith(AGED_RECEIVABLE_KEY)) delete state.sent[id];
+      if (day < oldest) delete state.sent[id];
     }
 
     const failures: string[] = [];
@@ -116,22 +136,19 @@ export class FinanceReports {
       failures.push(this.failure("Finance alerts", error));
     }
 
-    if (now.getTime() >= (this.nextAgingCheck.get(key) ?? 0)) {
+    if (Number(cutoffHour.format(now)) >= 9 && now.getTime() >= (this.nextCutoffCheck.get(key) ?? 0)) {
+      const cutoffDay = localDay(now, CUTOFF_TIMEZONE);
       try {
-        for await (const page of this.pages("aged-receivables", today, agedReceivable, true)) {
-          for (const invoice of page.events) {
-            const balance = new Intl.NumberFormat("en-PH", { style: "currency", currency: invoice.currency })
-              .format(invoice.balance_cents / 100);
-            await this.send(client, alerts, state, today, AGED_RECEIVABLE_KEY + invoice.id, {
-              content: "**Pending receivable · " + invoice.age_days + " days old**\n" +
-                "Invoice " + escapeMarkdown(invoice.invoice_number) + " · issued " + invoice.issued_on +
-                "\nOutstanding balance **" + balance + "**",
+        for await (const page of this.pages("cutoff-reminders", cutoffDay, cutoffReminder, true, CUTOFF_TIMEZONE)) {
+          for (const reminder of page.events) {
+            await this.send(client, alerts, state, cutoffDay, "cutoff:" + reminder.id, {
+              content: reminderMessage(reminder),
             });
           }
         }
-        this.nextAgingCheck.set(key, now.getTime() + AGING_CHECK_INTERVAL_MS);
+        this.nextCutoffCheck.set(key, now.getTime() + CUTOFF_CHECK_INTERVAL_MS);
       } catch (error) {
-        failures.push(this.failure("Pending receivables", error));
+        failures.push(this.failure("Billing cutoff reminders", error));
       }
     }
 
@@ -191,12 +208,14 @@ export class FinanceReports {
     };
   }
 
-  private async *pages<S extends z.ZodType>(kind: string, day: string, event: S, alerts = false) {
+  private async *pages<S extends z.ZodType>(
+    kind: string, day: string, event: S, alerts = false, timezone = this.timezone,
+  ) {
     const schema = z.object({ data: z.object({ events: z.array(event), next: z.string().nullable() }) });
     let after: string | null = null;
     do {
       const response: unknown = await this.cargo.financeActivity({
-        kind, day, timezone: this.timezone, alerts: alerts ? 1 : 0, after,
+        kind, day, timezone, alerts: alerts ? 1 : 0, after,
       });
       const page = schema.parse(response).data;
       yield page;
@@ -205,7 +224,7 @@ export class FinanceReports {
   }
 
   private async send(client: Client, channelId: string, state: Progress, day: string, id: string, message: MessageCreateOptions): Promise<void> {
-    const delivery = id.startsWith(AGED_RECEIVABLE_KEY) ? id : day + ":" + id;
+    const delivery = day + ":" + id;
     if (state.sent[delivery]) return;
 
     const channel = await privateTextChannel(client, channelId);

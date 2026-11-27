@@ -1,0 +1,465 @@
+@if (snapshot(); as data) {
+  <section class="operations" aria-label="Operations floor">
+    <div class="toolbar">
+      <div>
+        <h2>Operations floor</h2>
+        <p>
+          {{ data.employees.length }} active
+          {{ data.employees.length === 1 ? 'employee' : 'employees' }} ·
+          {{ data.rooms.length }} areas
+        </p>
+      </div>
+      <div class="actions">
+        <button
+          type="button"
+          class="vo-button"
+          (click)="reload()"
+          [disabled]="loading() || saving()"
+        >
+          {{ loading() ? 'Refreshing…' : 'Refresh' }}
+        </button>
+        @if (canEdit()) {
+          <button type="button" class="vo-button primary" (click)="openLayout()">
+            Edit layout
+          </button>
+        }
+      </div>
+    </div>
+
+    @if (loadError()) {
+      <p class="error" role="alert">{{ loadError() }}</p>
+    }
+
+    <app-office-yard
+      [yard]="data.yard"
+      [people]="data.employees"
+      [agentsReady]="data.agent.chat_ready"
+      [discordOnline]="agentStatus() === 'Online'"
+      [followedId]="followedEmployee()"
+      (personSelected)="select($event)"
+      (truckSelected)="selectedTruck.set($event)"
+      (deskSelected)="openDesk($event)"
+      (stopFollowing)="followedEmployee.set(null)"
+    />
+
+    <h3 class="directory-heading">Office directory</h3>
+    <div class="filters">
+      <label
+        >Find employee
+        <input
+          type="search"
+          placeholder="Name or employee ID"
+          [ngModel]="search()"
+          (ngModelChange)="search.set($event)"
+        />
+      </label>
+      <label
+        >Position
+        <select [ngModel]="filter()" (ngModelChange)="filter.set($event)">
+          <option value="">All positions</option>
+          @for (position of occupiedPositions(); track position.key) {
+            <option [value]="position.key">{{ position.name }}</option>
+          }
+        </select>
+      </label>
+      <span class="results" aria-live="polite">{{ filtered().length }} shown</span>
+    </div>
+
+    @if (!filtered().length) {
+      <p class="results" role="status">
+        {{
+          data.employees.length
+            ? 'No employees match these filters.'
+            : 'There are no active employees in the roster.'
+        }}
+      </p>
+    }
+
+    <div class="floor">
+      @for (room of floor(); track room.id) {
+        <article class="room" [attr.data-room]="room.id">
+          <div class="room-heading">
+            <div>
+              <h3>{{ room.name }}</h3>
+              @if (roomDetails[room.id]; as detail) {
+                <p>{{ detail }}</p>
+              }
+            </div>
+            @if (room.id !== 'ai') {
+              <span class="room-count" [attr.aria-label]="room.staff.length + ' shown'">{{
+                room.staff.length
+              }}</span>
+            }
+          </div>
+          @if (room.id === 'ai') {
+            <button type="button" class="directory-entry" (click)="agentOpen.set(true)">
+              <strong>Discord Assistant</strong><small>{{ agentStatus() }}</small>
+            </button>
+            @for (desk of officeAgents; track desk.id) {
+              <button type="button" class="directory-entry" (click)="openDesk(desk)">
+                <strong>{{ desk.name }}</strong
+                ><small>{{ data.agent.chat_ready ? 'Ready' : 'Setup needed' }}</small>
+              </button>
+            }
+          }
+          @for (person of room.staff; track person.id) {
+            <button
+              type="button"
+              class="directory-entry"
+              (click)="select(person.id)"
+              [attr.data-status]="person.work_status"
+            >
+              <strong>{{ person.name }}</strong
+              ><small>{{ labels[person.work_status] }}</small>
+            </button>
+          }
+          @if (room.id === 'dispatch') {
+            <div class="dispatch-board">
+              <div>
+                <strong>{{ data.dispatch.assigned }}</strong> Assigned
+              </div>
+              <div>
+                <strong>{{ data.dispatch.in_transit }}</strong> In transit
+              </div>
+              <div>
+                <strong>{{ data.dispatch.overdue }}</strong> Overdue
+              </div>
+              @if (canOpenDispatch()) {
+                <a routerLink="/dispatch">Dispatch monitoring</a>
+              }
+              @if (canOpenTrips()) {
+                <a routerLink="/trips">Trip planning</a>
+              }
+            </div>
+          }
+        </article>
+      }
+    </div>
+  </section>
+} @else if (loadError()) {
+  <app-error-state [message]="loadError()" (retry)="reload()" />
+} @else {
+  <p class="loading" role="status">Loading the operations floor…</p>
+}
+
+<app-modal
+  [open]="employee() !== null"
+  [title]="employee()?.name ?? 'Employee'"
+  icon="badge"
+  [locked]="saving()"
+  (closed)="select(null)"
+>
+  @if (employee(); as person) {
+    <div class="profile">
+      @if (person.photo_url) {
+        <img [src]="person.photo_url" alt="" width="64" height="64" />
+      }
+      <dl>
+        <dt>Employee ID</dt>
+        <dd>{{ person.employee_no }}</dd>
+        <dt>Position</dt>
+        <dd>{{ person.position }}</dd>
+        <dt>Department</dt>
+        <dd>{{ person.department || 'Unspecified' }}</dd>
+        <dt>Virtual area</dt>
+        <dd>{{ roomLabel(person.room) }}</dd>
+        <dt>Employment</dt>
+        <dd class="capitalize">{{ person.employment_status }}</dd>
+        <dt>Work status</dt>
+        <dd>{{ labels[person.work_status] }}</dd>
+        <dt>Assigned branch</dt>
+        <dd>Unspecified</dd>
+        <dt>Vehicle</dt>
+        <dd>{{ person.vehicle ?? 'Unassigned' }}</dd>
+        <dt>Current delivery</dt>
+        <dd>{{ person.delivery ?? 'Unassigned' }}</dd>
+      </dl>
+    </div>
+    <div class="actions">
+      <button
+        type="button"
+        class="vo-button"
+        (click)="followEmployee(person.id)"
+        [disabled]="saving()"
+      >
+        Follow on floor
+      </button>
+      @if (canOpenProfile()) {
+        <a class="vo-button" [routerLink]="['/employees', person.id]">Open employee profile</a>
+      }
+    </div>
+    @if (canEdit()) {
+      @if (appearance(); as draft) {
+        <form
+          class="appearance-form"
+          [attr.data-room]="person.room"
+          (ngSubmit)="saveAppearance(person, draft)"
+        >
+          <app-operations-avatar [appearance]="draft" [room]="person.room" />
+          <div class="appearance-fields">
+            @for (option of appearanceOptions; track option.field) {
+              <label
+                >{{ option.label }}
+                <select
+                  [name]="option.field"
+                  [ngModel]="draft[option.field]"
+                  (ngModelChange)="setAppearance(option.field, $event)"
+                >
+                  @for (choice of option.choices; track choice; let index = $index) {
+                    <option [ngValue]="index">{{ choice }}</option>
+                  }
+                </select>
+              </label>
+            }
+          </div>
+          @if (saveError()) {
+            <p class="error" role="alert">{{ saveError() }}</p>
+          }
+          <div class="actions">
+            <button
+              type="button"
+              class="vo-button"
+              (click)="appearance.set(null)"
+              [disabled]="saving()"
+            >
+              Cancel
+            </button>
+            <button type="submit" class="vo-button primary" [disabled]="saving() || loading()">
+              Save appearance
+            </button>
+          </div>
+        </form>
+      } @else {
+        <button type="button" class="vo-button" (click)="appearance.set(person.appearance)">
+          Customize character
+        </button>
+      }
+    }
+  }
+</app-modal>
+
+<app-modal
+  [open]="truck() !== null"
+  [title]="truck()?.plate ?? 'Truck details'"
+  icon="fleet"
+  (closed)="selectedTruck.set(null)"
+>
+  @if (truck(); as vehicle) {
+    <div class="profile">
+      <dl>
+        <dt>Model</dt>
+        <dd>{{ vehicle.model }}</dd>
+        <dt>Yard status</dt>
+        <dd>{{ vehicle.fleet_status === 'traveling' ? 'Traveling' : 'Parked' }}</dd>
+        <dt>Fleet monitor</dt>
+        <dd>{{ fleetLabels[vehicle.fleet_status] }}</dd>
+        <dt>Vehicle record</dt>
+        <dd class="capitalize">{{ vehicle.status }}</dd>
+        @if (vehicle.assigned && vehicle.fleet_status !== 'traveling') {
+          <dt>Dispatch</dt>
+          <dd>Assigned to a trip</dd>
+        }
+      </dl>
+    </div>
+    @if (canOpenVehicles()) {
+      <a class="vo-button" routerLink="/vehicles">Vehicle management</a>
+    }
+  }
+</app-modal>
+
+<app-modal
+  [open]="agentDesk() !== null"
+  [title]="agentDesk()?.name ?? 'AI Agent'"
+  icon="gauge"
+  (closed)="closeDesk()"
+>
+  <div class="profile">
+    <dl>
+      @for (stat of deskStats(); track stat.label) {
+        <dt>{{ stat.label }}</dt>
+        <dd>{{ stat.count }}</dd>
+      }
+    </dl>
+  </div>
+  @if (snapshot()?.agent?.chat_ready) {
+    <form class="agent-form" (ngSubmit)="askAgent()">
+      <label
+        >Your question
+        <textarea
+          name="question"
+          rows="3"
+          maxlength="500"
+          [ngModel]="agentQuestion()"
+          (ngModelChange)="agentQuestion.set($event)"
+        ></textarea>
+      </label>
+      <p class="results">The question and summary counts go to your configured AI provider.</p>
+      <button
+        type="submit"
+        class="vo-button primary"
+        [disabled]="agentBusy() || !agentQuestion().trim()"
+      >
+        Ask agent
+      </button>
+    </form>
+    @if (agentBusy()) {
+      <p class="results" role="status">The agent is working on your answer…</p>
+    }
+    @if (agentError()) {
+      <p class="error" role="alert">{{ agentError() }}</p>
+    }
+    @if (agentAnswer()) {
+      <p class="agent-answer" role="status">{{ agentAnswer() }}</p>
+    }
+  } @else {
+    <p class="results">
+      Enable the assistant and save an AI provider key in Assistant Settings to ask this agent
+      questions.
+    </p>
+    @if (canOpenSettings()) {
+      <a class="vo-button" routerLink="/assistant-settings">Assistant settings</a>
+    }
+  }
+</app-modal>
+
+<app-modal
+  [open]="agentOpen()"
+  title="AI Agent Office"
+  icon="gauge"
+  (closed)="agentOpen.set(false)"
+>
+  @if (snapshot(); as data) {
+    <div class="profile">
+      <dl>
+        <dt>Agent</dt>
+        <dd>Discord Assistant</dd>
+        <dt>Status</dt>
+        <dd>{{ agentStatus() }}</dd>
+        @if (data.agent.reported_at; as reported) {
+          <dt>Last report</dt>
+          <dd>{{ reported | date: 'medium' }}</dd>
+        }
+      </dl>
+    </div>
+    <div class="actions">
+      @if (canOpenSettings()) {
+        <a class="vo-button" routerLink="/assistant-settings">Assistant settings</a>
+      }
+      @if (canOpenAutomation()) {
+        <a class="vo-button" routerLink="/automation">Automation dashboard</a>
+      }
+    </div>
+  }
+</app-modal>
+
+<app-modal
+  [open]="layout() !== null"
+  title="Edit floor layout"
+  size="lg"
+  icon="shipments"
+  [locked]="saving()"
+  (closed)="closeLayout()"
+>
+  @if (layout(); as draft) {
+    <div class="layout-editor">
+      <section>
+        <h3>Areas</h3>
+        <ol class="area-order">
+          @for (
+            room of draft.rooms;
+            track room.id;
+            let index = $index;
+            let first = $first;
+            let last = $last
+          ) {
+            <li>
+              <span>{{ room.name }}</span>
+              <button
+                type="button"
+                class="vo-button compact"
+                [attr.aria-label]="'Move ' + room.name + ' earlier'"
+                (click)="moveRoom(index, -1)"
+                [disabled]="first || saving()"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                class="vo-button compact"
+                [attr.aria-label]="'Move ' + room.name + ' later'"
+                (click)="moveRoom(index, 1)"
+                [disabled]="last || saving()"
+              >
+                ↓
+              </button>
+              @if (room.id.startsWith('custom-')) {
+                <button
+                  type="button"
+                  class="vo-button compact"
+                  [attr.aria-label]="'Remove ' + room.name"
+                  (click)="removeRoom(room.id)"
+                  [disabled]="saving()"
+                >
+                  ×
+                </button>
+              }
+            </li>
+          }
+        </ol>
+        <form class="add-area" (ngSubmit)="addRoom()">
+          <label
+            >New area name<input
+              name="room"
+              [ngModel]="roomName()"
+              (ngModelChange)="roomName.set($event)"
+              maxlength="48"
+          /></label>
+          <button
+            type="submit"
+            class="vo-button"
+            [disabled]="!roomName().trim() || draft.rooms.length >= 40 || saving()"
+          >
+            Add area
+          </button>
+        </form>
+      </section>
+      <section>
+        <h3>Position assignments</h3>
+        @for (position of draft.positions; track position.key) {
+          <label class="position-rule"
+            >{{ position.name }}
+            <select
+              [ngModel]="position.room"
+              (ngModelChange)="assignRoom(position.key, $event)"
+              [disabled]="saving()"
+            >
+              @for (room of draft.rooms; track room.id) {
+                @if (room.id !== 'ai') {
+                  <option [value]="room.id">{{ room.name }}</option>
+                }
+              }
+            </select>
+          </label>
+        } @empty {
+          <p class="results">No positions are available yet.</p>
+        }
+      </section>
+    </div>
+    @if (saveError()) {
+      <p class="error" role="alert">{{ saveError() }}</p>
+    }
+    <div class="actions editor-actions">
+      <button type="button" class="vo-button" (click)="closeLayout()" [disabled]="saving()">
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="vo-button primary"
+        (click)="saveLayout(draft)"
+        [disabled]="saving() || loading()"
+      >
+        Save layout
+      </button>
+    </div>
+  }
+</app-modal>

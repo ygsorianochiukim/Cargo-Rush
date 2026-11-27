@@ -1,0 +1,106 @@
+.scene-controls,
+.area-shortcuts,
+.activity-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.area-shortcuts {
+  display: none;
+}
+.scene.enlarged .area-shortcuts {
+  display: flex;
+}
+@media (max-width: 1200px) {
+  .area-shortcuts {
+    display: flex;
+  }
+}
+.activity-bar {
+  padding: 9px 14px;
+  border-top: 1px solid var(--color-cr-line);
+}
+.activity-bar > span {
+  color: var(--color-cr-ink-muted);
+  font-size: 12px;
+  margin-right: 5px;
+}
+.activity-notice {
+  flex-basis: 100%;
+  font-size: 12px;
+  color: var(--color-cr-blue);
+}
+.follow-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 12px;
+  flex-wrap: wrap;
+  padding: 8px 14px;
+  background: #edf4f7;
+  color: #29475b;
+  font-size: 12px;
+}
+.person-pin.followed::before {
+  content: '';
+  position: absolute;
+  inset: auto 0 -2px;
+  height: 12px;
+  border: 2px solid #15589c;
+  border-radius: 50%;
+  background: #b4def590;
+}
+.person-pin.followed .pin-label {
+  visibility: visible;
+}
+.person-pin.walking {
+  transition:
+    left 140ms linear,
+    top 140ms linear;
+}
+.person-pin.away app-operations-avatar {
+  opacity: 0.58;
+}
+.person-pin.at-desk:not(:hover, :focus-visible) {
+  z-index: 90;
+}
+
+.station-pin {
+  z-index: 460;
+  padding: 2px;
+}
+.station-icon,
+.activity-bubble {
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.station-icon {
+  display: grid;
+  place-items: center;
+  color: #3d5064;
+  background: #fbf5e9;
+  border: 1px solid #b99973;
+  width: 22px;
+  height: 21px;
+}
+.station-pin:hover .station-icon {
+  background: white;
+  color: var(--color-cr-blue);
+}
+.activity-bubble {
+  position: absolute;
+  pointer-events: none;
+  left: 90%;
+  top: -5px;
+  padding: 0 3px;
+  color: #3d5064;
+  background: white;
+  border: 1px solid #bfccd4;
+}
+@media (prefers-reduced-motion: reduce) {
+  .person-pin.walking {
+    transition: none;
+  }
+}

@@ -14,6 +14,8 @@ class Permission extends Model
 
     public const DEVELOPER_ACCESS = 'automation.manage';
 
+    public const VIRTUAL_OPERATIONS_ACCESS = 'virtual-operations.view';
+
     protected $fillable = ['key', 'name', 'description', 'group', 'position'];
 
     protected function casts(): array
@@ -30,6 +32,7 @@ class Permission extends Model
     public static function allows(array $held, string $permission): bool
     {
         return in_array($permission, $held, true)
-            || ($permission !== self::DEVELOPER_ACCESS && in_array('*', $held, true));
+            || (! in_array($permission, [self::DEVELOPER_ACCESS, self::VIRTUAL_OPERATIONS_ACCESS], true)
+                && in_array('*', $held, true));
     }
 }

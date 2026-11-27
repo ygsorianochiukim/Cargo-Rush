@@ -290,6 +290,7 @@ describe('the statement of account', function (): void {
     });
 
     it('closes at zero on a withholding customer who paid the due', function (): void {
+        $this->travelTo(now('UTC')->setDate(2026, 6, 20)->setTime(16, 5));
         $this->customer->update(['withholds_tax' => true]);
         $invoice = ($this->raise)();
 
@@ -301,8 +302,14 @@ describe('the statement of account', function (): void {
         expect($kinds)->toBe(['invoice', 'withholding', 'payment'])
             ->and($statement['lines'][1]['credit_cents'])->toBe(20_000)
             ->and($statement['lines'][1]['date'])->toBe($statement['lines'][0]['date'])
+            ->and($statement['lines'][2]['date'])->toBe('2026-06-21')
+            ->and($statement['range']['to'])->toBe('2026-06-21')
             ->and($statement['closing_balance_cents'])->toBe(0)
             ->and($statement['aging']['total_cents'])->toBe(0);
+
+        $previousDay = ($this->statement)(['to' => '2026-06-20']);
+        expect(array_column($previousDay['lines'], 'kind'))->toBe(['invoice', 'withholding'])
+            ->and($previousDay['closing_balance_cents'])->toBe(1_100_000);
     });
 
     it('carries the withholding into the opening balance', function (): void {
@@ -313,6 +320,16 @@ describe('the statement of account', function (): void {
 
         expect($statement['opening_balance_cents'])->toBe(1_100_000)
             ->and($statement['closing_balance_cents'])->toBe(1_100_000);
+    });
+
+    it('ages by calendar days after midnight in Manila', function (): void {
+        $this->travelTo(now('UTC')->setDate(2026, 6, 20)->setTime(16, 5));
+        ($this->raise)(['issued_at' => '2026-05-21', 'due_at' => '2026-05-21']);
+
+        $aging = ($this->statement)()['aging'];
+
+        expect($aging['days_1_30'])->toBe(0)
+            ->and($aging['days_31_60'])->toBe(1_120_000);
     });
 
     it('ages against the money received by the statement date, not since', function (): void {
@@ -355,6 +372,7 @@ describe('the dashboard', function (): void {
     });
 
     it('measures collection on the window, net of withholding', function (): void {
+        $this->travelTo(now('UTC')->setDate(2026, 6, 20)->setTime(16, 5));
         $this->customer->update(['withholds_tax' => true]);
 
         $recent = ($this->raise)();

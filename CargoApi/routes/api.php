@@ -67,6 +67,7 @@ use App\Domain\Trucker\Controllers\TruckerController;
 use App\Domain\Trucker\Controllers\TruckerRegistrationController;
 use App\Domain\Vehicle\Controllers\MaintenanceController;
 use App\Domain\Vehicle\Controllers\VehicleController;
+use App\Domain\VirtualOperations\Controllers\VirtualOperationsController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -1240,6 +1241,13 @@ Route::prefix('v1')->group(function (): void {
         });
 
         /* -------------------------------------------------------------- HR */
+
+        Route::prefix('virtual-operations')->middleware('permission:'.Permission::VIRTUAL_OPERATIONS_ACCESS)->group(function (): void {
+            Route::get('/', [VirtualOperationsController::class, 'show']);
+            Route::post('ask', [VirtualOperationsController::class, 'ask'])->middleware('throttle:6,1');
+            Route::put('layout', [VirtualOperationsController::class, 'updateLayout']);
+            Route::put('employees/{employee}/appearance', [VirtualOperationsController::class, 'updateAppearance']);
+        });
 
         // Declared before the resources so `employees/overview` and
         // `applicants/pipeline` are never read as ids.

@@ -19,6 +19,8 @@ Everything about it is managed in Cargo Rush under **Administration → Assistan
 
 Finance posts a report for the previous date after midnight in the bot's configured timezone (Asia/Manila by default). It includes recorded payments, invoice statuses the overdue check changed, and the check run history. Completed checks that marked invoices overdue, failed checks, and payments at or above the configured threshold are reported on the next polling cycle. Reports run independently of the AI provider while the assistant switch is on. Keep the bot's data directory between deployments to retain delivery progress.
 
+Finance also sends billing cutoff reminders from 9:00 a.m. Manila time. On each day of the billing window, it lists the count and balance of trip invoices still to be marked billed. On the recommended payment date, it reports billed trip invoices that still have a balance. The dates come from **Billing & Invoice**, and the reminders go to the private Finance Alerts channel or its Finance channel fallback.
+
 ## Expense receipts
 
 Upload a JPEG, PNG, or WebP receipt of up to 2 MB directly in the private Finance channel. The bot saves the original, uses the configured AI provider to read the image, and shows an Other Expenses preview. **Update** sends the uploader a private link to the authenticated Cargo Rush editor. Save the draft and click **Update** in Discord to refresh the preview. **Confirm** creates one expense after the required fields validate. **Cancel** archives the draft and original image.

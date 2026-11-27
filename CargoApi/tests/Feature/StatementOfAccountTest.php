@@ -138,13 +138,14 @@ describe('the aging', function (): void {
     });
 
     it('ages what is left, not what was billed', function (): void {
+        $reportDate = now()->startOfDay();
         $invoice = ($this->raise)([
-            'issued_at' => now()->subDays(60)->toDateString(),
-            'due_at' => now()->subDays(30)->toDateString(),
+            'issued_at' => $reportDate->copy()->subDays(60)->toDateString(),
+            'due_at' => $reportDate->copy()->subDays(30)->toDateString(),
         ]);
-        ($this->settle)($invoice['id'], 1_000_000);
+        ($this->settle)($invoice['id'], 1_000_000, ['paid_on' => $reportDate->toDateString()]);
 
-        expect(($this->statement)()['aging']['days_1_30'])->toBe(120_000);
+        expect(($this->statement)(['to' => $reportDate->toDateString()])['aging']['days_1_30'])->toBe(120_000);
     });
 
     it('drops a settled document out of the buckets entirely', function (): void {

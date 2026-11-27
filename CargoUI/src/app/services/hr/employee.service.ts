@@ -13,6 +13,10 @@ export class EmployeeService {
     return this.api.envelope<Employee[]>('employees', query);
   }
 
+  get(id: string): Observable<Employee> {
+    return this.api.get<Employee>(`employees/${id}`);
+  }
+
   save(form: FormData, id?: string): Observable<Employee> {
     return id
       ? this.api.postForm<Employee>(`employees/${id}`, form)

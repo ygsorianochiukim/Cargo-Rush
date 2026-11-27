@@ -1,0 +1,253 @@
+﻿:host {
+  display: block;
+  width: var(--avatar-width, 44px);
+}
+.avatar {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  --uniform: var(--outfit);
+  --ink: #292a32;
+}
+.ground-shadow {
+  fill: #364a63;
+  opacity: 0.23;
+}
+.figure {
+  transform-origin: 28px 0;
+  transform: scaleX(var(--facing, 1));
+}
+.left {
+  --facing: -1;
+}
+.shirt {
+  fill: var(--uniform);
+  stroke: var(--ink);
+  stroke-width: 1.35;
+  stroke-linejoin: round;
+}
+.shirt-shadow {
+  fill: #28364f;
+  opacity: 0.26;
+}
+.shirt-light {
+  fill: #eef9ff;
+  opacity: 0.23;
+}
+.trouser {
+  fill: #344254;
+  stroke: #252e39;
+  stroke-width: 1.25;
+  stroke-linejoin: round;
+}
+.far-leg .trouser {
+  fill: #2c3747;
+}
+.shoe {
+  fill: #2b303b;
+  stroke: #1d262d;
+  stroke-width: 1.15;
+  stroke-linejoin: round;
+}
+.hand,
+.ear,
+.neck {
+  fill: color-mix(in srgb, var(--skin), #754c3a 10%);
+  stroke: #52362c;
+  stroke-width: 0.85;
+}
+.head {
+  fill: var(--skin);
+  stroke: #4d3730;
+  stroke-width: 1.25;
+}
+.face-shade {
+  fill: #945837;
+  opacity: 0.17;
+}
+.hair {
+  display: none;
+  fill: #32282d;
+  stroke: #231f26;
+  stroke-width: 1.45;
+  stroke-linejoin: round;
+}
+.hair-shine {
+  fill: none;
+  stroke: #886d61;
+  stroke-width: 1.45;
+  stroke-linecap: round;
+  opacity: 0.48;
+}
+[data-hair='0'] .hair-side,
+[data-hair='1'] .hair-fringe,
+[data-hair='2'] .hair-high,
+[data-hair='3'] .hair-crop {
+  display: block;
+}
+.eyes {
+  fill: #27262d;
+}
+.smile,
+.brows,
+.closed-eyes {
+  fill: none;
+  stroke: #633c2c;
+  stroke-width: 1.05;
+  stroke-linecap: round;
+}
+.brows {
+  opacity: 0.7;
+}
+.blush {
+  stroke: #e2856f;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  opacity: 0.47;
+}
+.collar {
+  fill: none;
+  stroke: #f4faf6;
+  stroke-width: 1;
+  stroke-linecap: round;
+  opacity: 0.75;
+}
+.seam {
+  fill: none;
+  stroke: #2c4a65;
+  stroke-width: 0.8;
+  opacity: 0.48;
+}
+.far-arm {
+  opacity: 0.88;
+}
+.accessory,
+.vest,
+.reflective,
+.tie,
+.sitting-legs,
+.closed-eyes,
+.mug,
+.work-hands {
+  display: none;
+}
+[data-accessory='1'] .glasses,
+[data-accessory='2'] :is(.cap, .cap-mark),
+[data-accessory='3'] .headset {
+  display: block;
+}
+.glasses,
+.headset {
+  fill: none;
+  stroke: #25334c;
+  stroke-width: 1.55;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.cap {
+  fill: var(--uniform);
+  stroke: #20364d;
+  stroke-width: 1.4;
+}
+.cap-mark {
+  fill: none;
+  stroke: #edf7fc;
+  stroke-width: 1.1;
+  stroke-linecap: round;
+}
+[data-uniform='drivers'] {
+  --uniform: #2365a4;
+}
+[data-uniform='warehouse'] {
+  --uniform: #237a83;
+}
+[data-uniform='helpers'] {
+  --uniform: #254e75;
+}
+[data-uniform='helpers'] .vest {
+  display: block;
+  fill: #b3d950;
+}
+[data-uniform='helpers'] .reflective {
+  display: block;
+  stroke: #f2f6e6;
+  stroke-width: 1.5;
+}
+:is([data-uniform='administration'], [data-uniform='hr'], [data-uniform='finance']) {
+  --uniform: #ddecf2;
+}
+:is([data-uniform='administration'], [data-uniform='hr'], [data-uniform='finance']) .tie {
+  display: block;
+  fill: #3a6496;
+}
+[data-uniform='management'] {
+  --uniform: #445165;
+}
+[data-uniform='management'] .tie {
+  display: block;
+  fill: #c06543;
+}
+
+:is([data-posture='seated'], [data-posture='working'], [data-posture='talking']) .figure {
+  transform: translateY(5px) scaleX(var(--facing, 1));
+}
+:is([data-posture='seated'], [data-posture='working'], [data-posture='talking']) .leg {
+  display: none;
+}
+:is([data-posture='seated'], [data-posture='working'], [data-posture='talking']) .sitting-legs {
+  display: block;
+}
+[data-posture='working'] .normal-arm,
+[data-posture='coffee'] .near-arm {
+  display: none;
+}
+[data-posture='working'] .work-hands,
+[data-posture='coffee'] .mug {
+  display: block;
+}
+[data-posture='sleeping'] .figure {
+  transform-origin: 28px 63px;
+  transform: rotate(-19deg) scale(0.76);
+}
+[data-posture='sleeping'] .ground-shadow {
+  opacity: 0.05;
+}
+[data-posture='sleeping'] :is(.eyes, .brows) {
+  display: none;
+}
+[data-posture='sleeping'] .closed-eyes {
+  display: block;
+}
+
+.leg {
+  transform-origin: 28px 49px;
+}
+.arm {
+  transform-origin: 28px 35px;
+}
+.walking .near-leg,
+.walking .far-arm {
+  animation: step 0.52s ease-in-out infinite;
+}
+.walking .far-leg,
+.walking .near-arm {
+  animation: step 0.52s ease-in-out -0.26s infinite;
+}
+.still .limb {
+  animation: none;
+}
+@keyframes step {
+  0%,
+  100% {
+    transform: rotate(-17deg);
+  }
+  50% {
+    transform: rotate(17deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .walking .limb {
+    animation: none;
+  }
+}

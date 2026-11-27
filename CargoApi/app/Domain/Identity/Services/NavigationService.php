@@ -40,7 +40,7 @@ class NavigationService
         $badges = $this->badges($user);
 
         return $this->navigation
-            ->forClient($client, $user->permissions(), $this->navigation->assignedKeys($user->id))
+            ->forClient($client, $user, $this->navigation->assignedKeys($user->id))
             ->map(fn (NavItem $item): array => [
                 'key' => $item->key,
                 'label' => $item->label,

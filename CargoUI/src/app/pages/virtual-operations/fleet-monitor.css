@@ -1,0 +1,112 @@
+.fleet-board {
+  padding: 14px;
+  border-top: 1px solid var(--color-cr-line);
+}
+.fleet-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+h3 {
+  font-size: 16px;
+  font-weight: 700;
+}
+p,
+.empty,
+.truck-name small {
+  color: var(--color-cr-ink-muted);
+  font-size: 12px;
+}
+input,
+button {
+  border: 1px solid var(--color-cr-line);
+  border-radius: var(--radius-control);
+}
+input {
+  padding: 6px 9px;
+  font-size: 13px;
+}
+button {
+  cursor: pointer;
+  background: var(--color-cr-surface);
+}
+button:hover {
+  border-color: var(--color-cr-blue);
+}
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--color-cr-blue);
+  outline-offset: 2px;
+}
+.fleet-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-block: 10px;
+}
+.fleet-filters button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+.fleet-filters button[aria-pressed='true'] {
+  background: var(--color-cr-tint);
+  border-color: var(--color-cr-blue);
+}
+.fleet-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 232px), 1fr));
+  gap: 6px;
+}
+.fleet-list .truck-card {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  gap: 6px;
+  padding: 5px 8px;
+  text-align: left;
+}
+.truck-card img {
+  width: 32px;
+  height: 30px;
+  flex: none;
+  object-fit: contain;
+}
+.truck-name {
+  display: grid;
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.truck-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+}
+.status-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--status, #7790a1);
+  flex: none;
+}
+[data-status='active'] {
+  --status: #2868a5;
+}
+[data-status='available'] {
+  --status: #288064;
+}
+[data-status='traveling'] {
+  --status: #6853a3;
+}
+[data-status='unavailable'] {
+  --status: #a34836;
+}

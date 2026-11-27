@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 
 import { Employee, ModuleState, RosterOverview, StaffCredentials } from '../../models/hr/hr.model';
@@ -34,6 +35,7 @@ import { StatusPill } from '../../shared/status-pill';
     SkeletonRows,
     StatusPill,
     ReactiveFormsModule,
+    RouterLink,
   ],
   templateUrl: './employees.page.html',
 })
@@ -41,6 +43,7 @@ export class EmployeesPage {
   private readonly employeesApi = inject(EmployeeService);
   private readonly accessApi = inject(AccessService);
   private readonly fb = inject(FormBuilder);
+  private readonly route = inject(ActivatedRoute);
 
   protected readonly fmt = fmt;
 
@@ -49,9 +52,13 @@ export class EmployeesPage {
 
   private readonly spec = employeeSpec();
 
-  protected readonly list = recordList<Employee>(this.spec, () =>
-    this.employeesApi.list().pipe(map((res) => res.data)),
-  );
+  protected readonly profileId = this.route.snapshot.paramMap.get('employeeId');
+  protected readonly list = recordList<Employee>(this.spec, () => {
+    const id = this.profileId;
+    return id === null
+      ? this.employeesApi.list().pipe(map((res) => res.data))
+      : this.employeesApi.get(encodeURIComponent(id)).pipe(map((employee) => [employee]));
+  });
 
   protected readonly rows = this.list.rows;
 
@@ -78,7 +85,7 @@ export class EmployeesPage {
   protected readonly roles = signal<{ value: string; label: string }[]>([]);
 
   constructor() {
-    this.refreshOverview();
+    if (this.profileId === null) this.refreshOverview();
 
     this.accessApi.roles(true).subscribe({
       next: (res) =>

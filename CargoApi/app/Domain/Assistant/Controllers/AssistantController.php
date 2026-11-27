@@ -139,7 +139,7 @@ class AssistantController extends ApiController
         $input = $request->validate([
             'day' => ['required', 'date_format:Y-m-d'],
             'timezone' => ['required', 'timezone'],
-            'kind' => ['required', 'in:runs,changes,payments,receipt-expenses,aged-receivables'],
+            'kind' => ['required', 'in:runs,changes,payments,receipt-expenses,aged-receivables,cutoff-reminders'],
             'alerts' => ['sometimes', 'boolean'],
             'after' => ['sometimes', 'string', 'regex:/^[A-Za-z0-9]{1,26}$/'],
         ]);

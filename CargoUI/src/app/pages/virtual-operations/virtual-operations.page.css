@@ -1,0 +1,198 @@
+:host {
+  display: block;
+}
+
+.operations {
+  padding: clamp(14px, 2vw, 26px);
+  border: 1px solid var(--color-cr-line);
+  border-radius: var(--radius-panel);
+  background: var(--color-cr-surface);
+}
+
+.toolbar,
+.filters,
+.actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.toolbar {
+  justify-content: space-between;
+}
+.toolbar h2 {
+  font-size: clamp(20px, 3vw, 28px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+.toolbar p,
+.results,
+.room-heading p {
+  color: var(--color-cr-ink-muted);
+  font-size: 13px;
+}
+.filters {
+  margin: 8px 0 12px;
+  align-items: end;
+}
+.filters .results {
+  padding-block: 8px;
+}
+label {
+  display: grid;
+  gap: 4px;
+  color: var(--color-cr-ink-muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+input,
+select,
+.vo-button {
+  border: 1px solid var(--color-cr-line);
+  border-radius: var(--radius-control);
+  background: var(--color-cr-surface);
+  color: var(--color-cr-ink);
+  padding: 7px 10px;
+  min-height: 36px;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+button,
+a.vo-button {
+  cursor: pointer;
+}
+.vo-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.vo-button:hover {
+  border-color: var(--color-cr-blue);
+  color: var(--color-cr-blue);
+}
+.vo-button.primary {
+  background: var(--color-cr-blue);
+  border-color: var(--color-cr-blue);
+  color: white;
+}
+.vo-button.primary:hover {
+  background: var(--color-cr-blue-hover);
+}
+.vo-button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.vo-button.compact {
+  min-width: 34px;
+  min-height: 32px;
+  padding: 2px 6px;
+}
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--color-cr-blue);
+  outline-offset: 2px;
+}
+.error {
+  margin-block: 10px;
+  color: var(--color-cr-red);
+}
+.loading {
+  padding: 1rem;
+}
+
+.floor {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 270px), 1fr));
+  align-items: start;
+  gap: 14px;
+  margin-top: 12px;
+}
+.room {
+  --room-accent: var(--color-cr-blue);
+  --room-tile: color-mix(in srgb, var(--room-accent) 13%, white);
+  overflow: hidden;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--color-cr-line);
+  border-radius: var(--radius-card);
+  background: linear-gradient(160deg, var(--color-cr-surface) 28%, var(--room-tile));
+}
+[data-room='helpers'],
+[data-room='warehouse'] {
+  --room-accent: var(--color-cr-warning);
+}
+[data-room='dispatch'],
+[data-room='hr'] {
+  --room-accent: var(--color-cr-success);
+}
+[data-room='management'],
+[data-room='finance'] {
+  --room-accent: #535971;
+}
+.room[data-room='ai'] {
+  --room-accent: #6153a7;
+}
+.room-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px 6px;
+}
+.directory-heading,
+.room-heading h3,
+.layout-editor h3 {
+  font-weight: 700;
+  font-size: 15px;
+}
+.room-count {
+  align-self: start;
+  border-radius: 50px;
+  background: var(--room-tile);
+  padding: 1px 8px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.directory-entry {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: center;
+  width: 100%;
+  margin-top: 4px;
+  padding: 5px 8px;
+  background: var(--color-cr-surface);
+  border: 1px solid var(--color-cr-line);
+  border-radius: var(--radius-control);
+  text-align: start;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.directory-entry:hover {
+  border-color: var(--room-accent);
+}
+.directory-entry small {
+  color: var(--color-cr-ink-muted);
+  font-size: 10px;
+}
+.directory-entry[data-status='available'] small {
+  color: var(--color-cr-success);
+}
+.directory-entry[data-status='assigned'] small,
+.directory-entry[data-status='on_delivery'] small {
+  color: var(--color-cr-blue);
+}
+.dispatch-board {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 6px 2px 0;
+  font-size: 11px;
+}
+.dispatch-board a {
+  color: var(--color-cr-blue);
+  text-decoration: underline;
+}
