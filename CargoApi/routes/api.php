@@ -44,6 +44,7 @@ use App\Domain\Identity\Models\Permission;
 use App\Domain\Incident\Controllers\DriverIncidentController;
 use App\Domain\Incident\Controllers\IncidentController;
 use App\Domain\Inspection\Controllers\InspectionController;
+use App\Domain\Marketing\Controllers\MarketingController;
 use App\Domain\Notification\Controllers\NotificationController;
 use App\Domain\Payroll\Controllers\CrewPayReportController;
 use App\Domain\Payroll\Controllers\PayComponentController;
@@ -1116,6 +1117,7 @@ Route::prefix('v1')->group(function (): void {
 
         Route::middleware('permission:billing.manage')->group(function (): void {
             Route::post('billing', [BillingController::class, 'store']);
+            Route::post('billing/trip-status', [BillingController::class, 'updateTripBilling']);
             Route::match(['put', 'patch'], 'billing/{invoice}', [BillingController::class, 'update']);
             Route::delete('billing/{invoice}', [BillingController::class, 'destroy']);
             Route::post('billing/{invoice}/settle', [BillingController::class, 'settle']);
@@ -1163,6 +1165,14 @@ Route::prefix('v1')->group(function (): void {
 
             Route::post('logo', [CompanyController::class, 'storeLogo']);
             Route::delete('logo', [CompanyController::class, 'destroyLogo']);
+        });
+
+        Route::prefix('marketing')->middleware('permission:company.manage')->group(function (): void {
+            Route::get('/', [MarketingController::class, 'index']);
+            Route::put('brand', [MarketingController::class, 'updateBrand']);
+            Route::post('drafts', [MarketingController::class, 'generate'])->middleware('throttle:marketing-generation');
+            Route::put('drafts/{draft}', [MarketingController::class, 'updateDraft'])->whereUlid('draft');
+            Route::get('drafts/{draft}/image', [MarketingController::class, 'draftImage'])->whereUlid('draft');
         });
 
         Route::middleware('permission:'.Permission::DEVELOPER_ACCESS)->prefix('automation')->group(function (): void {

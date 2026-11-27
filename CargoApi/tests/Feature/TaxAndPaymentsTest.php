@@ -209,12 +209,13 @@ describe('payments', function (): void {
             ->assertJsonValidationErrors('allocations');
     });
 
-    it('refuses a payment dated in the future', function (): void {
+    it('records the entered payment date even when it is after today', function (): void {
+        $date = now()->addWeek()->toDateString();
         $this->actingAs($this->admin)->postJson('/api/v1/payments', [
             'customer_id' => $this->customer->id,
             'amount_cents' => 100_000,
-            'paid_on' => now()->addWeek()->toDateString(),
-        ])->assertStatus(422)->assertJsonValidationErrors('paid_on');
+            'paid_on' => $date,
+        ])->assertCreated()->assertJsonPath('data.paid_on', $date);
     });
 
     it('puts the invoice back when a payment is removed', function (): void {

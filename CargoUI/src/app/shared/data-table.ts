@@ -43,10 +43,11 @@ export function dayOf(value: string | null | undefined): string | null {
   template: `
     @if (rows(); as loaded) {
       @if ((searchable() || dated()) && loaded.length > 0) {
-        <div class="flex flex-wrap items-center gap-2 px-4 py-3">
+        <div class="flex flex-wrap items-center gap-3 px-4 py-3">
           @if (searchable()) {
             <app-table-search
-              class="min-w-[200px] flex-1"
+              class="min-w-0 flex-[1_1_200px]"
+              [class.max-w-md]="compactFilters()"
               [value]="term()"
               [placeholder]="searchPlaceholder()"
               (valueChange)="setTerm($event)"
@@ -54,7 +55,7 @@ export function dayOf(value: string | null | undefined): string | null {
           }
 
           @if (dated()) {
-            <div class="flex items-center gap-1.5" role="group" [attr.aria-label]="dateLabel()">
+            <div class="flex flex-wrap items-center gap-1.5" role="group" [attr.aria-label]="dateLabel()">
               <label class="flex items-center gap-1.5 text-[12px] text-cr-ink-muted">
                 <span>From</span>
                 <input
@@ -138,6 +139,24 @@ export function dayOf(value: string | null | undefined): string | null {
           >
             <thead>
               <tr class="border-b border-cr-line">
+                @if (rowSelection()) {
+                  @let selection = matchedSelection();
+                  <th scope="col" class="w-[72px] min-w-[72px] px-4">
+                    <label class="flex w-max items-center gap-1.5 py-2 whitespace-nowrap">
+                      <input
+                        #selectAll
+                        type="checkbox"
+                        aria-label="Select all matching rows"
+                        class="size-4 shrink-0 accent-cr-blue"
+                        [checked]="selection.all"
+                        [indeterminate]="selection.partial"
+                        [disabled]="selectionDisabled() || selection.rows.length === 0"
+                        (change)="selectionChange.emit({ rows: selection.rows, checked: selectAll.checked })"
+                      />
+                      <span class="text-[11px] font-semibold text-cr-ink-muted">All</span>
+                    </label>
+                  </th>
+                }
                 @for (col of columns(); track col.label) {
                   <th class="cr-th px-4 py-2.5" [class.text-right]="col.kind === 'num'">
                     {{ col.label }}
@@ -155,6 +174,21 @@ export function dayOf(value: string | null | undefined): string | null {
                 <tr
                   class="border-b border-cr-line/70 transition-colors last:border-0 hover:bg-cr-tint"
                 >
+                  @if (rowSelection(); as selection) {
+                    <td class="px-4 py-3">
+                      @if (selection(row) !== null) {
+                        <input
+                          #checkbox
+                          type="checkbox"
+                          class="size-4 accent-cr-blue"
+                          [attr.aria-label]="'Select ' + (rowLabel()?.(row) ?? 'row')"
+                          [checked]="selection(row)"
+                          [disabled]="selectionDisabled()"
+                          (change)="selectionChange.emit({ rows: [row], checked: checkbox.checked })"
+                        />
+                      }
+                    </td>
+                  }
                   @for (col of columns(); track col.label) {
                     <td
                       class="px-4 py-3 text-[13px]"
@@ -165,6 +199,9 @@ export function dayOf(value: string | null | undefined): string | null {
                     >
                       @if (col.kind === 'status' && col.status) {
                         <app-status-pill [status]="col.status(row)" />
+                        @if (col.sub?.(row); as detail) {
+                          <span class="mt-1 block text-[12px] text-cr-ink-muted">{{ detail }}</span>
+                        }
                       } @else if (col.pill) {
                         <span
                           class="inline-flex items-center rounded-full px-2 py-[3px] text-[10px] font-semibold tracking-[0.06em] uppercase"
@@ -195,10 +232,8 @@ export function dayOf(value: string | null | undefined): string | null {
                         }
                       } @else {
                         {{ col.value ? (col.value(row) ?? dash) : '' }}
-                        @if (col.sub) {
-                          <span class="block text-[12px] text-cr-ink-muted">{{
-                            col.sub(row) ?? dash
-                          }}</span>
+                        @if (col.sub?.(row); as detail) {
+                          <span class="block text-[12px] text-cr-ink-muted">{{ detail }}</span>
                         }
                       }
                     </td>
@@ -264,8 +299,12 @@ export class DataTable {
 
   readonly open = output<any>();
   readonly remove = output<any>();
+  readonly rowSelection = input<((row: any) => boolean | null) | null>(null);
+  readonly selectionDisabled = input(false);
+  readonly selectionChange = output<{ rows: any[]; checked: boolean }>();
 
   readonly searchable = input(true);
+  readonly compactFilters = input(false);
   readonly paginated = input(true);
 
   readonly searchPlaceholder = input('Search…');
@@ -316,6 +355,27 @@ export class DataTable {
   protected readonly pageCount = computed(() =>
     Math.max(1, Math.ceil(this.matched().length / this.size())),
   );
+
+  protected readonly matchedSelection = computed(() => {
+    const selection = this.rowSelection();
+    const rows: any[] = [];
+    let checked = 0;
+
+    if (selection) {
+      for (const row of this.matched()) {
+        const state = selection(row);
+        if (state === null) continue;
+        rows.push(row);
+        if (state) checked++;
+      }
+    }
+
+    return {
+      rows,
+      all: rows.length > 0 && checked === rows.length,
+      partial: checked > 0 && checked < rows.length,
+    };
+  });
 
   protected readonly page = computed(() => {
     if (!this.paginated()) return this.matched();

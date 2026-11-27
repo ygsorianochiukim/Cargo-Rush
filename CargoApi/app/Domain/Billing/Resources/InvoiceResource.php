@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Domain\Billing\Resources;
 
 use App\Domain\Billing\Models\Invoice;
+use App\Domain\Billing\Support\BillingCutoff;
 use App\Domain\Shared\Http\Resources\ApiResource;
 use Illuminate\Http\Request;
 
@@ -41,6 +42,8 @@ class InvoiceResource extends ApiResource
             'currency' => $this->currency,
             'trip_id' => $this->trip_id,
             'trip_reference' => $this->trip?->reference,
+            'billing_cutoff' => BillingCutoff::forInvoice($this->resource),
+            'billing_status' => $this->tripBillingStatus(),
             'direction' => $this->direction->value,
             'status' => $this->status->value,
             'paid_at' => $this->iso($this->paid_at),

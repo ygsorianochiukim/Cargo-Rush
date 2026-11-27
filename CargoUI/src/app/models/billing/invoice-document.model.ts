@@ -1,3 +1,5 @@
+import { BillingCutoff, TripBillingStatus } from './billing.model';
+
 export interface InvoiceIssuer {
   name: string | null;
   code: string | null;
@@ -75,6 +77,8 @@ export interface InvoiceDocumentPayment {
 }
 
 export interface InvoiceDocument {
+  billing_cutoff?: BillingCutoff | null;
+  billing_status?: TripBillingStatus | null;
   template: InvoiceTemplate;
   issuer: InvoiceIssuer;
   bill_to: InvoiceBillTo;

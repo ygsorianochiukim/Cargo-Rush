@@ -37,3 +37,10 @@ export const developerGuard: CanActivateFn = () => {
     ? true
     : router.createUrlTree(['/dashboard']);
 };
+
+export const companyManagerGuard: CanActivateFn = () => {
+  const identity = inject(IdentityService);
+  const router = inject(Router);
+
+  return identity.can('company.manage') || router.createUrlTree(['/dashboard']);
+};

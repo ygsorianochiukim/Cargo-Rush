@@ -8,10 +8,12 @@ const TONES: Record<StatusValue, StatusTone> = {
   assigned: 'info',
   scheduled: 'info',
   pending: 'warning',
+  billed: 'info',
   maintenance: 'warning',
   cancelled: 'danger',
   overdue: 'danger',
   inactive: 'danger',
+  partial: 'warning',
   paid: 'success',
 };
 

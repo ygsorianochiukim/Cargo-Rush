@@ -10,6 +10,7 @@ use App\Domain\Billing\Resources\InvoiceResource;
 use App\Domain\Billing\Services\BillingService;
 use App\Domain\Billing\Services\InvoiceDocumentService;
 use App\Domain\Billing\Services\StatementOfAccountService;
+use App\Domain\Billing\Support\BillingCutoff;
 use App\Domain\Customer\Models\Customer;
 use App\Domain\Printing\Printables\InvoicePrintable;
 use App\Domain\Printing\Services\PrintRenderer;
@@ -18,6 +19,7 @@ use App\Domain\Shared\Http\Controllers\ApiController;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -73,10 +75,11 @@ class BillingController extends ApiController
     public function export(Request $request): StreamedResponse
     {
         $invoices = $this->billing->all($this->filters($request));
+        $selectedCutoff = $request->string('cutoff')->toString();
 
         $filename = sprintf('invoices-%s.csv', now()->format('Y-m-d'));
 
-        return response()->streamDownload(function () use ($invoices): void {
+        return response()->streamDownload(function () use ($invoices, $selectedCutoff): void {
             $out = fopen('php://output', 'wb');
 
             fwrite($out, "\xEF\xBB\xBF");
@@ -86,9 +89,15 @@ class BillingController extends ApiController
                 'Issued', 'Due', 'Currency',
                 'Net', 'VAT', 'Total', 'Withholding', 'Due to us', 'Paid', 'Balance',
                 'VAT treatment', 'Paid on',
+                'Cutoff start', 'Cutoff end', 'Billing from', 'Billing through', 'Recommended payment date', 'Trip billing status',
             ]);
 
             foreach ($invoices as $invoice) {
+                $cutoff = BillingCutoff::forInvoice($invoice);
+                if ($selectedCutoff !== '' && $selectedCutoff !== ($cutoff['start'] ?? 'none')) {
+                    continue;
+                }
+
                 fputcsv($out, [
                     $invoice->number,
                     $invoice->direction->value,
@@ -107,6 +116,12 @@ class BillingController extends ApiController
                     $this->pesos($invoice->balanceCents()),
                     $invoice->vat_treatment?->value,
                     $invoice->paid_at?->toDateString(),
+                    $cutoff['start'] ?? null,
+                    $cutoff['end'] ?? null,
+                    $cutoff['billing_from'] ?? null,
+                    $cutoff['billing_to'] ?? null,
+                    $cutoff['payment_target'] ?? null,
+                    $invoice->tripBillingStatus(),
                 ]);
             }
 
@@ -154,7 +169,7 @@ class BillingController extends ApiController
     public function settle(Request $request, Invoice $invoice): JsonResponse
     {
         $details = $request->validate([
-            'paid_on' => ['sometimes', 'date', 'before_or_equal:today'],
+            'paid_on' => ['sometimes', 'date'],
             'method' => ['sometimes', 'string', 'max:40'],
             'reference' => ['nullable', 'string', 'max:80'],
             'notes' => ['nullable', 'string', 'max:255'],
@@ -163,6 +178,27 @@ class BillingController extends ApiController
         return $this->item(new InvoiceResource(
             $this->billing->settle($invoice, $details, $request->user()?->getAuthIdentifier()),
         ));
+    }
+
+    public function updateTripBilling(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'invoice_ids' => ['required', 'array', 'list'],
+            'invoice_ids.*' => ['required', 'ulid', 'distinct:ignore_case'],
+            'action' => ['required', 'in:billed,paid'],
+            'paid_on' => ['nullable', 'date_format:Y-m-d'],
+            'method' => ['required_if:action,paid', 'string', 'max:40'],
+            'reference' => ['nullable', 'string', 'max:80'],
+        ]);
+
+        $this->billing->updateTripBilling(
+            $data['invoice_ids'],
+            $data['action'],
+            Arr::only($data, ['paid_on', 'method', 'reference']),
+            $request->user()?->getAuthIdentifier(),
+        );
+
+        return $this->noContent();
     }
 
     public function totals(): JsonResponse

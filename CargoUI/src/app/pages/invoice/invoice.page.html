@@ -57,6 +57,30 @@
 @if (error(); as message) {
   <app-error-state [message]="message" (retry)="load()" />
 } @else if (document(); as doc) {
+  @if (doc.billing_cutoff; as cutoff) {
+    <dl
+      class="cr-no-print mx-auto mb-4 grid max-w-[820px] gap-3 rounded-card bg-cr-surface p-4 ring-1 ring-cr-line/60 sm:grid-cols-4"
+    >
+      <div>
+        <dt class="cr-meta">Trip cutoff</dt>
+        <dd class="mt-1 text-[14px]">{{ cutoffRange(cutoff.start, cutoff.end) }}</dd>
+      </div>
+      <div>
+        <dt class="cr-meta">Billing window</dt>
+        <dd class="mt-1 text-[14px]">{{ cutoffRange(cutoff.billing_from, cutoff.billing_to) }}</dd>
+      </div>
+      <div>
+        <dt class="cr-meta">Recommended payment date</dt>
+        <dd class="mt-1 text-[14px]">{{ cutoffDate(cutoff.payment_target) }}</dd>
+      </div>
+      @if (doc.billing_status; as status) {
+        <div>
+          <dt class="cr-meta">Trip billing status</dt>
+          <dd class="mt-1"><app-status-pill [status]="status" /></dd>
+        </div>
+      }
+    </dl>
+  }
   <app-invoice-sheet [doc]="doc" />
 } @else {
   <article

@@ -2,6 +2,15 @@ import { StatusValue } from '../shared/status.model';
 import { Timestamped } from '../shared/envelope.model';
 
 export type InvoiceDirection = 'receivable' | 'payable';
+export type TripBillingStatus = 'pending' | 'billed' | 'paid';
+
+export interface BillingCutoff {
+  start: string;
+  end: string;
+  billing_from: string;
+  billing_to: string;
+  payment_target: string;
+}
 
 export interface Invoice extends Timestamped {
   id: string;
@@ -33,6 +42,8 @@ export interface Invoice extends Timestamped {
   status: StatusValue;
   trip_id: string | null;
   trip_reference: string | null;
+  billing_cutoff: BillingCutoff | null;
+  billing_status: TripBillingStatus | null;
   paid_at: string | null;
 }
 

@@ -43,6 +43,14 @@ export class BillingService {
     return this.api.post<Invoice>(`billing/${id}/settle`, details);
   }
 
+  updateTripStatus(
+    ids: string[],
+    action: 'billed' | 'paid',
+    payment?: Partial<Pick<PaymentPayload, 'paid_on' | 'method' | 'reference'>>,
+  ): Observable<void> {
+    return this.api.postVoid('billing/trip-status', { invoice_ids: ids, action, ...payment });
+  }
+
   document(id: string): Observable<InvoiceDocument> {
     return this.api.get<InvoiceDocument>(`billing/${id}/document`);
   }
@@ -51,7 +59,7 @@ export class BillingService {
     return this.api.blob(`billing/${id}/document.pdf`);
   }
 
-  exportUrl(query: ListQuery = {}): string {
+  exportUrl(query: ListQuery & { cutoff?: string } = {}): string {
     const params = new URLSearchParams();
 
     for (const [key, value] of Object.entries(query)) {

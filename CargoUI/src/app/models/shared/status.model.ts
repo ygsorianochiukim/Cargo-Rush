@@ -6,10 +6,12 @@ export type StatusValue =
   | 'assigned'
   | 'scheduled'
   | 'pending'
+  | 'billed'
   | 'maintenance'
   | 'cancelled'
   | 'overdue'
   | 'inactive'
+  | 'partial'
   | 'paid';
 
 export type StatusTone = 'success' | 'info' | 'warning' | 'danger';

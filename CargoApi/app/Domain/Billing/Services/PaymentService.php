@@ -62,7 +62,7 @@ class PaymentService
                 'direction' => $invoice->direction->value,
                 'amount_cents' => $balance,
                 'currency' => $invoice->currency,
-                'paid_on' => $attributes['paid_on'] ?? now()->toDateString(),
+                'paid_on' => $attributes['paid_on'] ?? now('Asia/Manila')->toDateString(),
                 'method' => $attributes['method'] ?? 'bank_transfer',
                 'reference' => $attributes['reference'] ?? null,
                 'notes' => $attributes['notes'] ?? null,

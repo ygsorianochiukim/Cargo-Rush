@@ -1,0 +1,151 @@
+@if (!loaded()) {
+  @if (busy() === 'load') {
+    <p role="status" class="text-sm text-cr-ink-muted">Loading marketing…</p>
+  } @else {
+    <p role="alert" class="text-sm text-cr-red">{{ error() }}</p>
+    <button type="button" class="mt-3 text-sm font-semibold text-cr-blue" (click)="load()">Try again</button>
+  }
+} @else {
+  @if (error()) {
+    <p role="alert" class="mb-4 rounded-control border border-cr-line bg-cr-surface px-3 py-2 text-sm text-cr-red">{{ error() }}</p>
+  }
+  @if (notice()) {
+    <p role="status" class="mb-4 text-sm text-cr-green">{{ notice() }}</p>
+  }
+
+  <div class="grid gap-4 xl:grid-cols-2">
+    <app-card heading="Brand profile" icon="tag">
+      <form class="grid gap-3" (ngSubmit)="saveBrand()">
+        @for (field of brandFields; track field.key) {
+          <app-field [label]="field.label" [required]="field.required">
+            <textarea
+              class="w-full rounded-control border border-cr-line bg-cr-surface px-3 py-2 text-sm text-cr-ink focus:border-cr-blue focus:outline-none"
+              [name]="field.key" [required]="field.required" [maxlength]="field.max" rows="2"
+              [ngModel]="brand()[field.key] ?? ''" (ngModelChange)="changeBrand(field.key, $event)"
+              [disabled]="!!busy()"
+            ></textarea>
+          </app-field>
+        }
+        <button type="submit" class="justify-self-start rounded-control bg-cr-blue px-4 py-2 text-sm font-semibold text-cr-surface disabled:opacity-60"
+          [disabled]="!!busy() || !brandReady() || !brandDirty()">
+          {{ busy() === 'brand' ? 'Saving…' : 'Save brand profile' }}
+        </button>
+      </form>
+    </app-card>
+
+    <div class="grid content-start gap-4">
+      <app-card heading="Generate a Facebook post" icon="gauge">
+        <form class="grid gap-3" (ngSubmit)="generate()">
+          <app-field label="What is the post about?" required hint="Include offer details, routes, or facts the post may mention.">
+            <textarea
+              class="w-full rounded-control border border-cr-line bg-cr-surface px-3 py-2 text-sm text-cr-ink focus:border-cr-blue focus:outline-none"
+              name="topic" required maxlength="500" rows="3" [ngModel]="topic()" (ngModelChange)="topic.set($event)" [disabled]="!!busy()"
+            ></textarea>
+          </app-field>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" name="trends" class="accent-cr-blue" [ngModel]="useTrends()"
+              (ngModelChange)="useTrends.set($event)" [disabled]="!!busy()" />
+            Use current Philippines search trends when relevant
+          </label>
+          @if (!configured()) {
+            <p class="text-sm text-cr-ink-muted">
+              Add an AI provider and API key in
+              <a routerLink="/assistant-settings" class="font-semibold text-cr-blue underline">Assistant Settings</a>.
+            </p>
+          } @else if (brandDirty() || !savedBrand()) {
+            <p class="text-sm text-cr-ink-muted">Save your brand profile to generate drafts.</p>
+          } @else if (draftDirty()) {
+            <p class="text-sm text-cr-ink-muted">Save or reset your draft edits before generating again.</p>
+          }
+          <button type="submit" class="justify-self-start rounded-control bg-cr-blue px-4 py-2 text-sm font-semibold text-cr-surface disabled:opacity-60"
+            [disabled]="!!busy() || !configured() || !savedBrand() || brandDirty() || draftDirty() || !topic().trim()">
+            {{ busy() === 'generate' ? 'Generating drafts…' : 'Generate two drafts' }}
+          </button>
+        </form>
+      </app-card>
+
+      <app-card heading="Recent drafts" icon="billing">
+        @if (drafts().length) {
+          <app-field label="Select a draft" [hint]="draftDirty() ? 'Save or reset your edits to switch drafts.' : undefined">
+            <select class="w-full rounded-control border border-cr-line bg-cr-surface px-3 py-2 text-sm text-cr-ink"
+              [ngModel]="selection()?.id" (ngModelChange)="chooseDraft($event)" [disabled]="!!busy() || draftDirty()">
+              @for (draft of drafts(); track draft.id) {
+                <option [value]="draft.id">{{ draft.content.hook }} ({{ formats[draft.content.format] }})</option>
+              }
+            </select>
+          </app-field>
+        } @else {
+          <p class="text-sm text-cr-ink-muted">Generated drafts will appear here.</p>
+        }
+      </app-card>
+    </div>
+  </div>
+
+  @if (selection(); as draft) {
+    @if (edit(); as content) {
+      <div class="mt-4 grid items-start gap-4 xl:grid-cols-2">
+        <app-card heading="Edit draft" icon="billing">
+          <form class="grid gap-3" (ngSubmit)="saveDraft()">
+            <app-field label="Post format">
+              <select class="w-full rounded-control border border-cr-line bg-cr-surface px-3 py-2 text-sm text-cr-ink"
+                name="format" [ngModel]="content.format" (ngModelChange)="changeDraft('format', $event)" [disabled]="!!busy()">
+                @for (format of formatKeys; track format) {
+                  <option [value]="format">{{ formats[format] }}</option>
+                }
+              </select>
+            </app-field>
+            @for (field of editFields; track field.key) {
+              <app-field [label]="field.label" required>
+                <textarea
+                  class="w-full rounded-control border border-cr-line bg-cr-surface px-3 py-2 text-sm text-cr-ink focus:border-cr-blue focus:outline-none"
+                  [name]="field.key" required [maxlength]="field.max" [rows]="field.rows"
+                  [ngModel]="content[field.key]" (ngModelChange)="changeDraft(field.key, $event)" [disabled]="!!busy()"
+                ></textarea>
+              </app-field>
+            }
+            <div>
+              <app-field label="Post image" hint="JPG, PNG, or WebP up to 5 MB." [error]="imageError() || null">
+                <input #imagePicker type="file" accept="image/jpeg,image/png,image/webp"
+                  class="block w-full text-sm text-cr-ink file:mr-3 file:rounded-control file:border file:border-cr-line file:bg-cr-surface file:px-3 file:py-2 file:text-sm file:font-semibold"
+                  [disabled]="!!busy()" (change)="pickImage(imagePicker)" />
+              </app-field>
+              @if (imageEdit() !== 'remove' && (imageEdit() || draft.has_image)) {
+                <button type="button" class="mt-2 text-sm font-semibold text-cr-blue hover:underline"
+                  [disabled]="!!busy()" (click)="removeImage()">Remove image</button>
+              }
+            </div>
+            <div class="flex gap-2">
+              <button type="submit" class="rounded-control bg-cr-blue px-4 py-2 text-sm font-semibold text-cr-surface disabled:opacity-60"
+                [disabled]="!!busy() || !draftReady() || !draftDirty()">
+                {{ busy() === 'draft' ? 'Saving…' : 'Save draft' }}
+              </button>
+              @if (draftDirty()) {
+                <button type="button" class="rounded-control border border-cr-line px-4 py-2 text-sm font-semibold"
+                  [disabled]="!!busy()" (click)="select(draft)">Reset edits</button>
+              }
+            </div>
+          </form>
+        </app-card>
+
+        <app-card heading="Post preview" icon="tag" [hint]="formats[content.format]">
+          <p class="whitespace-pre-wrap break-words text-sm font-semibold">{{ content.hook }}</p>
+          <p class="mt-3 whitespace-pre-wrap break-words text-sm">{{ content.caption }}</p>
+          <p class="mt-3 whitespace-pre-wrap break-words text-sm font-semibold">{{ content.cta }}</p>
+          @if (imagePreview(); as image) {
+            <img [src]="image" alt="Post image preview"
+              class="mt-4 max-h-[28rem] w-full rounded-control border border-cr-line bg-cr-tint object-contain" />
+          } @else if (imageEdit() !== 'remove' && imageLoading()) {
+            <p role="status" class="mt-4 text-sm text-cr-ink-muted">Loading image…</p>
+          } @else if (imageEdit() !== 'remove' && imageLoadError()) {
+            <p role="status" class="mt-4 text-sm text-cr-ink-muted">The saved image could not be loaded.</p>
+          }
+          @if (draft.trend; as trend) {
+            <p class="mt-4 border-t border-cr-line pt-3 text-xs text-cr-ink-muted">
+              Inspired by {{ trend.topic }} · {{ trend.source }} · {{ trend.checked_at | date:'medium':'+0800' }} PHT
+            </p>
+          }
+        </app-card>
+      </div>
+    }
+  }
+}
