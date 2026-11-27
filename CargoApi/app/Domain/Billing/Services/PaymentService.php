@@ -7,6 +7,7 @@ namespace App\Domain\Billing\Services;
 use App\Domain\Billing\Models\Invoice;
 use App\Domain\Billing\Models\Payment;
 use App\Domain\Billing\Models\PaymentAllocation;
+use App\Domain\Billing\Support\BillingCutoff;
 use App\Domain\Shared\Enums\StatusValue;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -62,7 +63,7 @@ class PaymentService
                 'direction' => $invoice->direction->value,
                 'amount_cents' => $balance,
                 'currency' => $invoice->currency,
-                'paid_on' => $attributes['paid_on'] ?? now('Asia/Manila')->toDateString(),
+                'paid_on' => $attributes['paid_on'] ?? now(BillingCutoff::TIMEZONE)->toDateString(),
                 'method' => $attributes['method'] ?? 'bank_transfer',
                 'reference' => $attributes['reference'] ?? null,
                 'notes' => $attributes['notes'] ?? null,

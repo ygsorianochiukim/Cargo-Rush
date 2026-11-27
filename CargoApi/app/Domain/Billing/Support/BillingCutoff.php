@@ -11,6 +11,8 @@ use Carbon\CarbonInterface;
 
 class BillingCutoff
 {
+    public const TIMEZONE = 'Asia/Manila';
+
     /** @return array{start: string, end: string, billing_from: string, billing_to: string, payment_target: string}|null */
     public static function forInvoice(Invoice $invoice): ?array
     {
@@ -26,7 +28,7 @@ class BillingCutoff
     /** @return array{start: string, end: string, billing_from: string, billing_to: string, payment_target: string} */
     public static function forDate(CarbonInterface $date): array
     {
-        $day = CarbonImmutable::instance($date)->setTimezone('Asia/Manila')->startOfDay();
+        $day = CarbonImmutable::instance($date)->setTimezone(self::TIMEZONE)->startOfDay();
         $month = $day->startOfMonth();
 
         [$start, $end] = match (true) {

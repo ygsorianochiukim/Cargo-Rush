@@ -6,6 +6,7 @@ namespace App\Domain\Billing\Services;
 
 use App\Domain\Billing\Models\Invoice;
 use App\Domain\Billing\Models\PaymentAllocation;
+use App\Domain\Billing\Support\BillingCutoff;
 use App\Domain\Customer\Models\Customer;
 use App\Domain\Shared\Enums\InvoiceDirection;
 use App\Domain\Shared\Enums\StatusValue;
@@ -32,7 +33,7 @@ class StatementOfAccountService
         ?Carbon $to = null,
         InvoiceDirection $direction = InvoiceDirection::Receivable,
     ): array {
-        $to ??= Carbon::now();
+        $to ??= Carbon::now(BillingCutoff::TIMEZONE);
 
         $opening = $this->openingBalance($customer, $from, $direction);
 
@@ -204,6 +205,7 @@ class StatementOfAccountService
     private function aging(Customer $customer, Carbon $asOf, InvoiceDirection $direction): array
     {
         $buckets = ['current' => 0, 'days_1_30' => 0, 'days_31_60' => 0, 'days_61_90' => 0, 'over_90' => 0];
+        $asOfDate = Carbon::parse($asOf->toDateString());
 
         $open = Invoice::query()
             ->withSum(
@@ -225,7 +227,7 @@ class StatementOfAccountService
             }
 
             $due = $invoice->due_at;
-            $late = $due === null ? 0 : (int) $due->startOfDay()->diffInDays($asOf->copy()->startOfDay(), false);
+            $late = $due === null ? 0 : (int) $due->diffInDays($asOfDate, false);
 
             $bucket = match (true) {
                 $late <= 0 => 'current',

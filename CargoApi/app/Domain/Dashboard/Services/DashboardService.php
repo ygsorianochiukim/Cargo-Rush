@@ -6,6 +6,7 @@ namespace App\Domain\Dashboard\Services;
 
 use App\Domain\Asset\Models\Asset;
 use App\Domain\Billing\Repositories\InvoiceRepository;
+use App\Domain\Billing\Support\BillingCutoff;
 use App\Domain\Delivery\Repositories\DeliveryLogRepository;
 use App\Domain\Driver\Repositories\DriverRepository;
 use App\Domain\Finance\Services\FinanceService;
@@ -191,8 +192,9 @@ class DashboardService
     {
         $counts = $this->invoices->countsByStatus(InvoiceDirection::Receivable);
 
-        $from = now()->subDays($days - 1)->startOfDay();
-        $to = now()->endOfDay();
+        $today = now(BillingCutoff::TIMEZONE);
+        $from = $today->copy()->subDays($days - 1)->startOfDay();
+        $to = $today->endOfDay();
 
         $ledger = $this->finance->periodRollup(
             Carbon::instance($from),
