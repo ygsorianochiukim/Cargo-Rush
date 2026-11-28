@@ -29,7 +29,7 @@ export interface OfficePose extends FloorPoint {
   heading?: FloorPoint;
   facing?: 'left' | 'right';
 }
-interface Home extends FloorPoint {
+export interface Home extends FloorPoint {
   posture?: AvatarPosture;
 }
 export interface ConversationPair {
@@ -196,6 +196,19 @@ function walk(path: FloorPoint[], progress: number): OfficePose {
 }
 
 function pathTo(from: FloorPoint, to: FloorPoint, zone: Zone): FloorPoint[] {
+  if (from.y > 454 || to.y > 454) {
+    const passage = { crew: 44, garage: 535, admin: 1007 }[zone];
+    const fromRow = from.y > 454 ? from.y : aisle(zone, from);
+    const toRow = to.y > 454 ? to.y : aisle(zone, to);
+    return [
+      from,
+      { x: from.x, y: fromRow },
+      { x: passage, y: fromRow },
+      { x: passage, y: toRow },
+      { x: to.x, y: toRow },
+      to,
+    ];
+  }
   const row = aisle(zone, from);
   const destinationRow = aisle(zone, to);
   if (zone === 'crew' && row !== destinationRow) {
@@ -216,15 +229,20 @@ export interface StationVisit {
   started: number;
   from: FloorPoint;
   station: OfficeStation;
+  garageOffset?: number;
 }
 
 export function stationForEmployee(
   station: OfficeStation,
   index: number,
   side?: 0 | 1,
+  home?: Home,
 ): OfficeStation {
   if (station.posture === 'sleeping')
-    return { ...station, ...crewBeds[index % crewBeds.length].rest };
+    return {
+      ...station,
+      ...(home?.posture === 'sleeping' ? home : crewBeds[index % crewBeds.length].rest),
+    };
   if (station.posture === 'talking') {
     const seats =
       station.zone === 'crew'
@@ -255,6 +273,7 @@ export function officePose(
   elapsed: number,
   visit?: StationVisit,
   pair?: ConversationPair,
+  garageOffset = 0,
 ): OfficePose {
   // Conversation partners share the same clock, so their visits overlap.
   const clock = (pair?.key ?? index) * 11_731 + elapsed;
@@ -272,7 +291,12 @@ export function officePose(
     pair && zone !== 'garage' && cycle % 3 === 0
       ? talkStations[zone]
       : ordinary[(cycle + index) % ordinary.length];
-  const destination = stationForEmployee(station, index, pair?.side);
+  const destination = stationForEmployee(
+    zone === 'garage' ? { ...station, y: station.y + garageOffset } : station,
+    index,
+    pair?.side,
+    home,
+  );
   return time >= 0 && time < roundTripDuration(destination)
     ? visitPose(home, home, destination, time)
     : atHome(home, zone);

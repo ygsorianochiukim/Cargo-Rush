@@ -13,7 +13,6 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { interval } from 'rxjs';
 
 import { FleetMonitor, fleetLabels, YardSnapshot } from './fleet-monitor';
-import { garageBays } from './garage-layout';
 import { GarageTruck, truckBounds } from './garage-truck';
 import {
   FloorPoint,
@@ -23,16 +22,18 @@ import {
   StationVisit,
   employeeZone,
   homePositions,
+  Zone,
   officePose,
   stationForEmployee,
   stations,
 } from './office-activity';
 import { OfficeDesk, discordDesk, officeAgents } from './office-agents';
 import { OfficeCamera } from './office-camera';
+import { officeCapacity } from './office-capacity';
 import { bedCoverHeight, chairSeatHeight } from './office-furniture';
 import { adminWorkstations } from './office-furniture-layout';
 import { OfficePlan } from './office-plan';
-import { project, sceneHeight, sceneWidth } from './office-projection';
+import { project } from './office-projection';
 import { Appearance, OperationsAvatar } from './operations-avatar';
 
 export interface OfficePerson {
@@ -71,65 +72,70 @@ export class OfficeYard {
   );
   protected readonly notice = signal('');
   protected readonly zoomPercent = computed(() => Math.round((this.camera()?.zoom() ?? 1) * 100));
-  protected readonly width = sceneWidth;
-  protected readonly height = sceneHeight;
-  protected readonly stations = stations.map((station) => ({
-    ...station,
-    screen: project(station),
-  }));
+  private readonly counts = computed(
+    () => {
+      const counts: Record<Zone, number> = { crew: 0, garage: 0, admin: 0 };
+      for (const person of this.people()) counts[employeeZone(person.room)]++;
+      return counts;
+    },
+    { equal: (a, b) => a.crew === b.crew && a.garage === b.garage && a.admin === b.admin },
+  );
+  private readonly fleetSize = computed(() => this.yard().fleet.length);
+  protected readonly capacity = computed(() => officeCapacity(this.counts(), this.fleetSize()));
+  protected readonly width = computed(() => this.capacity().width);
+  protected readonly height = computed(() => this.capacity().height);
+  protected readonly stations = computed(() =>
+    stations.map((station) => {
+      const y = station.y + (station.zone === 'garage' ? this.capacity().garageExtension : 0);
+      return { ...station, y, screen: project({ x: station.x, y }) };
+    }),
+  );
   protected readonly fleetLabels = fleetLabels;
-  protected readonly garageSize = garageBays.length;
-  protected readonly garagePageCount = computed(() =>
-    Math.max(1, Math.ceil(this.yard().fleet.length / this.garageSize)),
-  );
-  private readonly requestedGaragePage = signal(0);
-  protected readonly garagePage = computed(() =>
-    Math.min(this.requestedGaragePage(), this.garagePageCount() - 1),
-  );
-  protected readonly truckWidth = (truckBounds.width / sceneWidth) * 100;
+  protected readonly truckWidth = computed(() => (truckBounds.width / this.width()) * 100);
   protected readonly truckAnchor = `translate(${(-truckBounds.left / truckBounds.width) * 100}%, ${(-truckBounds.top / truckBounds.height) * 100}%)`;
   protected readonly desks = ([...officeAgents, discordDesk] satisfies OfficeDesk[]).map(
     (desk) => ({ ...desk, screen: project(desk, chairSeatHeight) }),
   );
 
   protected readonly parking = computed(() => {
-    const offset = this.garagePage() * this.garageSize;
-    return this.yard().fleet.slice(offset, offset + this.garageSize).flatMap((truck, index) => {
-      if (truck.fleet_status === 'traveling') return [];
-
-      const bay = garageBays[index];
-      return [{ truck, screen: project({ x: bay.center, y: bay.bumper }) }];
-    });
+    const { fleet } = this.yard();
+    return this.capacity().garage.flatMap(({ bays }) =>
+      bays.flatMap((bay) => {
+        const truck = fleet[bay.number - 1];
+        if (!truck || truck.fleet_status === 'traveling') return [];
+        return [{ truck, screen: project({ x: bay.center, y: bay.bumper }) }];
+      }),
+    );
   });
 
   protected readonly placement = computed(() => {
+    const { homes } = this.capacity();
     const nextSlot = { crew: 0, garage: 0, admin: 0 };
     const anchors = this.people().map((person) => {
       const zone = employeeZone(person.room);
       const slot = nextSlot[zone]++;
-      return { person, zone, slot, home: homePositions[zone][slot] as FloorPoint | undefined };
+      return { person, zone, slot, home: homes[zone][slot] };
     });
     const partners = new Map<string, ConversationPair>();
     for (const zone of ['crew', 'admin'] as const) {
       const present = anchors.filter(
-        (anchor) =>
-          anchor.zone === zone && anchor.home && anchor.person.work_status !== 'on_delivery',
+        (anchor) => anchor.zone === zone && anchor.person.work_status !== 'on_delivery',
       );
       for (let index = 0; index + 1 < present.length; index += 2) {
         partners.set(present[index].person.id, { key: index / 2, side: 0 });
         partners.set(present[index + 1].person.id, { key: index / 2, side: 1 });
       }
     }
-    return { anchors, partners, overflow: anchors.filter((anchor) => !anchor.home) };
+    return { anchors, partners };
   });
 
   protected readonly actors = computed(() => {
     const time = this.time();
     const visits = this.visits();
     const { anchors, partners } = this.placement();
-    return anchors.flatMap((anchor) => {
+    const { garageExtension, height } = this.capacity();
+    return anchors.map((anchor) => {
       const { home, person, zone, slot } = anchor;
-      if (!home) return [];
       const visit = visits[person.id];
       const pose: OfficePose =
         person.work_status === 'on_delivery'
@@ -139,8 +145,12 @@ export class OfficeYard {
               zone,
               slot,
               time,
-              visit?.station.zone === zone ? visit : undefined,
+              visit?.station.zone === zone &&
+                (zone !== 'garage' || visit.garageOffset === garageExtension)
+                ? visit
+                : undefined,
               partners.get(person.id),
+              garageExtension,
             );
       const screen = project(pose, pose.posture === 'sleeping' ? bedCoverHeight : 0);
       const facing =
@@ -149,8 +159,17 @@ export class OfficeYard {
           ? ('left' as const)
           : ('right' as const));
       const atDesk =
-        zone === 'admin' && pose.posture === 'working' && slot < adminWorkstations.length;
-      return [{ ...anchor, pose, screen, facing, atDesk, depth: Math.round(screen.y) }];
+        zone === 'admin' &&
+        pose.posture === 'working' &&
+        (slot < adminWorkstations.length || slot >= homePositions.admin.length);
+      return {
+        ...anchor,
+        pose,
+        screen,
+        facing,
+        atDesk,
+        depth: 200 + Math.round((screen.y / height) * 1000),
+      };
     });
   });
 
@@ -164,6 +183,15 @@ export class OfficeYard {
       .subscribe(() => {
         if (this.motion()) this.time.update((time) => time + 140);
       });
+
+    effect(() => {
+      this.capacity();
+      const camera = this.camera();
+      if (camera?.fitted())
+        queueMicrotask(() => {
+          if (camera.fitted()) camera.fit();
+        });
+    });
 
     effect(() => {
       const id = this.followedId();
@@ -182,7 +210,7 @@ export class OfficeYard {
     effect(() => {
       const actor = this.followed();
       if (actor)
-        this.camera()?.keepVisible(actor.screen.x / sceneWidth, actor.screen.y / sceneHeight);
+        this.camera()?.keepVisible(actor.screen.x / this.width(), actor.screen.y / this.height());
     });
   }
 
@@ -238,14 +266,15 @@ export class OfficeYard {
         [nearest.person.id]: {
           started,
           from: nearest.pose,
-          station: stationForEmployee(station, nearest.slot, 0),
+          station: stationForEmployee(station, nearest.slot, 0, nearest.home),
+          garageOffset: this.capacity().garageExtension,
         },
       };
       if (partner)
         next[partner.person.id] = {
           started,
           from: partner.pose,
-          station: stationForEmployee(station, partner.slot, 1),
+          station: stationForEmployee(station, partner.slot, 1, partner.home),
         };
       return next;
     });
@@ -264,18 +293,18 @@ export class OfficeYard {
     behavior: ScrollBehavior = this.motion() ? 'smooth' : 'auto',
   ): void {
     const screen = project(point);
-    this.camera()?.center(screen.x / sceneWidth, screen.y / sceneHeight, behavior);
+    this.camera()?.center(screen.x / this.width(), screen.y / this.height(), behavior);
   }
 
-  protected jumpTo(point: FloorPoint): void {
+  protected jumpTo(zone: Zone): void {
+    const { crew, garage, admin } = this.capacity().fronts;
+    const centers: Record<Zone, FloorPoint> = {
+      crew: { x: 265, y: (150 + crew) / 2 },
+      garage: { x: 748, y: (150 + garage) / 2 },
+      admin: { x: 1140, y: (31 + admin) / 2 },
+    };
     this.stopFollowing.emit();
-    this.panTo(point);
-  }
-
-  protected pageGarage(delta: number): void {
-    this.requestedGaragePage.set(
-      Math.max(0, Math.min(this.garagePageCount() - 1, this.garagePage() + delta)),
-    );
-    this.jumpTo({ x: 748, y: 300 });
+    this.camera()?.inspect();
+    this.panTo(centers[zone]);
   }
 }

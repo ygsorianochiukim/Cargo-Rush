@@ -1,8 +1,4 @@
-<section
-  class="scene"
-  [class.enlarged]="zoomPercent() > 100"
-  aria-label="Interactive office and truck yard"
->
+<section class="scene" aria-label="Interactive office and truck yard">
   <div class="scene-toolbar">
     <div>
       <strong>Interactive 2.5D office</strong>
@@ -10,11 +6,9 @@
     </div>
     <div class="scene-controls">
       <div class="area-shortcuts" role="group" aria-label="Jump to floor area">
-        <button type="button" class="zoom" (click)="jumpTo({ x: 265, y: 300 })">Crew</button>
-        <button type="button" class="zoom" (click)="jumpTo({ x: 748, y: 300 })">Garage</button>
-        <button type="button" class="zoom" (click)="jumpTo({ x: 1140, y: 245 })">
-          AI &amp; Admin
-        </button>
+        <button type="button" class="zoom" (click)="jumpTo('crew')">Crew</button>
+        <button type="button" class="zoom" (click)="jumpTo('garage')">Garage</button>
+        <button type="button" class="zoom" (click)="jumpTo('admin')">AI &amp; Admin</button>
       </div>
       <button type="button" class="zoom" [attr.aria-pressed]="!motion()" (click)="toggleMotion()">
         {{ motion() ? 'Pause movement' : 'Resume movement' }}
@@ -24,7 +18,7 @@
           type="button"
           class="zoom"
           aria-label="Zoom out"
-          [disabled]="zoomPercent() <= 25"
+          [disabled]="zoomPercent() <= 5"
           (click)="camera()?.adjust(1 / 1.25)"
         >
           −
@@ -51,15 +45,20 @@
     aria-label="Pan and zoom office floor"
     (moved)="stopFollowing.emit()"
   >
-    <div class="office-frame" [style.aspect-ratio]="width + ' / ' + height">
-      <app-office-plan [animate]="motion()" />
+    <div
+      class="office-frame"
+      [style.--scene-width]="width()"
+      [style.--scene-base]="width() * 0.64 + 'px'"
+      [style.aspect-ratio]="width() + ' / ' + height()"
+    >
+      <app-office-plan [animate]="motion()" [capacity]="capacity()" />
       @for (bay of parking(); track bay.truck.id) {
         <button
           class="pin bay-truck"
           type="button"
-          [style.left.%]="(bay.screen.x / width) * 100"
-          [style.top.%]="(bay.screen.y / height) * 100"
-          [style.width.%]="truckWidth"
+          [style.left.%]="(bay.screen.x / width()) * 100"
+          [style.top.%]="(bay.screen.y / height()) * 100"
+          [style.width.%]="truckWidth()"
           [style.transform]="truckAnchor"
           [attr.data-status]="bay.truck.fleet_status"
           [attr.aria-label]="bay.truck.plate + ', ' + fleetLabels[bay.truck.fleet_status]"
@@ -72,12 +71,12 @@
           >
         </button>
       }
-      @for (station of stations; track station.id) {
+      @for (station of stations(); track station.id) {
         <button
           class="pin station-pin"
           type="button"
-          [style.left.%]="(station.screen.x / width) * 100"
-          [style.top.%]="(station.screen.y / height) * 100"
+          [style.left.%]="(station.screen.x / width()) * 100"
+          [style.top.%]="(station.screen.y / height()) * 100"
           [attr.aria-label]="'Visit ' + station.label"
           (click)="visit(station)"
         >
@@ -89,8 +88,8 @@
         <button
           class="pin person-pin"
           type="button"
-          [style.left.%]="(actor.screen.x / width) * 100"
-          [style.top.%]="(actor.screen.y / height) * 100"
+          [style.left.%]="(actor.screen.x / width()) * 100"
+          [style.top.%]="(actor.screen.y / height()) * 100"
           [style.--depth]="actor.depth"
           [class.at-desk]="actor.atDesk"
           [class.walking]="actor.pose.walking && motion()"
@@ -120,8 +119,8 @@
         <button
           class="pin desk-pin"
           type="button"
-          [style.left.%]="(desk.screen.x / width) * 100"
-          [style.top.%]="(desk.screen.y / height) * 100"
+          [style.left.%]="(desk.screen.x / width()) * 100"
+          [style.top.%]="(desk.screen.y / height()) * 100"
           [class.ready]="desk.id === 'discord' ? discordOnline() : agentsReady()"
           [attr.aria-label]="desk.name"
           (click)="deskSelected.emit(desk)"
@@ -135,23 +134,7 @@
   <div class="garage-page" aria-label="Garage bays">
     <span aria-live="polite">
       Garage · {{ yard().parked.length }} parked · {{ yard().traveling }} traveling
-      @if (garagePageCount() > 1) {
-        · Page {{ garagePage() + 1 }} of {{ garagePageCount() }}
-      }
     </span>
-    @if (garagePageCount() > 1) {
-      <button class="zoom" type="button" [disabled]="garagePage() === 0" (click)="pageGarage(-1)">
-        Previous trucks
-      </button>
-      <button
-        class="zoom"
-        type="button"
-        [disabled]="garagePage() + 1 === garagePageCount()"
-        (click)="pageGarage(1)"
-      >
-        Next trucks
-      </button>
-    }
   </div>
   @if (followedId()) {
     <div class="follow-panel">
@@ -160,14 +143,14 @@
           ><strong>{{ actor.person.name }}</strong> · {{ actor.pose.label }}</span
         >
       } @else {
-        <span>This employee is listed under Additional workstations.</span>
+        <span>This employee is no longer on the floor.</span>
       }
       <button type="button" class="zoom" (click)="stopFollowing.emit()">Stop following</button>
     </div>
   }
   <div class="activity-bar">
     <span>{{ followed() ? 'Send this avatar to a station' : 'Send an avatar to a station' }}</span>
-    @for (station of stations; track station.id) {
+    @for (station of stations(); track station.id) {
       <button type="button" class="zoom" (click)="visit(station)">
         <span aria-hidden="true">{{ station.icon }}</span> {{ station.label }}
       </button>
@@ -176,30 +159,5 @@
       <p class="activity-notice" role="status">{{ notice() }}</p>
     }
   </div>
-  @if (placement().overflow.length) {
-    <div class="yard-heading"><h3>Additional workstations</h3></div>
-    <ul class="yard-roster" aria-label="Additional employee workstations">
-      @for (anchor of placement().overflow; track anchor.person.id) {
-        <li>
-          <button
-            type="button"
-            class="workstation"
-            [attr.data-room]="anchor.person.room"
-            (click)="personSelected.emit(anchor.person.id)"
-          >
-            <app-operations-avatar
-              [appearance]="anchor.person.appearance"
-              [room]="anchor.person.room"
-              [animate]="motion()"
-            />
-            <span
-              ><strong>{{ anchor.person.name }}</strong
-              ><small>{{ anchor.person.position }}</small></span
-            >
-          </button>
-        </li>
-      }
-    </ul>
-  }
   <app-fleet-monitor [yard]="yard()" (selected)="truckSelected.emit($event)" />
 </section>

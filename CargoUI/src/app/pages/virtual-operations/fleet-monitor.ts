@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
+import { GarageTruck } from './garage-truck';
 
 export type FleetStatus = 'active' | 'available' | 'unavailable' | 'traveling';
 
@@ -27,6 +28,7 @@ export const fleetLabels: Record<FleetStatus, string> = {
 @Component({
   selector: 'app-fleet-monitor',
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [GarageTruck],
   styleUrl: './fleet-monitor.css',
   template: `
     <section class="fleet-board" aria-label="Fleet monitor">
@@ -66,7 +68,7 @@ export const fleetLabels: Record<FleetStatus, string> = {
               (click)="selected.emit(truck.id)"
             >
               @if (truck.fleet_status !== 'traveling') {
-                <img [src]="truckImage" alt="" />
+                <app-garage-truck />
               }
               <span class="truck-name"
                 ><strong>{{ truck.plate }}</strong
@@ -92,7 +94,6 @@ export class FleetMonitor {
   protected readonly status = signal<(typeof this.groups)[number]>('all');
   protected readonly query = signal('');
   protected readonly labels = fleetLabels;
-  protected readonly truckImage = '/virtual-operations/parked-truck.webp';
 
   protected readonly totals = computed(() => {
     const totals = {

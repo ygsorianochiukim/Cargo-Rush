@@ -25,24 +25,42 @@ export class OfficeCamera {
   private clickWasDragged = false;
   readonly dragging = signal(false);
   readonly zoom = signal(1);
+  readonly fitted = signal(true);
   readonly moved = output<void>();
 
   constructor() {
     this.viewport.addEventListener('wheel', this.wheel, { passive: false });
     this.viewport.addEventListener('click', this.guardClick, true);
+    this.viewport.ownerDocument.defaultView?.addEventListener('resize', this.refit);
     inject(DestroyRef).onDestroy(() => {
+      this.viewport.ownerDocument.defaultView?.removeEventListener('resize', this.refit);
       this.viewport.removeEventListener('wheel', this.wheel);
       this.viewport.removeEventListener('click', this.guardClick, true);
     });
   }
 
   adjust(factor: number): void {
+    this.fitted.set(false);
     this.zoomAt(this.zoom() * factor);
   }
 
   fit(): void {
-    this.zoomAt(Math.min(1, this.viewport.clientWidth / 900));
+    const frame = this.frame();
+    if (!frame || !frame.width || !frame.height) return;
+    const height = Number.parseFloat(getComputedStyle(this.viewport).maxHeight);
+    this.fitted.set(true);
+    this.zoomAt(
+      this.zoom() *
+        Math.min((this.viewport.clientWidth - 2) / frame.width, (height - 2) / frame.height),
+      undefined,
+      0,
+    );
     this.viewport.scrollTo({ left: 0, top: 0 });
+  }
+
+  inspect(): void {
+    this.fitted.set(false);
+    this.zoomAt(Math.max(1, this.zoom()));
   }
 
   center(x: number, y: number, behavior: ScrollBehavior): void {
@@ -92,6 +110,7 @@ export class OfficeCamera {
       const other = [...this.pointers.entries()].find(([id]) => id !== event.pointerId)![1];
       const distance = Math.hypot(previous.x - other.x, previous.y - other.y);
       if (distance > 0) {
+        this.fitted.set(false);
         this.zoomAt((this.zoom() * Math.hypot(next.x - other.x, next.y - other.y)) / distance, {
           x: (previous.x + other.x) / 2,
           y: (previous.y + other.y) / 2,
@@ -136,8 +155,8 @@ export class OfficeCamera {
     this.viewport.scrollBy({ left: x, top: y });
   }
 
-  private zoomAt(level: number, point?: Point): void {
-    const next = Math.max(0.25, Math.min(3, level));
+  private zoomAt(level: number, point?: Point, minimum = 0.05): void {
+    const next = Math.max(minimum, Math.min(3, level));
     const before = this.frame();
     if (!before || next === this.zoom()) return;
     const bounds = this.viewport.getBoundingClientRect();
@@ -156,9 +175,14 @@ export class OfficeCamera {
     return this.viewport.firstElementChild?.getBoundingClientRect();
   }
 
+  private readonly refit = () => {
+    if (this.fitted()) this.fit();
+  };
+
   private readonly wheel = (event: WheelEvent): void => {
     if (!event.ctrlKey && !event.metaKey) return;
     event.preventDefault();
+    this.fitted.set(false);
     this.zoomAt(this.zoom() * Math.exp(-event.deltaY / 220), {
       x: event.clientX,
       y: event.clientY,

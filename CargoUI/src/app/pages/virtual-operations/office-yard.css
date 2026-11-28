@@ -45,7 +45,7 @@
 .office-viewport {
   background: #e5ecee;
   overflow: auto;
-  max-height: min(68vh, 550px);
+  max-height: min(72vh, 760px);
   touch-action: none;
   cursor: grab;
 }
@@ -61,7 +61,7 @@
 .office-frame {
   position: relative;
   isolation: isolate;
-  width: calc(max(100%, 900px) * var(--office-zoom, 1));
+  width: calc(max(100%, var(--scene-base)) * var(--office-zoom, 1));
   overflow: hidden;
   container-type: inline-size;
 }
@@ -89,7 +89,7 @@
 }
 .pin:hover,
 .pin:focus-visible {
-  z-index: 700;
+  z-index: 2000;
 }
 .pin-label {
   visibility: hidden;
@@ -155,13 +155,13 @@
 
 .person-pin {
   z-index: var(--depth);
-  width: max(23px, 3.5cqw);
+  width: calc(4900cqw / var(--scene-width));
   display: grid;
   justify-content: center;
   align-content: end;
 }
 .person-pin app-operations-avatar {
-  --avatar-width: max(18px, 3.35cqw);
+  --avatar-width: calc(4650cqw / var(--scene-width));
 }
 [data-room='helpers'],
 [data-room='warehouse'] {
@@ -216,43 +216,4 @@
 .ready .robot::after {
   background: #75f9bc;
   box-shadow: 6px 0 #75f9bc;
-}
-
-.yard-heading {
-  padding-bottom: 8px;
-}
-.yard-heading h3 {
-  font-size: 15px;
-  font-weight: 700;
-}
-.yard-roster {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 0 14px 14px;
-}
-.yard-roster li {
-  min-width: 0;
-}
-.yard-roster button {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  padding: 6px 10px;
-  border: 1px solid var(--color-cr-line);
-  border-radius: var(--radius-control);
-  font-size: 12px;
-  overflow-wrap: anywhere;
-  text-align: start;
-  cursor: pointer;
-}
-.yard-roster button:hover {
-  border-color: var(--color-cr-blue);
-}
-.yard-roster small {
-  display: block;
-  color: var(--color-cr-ink-muted);
-}
-.workstation app-operations-avatar {
-  zoom: 0.55;
 }
