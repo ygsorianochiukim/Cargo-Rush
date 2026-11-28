@@ -71,11 +71,9 @@ input:focus-visible {
   padding: 5px 8px;
   text-align: left;
 }
-.truck-card img {
-  width: 32px;
-  height: 30px;
+.truck-card app-garage-truck {
+  width: 23px;
   flex: none;
-  object-fit: contain;
 }
 .truck-name {
   display: grid;

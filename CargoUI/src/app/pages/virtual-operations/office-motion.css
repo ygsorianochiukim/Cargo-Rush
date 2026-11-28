@@ -6,17 +6,6 @@
   flex-wrap: wrap;
   gap: 6px;
 }
-.area-shortcuts {
-  display: none;
-}
-.scene.enlarged .area-shortcuts {
-  display: flex;
-}
-@media (max-width: 1200px) {
-  .area-shortcuts {
-    display: flex;
-  }
-}
 .activity-bar {
   padding: 9px 14px;
   border-top: 1px solid var(--color-cr-line);
@@ -67,7 +56,7 @@
 }
 
 .station-pin {
-  z-index: 460;
+  z-index: 1250;
   padding: 2px;
 }
 .station-icon,

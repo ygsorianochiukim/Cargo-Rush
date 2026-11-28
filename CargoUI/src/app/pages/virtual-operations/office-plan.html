@@ -1,7 +1,7 @@
 ﻿<svg
-  [attr.viewBox]="'0 0 ' + width + ' ' + height"
-  [attr.width]="width"
-  [attr.height]="height"
+  [attr.viewBox]="'0 0 ' + width() + ' ' + height()"
+  [attr.width]="width()"
+  [attr.height]="height()"
   aria-hidden="true"
 >
   <defs>
@@ -59,22 +59,22 @@
       <stop offset="1" stop-color="#fff4cb" stop-opacity="0" />
     </radialGradient>
   </defs>
-  <rect [attr.width]="width" [attr.height]="height" fill="url(#cr-scene-sky)" />
-  <rect [attr.width]="width" [attr.height]="height" fill="url(#cr-scene-dots)" />
+  <rect [attr.width]="width()" [attr.height]="height()" fill="url(#cr-scene-sky)" />
+  <rect [attr.width]="width()" [attr.height]="height()" fill="url(#cr-scene-dots)" />
   <g class="base-shadows">
-    @for (base of bases; track $index) {
+    @for (base of bases(); track $index) {
       <polygon [attr.points]="base.faces[2].points" />
     }
   </g>
   <g class="solid construction">
-    @for (base of bases; track $index) {
+    @for (base of bases(); track $index) {
       @for (face of base.faces; track $index) {
         <polygon [attr.points]="face.points" [attr.fill]="face.fill" />
       }
     }
   </g>
   <g class="ground-layer" [attr.transform]="ground">
-    @for (floor of floors; track floor.x + ':' + floor.y) {
+    @for (floor of floors(); track floor.x + ':' + floor.y) {
       <rect
         [attr.x]="floor.x"
         [attr.y]="floor.y"
@@ -104,47 +104,89 @@
     <rect x="429" y="204" width="69" height="57" rx="6" fill="#d1ac91" />
     <path d="M434 211h60m-60 42h60" stroke="#f1d4af" stroke-width="1.5" />
     <rect x="41" y="364" width="451" height="15" rx="6" fill="#fff2d0" opacity=".68" />
-    <rect
-      x="532"
-      y="199"
-      width="428"
-      height="171"
-      rx="9"
-      fill="#a9b8c1"
-      stroke="#edf1ef"
-      stroke-width="2"
-    />
-    <path d="M535 206h420M535 375h420" stroke="#eee6c3" stroke-width="3" />
-    @for (bay of bays; track bay.left; let index = $index) {
-      <path
-        [attr.d]="'M' + bay.left + ' 220v137h57V220'"
-        fill="#a5b7c2"
-        stroke="#ffcf64"
-        stroke-width="2.8"
-      />
-      <path [attr.d]="'M' + (bay.left + 15) + ' 224h27'" stroke="#eaf0ef" stroke-width="4" />
-      <path [attr.d]="'M' + (bay.left + 13) + ' 351h31'" stroke="#617e91" stroke-width="3" />
-      <text
-        [attr.x]="bay.center"
-        y="212"
-        fill="#577182"
-        font-size="11"
-        font-weight="700"
-        text-anchor="middle"
-      >
-        {{ index + 1 }}
-      </text>
+    @for (row of capacity().garage; track row.offset) {
+      <g [attr.transform]="'translate(0 ' + row.offset + ')'">
+        <rect
+          x="532"
+          y="199"
+          width="428"
+          height="171"
+          rx="9"
+          fill="#a9b8c1"
+          stroke="#edf1ef"
+          stroke-width="2"
+        />
+        <path d="M535 206h420M535 375h420" stroke="#eee6c3" stroke-width="3" />
+        @for (bay of row.bays; track bay.number) {
+          <path
+            [attr.d]="'M' + bay.left + ' 220v137h57V220'"
+            fill="#a5b7c2"
+            stroke="#ffcf64"
+            stroke-width="2.8"
+          />
+          <path [attr.d]="'M' + (bay.left + 15) + ' 224h27'" stroke="#eaf0ef" stroke-width="4" />
+          <path [attr.d]="'M' + (bay.left + 13) + ' 351h31'" stroke="#617e91" stroke-width="3" />
+          <text
+            [attr.x]="bay.center"
+            y="212"
+            fill="#577182"
+            font-size="11"
+            font-weight="700"
+            text-anchor="middle"
+          >
+            {{ bay.number }}
+          </text>
+        }
+        <path d="M536 383h422" stroke="#f3d284" stroke-width="2" stroke-dasharray="10 5" />
+        <path
+          d="M716 398h40m-7-5 7 5-7 5m-40 23h-40m7-5-7 5 7 5"
+          fill="none"
+          stroke="#738d9d"
+          stroke-width="3"
+        />
+      </g>
     }
-    <path d="M536 383h422M540 440h412" stroke="#f3d284" stroke-width="2" stroke-dasharray="10 5" />
-    <rect x="592" y="448" width="315" height="8" fill="url(#cr-hazard)" />
-    <rect x="540" y="404" width="34" height="34" fill="url(#cr-hazard)" opacity=".7" />
-    <rect x="925" y="408" width="29" height="29" fill="url(#cr-hazard)" opacity=".7" />
-    <path
-      d="M723 398h38m-7-5 7 5-7 5M725 421h38m-7-5 7 5-7 5"
-      fill="none"
-      stroke="#738d9d"
-      stroke-width="3"
+    <g [attr.transform]="'translate(0 ' + capacity().garageExtension + ')'">
+      <rect x="540" y="404" width="34" height="34" fill="url(#cr-hazard)" opacity=".7" />
+      <rect x="925" y="408" width="29" height="29" fill="url(#cr-hazard)" opacity=".7" />
+    </g>
+    <rect
+      x="592"
+      [attr.y]="capacity().fronts.garage - 6"
+      width="315"
+      height="8"
+      fill="url(#cr-hazard)"
     />
+    @for (row of bedRows(); track row.y) {
+      <rect
+        x="49"
+        [attr.y]="row.y - 7"
+        width="403"
+        height="64"
+        rx="6"
+        fill="#bfd3c6"
+        stroke="#9fb9ae"
+      />
+    }
+    @for (row of deskRows(); track row.y) {
+      <rect
+        x="1022"
+        [attr.y]="row.y - 33"
+        width="242"
+        height="50"
+        rx="6"
+        fill="#c8d3b7"
+        stroke="#aeba9f"
+      />
+    }
+    @for (row of warehouseRows(); track row.y) {
+      <path
+        [attr.d]="'M583 ' + (row.y + 9) + 'h329'"
+        stroke="#e6bb61"
+        stroke-width="2"
+        stroke-dasharray="8 5"
+      />
+    }
     <rect x="999" y="81" width="278" height="88" rx="10" fill="#73a5b4" opacity=".68" />
     <path
       d="M1007 160h260m-260 25h230"
@@ -166,12 +208,12 @@
     <ellipse cx="1134" cy="306" rx="28" ry="38" fill="url(#cr-lounge-light)" />
   </g>
   <g class="furniture-shadows">
-    @for (shadow of furnitureShadows; track shadow) {
+    @for (shadow of furnitureShadows(); track shadow) {
       <polygon [attr.points]="shadow" />
     }
   </g>
   <g class="solid construction">
-    @for (wall of walls; track $index) {
+    @for (wall of walls(); track $index) {
       @for (face of wall.faces; track $index) {
         <polygon [attr.points]="face.points" [attr.fill]="face.fill" />
       }
@@ -185,14 +227,14 @@
     />
   }
   <g class="solid furniture">
-    @for (item of furnishings; track $index) {
+    @for (item of furnishings(); track $index) {
       @for (face of item.faces; track $index) {
         <polygon [attr.points]="face.points" [attr.fill]="face.fill" />
       }
     }
   </g>
   <g class="solid construction">
-    @for (edge of edges; track $index) {
+    @for (edge of edges(); track $index) {
       @for (face of edge.faces; track $index) {
         <polygon [attr.points]="face.points" [attr.fill]="face.fill" />
       }
@@ -211,8 +253,12 @@
     </g>
   }
 </svg>
-<svg class="solid foreground-desks" [attr.viewBox]="'0 0 ' + width + ' ' + height" aria-hidden="true">
-  @for (desk of foregroundDesks; track $index) {
+<svg
+  class="solid foreground-desks"
+  [attr.viewBox]="'0 0 ' + width() + ' ' + height()"
+  aria-hidden="true"
+>
+  @for (desk of foregroundDesks(); track $index) {
     @for (face of desk.faces; track $index) {
       <polygon [attr.points]="face.points" [attr.fill]="face.fill" />
     }

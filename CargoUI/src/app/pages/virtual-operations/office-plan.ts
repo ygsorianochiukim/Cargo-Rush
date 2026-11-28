@@ -1,5 +1,5 @@
-﻿import { ChangeDetectionStrategy, Component, input } from '@angular/core';
-import { garageBays } from './garage-layout';
+﻿import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
+import { OfficeCapacity } from './office-capacity';
 import { bed, chair, furnishing, table, workstation } from './office-furniture';
 import {
   adminWorkstations,
@@ -9,15 +9,7 @@ import {
   crewSofas,
   officeRightWall,
 } from './office-furniture-layout';
-import {
-  box,
-  groundTransform,
-  Palette,
-  polygon,
-  project,
-  sceneHeight,
-  sceneWidth,
-} from './office-projection';
+import { box, groundTransform, Palette, polygon, project } from './office-projection';
 
 const timber = ['#e4b47d', '#b37f50', '#9b6949'] as const;
 const walnut = ['#c68857', '#9b6245', '#754d3c'] as const;
@@ -87,89 +79,116 @@ function sign(label: string, x: number, y: number, color: string, width: number)
 })
 export class OfficePlan {
   readonly animate = input(true);
+  readonly capacity = input.required<OfficeCapacity>();
 
-  protected readonly width = sceneWidth;
-  protected readonly height = sceneHeight;
+  protected readonly width = computed(() => this.capacity().width);
+  protected readonly height = computed(() => this.capacity().height);
   protected readonly ground = groundTransform;
   protected readonly loungeFurniture = crewSofas;
-  protected readonly floors = [
-    { x: 22, y: 150, w: 490, h: 304, fill: 'url(#cr-oak)' },
-    { x: 520, y: 150, w: 451, h: 304, fill: 'url(#cr-concrete)' },
+  protected readonly floors = computed(() => [
+    { x: 22, y: 150, w: 490, h: this.capacity().fronts.crew - 150, fill: 'url(#cr-oak)' },
+    { x: 520, y: 150, w: 451, h: this.capacity().fronts.garage - 150, fill: 'url(#cr-concrete)' },
     { x: 990, y: 31, w: officeRightWall - 990, h: 218, fill: 'url(#cr-agent-tile)' },
-    { x: 990, y: 249, w: officeRightWall - 990, h: 205, fill: 'url(#cr-oak)' },
-  ];
-  protected readonly bases = [
-    box(18, 146, 498, 312, 0, slab, -11),
-    box(516, 146, 459, 312, 0, slab, -11),
-    box(986, 27, officeRightWall - 982, 431, 0, slab, -11),
-  ];
-  protected readonly walls = [
+    {
+      x: 990,
+      y: 249,
+      w: officeRightWall - 990,
+      h: this.capacity().fronts.admin - 249,
+      fill: 'url(#cr-oak)',
+    },
+  ]);
+  protected readonly bases = computed(() => [
+    box(18, 146, 498, this.capacity().fronts.crew - 142, 0, slab, -11),
+    box(516, 146, 459, this.capacity().fronts.garage - 142, 0, slab, -11),
+    box(986, 27, officeRightWall - 982, this.capacity().fronts.admin - 23, 0, slab, -11),
+  ]);
+  protected readonly walls = computed(() => [
     box(22, 150, 490, 6, 31, wall),
-    box(22, 156, 6, 298, 23, wall),
+    box(22, 156, 6, this.capacity().fronts.crew - 156, 23, wall),
     box(520, 150, 451, 7, 33, steel),
-    box(520, 157, 6, 297, 19, steel),
+    box(520, 157, 6, this.capacity().fronts.garage - 157, 19, steel),
     box(990, 31, officeRightWall - 990, 6, 32, wall),
-    box(990, 37, 6, 417, 22, wall),
+    box(990, 37, 6, this.capacity().fronts.admin - 37, 22, wall),
     box(996, 246, 103, 5, 16, wall),
     box(1162, 246, officeRightWall - 1162, 5, 16, wall),
-  ];
-  protected readonly edges = [
-    box(28, 448, 441, 6, 8, wall),
-    box(497, 448, 15, 6, 8, wall),
-    box(506, 156, 6, 292, 9, wall),
-    box(965, 157, 6, 297, 9, steel),
-    box(526, 448, 54, 6, 8, steel),
-    box(921, 448, 44, 6, 8, steel),
-    box(996, 448, officeRightWall - 996, 6, 8, wall),
-    box(officeRightWall - 6, 37, 6, 411, 9, wall),
-  ];
+  ]);
+  protected readonly edges = computed(() => {
+    const { crew, garage, admin } = this.capacity().fronts;
+    return [
+      box(28, crew - 6, 441, 6, 8, wall),
+      box(497, crew - 6, 15, 6, 8, wall),
+      box(506, 156, 6, crew - 162, 9, wall),
+      box(965, 157, 6, garage - 157, 9, steel),
+      box(526, garage - 6, 54, 6, 8, steel),
+      box(921, garage - 6, 44, 6, 8, steel),
+      box(996, admin - 6, officeRightWall - 996, 6, 8, wall),
+      box(officeRightWall - 6, 37, 6, admin - 43, 9, wall),
+    ];
+  });
   protected readonly panels = [
     ...[69, 162, 265, 388].map((x) => panel(x, 156.1, 56, 7, 23, 'window')),
     ...[552, 688, 823].map((x) => panel(x, 157.1, 105, 2, 27, 'shutter')),
     panel(1010, 37.1, 257, 8, 24, 'window'),
   ];
-  protected readonly foregroundDesks = adminWorkstations
-    .map(({ x, y, angle }) => workstation(x, y, angle, cyan))
-    .sort((a, b) => a.depth - b.depth);
-  protected readonly furnishings = [
-    ...crewBeds.map(({ x, y }, index) => bed(x, y, index % 2 === 0 ? teal : steel)),
-    ...crewSofas.map(({ x, y }, index) => sofa(x, y, index < 3 ? teal : steel)),
-    ...[85, 220, 354].map((x) =>
-      furnishing(
-        table(x + 29, 306, 58, 15, 11),
-        box(x + 8, 302, 10, 7, 12, paper, 11),
-        box(x + 34, 305, 7, 4, 14, clay, 11),
-      ),
-    ),
-    ...aiWorkstations.flatMap(({ x, y, seat }) => [
-      workstation(x, y, 0, cyan),
-      chair(seat.x, seat.y, 0),
-    ]),
-    ...adminWorkstations.map(({ angle, seat }) => chair(seat.x, seat.y, angle)),
-    coffee(466, 226, 46),
-    coffee(1237, 280, 38),
-    furnishing(
-      table(1122.5, 317.5, 129, 23, 17, 0, walnut),
-      box(1090, 311, 24, 7, 19, paper, 17),
-      box(1150, 314, 11, 7, 19, teal, 17),
-    ),
-    ...adminMeetingSeats.map(({ x, y }) => chair(x, y, y < 300 ? 180 : 0, false)),
-    furnishing(box(1008, 299, 30, 7, 29, night), box(1013, 306, 19, 1, 24, cyan, 17)),
-    furnishing(box(1238, 189, 18, 29, 27, night), box(1241, 218, 12, 1, 22, cyan, 19)),
-    furnishing(box(1261, 189, 18, 29, 25, night), box(1264, 218, 12, 1, 20, cyan, 17)),
-    furnishing(box(541, 410, 28, 20, 12, timber), box(546, 414, 17, 13, 21, oak, 12)),
-    furnishing(box(923, 414, 26, 20, 12, timber), box(929, 418, 17, 11, 23, walnut, 12)),
-    ...[49, 481].map((x) => planter(x, 202)),
-    planter(45, 431),
-    planter(490, 427),
-    planter(1007, 435),
-    planter(1009, 215),
-    planter(1215, 389),
-  ].sort((a, b) => a.depth - b.depth);
-  protected readonly furnitureShadows = [...this.furnishings, ...this.foregroundDesks].flatMap(
-    ({ shadow }) => shadow ? [shadow] : [],
+  protected readonly foregroundDesks = computed(() =>
+    [...adminWorkstations, ...this.capacity().desks]
+      .map(({ x, y, angle }) => workstation(x, y, angle, cyan))
+      .sort((a, b) => a.depth - b.depth),
   );
-  protected readonly bays = garageBays;
+  protected readonly furnishings = computed(() => {
+    const { beds, desks, garageExtension } = this.capacity();
+    return [
+      ...[...crewBeds, ...beds].map(({ x, y }, index) => bed(x, y, index % 2 === 0 ? teal : steel)),
+      ...crewSofas.map(({ x, y }, index) => sofa(x, y, index < 3 ? teal : steel)),
+      ...[85, 220, 354].map((x) =>
+        furnishing(
+          table(x + 29, 306, 58, 15, 11),
+          box(x + 8, 302, 10, 7, 12, paper, 11),
+          box(x + 34, 305, 7, 4, 14, clay, 11),
+        ),
+      ),
+      ...aiWorkstations.flatMap(({ x, y, seat }) => [
+        workstation(x, y, 0, cyan),
+        chair(seat.x, seat.y, 0),
+      ]),
+      ...[...adminWorkstations, ...desks].map(({ angle, seat }) => chair(seat.x, seat.y, angle)),
+      coffee(466, 226, 46),
+      coffee(1237, 280, 38),
+      furnishing(
+        table(1122.5, 317.5, 129, 23, 17, 0, walnut),
+        box(1090, 311, 24, 7, 19, paper, 17),
+        box(1150, 314, 11, 7, 19, teal, 17),
+      ),
+      ...adminMeetingSeats.map(({ x, y }) => chair(x, y, y < 300 ? 180 : 0, false)),
+      furnishing(box(1008, 299, 30, 7, 29, night), box(1013, 306, 19, 1, 24, cyan, 17)),
+      furnishing(box(1238, 189, 18, 29, 27, night), box(1241, 218, 12, 1, 22, cyan, 19)),
+      furnishing(box(1261, 189, 18, 29, 25, night), box(1264, 218, 12, 1, 20, cyan, 17)),
+      furnishing(
+        box(541, 410 + garageExtension, 28, 20, 12, timber),
+        box(546, 414 + garageExtension, 17, 13, 21, oak, 12),
+      ),
+      furnishing(
+        box(923, 414 + garageExtension, 26, 20, 12, timber),
+        box(929, 418 + garageExtension, 17, 11, 23, walnut, 12),
+      ),
+      ...[49, 481].map((x) => planter(x, 202)),
+      planter(45, 431),
+      planter(490, 427),
+      planter(1007, 435),
+      planter(1009, 215),
+      planter(1215, 389),
+    ].sort((a, b) => a.depth - b.depth);
+  });
+  protected readonly furnitureShadows = computed(() =>
+    [...this.furnishings(), ...this.foregroundDesks()].flatMap(({ shadow }) =>
+      shadow ? [shadow] : [],
+    ),
+  );
+  protected readonly bedRows = computed(() => this.capacity().beds.filter(({ x }) => x === 62));
+  protected readonly deskRows = computed(() => this.capacity().desks.filter(({ x }) => x === 1044));
+  protected readonly warehouseRows = computed(() =>
+    this.capacity().warehouse.filter(({ x }) => x === 602),
+  );
   protected readonly signs = [
     sign('DRIVERS & HELPERS', 42, 150, '#435c58', 163),
     sign('GARAGE / PARKING', 540, 150, '#455d73', 158),
